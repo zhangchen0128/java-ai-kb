@@ -1,0 +1,1217 @@
+
+<article class="kb-entry" data-path="/12-Agent工程/核心能力/12-工具生态管理">
+  <div class="entry-meta">
+    <div class="entry-domain"><a href="/?d=12">12-Agent工程</a></div>
+    <h1>Tool Ecosystem Management</h1>
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#["tool-registry"</span><span class="badge badge-tag">#"tool-discovery"</span><span class="badge badge-tag">#"dynamic-loading"</span><span class="badge badge-tag">#"versioning"</span></div>
+    
+  </div>
+  <div class="entry-body"><h1>工具生态管理</h1>
+<h2>概述</h2>
+<p>当Agent系统中工具数量从个位数增长到数十甚至上百个时，工具的管理成为一个独立的工程问题。工具需要被注册、发现、动态加载、版本化管理、权限控制、速率限制和审计追踪。本节构建一个完整的ToolRegistry实现，覆盖工具从注册到执行的完整生命周期，实现企业级工具生态管理。</p>
+<h2>一、工具发现</h2>
+<h3>1.1 注解扫描 — Spring ClassPathScanning</h3>
+<p>最直接的方案：在Spring Boot应用中通过自定义注解标记工具类，然后通过ClassPathScanning自动发现和注册。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.beans.factory.config.BeanDefinition;
+import org.springframework.context.annotation.ClassPathScanningCandidateComponentProvider;
+import org.springframework.core.type.filter.AnnotationTypeFilter;
+import org.springframework.stereotype.Component;
+
+import java.lang.annotation.*;
+import java.util.*;
+
+/**
+ * 自定义 @Tool 注解，标记工具类。
+ */
+@Target(ElementType.TYPE)
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+@Component
+public @interface Tool {
+
+    /** 工具唯一名称 */
+    String name();
+
+    /** 工具描述 */
+    String description();
+
+    /** 工具版本 */
+    String version() default &quot;1.0.0&quot;;
+
+    /** 工具分类标签 */
+    String[] tags() default {};
+}
+
+/**
+ * 自定义 @ToolMethod 注解，标记工具方法。
+ */
+@Target(ElementType.METHOD)
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+public @interface ToolMethod {
+
+    /** 方法描述 */
+    String description();
+
+    /** JSON Schema 文件路径（相对于classpath） */
+    String schema() default &quot;&quot;;
+}
+
+/**
+ * 基于注解扫描的工具发现器。
+ */
+@Component
+public class AnnotationToolDiscovery {
+
+    private final ClassPathScanningCandidateComponentProvider scanner;
+
+    public AnnotationToolDiscovery() {
+        this.scanner = new ClassPathScanningCandidateComponentProvider(false);
+        this.scanner.addIncludeFilter(new AnnotationTypeFilter(Tool.class));
+    }
+
+    /**
+     * 扫描指定包路径，发现所有 @Tool 标注的类。
+     * @return Tool类名与其元数据的映射
+     */
+    public List&lt;ToolMetadata&gt; discover(String... basePackages) {
+        var tools = new ArrayList&lt;ToolMetadata&gt;();
+
+        for (var basePackage : basePackages) {
+            for (var beanDef : scanner.findCandidateComponents(basePackage)) {
+                try {
+                    var clazz = Class.forName(beanDef.getBeanClassName());
+                    var toolAnno = clazz.getAnnotation(Tool.class);
+                    if (toolAnno == null) continue;
+
+                    var methods = new ArrayList&lt;ToolMethodMetadata&gt;();
+                    for (var method : clazz.getDeclaredMethods()) {
+                        var methodAnno = method.getAnnotation(ToolMethod.class);
+                        if (methodAnno != null) {
+                            methods.add(new ToolMethodMetadata(
+                                method.getName(),
+                                methodAnno.description(),
+                                methodAnno.schema(),
+                                method.getParameterTypes()
+                            ));
+                        }
+                    }
+
+                    tools.add(new ToolMetadata(
+                        toolAnno.name(),
+                        toolAnno.description(),
+                        toolAnno.version(),
+                        Arrays.asList(toolAnno.tags()),
+                        clazz,
+                        methods
+                    ));
+
+                } catch (ClassNotFoundException e) {
+                    // 跳过无法加载的类
+                }
+            }
+        }
+        return tools;
+    }
+
+    public record ToolMetadata(
+        String name,
+        String description,
+        String version,
+        List&lt;String&gt; tags,
+        Class&lt;?&gt; toolClass,
+        List&lt;ToolMethodMetadata&gt; methods
+    ) {}
+
+    public record ToolMethodMetadata(
+        String methodName,
+        String description,
+        String schemaPath,
+        Class&lt;?&gt;[] parameterTypes
+    ) {}
+}
+</code></pre></div>
+<h3>1.2 SPI机制 — Java ServiceLoader</h3>
+<p>对于非Spring环境或需要跨模块扩展的场景，Java SPI（ServiceLoader）是更解耦的方案：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+ * 工具SPI接口 — 第三方JAR可以通过实现此接口来注册工具。
+ */
+public interface ToolSpi {
+
+    /** 工具名称 */
+    String name();
+
+    /** 工具描述 */
+    String description();
+
+    /** JSON Schema for parameters */
+    String inputSchema();
+
+    /** 执行工具 */
+    ToolResult execute(Map&lt;String, Object&gt; arguments);
+
+    record ToolResult(boolean success, String output, String error) {}
+}
+
+/**
+ * SPI工具发现器 — 通过META-INF/services加载。
+ */
+public class SpiToolDiscovery {
+
+    /**
+     * 从classpath中发现所有通过SPI注册的工具。
+     */
+    public List&lt;ToolSpi&gt; discover() {
+        var loader = ServiceLoader.load(ToolSpi.class);
+        var tools = new ArrayList&lt;ToolSpi&gt;();
+        for (var tool : loader) {
+            tools.add(tool);
+        }
+        return tools;
+    }
+}
+
+// META-INF/services/com.example.tool.ToolSpi 文件内容：
+// com.example.tools.DatabaseQueryTool
+// com.example.tools.FileSearchTool
+// com.example.tools.EmailSendTool
+</code></pre></div>
+<p><strong>SPI方式注册工具示例</strong>：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+ * 数据库查询工具 — 通过SPI注册。
+ */
+public class DatabaseQueryTool implements ToolSpi {
+
+    @Override
+    public String name() {
+        return &quot;database_query&quot;;
+    }
+
+    @Override
+    public String description() {
+        return &quot;执行只读SQL查询，返回结果集&quot;;
+    }
+
+    @Override
+    public String inputSchema() {
+        return &quot;&quot;&quot;
+            {
+              &quot;type&quot;: &quot;object&quot;,
+              &quot;properties&quot;: {
+                &quot;sql&quot;: {&quot;type&quot;: &quot;string&quot;, &quot;description&quot;: &quot;SELECT查询语句&quot;},
+                &quot;limit&quot;: {&quot;type&quot;: &quot;integer&quot;, &quot;default&quot;: 100}
+              },
+              &quot;required&quot;: [&quot;sql&quot;]
+            }
+            &quot;&quot;&quot;;
+    }
+
+    @Override
+    public ToolResult execute(Map&lt;String, Object&gt; arguments) {
+        var sql = (String) arguments.get(&quot;sql&quot;);
+        if (sql == null || !sql.trim().toUpperCase().startsWith(&quot;SELECT&quot;)) {
+            return new ToolResult(false, null,
+                &quot;Only SELECT queries are allowed&quot;);
+        }
+        // 执行查询...
+        return new ToolResult(true, &quot;{\&quot;rows\&quot;: [...]}&quot;, null);
+    }
+}
+</code></pre></div>
+<h3>1.3 MCP Tool Listing</h3>
+<p>MCP协议提供了标准的工具发现和列表化机制。MCP Server通过<code>tools/list</code>方法向Client声明其提供的所有Tool：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+ * MCP协议工具发现 — Client端获取Server的工具列表。
+ */
+public class McpToolDiscovery {
+
+    private final McpClient mcpClient;
+
+    public McpToolDiscovery(McpClient mcpClient) {
+        this.mcpClient = mcpClient;
+    }
+
+    /**
+     * 从MCP Server获取工具列表并注册到本地Registry。
+     */
+    public List&lt;McpToolInfo&gt; discoverAndRegister() {
+        // 调用 MCP tools/list 方法
+        var tools = mcpClient.listTools();
+
+        return tools.stream()
+            .map(tool -&gt; new McpToolInfo(
+                tool.name(),
+                tool.description(),
+                tool.inputSchema(),
+                tool.annotations()
+            ))
+            .toList();
+    }
+
+    public record McpToolInfo(
+        String name,
+        String description,
+        JsonNode inputSchema,
+        Map&lt;String, Object&gt; annotations
+    ) {}
+}
+</code></pre></div>
+<h2>二、动态加载</h2>
+<h3>2.1 从JAR包动态加载工具</h3>
+<p>利用自定义ClassLoader从外部JAR包加载工具类，支持运行时扩展：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.net.URL;
+import java.net.URLClassLoader;
+import java.nio.file.Path;
+import java.util.ServiceLoader;
+
+/**
+ * 从外部JAR包动态加载工具。
+ * 支持运行时热加载新的工具包。
+ */
+public class JarToolLoader implements AutoCloseable {
+
+    private final Map&lt;String, URLClassLoader&gt; classLoaders = new HashMap&lt;&gt;();
+
+    /**
+     * 加载JAR包中的SPI工具。
+     */
+    public List&lt;ToolSpi&gt; loadFromJar(Path jarPath) throws Exception {
+        var jarUrl = jarPath.toUri().toURL();
+        var classLoader = new URLClassLoader(
+            new URL[]{jarUrl},
+            Thread.currentThread().getContextClassLoader()
+        );
+
+        classLoaders.put(jarPath.getFileName().toString(), classLoader);
+
+        // 使用自定义ClassLoader的ServiceLoader
+        var loader = ServiceLoader.load(ToolSpi.class, classLoader);
+        var tools = new ArrayList&lt;ToolSpi&gt;();
+        for (var tool : loader) {
+            tools.add(tool);
+        }
+
+        return tools;
+    }
+
+    /**
+     * 卸载JAR包工具。
+     */
+    public void unload(String jarFileName) {
+        var cl = classLoaders.remove(jarFileName);
+        if (cl != null) {
+            try {
+                cl.close();
+            } catch (Exception e) {
+                // 记录日志
+            }
+        }
+    }
+
+    @Override
+    public void close() {
+        classLoaders.forEach((name, cl) -&gt; {
+            try { cl.close(); } catch (Exception ignored) {}
+        });
+    }
+}
+</code></pre></div>
+<h3>2.2 从MCP Server远程注册工具</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * MCP远程工具注册器。
+ * 连接到远程MCP Server，自动获取并注册其提供的所有Tool。
+ */
+public class McpRemoteToolRegistrar {
+
+    private final ToolRegistry registry;
+    private final Map&lt;String, McpClient&gt; mcpClients = new HashMap&lt;&gt;();
+    private final ScheduledExecutorService healthChecker =
+        Executors.newSingleThreadScheduledExecutor();
+
+    public McpRemoteToolRegistrar(ToolRegistry registry) {
+        this.registry = registry;
+    }
+
+    /**
+     * 连接远程MCP Server并注册其工具。
+     */
+    public void registerRemoteTools(String serverUrl, String serverName)
+            throws Exception {
+        var client = McpClient.async(
+            new HttpServerTransport(serverUrl)
+        ).build();
+
+        client.initialize();
+        mcpClients.put(serverName, client);
+
+        // 获取并注册工具
+        var tools = client.listTools();
+        for (var tool : tools) {
+            registry.register(new ToolDefinition(
+                serverName + &quot;:&quot; + tool.name(),
+                tool.description(),
+                tool.inputSchema(),
+                ToolSource.remote(serverUrl, serverName),
+                &quot;1.0.0&quot;,
+                List.of()
+            ));
+        }
+
+        // 周期性健康检查
+        healthChecker.scheduleAtFixedRate(() -&gt; {
+            try {
+                client.ping();
+            } catch (Exception e) {
+                // 标记所有来自此Server的工具为不可用
+                registry.setToolsUnavailable(serverName);
+            }
+        }, 30, 30, TimeUnit.SECONDS);
+    }
+}
+</code></pre></div>
+<h3>2.3 热更新工具（不停机）</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+ * 工具热更新管理器。
+ * 支持在运行时启用/禁用/替换工具，无需重启应用。
+ */
+public class HotSwapToolManager {
+
+    private final ToolRegistry registry;
+    private final AtomicReference&lt;Map&lt;String, ToolExecutor&gt;&gt; activeExecutors;
+
+    public HotSwapToolManager(ToolRegistry registry) {
+        this.registry = registry;
+        this.activeExecutors = new AtomicReference&lt;&gt;(new HashMap&lt;&gt;());
+    }
+
+    /**
+     * 热替换工具：启用新版本后停用旧版本。
+     */
+    public void hotSwap(String toolName, ToolExecutor newExecutor) {
+        var oldExecutors = activeExecutors.get();
+        var newExecutors = new HashMap&lt;&gt;(oldExecutors);
+        newExecutors.put(toolName, newExecutor);
+
+        // 原子切换
+        activeExecutors.set(newExecutors);
+
+        // 延迟关闭旧执行器（等待进行中的请求完成）
+        var oldExecutor = oldExecutors.get(toolName);
+        if (oldExecutor != null) {
+            Thread.ofVirtual().start(() -&gt; {
+                try {
+                    Thread.sleep(Duration.ofSeconds(30));
+                    oldExecutor.close();
+                } catch (Exception e) {
+                    // 记录日志
+                }
+            });
+        }
+
+        // 通知工具变更事件
+        registry.notifyToolChanged(toolName);
+    }
+
+    /**
+     * 执行工具 — 始终使用最新的Executor。
+     */
+    public ToolResult execute(String toolName, Map&lt;String, Object&gt; args) {
+        var executor = activeExecutors.get().get(toolName);
+        if (executor == null) {
+            return ToolResult.error(&quot;Tool not found: &quot; + toolName);
+        }
+        return executor.execute(args);
+    }
+}
+</code></pre></div>
+<h2>三、版本管理</h2>
+<h3>3.1 Semantic Versioning + Changelog</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+ * 工具版本管理器。
+ */
+public class ToolVersionManager {
+
+    private final Map&lt;String, List&lt;ToolVersionEntry&gt;&gt; versionHistory;
+
+    public ToolVersionManager() {
+        this.versionHistory = new ConcurrentHashMap&lt;&gt;();
+    }
+
+    public record ToolVersionEntry(
+        String toolName,
+        SemVer version,
+        String changelog,
+        String checksum,     // 工具JAR/代码的SHA-256
+        Instant createdAt,
+        String createdBy
+    ) {}
+
+    /**
+     * Semantic Versioning解析。
+     */
+    public record SemVer(int major, int minor, int patch)
+            implements Comparable&lt;SemVer&gt; {
+
+        public static SemVer parse(String version) {
+            var parts = version.split(&quot;\\.&quot;);
+            if (parts.length &lt; 3) {
+                throw new IllegalArgumentException(
+                    &quot;Invalid semver: &quot; + version);
+            }
+            return new SemVer(
+                Integer.parseInt(parts[0]),
+                Integer.parseInt(parts[1]),
+                Integer.parseInt(parts[2])
+            );
+        }
+
+        @Override
+        public int compareTo(SemVer other) {
+            int cmp = Integer.compare(major, other.major);
+            if (cmp != 0) return cmp;
+            cmp = Integer.compare(minor, other.minor);
+            if (cmp != 0) return cmp;
+            return Integer.compare(patch, other.patch);
+        }
+
+        @Override
+        public String toString() {
+            return STR.&quot;\{major}.\{minor}.\{patch}&quot;;
+        }
+    }
+
+    /**
+     * 发布新版本。
+     */
+    public ToolVersionEntry publishVersion(String toolName,
+            String newVersion, String changelog, String checksum,
+            String createdBy) {
+        var semver = SemVer.parse(newVersion);
+
+        // 验证版本递增
+        var latest = getLatestVersion(toolName);
+        if (latest != null &amp;&amp; semver.compareTo(latest.version()) &lt;= 0) {
+            throw new IllegalArgumentException(
+                STR.&quot;Version must be greater than \{latest.version()}&quot;);
+        }
+
+        var entry = new ToolVersionEntry(
+            toolName, semver, changelog, checksum,
+            Instant.now(), createdBy
+        );
+
+        versionHistory.computeIfAbsent(toolName, k -&gt; new ArrayList&lt;&gt;())
+            .add(entry);
+
+        return entry;
+    }
+
+    /**
+     * 获取某个工具的最新版本。
+     */
+    public ToolVersionEntry getLatestVersion(String toolName) {
+        var history = versionHistory.get(toolName);
+        if (history == null || history.isEmpty()) return null;
+        return history.getLast();
+    }
+
+    /**
+     * 获取完整的版本历史。
+     */
+    public List&lt;ToolVersionEntry&gt; getVersionHistory(String toolName) {
+        return versionHistory.getOrDefault(toolName, List.of());
+    }
+}
+</code></pre></div>
+<h3>3.2 向后兼容策略</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+ * 工具向后兼容策略执行器。
+ *
+ * 生命周期：
+ *   @Deprecated (标记，打印警告) →
+ *   宽限期 (指定的N个版本内仍可使用) →
+ *   移除 (彻底删除)
+ */
+public class DeprecationManager {
+
+    private final Map&lt;String, DeprecationInfo&gt; deprecatedTools =
+        new ConcurrentHashMap&lt;&gt;();
+
+    public record DeprecationInfo(
+        String toolName,
+        SemVer deprecatedAtVersion,
+        SemVer removalAtVersion,        // 计划移除的版本
+        String replacementTool,         // 替代工具名称
+        String migrationGuide,          // 迁移指南URL
+        Instant deprecatedAt,
+        DeprecationStatus status
+    ) {}
+
+    public enum DeprecationStatus {
+        DEPRECATED,    // 已标记废弃，仍可使用，打印警告
+        GRACE_PERIOD,  // 宽限期内，可使用但每次都会提醒
+        REMOVED        // 已移除，调用报错
+    }
+
+    private final ToolVersionManager.SemVer currentSystemVersion;
+
+    public DeprecationManager(String currentSystemVersion) {
+        this.currentSystemVersion =
+            ToolVersionManager.SemVer.parse(currentSystemVersion);
+    }
+
+    /**
+     * 标记工具为废弃。
+     */
+    public void deprecate(String toolName, String replacementTool,
+            String migrationGuide, int graceVersions) {
+        var current = currentSystemVersion;
+        var removalAt = new ToolVersionManager.SemVer(
+            current.major(), current.minor(), 0);
+
+        deprecatedTools.put(toolName, new DeprecationInfo(
+            toolName, current, removalAt,
+            replacementTool, migrationGuide,
+            Instant.now(), DeprecationStatus.DEPRECATED
+        ));
+    }
+
+    /**
+     * 在执行前检查工具是否已被废弃/移除。
+     */
+    public PreExecutionCheck checkBeforeExecution(String toolName) {
+        var info = deprecatedTools.get(toolName);
+        if (info == null) {
+            return PreExecutionCheck.ALLOWED;
+        }
+
+        return switch (info.status()) {
+            case DEPRECATED -&gt; PreExecutionCheck.warn(
+                STR.&quot;Tool &#39;\{toolName}&#39; is deprecated. &quot; +
+                STR.&quot;Please migrate to &#39;\{info.replacementTool()}&#39;. &quot; +
+                STR.&quot;See: \{info.migrationGuide()}&quot;);
+            case GRACE_PERIOD -&gt; PreExecutionCheck.warn(
+                STR.&quot;Tool &#39;\{toolName}&#39; will be removed in &quot; +
+                STR.&quot;version \{info.removalAtVersion()}. &quot; +
+                &quot;Migrate to &#39;\{info.replacementTool()}&#39;.&quot;);
+            case REMOVED -&gt; PreExecutionCheck.denied(
+                STR.&quot;Tool &#39;\{toolName}&#39; has been removed. &quot; +
+                STR.&quot;Use &#39;\{info.replacementTool()}&#39; instead.&quot;);
+        };
+    }
+
+    public record PreExecutionCheck(
+        boolean allowed,
+        String message
+    ) {
+        public static final PreExecutionCheck ALLOWED =
+            new PreExecutionCheck(true, null);
+
+        public static PreExecutionCheck warn(String msg) {
+            return new PreExecutionCheck(true, msg);
+        }
+
+        public static PreExecutionCheck denied(String msg) {
+            return new PreExecutionCheck(false, msg);
+        }
+    }
+}
+</code></pre></div>
+<h2>四、权限控制</h2>
+<h3>4.1 RBAC per Tool</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+ * 基于RBAC的工具权限控制。
+ */
+public class ToolAccessControl {
+
+    private final Map&lt;String, Set&lt;String&gt;&gt; toolRoles =
+        new ConcurrentHashMap&lt;&gt;();   // toolName -&gt; allowed roles
+    private final Map&lt;String, Set&lt;String&gt;&gt; userRoles =
+        new ConcurrentHashMap&lt;&gt;();   // userId -&gt; assigned roles
+
+    /**
+     * 为工具配置角色访问权限。
+     */
+    public void grantToolAccess(String toolName, String... roles) {
+        toolRoles.computeIfAbsent(toolName, k -&gt; new HashSet&lt;&gt;())
+            .addAll(Arrays.asList(roles));
+    }
+
+    /**
+     * 为用户分配角色。
+     */
+    public void assignUserRole(String userId, String... roles) {
+        userRoles.computeIfAbsent(userId, k -&gt; new HashSet&lt;&gt;())
+            .addAll(Arrays.asList(roles));
+    }
+
+    /**
+     * 检查用户是否有权限执行指定工具。
+     */
+    public AccessCheckResult checkAccess(String userId, String toolName) {
+        var requiredRoles = toolRoles.get(toolName);
+        if (requiredRoles == null || requiredRoles.isEmpty()) {
+            // 无角色限制 = 所有用户可访问
+            return AccessCheckResult.ALLOWED;
+        }
+
+        var userRoleSet = userRoles.getOrDefault(userId, Set.of());
+        var hasAccess = requiredRoles.stream()
+            .anyMatch(userRoleSet::contains);
+
+        return hasAccess
+            ? AccessCheckResult.ALLOWED
+            : AccessCheckResult.denied(
+                STR.&quot;User \{userId} lacks required roles for tool \{toolName}&quot;);
+    }
+
+    public record AccessCheckResult(boolean allowed, String reason) {
+        public static final AccessCheckResult ALLOWED =
+            new AccessCheckResult(true, null);
+
+        public static AccessCheckResult denied(String reason) {
+            return new AccessCheckResult(false, reason);
+        }
+    }
+}
+</code></pre></div>
+<h3>4.2 参数级权限与审计日志</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+ * 参数级权限 — 敏感参数需要额外审批。
+ * 每次工具调用都记录审计日志。
+ */
+public class SensitiveParamGuard {
+
+    private static final Set&lt;String&gt; SENSITIVE_PARAMS = Set.of(
+        &quot;password&quot;, &quot;apiKey&quot;, &quot;token&quot;, &quot;secret&quot;,
+        &quot;credit_card&quot;, &quot;ssn&quot;, &quot;phone&quot;
+    );
+
+    /**
+     * 检查参数中是否包含敏感字段。
+     * 如果包含且未经审批，拒绝执行。
+     */
+    public boolean requiresApproval(Map&lt;String, Object&gt; arguments) {
+        return arguments.keySet().stream()
+            .anyMatch(k -&gt; SENSITIVE_PARAMS.stream()
+                .anyMatch(k.toLowerCase()::contains));
+    }
+
+    /**
+     * 脱敏处理参数用于审计日志。
+     */
+    public Map&lt;String, Object&gt; sanitizeForAudit(
+            Map&lt;String, Object&gt; arguments) {
+        var sanitized = new HashMap&lt;&gt;(arguments);
+        sanitized.keySet().removeIf(k -&gt;
+            SENSITIVE_PARAMS.stream().anyMatch(k.toLowerCase()::contains));
+        // 替换可能包含敏感信息的值为[MASKED]
+        sanitized.replaceAll((k, v) -&gt;
+            SENSITIVE_PARAMS.stream().anyMatch(k.toLowerCase()::contains)
+                ? &quot;[MASKED]&quot; : v);
+        return sanitized;
+    }
+}
+
+/**
+ * 审计日志记录器。
+ */
+public class ToolAuditLogger {
+
+    private final List&lt;ToolAuditEntry&gt; auditLog =
+        Collections.synchronizedList(new ArrayList&lt;&gt;());
+
+    public record ToolAuditEntry(
+        String callId,
+        String toolName,
+        String userId,
+        String tenantId,
+        Map&lt;String, Object&gt; sanitizedArgs,
+        ToolResult result,
+        long durationMs,
+        Instant timestamp,
+        String traceId
+    ) {}
+
+    /**
+     * 记录工具调用审计日志。
+     */
+    public void log(String callId, String toolName, String userId,
+            String tenantId, Map&lt;String, Object&gt; args,
+            ToolResult result, long durationMs, String traceId) {
+        var entry = new ToolAuditEntry(
+            callId, toolName, userId, tenantId, args,
+            result, durationMs, Instant.now(), traceId
+        );
+        auditLog.add(entry);
+
+        // 同时输出结构化日志
+        logger.info(&quot;TOOL_AUDIT | tool={} | user={} | success={} | &quot; +
+            &quot;duration={}ms | traceId={}&quot;,
+            toolName, userId, result != null &amp;&amp; result.success(),
+            durationMs, traceId);
+    }
+}
+</code></pre></div>
+<h2>五、速率限制</h2>
+<h3>5.1 多维度限流</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.TimeUnit;
+
+/**
+ * 多维度工具速率限制器。
+ * 支持：每工具、每用户、每租户三级限流。
+ */
+public class ToolRateLimiter {
+
+    private final Map&lt;String, TokenBucket&gt; toolBuckets =
+        new ConcurrentHashMap&lt;&gt;();
+    private final Map&lt;String, TokenBucket&gt; userBuckets =
+        new ConcurrentHashMap&lt;&gt;();
+    private final Map&lt;String, TokenBucket&gt; tenantBuckets =
+        new ConcurrentHashMap&lt;&gt;();
+    private final int maxConcurrent;
+    private final Semaphore concurrencyLimiter;
+
+    public ToolRateLimiter(int maxConcurrent) {
+        this.maxConcurrent = maxConcurrent;
+        this.concurrencyLimiter = new Semaphore(maxConcurrent);
+    }
+
+    public void configureToolLimit(String toolName,
+            int permitsPerSecond) {
+        toolBuckets.put(toolName,
+            new TokenBucket(permitsPerSecond));
+    }
+
+    public void configureUserLimit(String userId,
+            int permitsPerSecond) {
+        userBuckets.put(userId,
+            new TokenBucket(permitsPerSecond));
+    }
+
+    public void configureTenantLimit(String tenantId,
+            int permitsPerSecond) {
+        tenantBuckets.put(tenantId,
+            new TokenBucket(permitsPerSecond));
+    }
+
+    /**
+     * 尝试获取执行许可。
+     */
+    public RateLimitResult tryAcquire(String toolName, String userId,
+            String tenantId) {
+        // 1. 并发控制
+        if (!concurrencyLimiter.tryAcquire()) {
+            return RateLimitResult.denied(
+                &quot;Concurrency limit reached&quot;);
+        }
+
+        // 2. 工具级限流
+        var toolBucket = toolBuckets.get(toolName);
+        if (toolBucket != null &amp;&amp; !toolBucket.tryConsume()) {
+            concurrencyLimiter.release();
+            return RateLimitResult.denied(
+                STR.&quot;Tool &#39;\{toolName}&#39; rate limit exceeded&quot;);
+        }
+
+        // 3. 用户级限流
+        var userBucket = userBuckets.get(userId);
+        if (userBucket != null &amp;&amp; !userBucket.tryConsume()) {
+            if (toolBucket != null) toolBucket.refund();
+            concurrencyLimiter.release();
+            return RateLimitResult.denied(&quot;User rate limit exceeded&quot;);
+        }
+
+        // 4. 租户级限流
+        var tenantBucket = tenantBuckets.get(tenantId);
+        if (tenantBucket != null &amp;&amp; !tenantBucket.tryConsume()) {
+            if (toolBucket != null) toolBucket.refund();
+            if (userBucket != null) userBucket.refund();
+            concurrencyLimiter.release();
+            return RateLimitResult.denied(
+                &quot;Tenant rate limit exceeded&quot;);
+        }
+
+        return RateLimitResult.allowed(() -&gt; {
+            concurrencyLimiter.release();
+        });
+    }
+
+    public record RateLimitResult(
+        boolean allowed,
+        String reason,
+        Runnable onComplete
+    ) {
+        public static RateLimitResult allowed(Runnable release) {
+            return new RateLimitResult(true, null, release);
+        }
+        public static RateLimitResult denied(String reason) {
+            return new RateLimitResult(false, reason, () -&gt; {});
+        }
+    }
+
+    /**
+     * JDK令牌桶实现。
+     */
+    static class TokenBucket {
+        final double rate;
+        final double maxTokens;
+        double tokens;
+        volatile long lastRefill;
+
+        TokenBucket(double tokensPerSecond) {
+            this.rate = tokensPerSecond;
+            this.maxTokens = tokensPerSecond;
+            this.tokens = tokensPerSecond;
+            this.lastRefill = System.nanoTime();
+        }
+
+        synchronized boolean tryConsume() {
+            refill();
+            if (tokens &gt;= 1.0) {
+                tokens -= 1.0;
+                return true;
+            }
+            return false;
+        }
+
+        synchronized void refund() {
+            tokens = Math.min(maxTokens, tokens + 1.0);
+        }
+
+        private void refill() {
+            var now = System.nanoTime();
+            var elapsed = (now - lastRefill) / 1_000_000_000.0;
+            tokens = Math.min(maxTokens, tokens + elapsed * rate);
+            lastRefill = now;
+        }
+    }
+}
+</code></pre></div>
+<h3>5.2 排队与超时机制</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+ * 工具执行排队管理器。
+ * 当工具并发达到上限时，新请求进入等待队列。
+ */
+public class ToolExecutionQueue {
+
+    private final Map&lt;String, LinkedBlockingQueue&lt;QueuedRequest&gt;&gt; queues;
+    private final int maxQueueSize;
+    private final Duration defaultTimeout;
+
+    public ToolExecutionQueue(int maxQueueSize, Duration defaultTimeout) {
+        this.queues = new ConcurrentHashMap&lt;&gt;();
+        this.maxQueueSize = maxQueueSize;
+        this.defaultTimeout = defaultTimeout;
+    }
+
+    public record QueuedRequest(
+        String requestId,
+        Map&lt;String, Object&gt; arguments,
+        CompletableFuture&lt;ToolResult&gt; resultFuture,
+        Instant enqueuedAt
+    ) {}
+
+    /**
+     * 提交请求到队列。如果队列已满则立即拒绝。
+     */
+    public CompletableFuture&lt;ToolResult&gt; submit(String toolName,
+            Map&lt;String, Object&gt; args) {
+        var future = new CompletableFuture&lt;ToolResult&gt;();
+
+        var queue = queues.computeIfAbsent(toolName,
+            k -&gt; new LinkedBlockingQueue&lt;&gt;(maxQueueSize));
+
+        var request = new QueuedRequest(
+            UUID.randomUUID().toString(), args, future, Instant.now());
+
+        if (!queue.offer(request)) {
+            future.complete(ToolResult.error(
+                STR.&quot;Queue full for tool &#39;\{toolName}&#39;.&quot;));
+            return future;
+        }
+
+        return future.orTimeout(defaultTimeout.toMillis(),
+            TimeUnit.MILLISECONDS);
+    }
+
+    /**
+     * 从队列中取出下一个请求。
+     */
+    public Optional&lt;QueuedRequest&gt; poll(String toolName,
+            Duration waitTime) {
+        var queue = queues.get(toolName);
+        if (queue == null) return Optional.empty();
+
+        try {
+            return Optional.ofNullable(
+                queue.poll(waitTime.toMillis(), TimeUnit.MILLISECONDS));
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return Optional.empty();
+        }
+    }
+}
+</code></pre></div>
+<h2>六、完整ToolRegistry实现</h2>
+<p>将以上所有能力整合为一个企业级ToolRegistry：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+ * 企业级ToolRegistry — 整合注册/发现/鉴权/限流/版本/审计全链路。
+ */
+@Service
+public class ToolRegistry {
+
+    // 工具注册表：存储所有已注册的工具定义
+    private final Map&lt;String, ToolRegistration&gt; registrations =
+        new ConcurrentHashMap&lt;&gt;();
+
+    // 子组件
+    private final AnnotationToolDiscovery annotationDiscovery;
+    private final SpiToolDiscovery spiDiscovery;
+    private final ToolAccessControl accessControl;
+    private final ToolRateLimiter rateLimiter;
+    private final ToolVersionManager versionManager;
+    private final DeprecationManager deprecationManager;
+    private final ToolAuditLogger auditLogger;
+    private final SensitiveParamGuard paramGuard;
+    private final ToolExecutionQueue executionQueue;
+
+    public ToolRegistry() {
+        this.annotationDiscovery = new AnnotationToolDiscovery();
+        this.spiDiscovery = new SpiToolDiscovery();
+        this.accessControl = new ToolAccessControl();
+        this.rateLimiter = new ToolRateLimiter(100);
+        this.versionManager = new ToolVersionManager();
+        this.deprecationManager = new DeprecationManager(&quot;2.0.0&quot;);
+        this.auditLogger = new ToolAuditLogger();
+        this.paramGuard = new SensitiveParamGuard();
+        this.executionQueue = new ToolExecutionQueue(50,
+            Duration.ofSeconds(60));
+    }
+
+    /**
+     * 工具注册信息。
+     */
+    public record ToolRegistration(
+        ToolDefinition definition,
+        ToolExecutor executor,
+        ToolSource source
+    ) {}
+
+    // ===== 注册 =====
+
+    /**
+     * 注册工具。
+     */
+    public void register(ToolDefinition definition, ToolExecutor executor,
+            ToolSource source) {
+        registrations.put(definition.name(),
+            new ToolRegistration(definition, executor, source));
+    }
+
+    /**
+     * 启动时自动发现并注册所有工具。
+     * 扫描顺序：注解扫描 → SPI → MCP远程注册。
+     */
+    public void bootstrap(String... basePackages) {
+        // 1. 注解扫描
+        var annotatedTools = annotationDiscovery.discover(basePackages);
+        for (var tool : annotatedTools) {
+            var executor = createAnnotatedExecutor(tool);
+            register(new ToolDefinition(tool.name(), tool.description(),
+                &quot;{}&quot;, ToolSource.local(tool.toolClass().getName()),
+                tool.version(), tool.tags()), executor,
+                ToolSource.local(tool.toolClass().getName()));
+        }
+
+        // 2. SPI发现
+        var spiTools = spiDiscovery.discover();
+        for (var tool : spiTools) {
+            register(new ToolDefinition(tool.name(), tool.description(),
+                tool.inputSchema(),
+                ToolSource.local(tool.getClass().getName()),
+                &quot;1.0.0&quot;, List.of()),
+                tool::execute,
+                ToolSource.local(tool.getClass().getName()));
+        }
+    }
+
+    // ===== 执行全链路 =====
+
+    /**
+     * 执行工具 — 通过完整的权限/限流/审计链路。
+     */
+    public ToolResult executeSecurely(String toolName,
+            Map&lt;String, Object&gt; arguments,
+            ExecutionContext context) {
+        var callId = UUID.randomUUID().toString();
+        var startTime = System.currentTimeMillis();
+
+        // Phase 1: 注册检查
+        var reg = registrations.get(toolName);
+        if (reg == null) {
+            return ToolResult.error(&quot;Tool not found: &quot; + toolName);
+        }
+
+        // Phase 2: 废弃检查
+        var deprecationCheck =
+            deprecationManager.checkBeforeExecution(toolName);
+        if (!deprecationCheck.allowed()) {
+            return ToolResult.error(deprecationCheck.message());
+        }
+        if (deprecationCheck.message() != null) {
+            logger.warn(deprecationCheck.message());
+        }
+
+        // Phase 3: 权限检查
+        var accessCheck = accessControl.checkAccess(
+            context.userId(), toolName);
+        if (!accessCheck.allowed()) {
+            auditLogger.log(callId, toolName, context.userId(),
+                context.tenantId(), arguments, null,
+                System.currentTimeMillis() - startTime,
+                context.traceId());
+            return ToolResult.error(accessCheck.reason());
+        }
+
+        // Phase 4: 敏感参数检查
+        if (paramGuard.requiresApproval(arguments) &amp;&amp;
+                !context.humanApproved()) {
+            return ToolResult.error(
+                &quot;Tool requires human approval for sensitive parameters&quot;);
+        }
+
+        // Phase 5: 速率限制
+        var rateCheck = rateLimiter.tryAcquire(
+            toolName, context.userId(), context.tenantId());
+        if (!rateCheck.allowed()) {
+            return ToolResult.error(rateCheck.reason());
+        }
+
+        // Phase 6: Schema校验
+        var schemaValidation = validateSchema(
+            reg.definition().inputSchema(), arguments);
+        if (!schemaValidation.valid()) {
+            rateCheck.onComplete().run();
+            return ToolResult.error(
+                &quot;Schema validation failed: &quot; + schemaValidation.errors());
+        }
+
+        // Phase 7: 执行
+        ToolResult result;
+        try {
+            result = reg.executor().execute(arguments);
+        } catch (Exception e) {
+            result = ToolResult.error(
+                &quot;Execution error: &quot; + e.getMessage());
+        }
+
+        // Phase 8: 审计
+        rateCheck.onComplete().run();
+        auditLogger.log(callId, toolName, context.userId(),
+            context.tenantId(),
+            paramGuard.sanitizeForAudit(arguments),
+            result,
+            System.currentTimeMillis() - startTime,
+            context.traceId());
+
+        return result;
+    }
+
+    /**
+     * 列出所有工具（用于Agent Tool Discovery）。
+     */
+    public List&lt;ToolDefinition&gt; listTools(String userId) {
+        return registrations.values().stream()
+            .filter(reg -&gt; accessControl.checkAccess(
+                userId, reg.definition().name()).allowed())
+            .map(ToolRegistration::definition)
+            .toList();
+    }
+
+    /**
+     * 通知工具变更事件。
+     */
+    public void notifyToolChanged(String toolName) {
+        // 可通过Spring Event或Kafka广播工具变更
+        eventPublisher.publish(
+            new ToolChangedEvent(toolName, Instant.now()));
+    }
+
+    public void setToolsUnavailable(String serverName) {
+        registrations.entrySet().stream()
+            .filter(e -&gt; e.getValue().source().serverName() != null
+                &amp;&amp; e.getValue().source().serverName().equals(serverName))
+            .forEach(e -&gt; e.getValue().definition().setAvailable(false));
+    }
+}
+
+// 支持类型
+record ToolDefinition(
+    String name,
+    String description,
+    String inputSchema,
+    ToolSource source,
+    String version,
+    List&lt;String&gt; tags,
+    boolean available
+) {
+    public ToolDefinition(String name, String desc, String schema,
+            ToolSource source, String version, List&lt;String&gt; tags) {
+        this(name, desc, schema, source, version, tags, true);
+    }
+}
+
+record ToolSource(String type, String serverUrl, String serverName,
+        String localClassName) {
+    static ToolSource local(String className) {
+        return new ToolSource(&quot;local&quot;, null, null, className);
+    }
+    static ToolSource remote(String url, String name) {
+        return new ToolSource(&quot;mcp&quot;, url, name, null);
+    }
+}
+
+record ExecutionContext(String userId, String tenantId,
+        String traceId, boolean humanApproved) {}
+
+interface ToolExecutor {
+    ToolResult execute(Map&lt;String, Object&gt; arguments);
+    default void close() {}
+}
+
+record ToolResult(boolean success, String output, String error) {
+    static ToolResult error(String msg) {
+        return new ToolResult(false, null, msg);
+    }
+}
+</code></pre></div>
+<h2>七、最佳实践</h2>
+<ol>
+<li><strong>默认拒绝</strong>：权限策略默认为deny-all，需要显式授权</li>
+<li><strong>分层限流</strong>：同时配置全局限流（保护系统）和用户级限流（保护公平性）</li>
+<li><strong>版本化Schema</strong>：Tool的JSON Schema格式变更时需递增版本号，支持多版本并存</li>
+<li><strong>审计不可删除</strong>：审计日志应写入不可变存储（如Kafka + 冷存储），至少保留90天</li>
+<li><strong>降级策略</strong>：当MCP远程工具不可用时，应明确告知Agent而非静默失败</li>
+</ol>
+<h2>八、常见问题</h2>
+<p><strong>Q: 如何避免工具注册重复？</strong>
+A: 使用工具名称作为唯一键，后注册的覆盖先注册的。启动时按优先级加载：本地注解工具 &gt; SPI工具 &gt; MCP远程工具。</p>
+<p><strong>Q: 工具版本兼容性如何自动化验证？</strong>
+A: 在CI中运行工具的Input/Output契约测试。每当Schema变更时，验证新版本与旧版本客户端调用的兼容性。</p>
+<p><strong>Q: 工具的执行超时如何设定？</strong>
+A: 默认30秒硬超时。对于数据查询类工具可放宽到120秒，对于实时计算类工具收紧到10秒。超时时间记录在ToolDefinition中。</p>
+<h2>相关条目</h2>
+<ul>
+<li><a href="/12-Agent工程/核心能力/12-ToolCalling完整剖析" class="cross-ref" data-ref="12-ToolCalling完整剖析">12-ToolCalling完整剖析</a> — 工具调用基础原理</li>
+<li><a href="/13-AI协议/13-MCP协议与JavaSDK" class="cross-ref" data-ref="13-MCP协议与JavaSDK">13-MCP协议与JavaSDK</a> — MCP协议与远程工具注册</li>
+<li><a href="/14-AI平台与LLMOps/14-模型网关与Prompt管理" class="cross-ref" data-ref="14-模型网关与Prompt管理">14-模型网关与Prompt管理</a> — API网关中的限流和配额管理</li>
+<li><a href="/15-AI安全与治理/15-AI安全全面防护体系" class="cross-ref" data-ref="15-AI安全全面防护体系">15-AI安全全面防护体系</a> — 工具安全与权限控制深度</li>
+<li><a href="/09-Java AI框架/09-架构抽象层设计" class="cross-ref" data-ref="09-架构抽象层设计">09-架构抽象层设计</a> — ToolRegistryPort接口设计</li>
+</ul>
+</div>
+</article>

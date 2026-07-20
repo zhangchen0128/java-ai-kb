@@ -1,0 +1,1419 @@
+
+<article class="kb-entry" data-path="/04-数据与中间件/数据库与缓存/04-PostgreSQL与pgvector深度解析">
+  <div class="entry-meta">
+    <div class="entry-domain"><a href="/?d=04">04-数据与中间件</a></div>
+    <h1>PostgreSQL 与 pgvector 深度解析</h1>
+    <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#["postgresql"</span><span class="badge badge-tag">#"pgvector"</span><span class="badge badge-tag">#"mvcc"</span><span class="badge badge-tag">#"vacuum"</span></div>
+    
+  </div>
+  <div class="entry-body"><h1>PostgreSQL 与 pgvector 深度解析</h1>
+<h2>概述</h2>
+<p>PostgreSQL 是企业级开源关系数据库的标杆，以其对 SQL 标准的遵从性、扩展性和可靠性著称。在 AI 应用场景中，pgvector 扩展使得 PostgreSQL 成为最便捷的向量数据库选择——无需额外基础设施即可在同一数据库中完成业务数据和向量数据的存储与检索。</p>
+<p>本文深入 PostgreSQL 核心内部机制（MVCC、VACUUM、WAL、复制）、索引策略、SQL 优化方法论，以及 pgvector 扩展的完整使用指南，并提供 Spring AI + pgvector 混合检索的完整代码示例。</p>
+<hr>
+<h2>一、MVCC 实现深入</h2>
+<h3>1.1 核心概念</h3>
+<p>PostgreSQL 使用多版本并发控制（MVCC）实现事务隔离，无需读锁即可支持高并发读写。每条元组（tuple）包含四个隐藏系统列：</p>
+<table>
+<thead>
+<tr>
+<th>系统列</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>xmin</code></td>
+<td>插入此元组的事务 ID（XID）</td>
+</tr>
+<tr>
+<td><code>xmax</code></td>
+<td>删除或更新此元组的事务 ID（0 表示未删除）</td>
+</tr>
+<tr>
+<td><code>cmin</code></td>
+<td>同一事务内的命令 ID（插入）</td>
+</tr>
+<tr>
+<td><code>cmax</code></td>
+<td>同一事务内的命令 ID（删除）</td>
+</tr>
+</tbody></table>
+<h3>1.2 元组可见性判定</h3>
+<p>当一个事务读取数据时，PostgreSQL 根据当前事务的快照（snapshot）判定每个元组是否可见：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>可见性判定规则：
+1. 如果 xmin 是当前事务 → 可见
+2. 如果 xmin 已提交 且 xmax 未设置或未提交 → 可见
+3. 如果 xmin 在快照生成后启动 → 不可见
+4. 如果 xmin 已回滚 → 不可见
+</code></pre></div>
+<p>快照存储的是该时刻的活跃事务列表（<code>active_txids</code>）、最小活跃 XID（<code>xmin</code>）、下一个待分配 XID（<code>xmax</code>）。</p>
+<h3>1.3 UPDATE 操作的真实行为</h3>
+<p>PostgreSQL 的 UPDATE 不是原地修改，而是 <strong>插入新版本 + 标记旧版本删除</strong>：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- 逻辑上：UPDATE users SET name = &#39;Bob&#39; WHERE id = 1;
+-- 物理上等价于：
+INSERT INTO users (id, name) VALUES (1, &#39;Bob&#39;);  -- xmin = 当前事务ID
+UPDATE 旧元组 SET xmax = 当前事务ID;
+</code></pre></div>
+<p><strong>重要后果：</strong> 每次 UPDATE 都会产生死元组（dead tuple），需要 VACUUM 回收。</p>
+<h3>1.4 事务 ID 回卷（XID Wraparound）</h3>
+<p>XID 是 32 位无符号整数（约 4.3 亿），采用循环使用。当 XID 使用过半时，旧 XID 会因为比新 XID&quot;大&quot;而导致数据丢失。PostgreSQL 通过 **冻结（freeze）**机制处理：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- 查看各数据库的 XID 消耗情况
+SELECT datname, age(datfrozenxid), datfrozenxid
+FROM pg_database
+ORDER BY age(datfrozenxid) DESC;
+</code></pre></div>
+<p>当 <code>age(datfrozenxid)</code> 达到 2 亿时触发自动 VACUUM freeze，达到 10 亿时数据库进入只读模式。</p>
+<hr>
+<h2>二、VACUUM 与表膨胀</h2>
+<h3>2.1 VACUUM 分类</h3>
+<table>
+<thead>
+<tr>
+<th>类型</th>
+<th>行为</th>
+<th>是否阻塞</th>
+<th>是否回收磁盘空间</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>VACUUM</code></td>
+<td>标记死元组可重用，更新空闲空间映射</td>
+<td>不阻塞读写</td>
+<td>不回收</td>
+</tr>
+<tr>
+<td><code>VACUUM FULL</code></td>
+<td>重写整个表，物理移除死元组</td>
+<td>阻塞（AccessExclusiveLock）</td>
+<td>回收</td>
+</tr>
+<tr>
+<td>自动 VACUUM</td>
+<td>后台自动执行，基于阈值触发</td>
+<td>不阻塞</td>
+<td>不回收</td>
+</tr>
+</tbody></table>
+<h3>2.2 自动 VACUUM 调优</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-ini"># postgresql.conf 关键参数
+autovacuum = on
+autovacuum_vacuum_scale_factor = 0.1   # 10% 死元组触发 VACUUM
+autovacuum_vacuum_threshold = 50       # 至少 50 个死元组
+autovacuum_vacuum_cost_limit = 200     # 成本限速（I/O 限制）
+autovacuum_vacuum_cost_delay = 2ms     # 达到成本限制后暂停时间
+</code></pre></div>
+<p><strong>高频更新表推荐使用表级调优：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">ALTER TABLE high_traffic_events SET (
+    autovacuum_vacuum_scale_factor = 0.01,
+    autovacuum_vacuum_threshold = 100
+);
+</code></pre></div>
+<h3>2.3 表膨胀检测</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- 查询表膨胀率
+SELECT schemaname, relname,
+       pg_size_pretty(pg_total_relation_size(relid)) AS total_size,
+       n_dead_tup,
+       CASE WHEN n_live_tup &gt; 0
+            THEN round(100.0 * n_dead_tup / (n_live_tup + n_dead_tup), 2)
+            ELSE 0 END AS dead_ratio
+FROM pg_stat_user_tables
+WHERE n_dead_tup &gt; 1000
+ORDER BY n_dead_tup DESC;
+</code></pre></div>
+<h3>2.4 膨胀应对策略</h3>
+<ol>
+<li><strong>预防：</strong> 合理设置 autovacuum 参数，避免长事务（长时间持有快照会使 VACUUM 无法回收）</li>
+<li><strong>发现：</strong> 监控 <code>pg_stat_user_tables.n_dead_tup</code></li>
+<li><strong>处理：</strong> 高峰期外执行 <code>VACUUM FULL</code> 或使用 <code>pg_repack</code>（在线重建，不阻塞写入）</li>
+</ol>
+<hr>
+<h2>三、WAL（预写日志）</h2>
+<h3>3.1 WAL 原理</h3>
+<p>WAL 确保崩溃恢复和复制。所有数据变更先写入 WAL，再写入数据文件。WAL 是顺序追加写，性能极高。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>事务提交流程：
+1. 生成 WAL Record
+2. 写入 WAL Buffer → 触发条件后 fsync 到磁盘 WAL Segment 文件
+3. 返回客户端&quot;提交成功&quot;
+4. Checkpointer 将脏页写入数据文件（异步）
+</code></pre></div>
+<h3>3.2 WAL 调优</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-ini"># 关键参数
+wal_level = replica           # 支持流复制；logical 支持逻辑复制
+wal_buffers = 16MB            # WAL buffer；大事务场景增大
+wal_sync_method = fdatasync   # 刷新方式，Linux 推荐 fdatasync
+checkpoint_timeout = 15min    # 检查点间隔
+max_wal_size = 4GB            # WAL 最大尺寸（触发检查点）
+min_wal_size = 1GB            # WAL 回收基准尺寸
+</code></pre></div>
+<h3>3.3 流复制与逻辑复制</h3>
+<p><strong>流复制（物理复制）：</strong> 复制 WAL 记录，主备完全一致（块级复制）。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>主库 → WAL Sender 进程 → 网络 → WAL Receiver 进程 → 备库应用
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- 查看复制状态
+SELECT pid, state, sync_state, write_lag, flush_lag, replay_lag
+FROM pg_stat_replication;
+</code></pre></div>
+<p><strong>逻辑复制：</strong> 基于发布/订阅模型，复制指定表的变更（行级），允许异构版本、部分复制。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- 发布端
+CREATE PUBLICATION my_pub FOR TABLE users, orders;
+-- 订阅端
+CREATE SUBSCRIPTION my_sub CONNECTION &#39;host=master dbname=mydb&#39; PUBLICATION my_pub;
+</code></pre></div>
+<p><strong>适用场景对比：</strong></p>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>流复制</th>
+<th>逻辑复制</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>读写分离</td>
+<td>适用</td>
+<td>适用</td>
+</tr>
+<tr>
+<td>大版本升级</td>
+<td>不适用</td>
+<td>适用</td>
+</tr>
+<tr>
+<td>跨平台复制</td>
+<td>不适用</td>
+<td>适用</td>
+</tr>
+<tr>
+<td>部分表复制</td>
+<td>不适用</td>
+<td>适用</td>
+</tr>
+<tr>
+<td>CDC（变更数据捕获）</td>
+<td>不适用</td>
+<td>适用（配合 Debezium）</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>四、索引深入</h2>
+<h3>4.1 索引类型全景</h3>
+<table>
+<thead>
+<tr>
+<th>索引类型</th>
+<th>适用数据类型</th>
+<th>典型操作符</th>
+<th>场景</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>B-Tree</td>
+<td>标量类型</td>
+<td><code>&lt;</code>, <code>=</code>, <code>&gt;</code>, <code>BETWEEN</code>, <code>IN</code></td>
+<td>通用主键、等值、范围查询</td>
+</tr>
+<tr>
+<td>GiST</td>
+<td>几何、全文检索、范围</td>
+<td><code>&amp;&amp;</code> (overlap), <code>@&gt;</code> (contains)</td>
+<td>空间索引、全文检索</td>
+</tr>
+<tr>
+<td>GIN</td>
+<td>数组、JSONB、全文检索</td>
+<td><code>@&gt;</code> (contains), <code>?</code> (exists)</td>
+<td>数组字段、JSONB 查询、倒排索引</td>
+</tr>
+<tr>
+<td>BRIN</td>
+<td>大数据量顺序列</td>
+<td><code>=</code></td>
+<td>时序数据、日志表</td>
+</tr>
+<tr>
+<td>Hash</td>
+<td>等值</td>
+<td><code>=</code></td>
+<td>仅等值查询（已不常用，B-Tree 代替）</td>
+</tr>
+</tbody></table>
+<h3>4.2 部分索引（Partial Index）</h3>
+<p>只为满足条件的行创建索引，减小索引尺寸：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- 只为活跃用户创建索引（假设80%数据是已归档的）
+CREATE INDEX idx_active_users ON users (created_at)
+WHERE status = &#39;active&#39;;
+</code></pre></div>
+<h3>4.3 表达式索引（Expression Index）</h3>
+<p>针对表达式的计算结果创建索引：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- 大小写不敏感搜索
+CREATE INDEX idx_users_email_lower ON users (LOWER(email));
+
+-- 查询时可使用该索引
+SELECT * FROM users WHERE LOWER(email) = LOWER(&#39;User@Example.com&#39;);
+</code></pre></div>
+<h3>4.4 索引扫描类型</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)
+SELECT * FROM orders WHERE customer_id = 123 AND status = &#39;pending&#39;;
+</code></pre></div>
+<p>EXPLAIN 解读关键字段：</p>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>Seq Scan</code></td>
+<td>全表扫描（表小于阈值或无可用索引）</td>
+</tr>
+<tr>
+<td><code>Index Scan</code></td>
+<td>使用索引，回表获取完整行</td>
+</tr>
+<tr>
+<td><code>Index Only Scan</code></td>
+<td>仅扫描索引即可获取所需数据（覆盖索引），伴随 VM 位判断</td>
+</tr>
+<tr>
+<td><code>Bitmap Index Scan + Bitmap Heap Scan</code></td>
+<td>索引过滤中间结果后用位图合并，再回表</td>
+</tr>
+<tr>
+<td><code>Rows</code></td>
+<td>计划估计返回行数</td>
+</tr>
+<tr>
+<td><code>actual ... rows</code></td>
+<td>实际返回行数（差距大说明统计信息不准）</td>
+</tr>
+<tr>
+<td><code>Width</code></td>
+<td>估计每行宽度（字节）</td>
+</tr>
+<tr>
+<td><code>Cost</code></td>
+<td><code>启动代价..总代价</code></td>
+</tr>
+</tbody></table>
+<p><strong>快速诊断：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- 查找缺失索引
+SELECT schemaname || &#39;.&#39; || relname AS table,
+       seq_scan, seq_tup_read,
+       idx_scan, seq_tup_read / GREATEST(seq_scan, 1) AS avg_seq_tup,
+       n_live_tup
+FROM pg_stat_user_tables
+WHERE seq_scan &gt; 0
+ORDER BY seq_tup_read DESC
+LIMIT 20;
+
+-- 查找未使用索引
+SELECT schemaname || &#39;.&#39; || relname AS table,
+       indexrelname, idx_scan
+FROM pg_stat_user_indexes
+WHERE idx_scan = 0
+  AND indexrelname NOT LIKE &#39;%pkey&#39;
+ORDER BY pg_relation_size(indexrelid) DESC;
+</code></pre></div>
+<hr>
+<h2>五、SQL 优化</h2>
+<h3>5.1 JOIN 策略</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- 查看 JOIN 策略
+SET enable_nestloop = off;  -- 临时禁用，对比效果
+EXPLAIN ANALYZE SELECT ...
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>JOIN 策略</th>
+<th>算法</th>
+<th>适用场景</th>
+<th>内存需求</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Nested Loop</td>
+<td>外表每行扫描内表索引</td>
+<td>外表小+内表有索引</td>
+<td>低</td>
+</tr>
+<tr>
+<td>Hash Join</td>
+<td>建内表哈希表→扫描外表探测</td>
+<td>两表都较大</td>
+<td><code>work_mem</code> (哈希表)</td>
+</tr>
+<tr>
+<td>Merge Join</td>
+<td>两表排序后归并</td>
+<td>两表都有序</td>
+<td>低</td>
+</tr>
+</tbody></table>
+<p><strong>调优：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-ini"># 增加 work_mem 使 Hash Join 能在内存中完成
+work_mem = 256MB  # 每个操作可用内存，注意 = 并发数 * work_mem
+</code></pre></div>
+<h3>5.2 常见慢查询模式</h3>
+<ol>
+<li><p><strong>隐式类型转换导致索引失效：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- 错误：id 是 int 类型但比较值用了字符串
+SELECT * FROM users WHERE id = &#39;123&#39;;
+-- 正确的做法
+SELECT * FROM users WHERE id = 123;
+</code></pre></div>
+</li>
+<li><p><strong>函数包裹索引列：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- 错误：索引失效
+SELECT * FROM orders WHERE DATE(created_at) = &#39;2026-01-01&#39;;
+-- 正确：使用范围查询
+SELECT * FROM orders WHERE created_at &gt;= &#39;2026-01-01&#39; AND created_at &lt; &#39;2026-01-02&#39;;
+</code></pre></div>
+</li>
+<li><p><strong>负向查询无法使用索引：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- 以下通常不走索引
+SELECT * FROM users WHERE status != &#39;deleted&#39;;
+-- 如果 deleted 占比很小，用部分索引
+SELECT * FROM users WHERE status IN (&#39;active&#39;, &#39;pending&#39;);
+</code></pre></div>
+</li>
+<li><p><strong>大 OFFSET 分页：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- 错误：OFFSET 1000000 需要扫描并丢弃前100万行
+SELECT * FROM orders ORDER BY id OFFSET 1000000 LIMIT 20;
+-- 正确：基于游标的分页（Keyset Pagination）
+SELECT * FROM orders WHERE id &gt; 1000000 ORDER BY id LIMIT 20;
+</code></pre></div>
+</li>
+</ol>
+<h3>5.3 统计信息</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- 收集统计信息
+ANALYZE tablename;
+
+-- 查看统计信息
+SELECT * FROM pg_stats WHERE tablename = &#39;orders&#39; AND attname = &#39;customer_id&#39;;
+-- n_distinct: -1 表示唯一列；正值表示不同值数量
+-- most_common_vals / most_common_freqs: 最常见值及其频率
+-- correlation: 列值和物理存储顺序的相关性（1 理想，0 随机）
+</code></pre></div>
+<hr>
+<h2>六、pgvector 深入</h2>
+<h3>6.1 安装与基础配置</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">CREATE EXTENSION IF NOT EXISTS vector;
+
+CREATE TABLE documents (
+    id BIGSERIAL PRIMARY KEY,
+    content TEXT,
+    metadata JSONB,
+    chunk_text TEXT,
+    embedding VECTOR(1536)  -- OpenAI text-embedding-3-small = 1536 维
+);
+
+-- 创建向量索引
+CREATE INDEX ON documents USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
+-- 或 HNSW
+CREATE INDEX ON documents USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 200);
+</code></pre></div>
+<h3>6.2 操作符</h3>
+<table>
+<thead>
+<tr>
+<th>操作符</th>
+<th>含义</th>
+<th>计算</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>&lt;-&gt;</code></td>
+<td>L2 欧几里得距离</td>
+<td>sqrt(sum((a-b)^2))</td>
+</tr>
+<tr>
+<td><code>&lt;#&gt;</code></td>
+<td>负内积</td>
+<td>-sum(a*b)</td>
+</tr>
+<tr>
+<td><code>&lt;=&gt;</code></td>
+<td>余弦距离</td>
+<td>1 - cosine_similarity</td>
+</tr>
+<tr>
+<td><code>&lt;+&gt;</code></td>
+<td>L1 曼哈顿距离</td>
+<td>sum(|a-b|)</td>
+</tr>
+</tbody></table>
+<p><strong>注意：</strong> 所有操作符返回&quot;距离&quot;而非&quot;相似度&quot;。距离越小越相似。<code>&lt;=&gt;</code> 范围 [0, 2]。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- L2 距离最近邻
+SELECT id, chunk_text, embedding &lt;-&gt; query_embedding AS distance
+FROM documents
+ORDER BY distance
+LIMIT 10;
+
+-- 余弦距离最近邻（推荐用于语义搜索）
+SELECT id, chunk_text, 1 - (embedding &lt;=&gt; query_embedding) AS similarity
+FROM documents
+ORDER BY embedding &lt;=&gt; query_embedding
+LIMIT 10;
+</code></pre></div>
+<h3>6.3 IVFFlat 索引</h3>
+<p><strong>原理：</strong> 使用 K-means 将向量空间划分为 <code>lists</code> 个聚类。查询时，先计算查询向量最近的 <code>probes</code> 个聚类中心，然后只在这些聚类中搜索。</p>
+<p><strong>构建过程：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>1. 随机采样或全量数据执行 K-means 聚类
+2. 为每个向量分配聚类 ID
+3. 将同一聚类向量存储在一起（倒排文件）
+</code></pre></div>
+<p><strong>查询流程：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>1. 计算查询向量到所有聚类中心的距离
+2. 选择最近的 probes 个聚类
+3. 遍历选中的聚类，计算精确距离
+4. 排序返回 top-k
+</code></pre></div>
+<p><strong>调优：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">CREATE INDEX ON documents USING ivfflat (embedding vector_cosine_ops)
+WITH (lists = 200);  -- lists ≈ sqrt(总行数) 作为起点
+
+-- 查询时动态设置探针数
+SET ivfflat.probes = 10;  -- 默认 1；增加提升召回率但牺牲速度
+</code></pre></div>
+<p><strong>lists 选择法则：</strong></p>
+<ul>
+<li><code>lists = sqrt(rows)</code> 作为起点</li>
+<li>100 万行数据：lists 约 1000</li>
+<li>lists 过小 → 每个列表太大 → 扫描时间长</li>
+<li>lists 过大 → probes 无法覆盖足够多的列表 → 召回率下降</li>
+</ul>
+<h3>6.4 HNSW 索引</h3>
+<p><strong>原理：</strong> 构建分层图结构，每层是近似 Delaunay 图。底层包含所有节点，上层逐层稀疏。</p>
+<p><strong>关键参数：</strong></p>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>含义</th>
+<th>默认值</th>
+<th>建议</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>m</code></td>
+<td>每个节点最大连接数</td>
+<td>16</td>
+<td>16-64；越大精度越高、内存越大</td>
+</tr>
+<tr>
+<td><code>ef_construction</code></td>
+<td>构建时搜索深度</td>
+<td>64</td>
+<td>100-2000；越大索引质量越高、构建越慢</td>
+</tr>
+</tbody></table>
+<p><strong>查询参数：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">SET hnsw.ef_search = 100;  -- 查询时搜索深度，默认 40；越大精度越高
+</code></pre></div>
+<p><strong>HNSW vs IVFFlat 对比：</strong></p>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>HNSW</th>
+<th>IVFFlat</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>查询速度</td>
+<td>更快</td>
+<td>较慢</td>
+</tr>
+<tr>
+<td>召回率</td>
+<td>更高</td>
+<td>稍低（取决于 lists + probes）</td>
+</tr>
+<tr>
+<td>构建时间</td>
+<td>较慢</td>
+<td>较快</td>
+</tr>
+<tr>
+<td>内存占用</td>
+<td>更大（图结构）</td>
+<td>较小</td>
+</tr>
+<tr>
+<td>插入后可查询</td>
+<td>是（增量更新图）</td>
+<td>否（需要重建索引）</td>
+</tr>
+<tr>
+<td>并发写入</td>
+<td>需要锁</td>
+<td>不阻塞写入（但需要重建）</td>
+</tr>
+</tbody></table>
+<h3>6.5 混合检索：全文 + 向量 RRF 融合</h3>
+<p>在实际 RAG 场景中，纯向量检索可能遗漏精确关键词匹配的文档。混合检索将全文检索（BM25 等价实现）与向量检索融合。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- 1. 创建全文检索索引
+ALTER TABLE documents ADD COLUMN fts tsvector
+GENERATED ALWAYS AS (to_tsvector(&#39;english&#39;, chunk_text)) STORED;
+CREATE INDEX idx_documents_fts ON documents USING GIN (fts);
+
+-- 2. 混合检索函数（使用 RRF 融合）
+CREATE OR REPLACE FUNCTION hybrid_search(
+    query_text TEXT,
+    query_embedding VECTOR(1536),
+    match_limit INT DEFAULT 20,
+    full_text_limit INT DEFAULT 50,
+    vector_limit INT DEFAULT 50,
+    rrf_k INT DEFAULT 60
+)
+RETURNS TABLE(
+    id BIGINT,
+    chunk_text TEXT,
+    rrf_score DOUBLE PRECISION
+) AS $$
+BEGIN
+    RETURN QUERY
+    WITH fts_results AS (
+        SELECT id, chunk_text,
+               ts_rank(fts, websearch_to_tsquery(&#39;english&#39;, query_text)) AS score,
+               row_number() OVER (ORDER BY ts_rank(fts, websearch_to_tsquery(&#39;english&#39;, query_text)) DESC) AS rank
+        FROM documents
+        WHERE fts @@ websearch_to_tsquery(&#39;english&#39;, query_text)
+        ORDER BY score DESC
+        LIMIT full_text_limit
+    ),
+    vector_results AS (
+        SELECT id, chunk_text,
+               1 - (embedding &lt;=&gt; query_embedding) AS score,
+               row_number() OVER (ORDER BY embedding &lt;=&gt; query_embedding) AS rank
+        FROM documents
+        ORDER BY embedding &lt;=&gt; query_embedding
+        LIMIT vector_limit
+    ),
+    rrf AS (
+        SELECT COALESCE(f.id, v.id) AS id,
+               COALESCE(f.chunk_text, v.chunk_text) AS chunk_text,
+               COALESCE(1.0 / (rrf_k + f.rank), 0.0) +
+               COALESCE(1.0 / (rrf_k + v.rank), 0.0) AS rrf_score
+        FROM fts_results f
+        FULL OUTER JOIN vector_results v ON f.id = v.id
+    )
+    SELECT r.id, r.chunk_text, r.rrf_score
+    FROM rrf r
+    ORDER BY r.rrf_score DESC
+    LIMIT match_limit;
+END;
+$$ LANGUAGE plpgsql;
+</code></pre></div>
+<h3>6.6 Spring AI + pgvector 完整示例</h3>
+<h4>6.6.1 PgvectorConfig — 向量存储配置</h4>
+<p>配置 <code>PgVectorStore</code> Bean，指定向量维度、距离类型、HNSW 索引参数。Spring AI 的 <code>VectorStore</code> 抽象屏蔽了不同向量数据库的 API 差异。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// PgvectorConfig.java
+@Configuration
+public class PgvectorConfig {
+
+    @Bean
+    public JdbcTemplate jdbcTemplate(DataSource dataSource) {
+        return new JdbcTemplate(dataSource);
+    }
+
+    @Bean
+    public VectorStore pgvectorStore(JdbcTemplate jdbcTemplate,
+                                     EmbeddingModel embeddingModel) {
+        return PgVectorStore.builder(jdbcTemplate, embeddingModel)
+                .dimensions(1536)
+                .distanceType(PgVectorStore.PgDistanceType.COSINE_DISTANCE)
+                .indexType(PgVectorStore.PgIndexType.HNSW)
+                .hnswM(16)
+                .hnswEfConstruction(200)
+                .vectorTableName(&quot;document_embeddings&quot;)
+                .schemaName(&quot;public&quot;)
+                .build();
+    }
+}
+</code></pre></div>
+<h4>6.6.2 HybridSearchService — 混合检索服务</h4>
+<p>直接使用 <code>JdbcTemplate</code> 执行 RRF（Reciprocal Rank Fusion）混合检索 SQL，融合 BM25 全文检索和向量余弦相似度检索的结果。<code>SearchResult</code> 使用 JDK record 定义返回类型。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// HybridSearchService.java
+@Service
+public class HybridSearchService {
+
+    private final JdbcTemplate jdbcTemplate;
+    private final EmbeddingModel embeddingModel;
+
+    public HybridSearchService(JdbcTemplate jdbcTemplate,
+                               EmbeddingModel embeddingModel) {
+        this.jdbcTemplate = jdbcTemplate;
+        this.embeddingModel = embeddingModel;
+    }
+
+    public record SearchResult(Long id, String chunkText, double rrfScore) {}
+
+    public List&lt;SearchResult&gt; hybridSearch(String query, int limit) {
+        var embedding = embeddingModel.embed(query);
+        var vectorStr = Arrays.toString(embedding)
+                .replace(&#39;[&#39;, &#39;{&#39;).replace(&#39;]&#39;, &#39;}&#39;);
+
+        var sql = &quot;&quot;&quot;
+            WITH fts_results AS (
+                SELECT id, chunk_text,
+                       ts_rank(fts, websearch_to_tsquery(&#39;english&#39;, ?)) AS score,
+                       row_number() OVER (ORDER BY ts_rank(fts, websearch_to_tsquery(&#39;english&#39;, ?)) DESC) AS rank
+                FROM documents
+                WHERE fts @@ websearch_to_tsquery(&#39;english&#39;, ?)
+                ORDER BY score DESC
+                LIMIT ?
+            ),
+            vector_results AS (
+                SELECT id, chunk_text,
+                       1 - (embedding &lt;=&gt; ?::vector) AS score,
+                       row_number() OVER (ORDER BY embedding &lt;=&gt; ?::vector) AS rank
+                FROM documents
+                ORDER BY embedding &lt;=&gt; ?::vector
+                LIMIT ?
+            ),
+            rrf AS (
+                SELECT COALESCE(f.id, v.id) AS id,
+                       COALESCE(f.chunk_text, v.chunk_text) AS chunk_text,
+                       COALESCE(1.0 / (60 + f.rank), 0.0) +
+                       COALESCE(1.0 / (60 + v.rank), 0.0) AS rrf_score
+                FROM fts_results f
+                FULL OUTER JOIN vector_results v ON f.id = v.id
+            )
+            SELECT id, chunk_text, rrf_score
+            FROM rrf
+            ORDER BY rrf_score DESC
+            LIMIT ?
+            &quot;&quot;&quot;;
+
+        return jdbcTemplate.query(sql,
+                new Object[]{query, query, query, limit, vectorStr, vectorStr, vectorStr, limit, limit},
+                (rs, rowNum) -&gt; new SearchResult(
+                        rs.getLong(&quot;id&quot;),
+                        rs.getString(&quot;chunk_text&quot;),
+                        rs.getDouble(&quot;rrf_score&quot;)
+                ));
+    }
+}
+</code></pre></div>
+<h4>6.6.3 application.yml — 数据源与 AI 配置</h4>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># application.yml
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/ai_knowledge
+    username: app
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      idle-timeout: 300000
+      max-lifetime: 1200000
+      connection-timeout: 10000
+      leak-detection-threshold: 60000
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY}
+      embedding:
+        options:
+          model: text-embedding-3-small
+</code></pre></div>
+<h3>6.7 RAGDocumentService — 完整的 RAG 检索服务</h3>
+<p>以下 <code>RAGDocumentService</code> 封装了 RAG 场景中的核心操作：文档插入（自动生成 Embedding）、混合检索（BM25 + 向量 + RRF 融合）、元数据过滤（按 category / tags / created_at）、以及批量 Embedding 和批量插入。使用 JDK 25 风格：<code>var</code> 局部变量类型推断、Record 类型、Text Block SQL、<code>Stream.toList()</code>。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// RAGDocumentService.java
+package com.example.rag.service;
+
+import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+import java.time.LocalDateTime;
+import java.util.*;
+
+@Service
+public class RAGDocumentService {
+
+    private final JdbcTemplate jdbcTemplate;
+    private final EmbeddingModel embeddingModel;
+
+    public RAGDocumentService(JdbcTemplate jdbcTemplate,
+                               EmbeddingModel embeddingModel) {
+        this.jdbcTemplate = jdbcTemplate;
+        this.embeddingModel = embeddingModel;
+    }
+
+    // ============================================================
+    // Record 类型定义
+    // ============================================================
+
+    /** 文档插入输入 */
+    public record DocumentInput(String content, String chunkText,
+                                 String category, String tags) {}
+
+    /** 文档数据库记录 */
+    public record DocumentRecord(Long id, String content, String chunkText,
+                                  String category, String tags,
+                                  LocalDateTime createdAt) {}
+
+    /** 混合检索结果，含 RRF 融合分数和各路原始分数 */
+    public record HybridSearchResult(Long id, String chunkText, double rrfScore,
+                                      String category, String tags,
+                                      double vectorScore, double ftsScore) {}
+
+    // ============================================================
+    // 文档插入（带 Embedding）
+    // ============================================================
+
+    /**
+     * 插入单个文档，自动调用 EmbeddingModel 生成向量并写入 pgvector。
+     * 返回自增主键 id。
+     */
+    @Transactional
+    public long insertDocument(String content, String chunkText,
+                                String category, String tags) {
+        var embedding = embeddingModel.embed(chunkText);
+        var vectorStr = toPgVector(embedding);
+
+        var sql = &quot;&quot;&quot;
+            INSERT INTO documents (content, chunk_text, category, tags, embedding, created_at)
+            VALUES (?, ?, ?, ?, ?::vector, NOW())
+            RETURNING id
+            &quot;&quot;&quot;;
+
+        var id = jdbcTemplate.queryForObject(sql, Long.class,
+                content, chunkText, category, tags, vectorStr);
+        return Objects.requireNonNullElse(id, -1L);
+    }
+
+    // ============================================================
+    // 混合检索：BM25 全文 + 向量相似度 + RRF 融合 + 元数据过滤
+    // ============================================================
+
+    /**
+     * 混合检索，融合 BM25 全文搜索和向量余弦相似度。
+     * 支持按 category 和 tags 进行元数据过滤。
+     *
+     * @param query    查询文本
+     * @param category 分类过滤（null 或空字符串表示不过滤）
+     * @param tags     标签过滤（null 或空字符串表示不过滤，逗号分隔多标签匹配任一）
+     * @param limit    返回结果数上限
+     * @return 按 RRF 分数降序排列的检索结果
+     */
+    public List&lt;HybridSearchResult&gt; hybridSearch(String query, String category,
+                                                  String tags, int limit) {
+        var embedding = embeddingModel.embed(query);
+        var vectorStr = toPgVector(embedding);
+        var hasCategory = category != null &amp;&amp; !category.isBlank();
+        var hasTags = tags != null &amp;&amp; !tags.isBlank();
+
+        // 动态构建元数据过滤子句
+        var categoryClause = hasCategory ? &quot;AND d.category = ?&quot; : &quot;&quot;;
+        var tagsClause = hasTags
+                ? &quot;AND string_to_array(d.tags, &#39;,&#39;) &amp;&amp; string_to_array(?, &#39;,&#39;)&quot; : &quot;&quot;;
+
+        var sql = &quot;&quot;&quot;
+            WITH fts_results AS (
+                SELECT d.id, d.chunk_text, d.category, d.tags,
+                       ts_rank(d.fts, websearch_to_tsquery(&#39;english&#39;, ?)) AS score,
+                       row_number() OVER (
+                           ORDER BY ts_rank(d.fts, websearch_to_tsquery(&#39;english&#39;, ?)) DESC
+                       ) AS rank
+                FROM documents d
+                WHERE d.fts @@ websearch_to_tsquery(&#39;english&#39;, ?)
+                  %s
+                  %s
+                ORDER BY score DESC
+                LIMIT 50
+            ),
+            vector_results AS (
+                SELECT d.id, d.chunk_text, d.category, d.tags,
+                       1 - (d.embedding &lt;=&gt; ?::vector) AS score,
+                       row_number() OVER (ORDER BY d.embedding &lt;=&gt; ?::vector) AS rank
+                FROM documents d
+                WHERE 1=1
+                  %s
+                  %s
+                ORDER BY d.embedding &lt;=&gt; ?::vector
+                LIMIT 50
+            ),
+            rrf AS (
+                SELECT COALESCE(f.id, v.id) AS id,
+                       COALESCE(f.chunk_text, v.chunk_text) AS chunk_text,
+                       COALESCE(f.category, v.category) AS category,
+                       COALESCE(f.tags, v.tags) AS tags,
+                       COALESCE(1.0 / (60 + f.rank), 0.0) +
+                       COALESCE(1.0 / (60 + v.rank), 0.0) AS rrf_score,
+                       COALESCE(f.score, 0.0) AS fts_score,
+                       COALESCE(v.score, 0.0) AS vector_score
+                FROM fts_results f
+                FULL OUTER JOIN vector_results v ON f.id = v.id
+            )
+            SELECT id, chunk_text, rrf_score, category, tags, vector_score, fts_score
+            FROM rrf
+            ORDER BY rrf_score DESC
+            LIMIT ?
+            &quot;&quot;&quot;.formatted(categoryClause, tagsClause, categoryClause, tagsClause);
+
+        // 按占位符顺序构建参数
+        var params = new ArrayList&lt;&gt;();
+        params.add(query);         // fts: ts_rank #1
+        params.add(query);         // fts: ts_rank #2 (row_number)
+        params.add(query);         // fts: WHERE fts @@
+        if (hasCategory) params.add(category);
+        if (hasTags) params.add(tags);
+        // fts LIMIT 50 (hardcoded above)
+        params.add(vectorStr);     // vector: &lt;=&gt; #1
+        params.add(vectorStr);     // vector: &lt;=&gt; #2 (row_number)
+        if (hasCategory) params.add(category);
+        if (hasTags) params.add(tags);
+        params.add(vectorStr);     // vector: ORDER BY &lt;=&gt;
+        // vector LIMIT 50 (hardcoded above)
+        params.add(limit);         // final LIMIT
+
+        return jdbcTemplate.query(sql, params.toArray(),
+                (rs, rowNum) -&gt; new HybridSearchResult(
+                        rs.getLong(&quot;id&quot;),
+                        rs.getString(&quot;chunk_text&quot;),
+                        rs.getDouble(&quot;rrf_score&quot;),
+                        rs.getString(&quot;category&quot;),
+                        rs.getString(&quot;tags&quot;),
+                        rs.getDouble(&quot;vector_score&quot;),
+                        rs.getDouble(&quot;fts_score&quot;)
+                ));
+    }
+
+    // ============================================================
+    // 批量 Embedding
+    // ============================================================
+
+    /**
+     * 批量生成 Embedding。使用 parallelStream 并行调用 EmbeddingModel，
+     * 适用于大批量文本的离线 Embedding 生成场景。
+     */
+    public List&lt;float[]&gt; batchEmbed(List&lt;String&gt; texts) {
+        return texts.parallelStream()
+                .map(embeddingModel::embed)
+                .toList();
+    }
+
+    // ============================================================
+    // 批量插入文档
+    // ============================================================
+
+    /**
+     * 批量插入文档：先调用 batchEmbed 生成所有向量，再通过 batchUpdate 一次性写入。
+     * 整个操作在一个事务中完成。
+     */
+    @Transactional
+    public int[] batchInsertDocuments(List&lt;DocumentInput&gt; documents) {
+        var texts = documents.stream().map(DocumentInput::chunkText).toList();
+        var embeddings = batchEmbed(texts);
+
+        var sql = &quot;&quot;&quot;
+            INSERT INTO documents (content, chunk_text, category, tags, embedding, created_at)
+            VALUES (?, ?, ?, ?, ?::vector, NOW())
+            &quot;&quot;&quot;;
+
+        var batchArgs = new ArrayList&lt;Object[]&gt;();
+        for (int i = 0; i &lt; documents.size(); i++) {
+            var doc = documents.get(i);
+            batchArgs.add(new Object[]{
+                    doc.content(), doc.chunkText(), doc.category(), doc.tags(),
+                    toPgVector(embeddings.get(i))
+            });
+        }
+
+        return jdbcTemplate.batchUpdate(sql, batchArgs,
+                new int[]{java.sql.Types.VARCHAR, java.sql.Types.VARCHAR,
+                          java.sql.Types.VARCHAR, java.sql.Types.VARCHAR,
+                          java.sql.Types.OTHER});
+    }
+
+    // ============================================================
+    // 按元数据过滤检索
+    // ============================================================
+
+    /** 按 category 过滤，返回最近创建的文档。 */
+    public List&lt;DocumentRecord&gt; findByCategory(String category, int limit) {
+        var sql = &quot;&quot;&quot;
+            SELECT id, content, chunk_text, category, tags, created_at
+            FROM documents
+            WHERE category = ?
+            ORDER BY created_at DESC
+            LIMIT ?
+            &quot;&quot;&quot;;
+        return jdbcTemplate.query(sql,
+                (rs, rowNum) -&gt; new DocumentRecord(
+                        rs.getLong(&quot;id&quot;),
+                        rs.getString(&quot;content&quot;),
+                        rs.getString(&quot;chunk_text&quot;),
+                        rs.getString(&quot;category&quot;),
+                        rs.getString(&quot;tags&quot;),
+                        rs.getTimestamp(&quot;created_at&quot;).toLocalDateTime()
+                ),
+                category, limit);
+    }
+
+    /** 按 tags 过滤（包含任一标签即匹配）。 */
+    public List&lt;DocumentRecord&gt; findByTags(String tags, int limit) {
+        var sql = &quot;&quot;&quot;
+            SELECT id, content, chunk_text, category, tags, created_at
+            FROM documents
+            WHERE string_to_array(tags, &#39;,&#39;) &amp;&amp; string_to_array(?, &#39;,&#39;)
+            ORDER BY created_at DESC
+            LIMIT ?
+            &quot;&quot;&quot;;
+        return jdbcTemplate.query(sql,
+                (rs, rowNum) -&gt; new DocumentRecord(
+                        rs.getLong(&quot;id&quot;),
+                        rs.getString(&quot;content&quot;),
+                        rs.getString(&quot;chunk_text&quot;),
+                        rs.getString(&quot;category&quot;),
+                        rs.getString(&quot;tags&quot;),
+                        rs.getTimestamp(&quot;created_at&quot;).toLocalDateTime()
+                ),
+                tags, limit);
+    }
+
+    /** 按创建时间范围过滤。 */
+    public List&lt;DocumentRecord&gt; findByCreatedAtRange(LocalDateTime from,
+                                                      LocalDateTime to,
+                                                      int limit) {
+        var sql = &quot;&quot;&quot;
+            SELECT id, content, chunk_text, category, tags, created_at
+            FROM documents
+            WHERE created_at BETWEEN ? AND ?
+            ORDER BY created_at DESC
+            LIMIT ?
+            &quot;&quot;&quot;;
+        return jdbcTemplate.query(sql,
+                (rs, rowNum) -&gt; new DocumentRecord(
+                        rs.getLong(&quot;id&quot;),
+                        rs.getString(&quot;content&quot;),
+                        rs.getString(&quot;chunk_text&quot;),
+                        rs.getString(&quot;category&quot;),
+                        rs.getString(&quot;tags&quot;),
+                        rs.getTimestamp(&quot;created_at&quot;).toLocalDateTime()
+                ),
+                from, to, limit);
+    }
+
+    // ============================================================
+    // 工具方法
+    // ============================================================
+
+    /** 将 float[] 转为 pgvector 兼容格式 &quot;{v1,v2,...,vn}&quot; */
+    private static String toPgVector(float[] embedding) {
+        var sb = new StringBuilder(&quot;{&quot;);
+        for (int i = 0; i &lt; embedding.length; i++) {
+            if (i &gt; 0) sb.append(&quot;,&quot;);
+            sb.append(embedding[i]);
+        }
+        sb.append(&quot;}&quot;);
+        return sb.toString();
+    }
+}
+</code></pre></div>
+<p><code>hybridSearch</code> 方法的设计要点：</p>
+<ul>
+<li><strong>动态过滤</strong>：根据 <code>category</code> / <code>tags</code> 是否传入，使用 <code>String.formatted()</code> 将过滤子句注入 Text Block SQL</li>
+<li><strong>RRF k=60</strong>：与 6.5 节中的 SQL 函数保持一致</li>
+<li><strong>双路各取 50</strong>：全文和向量两路各取 top-50，再通过 FULL OUTER JOIN 融合</li>
+<li><strong>返回每路原始分数</strong>：<code>vectorScore</code> 和 <code>ftsScore</code> 便于排查排序问题</li>
+</ul>
+<h3>6.8 Testcontainers 集成测试</h3>
+<p>使用 Testcontainers 启动真实的 PostgreSQL + pgvector 容器，验证 RAGDocumentService 的各项功能。<code>@ServiceConnection</code> 自动将容器连接信息注入 Spring 上下文，无需手动配置 <code>@DynamicPropertySource</code>。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// PgvectorHybridSearchIntegrationTest.java
+package com.example.rag;
+
+import com.example.rag.service.RAGDocumentService;
+import org.junit.jupiter.api.*;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
+
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+@SpringBootTest
+@Testcontainers
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+@DisplayName(&quot;pgvector 混合检索集成测试&quot;)
+class PgvectorHybridSearchIntegrationTest {
+
+    @Container
+    @ServiceConnection
+    static PostgreSQLContainer&lt;?&gt; postgres = new PostgreSQLContainer&lt;&gt;(
+            &quot;pgvector/pgvector:pg17&quot;
+    );
+
+    @Autowired
+    private RAGDocumentService ragDocumentService;
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    @BeforeAll
+    void setupDatabase() {
+        // 启用 pgvector 扩展
+        jdbcTemplate.execute(&quot;CREATE EXTENSION IF NOT EXISTS vector&quot;);
+
+        // 创建文档表（含全文检索列和向量列）
+        jdbcTemplate.execute(&quot;&quot;&quot;
+            CREATE TABLE IF NOT EXISTS documents (
+                id BIGSERIAL PRIMARY KEY,
+                content TEXT NOT NULL,
+                chunk_text TEXT NOT NULL,
+                category VARCHAR(100),
+                tags VARCHAR(500),
+                fts tsvector GENERATED ALWAYS AS (
+                    to_tsvector(&#39;english&#39;, chunk_text)
+                ) STORED,
+                embedding VECTOR(1536),
+                created_at TIMESTAMPTZ DEFAULT NOW()
+            )
+            &quot;&quot;&quot;);
+
+        // 创建 GIN 全文检索索引
+        jdbcTemplate.execute(&quot;&quot;&quot;
+            CREATE INDEX IF NOT EXISTS idx_documents_fts
+            ON documents USING GIN (fts)
+            &quot;&quot;&quot;);
+
+        // 创建 HNSW 向量索引
+        jdbcTemplate.execute(&quot;&quot;&quot;
+            CREATE INDEX IF NOT EXISTS idx_documents_embedding
+            ON documents USING hnsw (embedding vector_cosine_ops)
+            WITH (m = 16, ef_construction = 200)
+            &quot;&quot;&quot;);
+    }
+
+    @BeforeEach
+    void setUp() {
+        jdbcTemplate.execute(&quot;DELETE FROM documents&quot;);
+    }
+
+    @Test
+    @DisplayName(&quot;插入文档并验证 embedding 已生成&quot;)
+    void shouldInsertDocumentWithEmbedding() {
+        var id = ragDocumentService.insertDocument(
+                &quot;Spring AI 是 Spring 生态的 AI 集成框架，&quot;
+                + &quot;提供了与多种 LLM 的集成能力。&quot;,
+                &quot;Spring AI 框架概述&quot;,
+                &quot;java-ai&quot;,
+                &quot;spring,ai,framework&quot;
+        );
+
+        assertThat(id).isGreaterThan(0);
+
+        // 验证 embedding 列不为空
+        var count = jdbcTemplate.queryForObject(
+                &quot;SELECT COUNT(*) FROM documents WHERE id = ? AND embedding IS NOT NULL&quot;,
+                Integer.class, id);
+        assertThat(count).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName(&quot;混合检索应返回与查询语义相关的文档&quot;)
+    void shouldReturnRelevantDocumentsViaHybridSearch() {
+        // 准备测试数据：覆盖不同主题的文档
+        ragDocumentService.batchInsertDocuments(List.of(
+                new RAGDocumentService.DocumentInput(
+                        &quot;全文1&quot;, &quot;Spring Boot makes it easy to create stand-alone applications&quot;,
+                        &quot;java-ai&quot;, &quot;spring,boot&quot;
+                ),
+                new RAGDocumentService.DocumentInput(
+                        &quot;全文2&quot;, &quot;PostgreSQL pgvector enables vector similarity search&quot;,
+                        &quot;database&quot;, &quot;postgresql,pgvector&quot;
+                ),
+                new RAGDocumentService.DocumentInput(
+                        &quot;全文3&quot;, &quot;Machine learning models require large datasets for training&quot;,
+                        &quot;ai-ml&quot;, &quot;machine-learning,training&quot;
+                ),
+                new RAGDocumentService.DocumentInput(
+                        &quot;全文4&quot;, &quot;Vector databases store embeddings for semantic search in RAG pipelines&quot;,
+                        &quot;database&quot;, &quot;vector-db,rag,embeddings&quot;
+                ),
+                new RAGDocumentService.DocumentInput(
+                        &quot;全文5&quot;, &quot;Spring AI integrates with vector stores for RAG applications&quot;,
+                        &quot;java-ai&quot;, &quot;spring,ai,rag,vector-store&quot;
+                )
+        ));
+
+        // 执行混合检索
+        var results = ragDocumentService.hybridSearch(
+                &quot;vector database semantic search&quot;, null, null, 5);
+
+        // 验证返回了结果且分数合法
+        assertThat(results).isNotEmpty();
+        assertThat(results).allSatisfy(result -&gt; {
+            assertThat(result.chunkText()).isNotBlank();
+            assertThat(result.rrfScore()).isGreaterThan(0);
+        });
+
+        // 验证 &quot;Vector databases&quot; 相关文档出现在 top 结果中
+        var topChunks = results.stream()
+                .map(RAGDocumentService.HybridSearchResult::chunkText)
+                .toList();
+        assertThat(topChunks)
+                .anyMatch(chunk -&gt; chunk.toLowerCase().contains(&quot;vector&quot;));
+    }
+
+    @Test
+    @DisplayName(&quot;按 category 元数据过滤应仅返回匹配分类的文档&quot;)
+    void shouldFilterByCategory() {
+        ragDocumentService.batchInsertDocuments(List.of(
+                new RAGDocumentService.DocumentInput(
+                        &quot;c1&quot;, &quot;Java virtual threads improve concurrency&quot;,
+                        &quot;java-ai&quot;, &quot;java&quot;),
+                new RAGDocumentService.DocumentInput(
+                        &quot;c2&quot;, &quot;PostgreSQL is a powerful relational database&quot;,
+                        &quot;database&quot;, &quot;postgresql&quot;),
+                new RAGDocumentService.DocumentInput(
+                        &quot;c3&quot;, &quot;Spring Boot simplifies application development&quot;,
+                        &quot;java-ai&quot;, &quot;spring&quot;)
+        ));
+
+        // 按 database 分类检索
+        var dbResults = ragDocumentService.findByCategory(&quot;database&quot;, 10);
+        assertThat(dbResults).hasSize(1);
+        assertThat(dbResults.getFirst().chunkText())
+                .contains(&quot;PostgreSQL&quot;);
+
+        // 按 java-ai 分类检索
+        var javaResults = ragDocumentService.findByCategory(&quot;java-ai&quot;, 10);
+        assertThat(javaResults).hasSize(2);
+    }
+
+    @Test
+    @DisplayName(&quot;按 tags 元数据过滤应仅返回匹配标签的文档&quot;)
+    void shouldFilterByTags() {
+        ragDocumentService.batchInsertDocuments(List.of(
+                new RAGDocumentService.DocumentInput(
+                        &quot;t1&quot;, &quot;RAG pipeline design&quot;, &quot;ai&quot;, &quot;rag,pipeline&quot;),
+                new RAGDocumentService.DocumentInput(
+                        &quot;t2&quot;, &quot;Agent memory management&quot;, &quot;ai&quot;, &quot;agent,memory&quot;),
+                new RAGDocumentService.DocumentInput(
+                        &quot;t3&quot;, &quot;RAG evaluation metrics&quot;, &quot;ai&quot;, &quot;rag,evaluation&quot;)
+        ));
+
+        var ragDocs = ragDocumentService.findByTags(&quot;rag&quot;, 10);
+        assertThat(ragDocs).hasSize(2);
+        assertThat(ragDocs).allSatisfy(doc -&gt;
+                assertThat(doc.tags()).contains(&quot;rag&quot;));
+    }
+
+    @Test
+    @DisplayName(&quot;混合检索 + category 过滤应同时生效&quot;)
+    void shouldCombineHybridSearchWithCategoryFilter() {
+        ragDocumentService.batchInsertDocuments(List.of(
+                new RAGDocumentService.DocumentInput(
+                        &quot;d1&quot;, &quot;Vector search with pgvector in PostgreSQL&quot;,
+                        &quot;database&quot;, &quot;vector&quot;),
+                new RAGDocumentService.DocumentInput(
+                        &quot;d2&quot;, &quot;Vector search applied in Java AI applications&quot;,
+                        &quot;java-ai&quot;, &quot;vector&quot;),
+                new RAGDocumentService.DocumentInput(
+                        &quot;d3&quot;, &quot;Embedding generation with Spring AI framework&quot;,
+                        &quot;java-ai&quot;, &quot;spring,ai&quot;)
+        ));
+
+        // 混合检索 + category=java-ai 过滤
+        var results = ragDocumentService.hybridSearch(
+                &quot;vector search&quot;, &quot;java-ai&quot;, null, 5);
+
+        assertThat(results).isNotEmpty();
+        // 所有返回结果应只属于 java-ai 分类
+        assertThat(results).allSatisfy(r -&gt;
+                assertThat(r.category()).isEqualTo(&quot;java-ai&quot;));
+    }
+
+    @AfterAll
+    void tearDown() {
+        jdbcTemplate.execute(&quot;DROP TABLE IF EXISTS documents CASCADE&quot;);
+    }
+}
+</code></pre></div>
+<p>测试覆盖了以下场景：</p>
+<table>
+<thead>
+<tr>
+<th>测试用例</th>
+<th>覆盖能力</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>shouldInsertDocumentWithEmbedding</code></td>
+<td>单文档插入 + Embedding 自动生成验证</td>
+</tr>
+<tr>
+<td><code>shouldReturnRelevantDocumentsViaHybridSearch</code></td>
+<td>混合检索准确性：语义相关文档排在前面</td>
+</tr>
+<tr>
+<td><code>shouldFilterByCategory</code></td>
+<td>按 category 元数据过滤</td>
+</tr>
+<tr>
+<td><code>shouldFilterByTags</code></td>
+<td>按 tags 元数据过滤</td>
+</tr>
+<tr>
+<td><code>shouldCombineHybridSearchWithCategoryFilter</code></td>
+<td>混合检索 + 元数据过滤组合使用</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>七、连接池：HikariCP + PgBouncer</h2>
+<h3>7.1 HikariCP 关键配置</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">spring:
+  datasource:
+    hikari:
+      maximum-pool-size: 20       # 最大连接数 = (CPU核数 * 2) + 有效磁盘数
+      minimum-idle: 5             # 最小空闲连接（默认等于 maximum-pool-size）
+      idle-timeout: 600000        # 空闲连接最大存活时间（10分钟）
+      max-lifetime: 1800000       # 连接最大生命周期（30分钟，应小于数据库连接超时）
+      connection-timeout: 30000   # 等待连接超时（30秒）
+      connection-test-query: &quot;SELECT 1&quot;
+      leak-detection-threshold: 60000  # 连接泄漏检测（仅开发环境启用）
+</code></pre></div>
+<p><strong>连接池大小公式：</strong> <code>connections = ((core_count * 2) + effective_spindle_count)</code></p>
+<h3>7.2 PgBouncer</h3>
+<p>当微服务实例数激增时，数据库直接连接数会成倍增长。PgBouncer 作为轻量级连接池代理，将大量短连接复用为少数长连接。</p>
+<p><strong>pool_mode 选择：</strong></p>
+<table>
+<thead>
+<tr>
+<th>模式</th>
+<th>含义</th>
+<th>适用场景</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>session</code></td>
+<td>一个客户端连接绑定一个服务器连接</td>
+<td>需要 prepared statement / SET 变量</td>
+</tr>
+<tr>
+<td><code>transaction</code></td>
+<td>仅在事务期间占用服务器连接</td>
+<td>通用 Web 应用（推荐）</td>
+</tr>
+<tr>
+<td><code>statement</code></td>
+<td>仅在单条语句期间占用</td>
+<td>自动提交模式，极少使用</td>
+</tr>
+</tbody></table>
+<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-ini"># pgbouncer.ini
+[databases]
+mydb = host=localhost port=5432 dbname=mydb
+
+[pgbouncer]
+pool_mode = transaction
+max_client_conn = 1000
+default_pool_size = 25
+reserve_pool_size = 5
+reserve_pool_timeout = 3.0
+</code></pre></div>
+<hr>
+<h2>八、分区表</h2>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- Range 分区（按日期）
+CREATE TABLE events (
+    id BIGSERIAL,
+    event_type TEXT,
+    payload JSONB,
+    created_at TIMESTAMPTZ NOT NULL
+) PARTITION BY RANGE (created_at);
+
+CREATE TABLE events_2026_q1 PARTITION OF events
+FOR VALUES FROM (&#39;2026-01-01&#39;) TO (&#39;2026-04-01&#39;);
+
+CREATE TABLE events_2026_q2 PARTITION OF events
+FOR VALUES FROM (&#39;2026-04-01&#39;) TO (&#39;2026-07-01&#39;);
+
+-- 分区裁剪自动生效
+SELECT * FROM events WHERE created_at BETWEEN &#39;2026-02-01&#39; AND &#39;2026-02-28&#39;;
+-- 只扫描 events_2026_q1 分区
+
+-- List 分区（按类型）
+CREATE TABLE orders PARTITION BY LIST (region);
+
+CREATE TABLE orders_us PARTITION OF orders FOR VALUES IN (&#39;US&#39;, &#39;CA&#39;);
+CREATE TABLE orders_eu PARTITION OF orders FOR VALUES IN (&#39;UK&#39;, &#39;DE&#39;, &#39;FR&#39;);
+
+-- Hash 分区（按 user_id 均匀分布）
+CREATE TABLE user_logs PARTITION BY HASH (user_id);
+
+CREATE TABLE user_logs_p0 PARTITION OF user_logs FOR VALUES WITH (MODULUS 4, REMAINDER 0);
+CREATE TABLE user_logs_p1 PARTITION OF user_logs FOR VALUES WITH (MODULUS 4, REMAINDER 1);
+CREATE TABLE user_logs_p2 PARTITION OF user_logs FOR VALUES WITH (MODULUS 4, REMAINDER 2);
+CREATE TABLE user_logs_p3 PARTITION OF user_logs FOR VALUES WITH (MODULUS 4, REMAINDER 3);
+</code></pre></div>
+<hr>
+<h2>九、常用扩展</h2>
+<h3>9.1 pg_stat_statements</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">CREATE EXTENSION pg_stat_statements;
+
+-- Top 10 慢查询（总耗时）
+SELECT queryid, LEFT(query, 120) AS query_preview,
+       calls, mean_exec_time, total_exec_time,
+       rows, shared_blks_hit, shared_blks_read
+FROM pg_stat_statements
+ORDER BY total_exec_time DESC
+LIMIT 10;
+
+-- 重置统计
+SELECT pg_stat_statements_reset();
+</code></pre></div>
+<h3>9.2 auto_explain</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- postgresql.conf
+shared_preload_libraries = &#39;auto_explain&#39;
+auto_explain.log_min_duration = 1000  -- 记录超过1秒的查询计划
+auto_explain.log_analyze = on
+auto_explain.log_buffers = on
+auto_explain.log_format = json
+</code></pre></div>
+<h3>9.3 pg_cron</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">CREATE EXTENSION pg_cron;
+
+-- 每天凌晨3点清理过期会话
+SELECT cron.schedule(
+    &#39;cleanup-expired-sessions&#39;,
+    &#39;0 3 * * *&#39;,
+    $$DELETE FROM user_sessions WHERE expires_at &lt; NOW()$$
+);
+
+-- 每小时 VACUUM 高频更新表
+SELECT cron.schedule(
+    &#39;vacuum-high-traffic&#39;,
+    &#39;0 * * * *&#39;,
+    &#39;VACUUM ANALYZE high_traffic_events&#39;
+);
+</code></pre></div>
+<hr>
+<h2>常见问题</h2>
+<p><strong>Q: pgvector 能支持多少向量？</strong>
+A: 无硬限制。100 万向量内索引效果良好；1000 万以上需考虑分区表 + 合理调优 <code>lists/m</code>。</p>
+<p><strong>Q: VACUUM FULL 阻塞多久？</strong>
+A: 取决于表大小。大表可能数小时。优先使用 <code>pg_repack</code> 进行在线重建。</p>
+<p><strong>Q: HNSW 索引占用多少内存？</strong>
+A: <code>m * 向量数 * 维度 * 4bytes</code>。例如 m=16, 100 万 1536 维向量 ≈ 98GB。生产环境需保证 <code>shared_buffers + OS Cache</code> 能容纳索引。</p>
+<p><strong>Q: 什么时候用流复制 vs 逻辑复制？</strong>
+A: 读写分离/灾备用流复制；CDC/跨版本升级/部分表同步用逻辑复制。</p>
+<hr>
+<h2>相关条目</h2>
+<ul>
+<li><a href="/04-数据与中间件/数据库与缓存/04-Redis深度解析" class="cross-ref" data-ref="04-Redis深度解析">04-Redis深度解析</a> — Redis 缓存与向量检索</li>
+<li><a href="/04-数据与中间件/消息与搜索/04-Elasticsearch深度解析" class="cross-ref" data-ref="04-Elasticsearch深度解析">04-Elasticsearch深度解析</a> — Elasticsearch 全文检索与混合搜索</li>
+<li><a href="/04-数据与中间件/对象存储/04-对象存储与中间件扩展" class="cross-ref" data-ref="04-对象存储与中间件扩展">04-对象存储与中间件扩展</a> — 对象存储与 AI 文件链路</li>
+<li><a href="/05-分布式架构/事务与一致性/05-分布式一致性与事务方案" class="cross-ref" data-ref="05-分布式一致性与事务方案">05-分布式一致性与事务方案</a> — 分布式事务（含 Outbox Pattern）</li>
+</ul>
+</div>
+</article>

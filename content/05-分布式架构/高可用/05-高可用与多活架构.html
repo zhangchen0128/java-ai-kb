@@ -1,0 +1,1195 @@
+
+<article class="kb-entry" data-path="/05-分布式架构/高可用/05-高可用与多活架构">
+  <div class="entry-meta">
+    <div class="entry-domain"><a href="/?d=05">05-分布式架构</a></div>
+    <h1>高可用与多活架构</h1>
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#["high-availability"</span><span class="badge badge-tag">#"multi-active"</span><span class="badge badge-tag">#"failover"</span><span class="badge badge-tag">#"sentinel"</span></div>
+    
+  </div>
+  <div class="entry-body"><h1>高可用与多活架构</h1>
+<h2>概述</h2>
+<p>高可用（High Availability, HA）是分布式系统的核心质量属性，其本质是在部分组件故障时系统仍能对外提供可接受的服务水平。可用性的技术体系从单机守护进程的冷备模式，演进到机架级/机房级/区域级的异地多活，覆盖故障检测、故障转移、数据同步、流量调度和灾备恢复的全生命周期。</p>
+<p>在 AI 应用中，高可用尤为重要：模型推理服务的延迟敏感特性决定了秒级故障检测和自动恢复是刚需；RAG 知识库的多向量索引需要同步复制保障检索一致性；Agent 长任务的持久化执行状态需要跨可用区容灾。</p>
+<p>本文从可用性指标出发，系统性地展开故障转移策略、多活架构设计、优雅关闭与滚动更新、灾备恢复等全套技术体系，并给出基于 JDK 25 + Spring Boot 4.x + Redis Sentinel/Redisson + Kafka ISR 的实战代码。</p>
+<hr>
+<h2>一、高可用基础</h2>
+<h3>1.1 可用性指标</h3>
+<p>可用性是系统正常运行时间占总时间的比例，业界常用&quot;几个9&quot;来量化：</p>
+<table>
+<thead>
+<tr>
+<th>可用性等级</th>
+<th>年宕机时间</th>
+<th>月宕机时间</th>
+<th>周宕机时间</th>
+<th>典型场景</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>99% (2个9)</td>
+<td>3.65 天</td>
+<td>7.2 小时</td>
+<td>1.68 小时</td>
+<td>内部工具、开发环境</td>
+</tr>
+<tr>
+<td>99.9% (3个9)</td>
+<td>8.76 小时</td>
+<td>43.8 分钟</td>
+<td>10.1 分钟</td>
+<td>非关键业务系统</td>
+</tr>
+<tr>
+<td>99.99% (4个9)</td>
+<td>52.56 分钟</td>
+<td>4.38 分钟</td>
+<td>1.01 分钟</td>
+<td>核心业务系统</td>
+</tr>
+<tr>
+<td>99.999% (5个9)</td>
+<td>5.26 分钟</td>
+<td>26.3 秒</td>
+<td>6.05 秒</td>
+<td>电信级、金融核心</td>
+</tr>
+<tr>
+<td>99.9999% (6个9)</td>
+<td>31.5 秒</td>
+<td>2.6 秒</td>
+<td>0.6 秒</td>
+<td>极少达成</td>
+</tr>
+</tbody></table>
+<p>核心计算公式：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Availability = MTBF / (MTBF + MTTR)
+</code></pre></div>
+<ul>
+<li><strong>MTBF</strong> (Mean Time Between Failures)：平均无故障时间，表征系统稳定性</li>
+<li><strong>MTTR</strong> (Mean Time To Repair)：平均修复时间，表征运维响应能力</li>
+<li><strong>MTTF</strong> (Mean Time To Failure)：系统从启动到首次故障的平均时间（适用于不可修复系统）</li>
+</ul>
+<p><strong>关键洞察：</strong> 降低 MTTR 比提高 MTBF 更高效。将 MTTR 从 30 分钟降到 5 分钟，等同于将 MTBF 提升 6 倍。这也是自动化故障检测与恢复的工程价值所在——人工介入的 MTTR 通常以分钟计，而自动故障转移可将 MTTR 压缩到秒级。</p>
+<h3>1.2 故障检测机制</h3>
+<p>故障检测是故障转移的前提。必须有准确、低延迟的机制判断节点是否真的故障：</p>
+<p><strong>心跳机制（Heartbeat）：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌─────────┐    TCP 连接保活/HTTP Health Check     ┌─────────┐
+│  监控节点 │ ◄──────────────────────────────────► │  被监控节点│
+└─────────┘     每 N 秒发送心跳，超时判定故障        └─────────┘
+</code></pre></div>
+<ul>
+<li><strong>TCP 层心跳：</strong> 依赖 TCP Keep-Alive 或自定义长度字节的心跳包，开销最低，但无法反映应用层状态</li>
+<li><strong>HTTP Health Check：</strong> <code>/health</code>、<code>/actuator/health/liveness</code>、<code>/actuator/health/readiness</code>，能检测应用逻辑是否正常，是 K8s 和 Spring Boot 的标准方案</li>
+<li><strong>超时判死：</strong> 连续 N 次心跳失败 → 判定节点故障。N 的取值需要平衡误判率和检测延迟</li>
+<li><strong>故障确认：</strong> 单个监控节点的判定不可靠（可能是监控节点自身网络问题），通常需要多个监控节点达成共识</li>
+</ul>
+<p><strong>TTL 租约（Lease）：</strong></p>
+<p>节点定期续约一个带 TTL 的租约（如写入 Redis/etcd 一个带过期时间的 key）。节点故障后租约自动过期，其他节点可感知到。优势是避免了监控者单点问题，但依赖外部存储的可用性。</p>
+<p><strong>Gossip 协议（成员关系传播）：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Node A ──── 随机选择 ────► Node B ──── 随机选择 ────► Node C
+  │                          │                          │
+  └── 交换已知的成员状态 ─────┴── 交换已知的成员状态 ─────┘
+</code></pre></div>
+<p>每个节点周期性地与随机几个对等节点交换其已知的全体成员状态。信息以 O(log N) 轮次传播到整个集群。Cassandra、Redis Cluster、Consul 都使用 Gossip 或变体。优点是无中心化、扩展性好；缺点是收敛需要时间，存在短暂的不一致窗口。</p>
+<p><strong>Phi Accrual Failure Detector（自适应阈值）：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>φ = -log₁₀(P(t | heartbeat_arrival_history))
+
+φ = 1 → 约 10% 怀疑是故障
+φ = 2 → 约 1% 怀疑是故障
+φ = 8 → 约 10⁻⁸ 怀疑是故障
+</code></pre></div>
+<p>不设置固定的超时阈值，而是根据心跳到达的历史分布，动态计算节点故障的可疑程度（φ 值）。当 φ 超过阈值时触发故障怀疑。Akka 和 Cassandra 使用此机制。相比固定超时，在面对网络抖动和瞬时负载变化时更鲁棒。</p>
+<h3>1.3 故障转移基础</h3>
+<p><strong>自动 failover 流程：</strong> 检测故障 → 选举新主 → 将流量切换到新主 → 通知相关组件</p>
+<p><strong>手动 failover vs 自动 failover：</strong></p>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>手动 failover</th>
+<th>自动 failover</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>MTTR</td>
+<td>分钟级到小时级</td>
+<td>秒级到分钟级</td>
+</tr>
+<tr>
+<td>误判风险</td>
+<td>低（有人工判断）</td>
+<td>存在（网络分区误判）</td>
+</tr>
+<tr>
+<td>运维成本</td>
+<td>高（需要 7x24 值班）</td>
+<td>低（自动化处理）</td>
+</tr>
+<tr>
+<td>复杂场景</td>
+<td>灵活处理</td>
+<td>需预定义规则</td>
+</tr>
+</tbody></table>
+<p><strong>脑裂（Split-Brain）问题：</strong> 当网络分区导致集群分裂为两个或更多子集群，每个子集群都可能选出自己的 leader，导致数据写入冲突和数据丢失。解决方案：</p>
+<ol>
+<li><strong>法定人数（Quorum）：</strong> 要求 leader 获得超过半数节点的投票（Raft 的多数派原则）</li>
+<li><strong>Fencing Token：</strong> 每次 leader 变更递增一个单调递增的 token，存储系统拒绝小于当前 token 的写入请求</li>
+<li><strong>外部锁：</strong> 基于 ZooKeeper 临时节点的 leader 租约，只有持有租约的节点才能写入</li>
+</ol>
+<hr>
+<h2>二、故障转移策略</h2>
+<h3>2.1 Active-Passive（主备模式）</h3>
+<table>
+<thead>
+<tr>
+<th>模式</th>
+<th>备节点状态</th>
+<th>切换时间</th>
+<th>资源利用率</th>
+<th>适用场景</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>冷备（Cold Standby）</td>
+<td>未启动，故障时启动</td>
+<td>分钟级</td>
+<td>100%（仅备节点闲置）</td>
+<td>成本敏感的离线系统</td>
+</tr>
+<tr>
+<td>温备（Warm Standby）</td>
+<td>已启动，未接管流量</td>
+<td>秒级到分钟级</td>
+<td>备节点部分闲置</td>
+<td>对切换时间有一定要求的业务</td>
+</tr>
+<tr>
+<td>热备（Hot Standby）</td>
+<td>已启动，实时同步，随时接管</td>
+<td>秒级</td>
+<td>备节点闲置但可做只读</td>
+<td>核心数据库、关键服务</td>
+</tr>
+</tbody></table>
+<p><strong>VIP 漂移（Keepalived + VRRP）：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>         ┌──────────────┐
+         │   VIP: 10.0.0.100 │
+         └───────┬──────┘
+                 │
+     ┌───────────┴───────────┐
+     │                       │
+┌────┴─────┐          ┌──────┴────┐
+│  Master   │  VRRP    │  Backup   │
+│ (Priority │◄────────►│ (Priority │
+│   100)    │  心跳     │   90)     │
+└──────────┘          └───────────┘
+
+Master 故障 → Backup 检测到 VRRP 心跳丢失
+→ Backup 提升为 Master（优先级 100）
+→ Backup 接管 VIP 10.0.0.100
+→ 发送免费 ARP 通告新的 MAC 地址
+→ 流量切换完成（通常 &lt; 3 秒）
+</code></pre></div>
+<p>Keepalived 的核心是通过 VRRP（Virtual Router Redundancy Protocol）实现 IP 地址的虚拟化和漂移。但它只能做 IP 层面的切换，不感知应用状态——需要配合应用层健康检查脚本（如 <code>notify_master</code> 脚本中检测 MySQL 是否真的可写）。</p>
+<h3>2.2 Active-Active（双活模式）</h3>
+<p>两个节点同时处理流量，互为备份：</p>
+<ul>
+<li><strong>DNS 轮询 + 健康检查：</strong> DNS 返回多个 A 记录，配合健康检查摘除故障节点。优点是最简单；缺点是 DNS 缓存导致切换延迟（TTL 内客户端仍会路由到故障节点）</li>
+<li><strong>全局负载均衡（GSLB）：</strong> 在 DNS 层面做智能路由（基于地理位置、机房健康度、容量等），比简单轮询更灵活</li>
+<li><strong>数据冲突处理：</strong> 双活的根本挑战是数据冲突——两个机房同时修改同一行数据。处理方案包括：<ul>
+<li>按用户维度分片，保证同一用户的请求始终路由到同一机房（用户亲和性）</li>
+<li>CRDT（Conflict-free Replicated Data Type）：数据结构本身保证合并无冲突</li>
+<li>最后写入胜出（LWW）：简单但有数据丢失风险</li>
+<li>业务规则合并：应用层自定义冲突解决逻辑</li>
+</ul>
+</li>
+</ul>
+<h3>2.3 数据同步策略</h3>
+<p>数据复制的核心矛盾是：<strong>一致性 vs 可用性 vs 延迟</strong>。</p>
+<table>
+<thead>
+<tr>
+<th>同步模式</th>
+<th>写入延迟</th>
+<th>数据一致性</th>
+<th>数据丢失风险</th>
+<th>适用场景</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>同步复制</td>
+<td>高（等所有副本确认）</td>
+<td>强一致</td>
+<td>零丢失</td>
+<td>金融交易、支付系统</td>
+</tr>
+<tr>
+<td>异步复制</td>
+<td>低（主库立即返回）</td>
+<td>最终一致</td>
+<td>可能丢失未同步数据</td>
+<td>用户行为日志、社交动态</td>
+</tr>
+<tr>
+<td>半同步复制</td>
+<td>中（等至少一个副本确认）</td>
+<td>增强最终一致</td>
+<td>少量丢失风险</td>
+<td>通用业务数据库</td>
+</tr>
+</tbody></table>
+<p><strong>MySQL 半同步复制的 after_sync 模式：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>客户端 → 主库写入 binlog
+          │
+          ├── 等待至少 1 个从库确认收到 binlog（不等待执行完成）
+          │
+          └── 收到确认后，提交事务并返回客户端
+
+优势：主库崩溃时，至少有一个从库拥有完整的 binlog
+代价：如果半同步超时退化为异步，需要告警和人工介入
+</code></pre></div>
+<h3>2.4 选举算法</h3>
+<p><strong>Raft 领导者选举：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>节点状态转换：
+                      超时，开始选举
+    ┌──────────┐ ────────────────────────► ┌──────────┐
+    │ Follower │                           │ Candidate │
+    └──────────┘ ◄──────────────────────── └──────────┘
+          ▲         收到更高 term 的请求           │
+          │                                       │
+          │                               获得多数票 │
+          │                                       ▼
+          │                                ┌──────────┐
+          └────────────────────────────────│  Leader   │
+                 发现更高 term 的 Leader     └──────────┘
+</code></pre></div>
+<p>选举比较规则：先比较 term（任期号），term 大的胜出；term 相同比较 log index，日志更新的胜出。每个节点在一个 term 内只能投一票，防止脑裂。</p>
+<p><strong>Bully 算法：</strong> 节点 ID 最大的节点成为 leader。当节点发现 leader 故障时，&quot;欺负&quot;比自己 ID 小的节点。简单但在网络分区时容易双主。</p>
+<p><strong>基于 ZooKeeper 的选举：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>/leader-election
+    ├── _c_0000000001 (临时顺序节点, node-A)
+    ├── _c_0000000002 (临时顺序节点, node-B)
+    └── _c_0000000003 (临时顺序节点, node-C)
+
+序号最小的节点（0000000001）成为 Leader
+Leader 故障 → 临时节点自动删除 → 序号 0000000002 晋升
+每个 Follower watch 前一个序号节点
+</code></pre></div>
+<p>ZooKeeper 的临时顺序节点 + watch 机制提供了工业级的 leader 选举方案。临时节点的特性保证了 leader 崩溃后自动释放锁；顺序节点的特性保证了先到先得且无惊群效应。</p>
+<hr>
+<h2>三、多活架构</h2>
+<h3>3.1 多活架构层次</h3>
+<p><strong>同城双活：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌──────────────────── 同城（延迟 &lt; 2ms）─────────────────┐
+│                                                          │
+│  ┌──────────────┐         数据同步         ┌──────────────┐ │
+│  │  机房 A       │ ◄═══════════════════►   │  机房 B       │ │
+│  │  (全量服务)    │     同步复制(强一致)      │  (全量服务)    │ │
+│  └──────────────┘                          └──────────────┘ │
+│                                                          │
+│  数据库主从跨机房部署，同步复制保障零数据丢失                           │
+│  任一机房故障，另一机房承载全部流量                                   │
+└──────────────────────────────────────────────────────────┘
+</code></pre></div>
+<p>核心要求：</p>
+<ul>
+<li>网络延迟极低（光纤直连，RTT &lt; 2ms），否则同步复制的延迟代价不可接受</li>
+<li>链路带宽充足，能承载数据同步和故障时全量流量</li>
+<li>必须防脑裂——通常引入第三点（仲裁节点）或依赖多机房多数派</li>
+</ul>
+<p><strong>两地三中心：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>    城市 A（同城双活）                         城市 B（异地灾备）
+┌─────────────────────────┐        ┌─────────────────────┐
+│  机房 A-1     机房 A-2    │ 异步复制│    机房 B-1           │
+│  (主) ◄────► (从/备)   │═══════►│   (灾备)              │
+│  同步复制              │ 延迟&lt;2ms│                      │
+└─────────────────────────┘        └─────────────────────┘
+
+同城双活保障机房级容灾，异地灾备保障城市级容灾
+异地之间的异步复制容忍分钟级延迟和数据丢失
+</code></pre></div>
+<p>这是国内金融行业的标准架构。异地灾备中心的资源可以用于灾备演练和非核心的读流量（如报表、数据分析）。</p>
+<p><strong>单元化架构：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>用户 ID hash(user_id) % N  → 路由到固定的单元（Set）
+
+┌──────────────┐    ┌──────────────┐    ┌──────────────┐
+│   Set 0      │    │   Set 1      │    │   Set 2      │
+│  user [0,N,2N]│   │ user [1,N+1] │   │ user [2,N+2] │
+│              │    │              │    │              │
+│  应用 + 数据库 │    │  应用 + 数据库 │    │  应用 + 数据库 │
+│  缓存 + 消息   │    │  缓存 + 消息   │    │  缓存 + 消息   │
+└──────────────┘    └──────────────┘    └──────────────┘
+
+每个 Set 是自包含的完整业务单元
+Set 之间无共享数据库，无跨 Set 事务
+通过全局路由层将用户请求分发到所属 Set
+</code></pre></div>
+<p>单元化的优势：</p>
+<ul>
+<li>故障爆炸半径可控——一个 Set 故障只影响该分片的用户</li>
+<li>水平扩展简单——增加 Set 即可扩容</li>
+<li>异地多活自然支持——不同的 Set 可以部署在不同的机房</li>
+</ul>
+<p>代价是需要精心设计分片键，且跨 Set 的业务操作（如用户间转账）需额外的分布式事务支持。</p>
+<h3>3.2 全局路由</h3>
+<p>多活架构中，如何将用户请求路由到正确的机房/单元？</p>
+<p><strong>GSLB（Global Server Load Balancing）+ 智能 DNS：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>用户 DNS 查询 your-api.example.com
+        │
+        ▼
+    GSLB 设备/服务（根据以下策略决策）：
+    ├── 用户 IP 的地理位置 → 最近机房
+    ├── 各机房的实时健康度 → 剔除故障机房
+    ├── 各机房的当前负载 → 负载均衡分发
+    └── 用户所属单元 → 路由到对应机房
+        │
+        ▼
+    返回目标机房的 VIP 或入口地址
+</code></pre></div>
+<p><strong>HTTP 302 重定向：</strong> 用户首次访问任意机房的入口，该入口查询用户归属后返回 302 将浏览器重定向到正确机房。适用于 Web 应用，但不适用于 API 调用（增加一次额外往返）。</p>
+<p><strong>Anycast IP：</strong> 多个机房对外通告相同的 IP 地址，依赖 BGP 路由协议将用户流量自动导向最近的机房。Google 的 8.8.8.8 就是经典的 Anycast 部署。优点是网络层转发、无额外延迟；缺点是不感知应用层状态，切换依赖路由收敛。</p>
+<h3>3.3 数据分区与用户亲和性</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>路由策略的核心：
+user_id → hash(user_id) % shard_count → Set ID → 机房映射
+
+用户亲和性（Session Affinity / Sticky Session）：
+同一用户的后续请求必须路由到同一机房/Set，避免跨机房读写的复杂性和延迟
+</code></pre></div>
+<p><strong>跨机房数据访问的兜底策略：</strong></p>
+<ol>
+<li><strong>只读降级：</strong> 用户的归属机房故障时，临时路由到其他机房，但只允许读取已有数据（禁止写入）</li>
+<li><strong>异步写入暂存：</strong> 本地暂存写入操作，等归属机房恢复后异步同步</li>
+<li><strong>跨机房代理写：</strong> 通过专线将写入请求代理转发到归属机房（延迟会显著增加）</li>
+</ol>
+<h3>3.4 数据同步延迟处理</h3>
+<p>多活架构无法回避的核心难题——数据同步总是有延迟的。</p>
+<p><strong>最终一致性窗口：</strong></p>
+<table>
+<thead>
+<tr>
+<th>同步方式</th>
+<th>典型延迟</th>
+<th>数据差异</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>同城同步复制</td>
+<td>&lt; 1ms（网络）+ 磁盘写入</td>
+<td>无差异</td>
+</tr>
+<tr>
+<td>同城半同步</td>
+<td>&lt; 1ms</td>
+<td>可能丢失未确认事务</td>
+</tr>
+<tr>
+<td>跨城异步复制</td>
+<td>10-100ms</td>
+<td>延迟窗口内数据不一致</td>
+</tr>
+<tr>
+<td>跨洲异步复制</td>
+<td>100ms - 数秒</td>
+<td>较大的不一致窗口</td>
+</tr>
+</tbody></table>
+<p><strong>冲突解决策略：</strong></p>
+<ol>
+<li><strong>Last Write Wins（LWW）：</strong> 基于时间戳，最后写入的数据覆盖。最简单但可能丢失有效更新。适用于覆盖式操作（如更新用户头像）</li>
+<li><strong>CRDT（Conflict-free Replicated Data Type）：</strong> 数据结构本身保证合并无冲突。例如：<ul>
+<li>G-Counter（只增不减的计数器）：合并 = 取各副本的最大值</li>
+<li>PN-Counter（可增可减的计数器）：通过正负两个 G-Counter 实现</li>
+<li>OR-Set（Observed-Remove Set）：标记已删除元素，合并时考虑删除标记</li>
+</ul>
+</li>
+<li><strong>版本向量（Version Vector）：</strong> 每个副本维护一个向量 <code>[counter_A, counter_B, counter_C]</code>，通过比较向量判断因果关系和冲突</li>
+<li><strong>业务规则合并：</strong> 应用层根据领域语义合并非冲突的更新，标记冲突交人工处理</li>
+</ol>
+<p><strong>Read-Your-Writes 一致性：</strong> 用户读取自己的写入时必须看到最新数据。实现方式：</p>
+<ul>
+<li>写操作完成后返回一个版本号，后续读操作携带该版本号确保读到足够新的副本</li>
+<li>用户写操作始终路由到主副本读取（牺牲一部分多活的负载分担效果）</li>
+<li>异步复制场景下，写入后短暂时间内仍从主副本读取</li>
+</ul>
+<hr>
+<h2>四、优雅关闭与滚动更新</h2>
+<h3>4.1 Spring Boot Graceful Shutdown</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">server:
+  shutdown: graceful
+
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: always
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Configuration
+public class GracefulShutdownConfig {
+
+    @Bean
+    public TomcatProtocolHandlerCustomizer&lt;?&gt; gracefulShutdown() {
+        return protocolHandler -&gt; {
+            protocolHandler.setKeepAliveTimeout(5_000);
+            // Spring Boot 4.x 支持设置优雅关闭的等待窗口
+        };
+    }
+
+    @EventListener
+    public void onShutdown(ApplicationReadyEvent event) {
+        // 应用启动完成后的初始化
+    }
+}
+
+// 自定义 Readiness 探针
+@Component
+public class CustomReadinessIndicator implements AvailabilityChangeListener {
+
+    private volatile boolean outOfService = false;
+
+    @PostConstruct
+    public void init() {
+        AvailabilityChangeListener.register(this);
+    }
+
+    public void markOutOfService() {
+        this.outOfService = true;
+        // 通知 Kubernetes readiness 探针返回 503
+    }
+
+    @Override
+    public void onStateChange(AvailabilityState state) {
+        // 监听 Spring Boot 内部状态变化
+    }
+}
+
+// Readiness HealthIndicator
+@Component
+public class TrafficReadinessHealthIndicator implements HealthIndicator {
+
+    private final AtomicBoolean ready = new AtomicBoolean(true);
+
+    @Override
+    public Health health() {
+        if (ready.get()) {
+            return Health.up().build();
+        }
+        return Health.outOfService().withDetail(&quot;reason&quot;, &quot;draining&quot;).build();
+    }
+
+    public void markOutOfService() {
+        ready.set(false);
+    }
+}
+</code></pre></div>
+<h3>4.2 K8s preStop Hook 与完整生命周期</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Pod 终止的完整生命周期：
+
+1. Pod 状态变为 Terminating（从 Service Endpoints 中移除）
+2. preStop Hook 执行（如果配置了）
+   └── 应用：标记 readiness 为 OUT_OF_SERVICE
+   └── 等待 connection draining 完成（例如 sleep 10s）
+3. SIGTERM 发送给容器主进程
+   └── Spring Boot 收到 SIGTERM → 执行 graceful shutdown
+   └── 拒绝新的 HTTP 请求
+   └── 等待正在处理的请求完成（最多 timeout-per-shutdown-phase）
+4. 等待 terminationGracePeriodSeconds（默认 30s）
+5. 超时后，SIGKILL 强杀进程
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">apiVersion: v1
+kind: Pod
+metadata:
+  name: ai-service
+spec:
+  terminationGracePeriodSeconds: 60
+  containers:
+    - name: app
+      image: ai-service:latest
+      ports:
+        - containerPort: 8080
+      lifecycle:
+        preStop:
+          exec:
+            command:
+              - /bin/sh
+              - -c
+              - |
+                # 1. 标记 readiness 为 OUT_OF_SERVICE
+                curl -X POST http://localhost:8080/actuator/health/out-of-service
+                # 2. 等待连接排干（通常 10-15 秒）
+                sleep 15
+      readinessProbe:
+        httpGet:
+          path: /actuator/health/readiness
+          port: 8080
+        initialDelaySeconds: 10
+        periodSeconds: 5
+        failureThreshold: 3
+      livenessProbe:
+        httpGet:
+          path: /actuator/health/liveness
+          port: 8080
+        initialDelaySeconds: 30
+        periodSeconds: 10
+</code></pre></div>
+<p><strong>连接排干（Connection Draining）的最佳实践：</strong></p>
+<ol>
+<li>先标记 readiness 为 OUT_OF_SERVICE → K8s 将该 Pod 从 Service Endpoints 中摘除</li>
+<li>存量连接自然完成或超时关闭（预留给 drain 窗口的时间）</li>
+<li>关闭端口 → 停止接受新连接</li>
+<li>停止应用 → 释放资源</li>
+</ol>
+<p>完整的排干时间 = preStop sleep 时间 + graceful shutdown 执行时间，必须小于 <code>terminationGracePeriodSeconds</code>。</p>
+<h3>4.3 滚动更新与发布策略</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-service
+spec:
+  replicas: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1         # 最多额外创建 1 个 Pod
+      maxUnavailable: 0   # 更新期间不允许有不可用 Pod（零停机）
+  template:
+    ...
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>发布策略</th>
+<th>原理</th>
+<th>影响范围</th>
+<th>回滚速度</th>
+<th>适用场景</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>滚动更新（Rolling）</td>
+<td>逐个替换 Pod</td>
+<td>逐步切换</td>
+<td>较快</td>
+<td>常规发布</td>
+</tr>
+<tr>
+<td>金丝雀发布（Canary）</td>
+<td>少量实例（5-10%）先接受新版本流量</td>
+<td>小范围用户</td>
+<td>立即</td>
+<td>需要灰度验证</td>
+</tr>
+<tr>
+<td>蓝绿部署（Blue-Green）</td>
+<td>两套完整环境切换</td>
+<td>全部流量瞬间切换</td>
+<td>秒级</td>
+<td>核心服务、需要快速回滚</td>
+</tr>
+<tr>
+<td>A/B 测试</td>
+<td>按用户属性路由到不同版本</td>
+<td>特定用户群</td>
+<td>逐步</td>
+<td>产品功能验证</td>
+</tr>
+</tbody></table>
+<p><strong>金丝雀发布的路由策略（基于 Spring Cloud Gateway）：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Bean
+public RouteLocator canaryRoutes(RouteLocatorBuilder builder) {
+    return builder.routes()
+        .route(&quot;llm-service-canary&quot;, r -&gt; r
+            .path(&quot;/api/v1/llm/**&quot;)
+            .and().header(&quot;X-Canary&quot;, &quot;true&quot;)
+            .uri(&quot;lb://llm-service-canary&quot;))  // 金丝雀版本
+        .route(&quot;llm-service-stable&quot;, r -&gt; r
+            .path(&quot;/api/v1/llm/**&quot;)
+            .uri(&quot;lb://llm-service-stable&quot;))  // 稳定版本
+        .build();
+}
+</code></pre></div>
+<hr>
+<h2>五、灾备与恢复</h2>
+<h3>5.1 RPO 与 RTO</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>                    ┌────── 故障发生点 ──────┐
+                    │                        │
+    ────────────────┤   数据丢失窗口 (RPO)    ├──────── 时间轴
+                    │◄─────────────────────►│
+                    │                        │
+                    │  ┌── 恢复窗口 (RTO) ──┤──── 服务恢复
+                    │  │◄─────────────────►│
+                    │  │                   │
+                    ▼  ▼                   ▼
+                  [故障] [开始恢复]    [恢复完成]
+</code></pre></div>
+<ul>
+<li><strong>RPO (Recovery Point Objective)：</strong> 可接受的数据丢失量。RPO=0 意味着零数据丢失（同步复制）；RPO=60s 意味着可接受丢失最近 60 秒的数据（异步复制）</li>
+<li><strong>RTO (Recovery Time Objective)：</strong> 从故障发生到服务恢复的最大可接受时长。RTO=5min 意味着必须在 5 分钟内恢复服务</li>
+</ul>
+<p><strong>RPO/RTO 的工程权衡：</strong> 更低的 RPO 和 RTO 意味着更高的成本（同步复制、热备、专用链路）。并非所有系统都需要 RPO=0 和 RTO&lt;1min——应根据业务分级制定。</p>
+<h3>5.2 备份策略</h3>
+<table>
+<thead>
+<tr>
+<th>备份类型</th>
+<th>原理</th>
+<th>优点</th>
+<th>缺点</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>全量备份</td>
+<td>完整数据集快照</td>
+<td>恢复最简单</td>
+<td>耗时长，存储大</td>
+</tr>
+<tr>
+<td>增量备份</td>
+<td>自上次备份以来的变更</td>
+<td>速度快、存储小</td>
+<td>恢复需要叠加多次备份</td>
+</tr>
+<tr>
+<td>日志备份</td>
+<td>连续归档 WAL/binlog</td>
+<td>支持任意时间点恢复（PITR）</td>
+<td>日志存储和管理复杂</td>
+</tr>
+<tr>
+<td>冷备份</td>
+<td>停机状态下备份</td>
+<td>数据一致性最好</td>
+<td>需要停机窗口</td>
+</tr>
+<tr>
+<td>热备份</td>
+<td>在线备份</td>
+<td>不中断服务</td>
+<td>可能影响性能</td>
+</tr>
+</tbody></table>
+<p><strong>MySQL 备份工具链：</strong></p>
+<ul>
+<li><code>xtrabackup</code>（Percona）：物理热备份，不锁表，适合大数据库</li>
+<li><code>mysqldump</code>：逻辑备份，简单但慢</li>
+<li><code>mysqlbinlog</code>：binlog 连续归档，支持 PITR</li>
+</ul>
+<p><strong>PostgreSQL 备份工具链：</strong></p>
+<ul>
+<li><code>pg_dump</code> / <code>pg_dumpall</code>：逻辑备份</li>
+<li><code>pg_basebackup</code>：物理在线备份</li>
+<li>WAL 连续归档：<code>archive_command</code> + <code>pg_receivewal</code>，支持 PITR</li>
+</ul>
+<h3>5.3 恢复演练与数据校验</h3>
+<p><strong>定期恢复演练是验证灾备有效性的唯一手段。</strong> 必须定期（每季度/每半年）执行以下验证：</p>
+<ol>
+<li><strong>从备份恢复数据库到指定时间点</strong> → 验证 RPO 是否达标</li>
+<li><strong>在灾备机房启动完整应用栈</strong> → 验证 RTO 是否达标</li>
+<li><strong>执行数据一致性校验</strong> → 验证数据无静默损坏</li>
+</ol>
+<p><strong>混沌工程故障注入：</strong></p>
+<p>在受控环境下注入以下故障类型，验证系统的容灾能力：</p>
+<ul>
+<li>数据库主节点宕机 → 验证自动 failover 和 RTO</li>
+<li>网络分区（延迟注入/丢包） → 验证选举和一致性保障</li>
+<li>机房级故障（模拟） → 验证多活切换和流量调度</li>
+</ul>
+<p><strong>恢复手册（Playbook）的重要性：</strong> 故障处置不能依赖记忆——必须在事先编写覆盖关键故障场景的逐步操作手册，包含以下要素：故障现象识别、人员通知流程、故障诊断步骤、恢复操作步骤（含精确命令）、验证恢复成功的检查步骤、回滚方案。</p>
+<p><strong>数据一致性校验：</strong></p>
+<ul>
+<li>MySQL：<code>pt-table-checksum</code>（Percona Toolkit）—— 对主从数据进行 CRC 校验，发现不一致的行</li>
+<li>PostgreSQL：<code>pg_checksums</code> + 自定义校验脚本</li>
+<li>WAL/Binlog 完整性验证：确保日志序列无间断、无损坏</li>
+</ul>
+<hr>
+<h2>六、实际案例</h2>
+<h3>6.1 MySQL 主从切换（GitHub Orchestrator）</h3>
+<p>Orchestrator 是 GitHub 开源的 MySQL 高可用管理工具，实现了拓扑发现、故障检测和自动故障转移。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>架构概览：
+
+┌──────────────────────────────────────────────────────┐
+│                   Orchestrator                        │
+│                                                      │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐   │
+│  │ 拓扑发现      │  │ 故障检测     │  │ 故障转移     │   │
+│  │ (周期性探测   │  │ (心跳超时    │  │ (选择最佳    │   │
+│  │  复制拓扑)    │  │  判定故障)    │  │  从库晋升)   │   │
+│  └─────────────┘  └─────────────┘  └─────────────┘   │
+│                                                      │
+│                       故障转移流程                      │
+│  ┌────────────────────────────────────────────────┐  │
+│  │ 1. 检测到主库故障（连续心跳失败）                  │  │
+│  │ 2. 验证主库确实不可达（多个 orchestrator 节点共识）│  │
+│  │ 3. 选择最佳从库（数据最新的、延迟最小的）          │  │
+│  │ 4. 确认其他从库的复制状态                          │  │
+│  │ 5. 将选中的从库提升为主库                          │  │
+│  │ 6. 让其他从库切换复制源到新主库                    │  │
+│  │ 7. 更新 VIP 或 ProxySQL 路由，指向新主库          │  │
+│  │ 8. 发送告警通知                                  │  │
+│  └────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────┘
+</code></pre></div>
+<p><strong>GTID 模式下的主从切换优势：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- 传统 binlog + position 方式
+CHANGE MASTER TO
+  MASTER_LOG_FILE=&#39;mysql-bin.000123&#39;,
+  MASTER_LOG_POS=456789;
+
+-- GTID 方式（简化切换、自动定位）
+-- 从库自动从正确的 binlog 位置开始同步
+-- 不依赖文件+偏移量的手动对齐
+</code></pre></div>
+<p>GTID（Global Transaction Identifier）为每个事务分配全局唯一标识。切换时，新从库只需告诉主库自己执行过哪些 GTID，主库就能自动确定需要同步哪些事务。这极大降低了切换的复杂度和出错概率。</p>
+<p><strong>ProxySQL 路由切换：</strong> Orchestrator 检测到主从切换后，调用 <code>detect_post_failover_script</code> → 脚本更新 ProxySQL 的 <code>mysql_servers</code> 表中的读写组配置 → ProxySQL 立即将写流量路由到新主库。</p>
+<h3>6.2 Redis Sentinel 故障转移</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>哨兵集群（至少 3 个节点，避免偶数节点投票平手）：
+
+    ┌──────────┐    ┌──────────┐    ┌──────────┐
+    │ Sentinel │    │ Sentinel │    │ Sentinel │
+    │    1     │    │    2     │    │    3     │
+    └────┬─────┘    └────┬─────┘    └────┬─────┘
+         │               │               │
+         └───────────────┼───────────────┘
+                         │ 监控
+         ┌───────────────┼───────────────┐
+         │               │               │
+    ┌────┴─────┐    ┌────┴─────┐    ┌────┴─────┐
+    │  Master  │    │  Slave 1 │    │  Slave 2 │
+    │  Redis   │◄───│  Redis   │    │  Redis   │
+    └──────────┘ 复制└──────────┘    └──────────┘
+</code></pre></div>
+<p><strong>Sentinel 故障转移完整流程：</strong></p>
+<ol>
+<li><p><strong>主观下线（SDOWN - Subjective Down）：</strong> 单个 Sentinel 检测到 Master 在 <code>down-after-milliseconds</code> 时间内无响应，标记该 Master 为 SDOWN</p>
+</li>
+<li><p><strong>客观下线（ODOWN - Objective Down）：</strong> 该 Sentinel 向其他 Sentinel 查询，当超过 <code>quorum</code> 个 Sentinel 都认为 Master 不可达时，将标记升级为 ODOWN</p>
+</li>
+<li><p><strong>选举 Sentinel Leader：</strong> 需要进行故障转移的 Sentinel 之间通过 Raft-like 投票选举出一个 Leader（Leader 负责执行故障转移）</p>
+</li>
+<li><p><strong>选择新 Master：</strong> Leader Sentinel 从所有 Slave 中选择一个新 Master（规则：排除已经标记 SDOWN 的、排除与旧 Master 断开时间过长的、优先级最高的、复制偏移量最大的、run_id 字典序最小的）</p>
+</li>
+<li><p><strong>执行故障转移：</strong> Sentinel Leader 向选中的 Slave 发送 <code>SLAVEOF NO ONE</code> → 配置其他 Slave 复制新 Master → 更新 Sentinel 内部状态</p>
+</li>
+<li><p><strong>通知客户端：</strong> Sentinel 通过 Pub/Sub（<code>+switch-master</code> 频道）或客户端重连机制通知新 Master 地址</p>
+</li>
+</ol>
+<div class="code-block"><div class="code-header"><span class="code-lang">conf</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-conf"># sentinel.conf
+sentinel monitor mymaster 192.168.1.10 6379 2
+sentinel down-after-milliseconds mymaster 5000
+sentinel failover-timeout mymaster 30000
+sentinel parallel-syncs mymaster 1
+</code></pre></div>
+<h3>6.3 Kafka ISR 故障处理</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Topic: ai-events, Partition: 0
+
+    ┌──────────────────────────────────────────────────────┐
+    │  ISR (In-Sync Replicas) = [Broker-1, Broker-2, Broker-3] │
+    │                                                      │
+    │  Leader: Broker-1                                    │
+    │      消息写入 ─► Broker-1 日志                        │
+    │                    │                                 │
+    │               Follower 拉取                          │
+    │        ┌──────────┼──────────┐                       │
+    │        ▼          ▼          ▼                       │
+    │    Broker-2    Broker-3    Broker-4                  │
+    │    (ISR)       (ISR)      (不在 ISR，落后太多)        │
+    └──────────────────────────────────────────────────────┘
+</code></pre></div>
+<p><strong>ISR 机制核心参数：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>min.insync.replicas = 2
+→ 写入消息时，Leader 必须等待至少 2 个 ISR 副本确认
+→ 如果 ISR 少于 2 个，写入被拒绝（NotEnoughReplicasException）
+→ 配合 acks=all 使用，保障数据可靠性
+
+unclean.leader.election.enable = false
+→ false：ISR 外无活着的副本 → 分区不可用（宁可不可用也不丢数据）
+→ true：允许从 ISR 外的副本选 Leader（可用性优先，但可能丢数据）
+</code></pre></div>
+<p><strong>Controller 故障转移：</strong></p>
+<p>Kafka 集群中有一个 Controller（控制器）负责分区 Leader 选举和管理。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Controller 故障检测与转移：
+
+1. Controller 与 ZooKeeper/KRaft 的 Session 超时
+2. 其他 Broker 检测到 Controller 的临时节点消失
+3. 所有 Broker 尝试在 ZooKeeper 中创建 /controller 临时节点
+4. 先创建成功的 Broker 成为新 Controller
+5. 新 Controller 读取所有分区的 ISR 信息
+6. 对失去 Leader 的分区，从 ISR 中选举新 Leader
+7. 将新的 Leader/ISR 信息通过 LeaderAndIsr 请求分发给所有 Broker
+</code></pre></div>
+<hr>
+<h2>七、代码示例</h2>
+<h3>7.1 Spring Boot Graceful Shutdown + K8s Readiness Probe</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.ha.config;
+
+import org.springframework.boot.actuate.health.Health;
+import org.springframework.boot.actuate.health.HealthIndicator;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
+import org.springframework.stereotype.Component;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RestController;
+
+import java.util.concurrent.atomic.AtomicBoolean;
+
+@Component
+@RestController
+public class GracefulDrainController implements HealthIndicator {
+
+    private final AtomicBoolean ready = new AtomicBoolean(true);
+    private final AtomicBoolean draining = new AtomicBoolean(false);
+
+    @EventListener(ApplicationReadyEvent.class)
+    public void onReady() {
+        ready.set(true);
+    }
+
+    /**
+     * K8s readiness probe 调用此端点
+     * 返回 OUT_OF_SERVICE 时，K8s 会将 Pod 从 Service 中摘除
+     */
+    @Override
+    public Health health() {
+        if (!ready.get()) {
+            return Health.outOfService()
+                    .withDetail(&quot;reason&quot;, &quot;draining&quot;)
+                    .build();
+        }
+        return Health.up()
+                .withDetail(&quot;status&quot;, &quot;ready&quot;)
+                .build();
+    }
+
+    /**
+     * K8s preStop Hook 调用此端点启动排干流程
+     */
+    @PostMapping(&quot;/actuator/drain&quot;)
+    public void startDraining() {
+        draining.set(true);
+        ready.set(false);
+        System.out.println(&quot;Draining started — Pod marked OUT_OF_SERVICE&quot;);
+    }
+}
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># application.yml
+server:
+  shutdown: graceful
+
+spring:
+  lifecycle:
+    timeout-per-shutdown-phase: 25s
+
+management:
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  health:
+    livenessstate:
+      enabled: true
+    readinessstate:
+      enabled: true
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># k8s-deployment.yaml (片段)
+spec:
+  terminationGracePeriodSeconds: 45
+  containers:
+    - name: app
+      lifecycle:
+        preStop:
+          exec:
+            command:
+              - /bin/sh
+              - -c
+              - |
+                # 触发排干
+                curl -s -X POST http://localhost:8080/actuator/drain
+                # 等待现有请求处理完成 + K8s 摘除 Endpoint
+                sleep 12
+      readinessProbe:
+        httpGet:
+          path: /actuator/health/readiness
+          port: 8080
+        periodSeconds: 3
+        failureThreshold: 3  # 9 秒后标记为 Not Ready
+      livenessProbe:
+        httpGet:
+          path: /actuator/health/liveness
+          port: 8080
+        periodSeconds: 10
+</code></pre></div>
+<h3>7.2 Redis Sentinel + Redisson 高可用配置</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.ha.config;
+
+import org.redisson.Redisson;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
+import org.redisson.config.Config;
+import org.redisson.config.SentinelServersConfig;
+import org.redisson.connection.ConnectionListener;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+import java.net.InetSocketAddress;
+import java.util.List;
+
+@Configuration
+public class RedisHACConfig {
+
+    @Bean
+    public RedissonClient redissonClient() {
+        var config = new Config();
+
+        var sentinelConfig = config.useSentinelServers()
+                .setMasterName(&quot;mymaster&quot;)
+                .addSentinelAddress(
+                        &quot;redis://sentinel-1:26379&quot;,
+                        &quot;redis://sentinel-2:26379&quot;,
+                        &quot;redis://sentinel-3:26379&quot;
+                )
+                .setDatabase(0)
+                .setConnectTimeout(3000)
+                .setTimeout(3000)
+                .setRetryAttempts(3)
+                .setRetryInterval(1500)
+                // Sentinel 模式下启用主从切换监听
+                .setCheckSentinelsList(false)
+                // 密码（如有）
+                .setPassword(&quot;your-redis-password&quot;);
+
+        var redisson = (Redisson) Redisson.create(config);
+
+        // 注册主从切换监听器
+        redisson.getConnectionManager().getConnectionEventsHub()
+                .addListener(new ConnectionListener() {
+                    @Override
+                    public void onConnect(InetSocketAddress addr) {
+                        System.out.println(&quot;Connected to Redis: &quot; + addr);
+                    }
+
+                    @Override
+                    public void onDisconnect(InetSocketAddress addr) {
+                        System.out.println(&quot;Disconnected from Redis: &quot; + addr);
+                    }
+                });
+
+        return redisson;
+    }
+
+    /**
+     * 使用示例：带重试的 Redis 操作（应对主从切换瞬间的异常）
+     */
+    @Bean
+    public CacheService cacheService(RedissonClient redisson) {
+        return new CacheService(redisson);
+    }
+}
+
+// 缓存服务：封装 Sentinel 切换时的重试逻辑
+class CacheService {
+
+    private final RedissonClient redisson;
+
+    public CacheService(RedissonClient redisson) {
+        this.redisson = redisson;
+    }
+
+    public String getWithRetry(String key) {
+        int attempts = 3;
+        for (int i = 0; i &lt; attempts; i++) {
+            try {
+                var bucket = redisson.&lt;String&gt;getBucket(key);
+                return bucket.get();
+            } catch (Exception e) {
+                if (i == attempts - 1) throw e;
+                try {
+                    // 主从切换期间的短暂不可用，短暂休眠后重试
+                    Thread.sleep(200L * (i + 1));
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException(ie);
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 分布式锁 —— 依赖 Sentinel 高可用的锁
+     */
+    public void executeWithLock(String lockKey, Runnable task) {
+        RLock lock = redisson.getLock(lockKey);
+        try {
+            // waitTime: 等锁时间, leaseTime: 锁自动释放时间
+            if (lock.tryLock(3, 10, java.util.concurrent.TimeUnit.SECONDS)) {
+                task.run();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        } finally {
+            if (lock.isHeldByCurrentThread()) {
+                lock.unlock();
+            }
+        }
+    }
+}
+</code></pre></div>
+<h3>7.3 基于 Spring Cloud LoadBalancer 的服务健康检查 + 自动摘除</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.ha.config;
+
+import org.springframework.cloud.client.DefaultServiceInstance;
+import org.springframework.cloud.client.ServiceInstance;
+import org.springframework.cloud.loadbalancer.core.ServiceInstanceListSupplier;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import reactor.core.publisher.Flux;
+
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+@Configuration
+public class LoadBalancerHealthCheckConfig {
+
+    private final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(2))
+            .build();
+
+    private final Map&lt;String, Long&gt; unhealthyInstances = new ConcurrentHashMap&lt;&gt;();
+    private static final long UNHEALTHY_TTL_MS = 30_000; // 30 秒后重试
+
+    @Bean
+    public ServiceInstanceListSupplier healthCheckSupplier(
+            ServiceInstanceListSupplier discoverySupplier) {
+
+        return new ServiceInstanceListSupplier() {
+
+            @Override
+            public String getServiceId() {
+                return discoverySupplier.getServiceId();
+            }
+
+            @Override
+            public Flux&lt;List&lt;ServiceInstance&gt;&gt; get() {
+                return discoverySupplier.get().map(instances -&gt; {
+                    // 过滤不健康的实例（带冷却期）
+                    return instances.stream()
+                            .filter(this::isHealthy)
+                            .toList();
+                });
+            }
+        };
+    }
+
+    private boolean isHealthy(ServiceInstance instance) {
+        String key = instance.getInstanceId();
+        Long unhealthySince = unhealthyInstances.get(key);
+
+        // 如果在冷却期内，跳过健康检查，直接排除
+        if (unhealthySince != null
+                &amp;&amp; System.currentTimeMillis() - unhealthySince &lt; UNHEALTHY_TTL_MS) {
+            return false;
+        }
+
+        // 执行健康检查
+        try {
+            var request = HttpRequest.newBuilder()
+                    .uri(URI.create(instance.getUri() + &quot;/actuator/health&quot;))
+                    .timeout(Duration.ofSeconds(2))
+                    .GET()
+                    .build();
+
+            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() == 200
+                    &amp;&amp; response.body().contains(&quot;\&quot;status\&quot;:\&quot;UP\&quot;&quot;)) {
+                unhealthyInstances.remove(key); // 恢复健康
+                return true;
+            }
+        } catch (Exception e) {
+            // 健康检查失败
+        }
+
+        // 标记为不健康
+        unhealthyInstances.put(key, System.currentTimeMillis());
+        System.out.println(&quot;Marked unhealthy: &quot; + instance.getHost() + &quot;:&quot; + instance.getPort());
+        return false;
+    }
+}
+</code></pre></div>
+<hr>
+<h2>八、常见问题</h2>
+<p><strong>Q1: 脑裂（Split-Brain）如何防范？</strong></p>
+<p>脑裂的根本原因是网络分区导致集群分裂为多个子集，各自选出 leader 并写入数据。防范策略：</p>
+<ul>
+<li><strong>法定人数（Quorum）：</strong> leader 选举和写入操作都要求获得超过半数节点的同意（如 Raft 的多数派原则），这样最多只有一个分区能满足多数派条件</li>
+<li><strong>Fencing Token：</strong> 每个写入请求携带递增的 fencing token，底层存储拒绝 token 小于已处理最大值的请求。即使旧 leader 以为自己还是 leader，其写入也会被拒绝</li>
+<li><strong>外部仲裁者：</strong> 引入独立于集群的第三方组件（如 ZooKeeper、etcd）作为 tie-breaker。但这引入了新的依赖</li>
+<li><strong>STONITH（Shoot The Other Node In The Head）：</strong> 物理层面确保故障节点真的停止运行（如 IPMI 断电、云厂商 API 强制关机），这是最彻底的方案</li>
+</ul>
+<p><strong>Q2: 主从延迟如何监控和降级？</strong></p>
+<p>监控手段：</p>
+<ul>
+<li>MySQL：<code>SHOW SLAVE STATUS</code> 中的 <code>Seconds_Behind_Master</code>（注意这个值在某些场景下不准确），更准确的是使用 <code>pt-heartbeat</code></li>
+<li>Redis：<code>INFO replication</code> 中的 <code>master_repl_offset - slave_repl_offset</code></li>
+<li>应用层：在写入时记录一个时间戳/版本号，在从库读取时校验是否已同步</li>
+</ul>
+<p>降级策略：</p>
+<ul>
+<li>关键业务（如支付确认）读写分离配置为强制读主库</li>
+<li>非关键查询（如列表页、历史记录）允许读从库，但缓存&quot;同步中&quot;状态避免显示缺失数据</li>
+<li>将从库延迟作为健康指标——延迟过大的从库从负载均衡中摘除</li>
+</ul>
+<p><strong>Q3: 多活架构中数据冲突如何解决？</strong></p>
+<p>数据冲突是多活架构中最难解决的本质问题。分层策略：</p>
+<ol>
+<li><strong>设计层避免：</strong> 按用户 ID 分片，保证同一用户请求始终路由到同一机房（用户亲和性 + 全局路由），从根本上避免跨机房写冲突</li>
+<li><strong>协议层解决：</strong> 使用 CRDT（如 Riak、Redis CRDT 数据结构），数据结构本身保证合并后无冲突</li>
+<li><strong>应用层合并：</strong> 版本向量检测因果冲突，写冲突时执行业务规则合并（如购物车 = 多机房的并集）</li>
+<li><strong>最后写入胜出：</strong> 最简单的方案，容忍一定程度的数据丢失（适用于用户行为日志、非关键配置）</li>
+<li><strong>人工裁定：</strong> 对无法自动合并且数据重要的场景，标记冲突交人工处理</li>
+</ol>
+<p><strong>Q4: 如何验证灾备的有效性？</strong></p>
+<p>灾备不仅仅是搭建，更需要持续验证：</p>
+<ul>
+<li><strong>定期恢复演练（每季度）：</strong> 从备份介质完整恢复数据库，在灾备机房启动完整应用栈，执行冒烟测试和数据一致性校验</li>
+<li><strong>混沌工程注入：</strong> 使用 Chaos Mesh/LitmusChaos 注入数据库故障、网络分区、机房级故障，验证自动 failover 机制</li>
+<li><strong>灰度验证灾备流量：</strong> 将一小部分生产流量路由到灾备机房，验证服务能正常处理（注意数据隔离）</li>
+<li><strong>RPO/RTO 实测：</strong> 记录故障注入到自动恢复的时间间隔，与应用约定的 RTO 对比；对比主备数据差异量，与约定的 RPO 对比</li>
+<li><strong>Playbook 验证：</strong> 按恢复手册逐步演练，发现缺失步骤或过时命令，及时更新</li>
+</ul>
+<p><strong>Q5: K8s 滚动更新如何做到流量无损？</strong></p>
+<p>实现零流量损失的滚动更新，需要逐层保障：</p>
+<ul>
+<li><strong>就绪探针（Readiness Probe）：</strong> 确保新 Pod 完全就绪后才加入 Service Endpoints。探针检查应覆盖数据库连接、缓存连接、消息队列连接等核心依赖</li>
+<li><strong>preStop Hook + 连接排干：</strong> preStop 中先标记 readiness 为 OUT_OF_SERVICE → 等待排干窗口 → 接受 SIGTERM → 处理中请求完成 → 退出</li>
+<li><strong><code>maxUnavailable: 0</code>：</strong> 滚动更新期间不允许有不可用 Pod。需要配合 <code>maxSurge</code> 先创建新 Pod，确认就绪后再缩旧 Pod</li>
+<li><strong>Service Mesh（Istio/Linkerd）：</strong> 在 sidecar 层面实现更精细的连接排干和流量迁移，不依赖 Pod 的就绪探针</li>
+<li><strong>重试与幂等：</strong> 客户端必须具备重试能力（<code>RetryTemplate</code> / Resilience4j Retry），且所有写操作必须是幂等的——因为旧 Pod 关闭瞬间可能有请求已发送但未处理完</li>
+<li><strong>优雅关闭超时配足：</strong> <code>terminationGracePeriodSeconds</code> 必须大于 preStop sleep + 应用 graceful shutdown timeout，否则 Pod 会被 SIGKILL 强杀导致流量中断</li>
+</ul>
+<hr>
+<h2>相关条目</h2>
+<ul>
+<li><a href="/05-分布式架构/弹性设计/05-熔断限流与弹性设计" class="cross-ref" data-ref="05-熔断限流与弹性设计">05-熔断限流与弹性设计</a> — 熔断、限流、重试等弹性策略，高可用的补充防护</li>
+<li><a href="/05-分布式架构/事务与一致性/05-分布式一致性与事务方案" class="cross-ref" data-ref="05-分布式一致性与事务方案">05-分布式一致性与事务方案</a> — RAFT 共识、分布式事务等理论基础</li>
+<li><a href="/04-数据与中间件/数据库与缓存/04-Redis深度解析" class="cross-ref" data-ref="04-Redis深度解析">04-Redis深度解析</a> — Redis Sentinel 集群架构深入</li>
+<li><a href="/?d=06" class="cross-ref domain-ref">06-云原生与SRE/容器与编排/06-Kubernetes深度解析</a> — K8s 滚动更新、探针、Pod 生命周期管理</li>
+</ul>
+</div>
+</article>

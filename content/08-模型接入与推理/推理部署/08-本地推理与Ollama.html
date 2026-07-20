@@ -1,0 +1,691 @@
+
+<article class="kb-entry" data-path="/08-模型接入与推理/推理部署/08-本地推理与Ollama">
+  <div class="entry-meta">
+    <div class="entry-domain"><a href="/?d=08">08-模型接入与推理</a></div>
+    <h1>Local Inference and Ollama</h1>
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#["ollama"</span><span class="badge badge-tag">#"vllm"</span><span class="badge badge-tag">#"tensorrt-llm"</span><span class="badge badge-tag">#"tgi"</span></div>
+    
+  </div>
+  <div class="entry-body"><h1>Local Inference and Ollama</h1>
+<h2>概述</h2>
+<p>本地推理（Local Inference）是 LLM 开发生命周期中不可或缺的一环。Ollama 是本地开发和测试的首选工具，而 vLLM/TensorRT-LLM/HuggingFace TGI 是生产推理服务的主流选择。本条目从 Ollama 的 Modelfile 到生产推理服务的选型决策树，全面覆盖。</p>
+<blockquote>
+<p>技术雷达：Ollama — Adopt（本地开发）；vLLM — Adopt（生产推理首选）；Docker Model Runner — Trial；TensorRT-LLM — Trial（NVIDIA GPU优化）；TGI — Trial</p>
+</blockquote>
+<h2>Ollama 深入</h2>
+<p>Ollama 是目前最流行的本地 LLM 运行工具。它用 Go 编写，内置模型管理和推理优化。</p>
+<h3>Modelfile 语法</h3>
+<p>Modelfile 类似于 Dockerfile，定义了一个模型的行为。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code># Modelfile 示例：创建一个Java编码助手
+
+# 基础模型
+FROM qwen2.5:7b
+
+# 温度参数 (0-2)：控制输出的随机性
+PARAMETER temperature 0.3
+
+# Top-p 采样 (0-1)：累积概率阈值
+PARAMETER top_p 0.9
+
+# Top-k 采样：限制为 top-k 个 token
+PARAMETER top_k 40
+
+# 上下文窗口大小
+PARAMETER num_ctx 8192
+
+# 重复惩罚 (1-2)：&gt;1 时抑制重复
+PARAMETER repeat_penalty 1.1
+
+# 停止序列
+PARAMETER stop &quot;&lt;|end|&gt;&quot;
+PARAMETER stop &quot;```&quot;
+
+# 系统提示词模板
+TEMPLATE &quot;&quot;&quot;
+{{ if .System }}&lt;|system|&gt;
+{{ .System }}&lt;|end|&gt;
+{{ end }}
+&lt;|user|&gt;
+{{ .Prompt }}&lt;|end|&gt;
+&lt;|assistant|&gt;
+&quot;&quot;&quot;
+
+# 系统角色定义
+SYSTEM &quot;&quot;&quot;
+你是一个资深的Java工程师AI助手，精通：
+- Java 25 LTS 新特性
+- Spring Boot 4.x
+- Spring AI 2.x
+- 并发编程 (Virtual Threads)
+- JVM 性能优化
+
+回答风格：
+- 直接给出可运行的代码
+- 代码使用 JDK 25 语法
+- 给出最佳实践建议
+&quot;&quot;&quot;
+</code></pre></div>
+<p><strong>完整 Modelfile 参数清单：</strong></p>
+<table>
+<thead>
+<tr>
+<th>指令</th>
+<th>说明</th>
+<th>示例值</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>FROM</td>
+<td>基础模型</td>
+<td>llama3.1:8b, qwen2.5:7b</td>
+</tr>
+<tr>
+<td>PARAMETER</td>
+<td>推理参数</td>
+<td>temperature, top_p, top_k, num_ctx, seed</td>
+</tr>
+<tr>
+<td>TEMPLATE</td>
+<td>对话模板（Go template 语法）</td>
+<td>对话格式</td>
+</tr>
+<tr>
+<td>SYSTEM</td>
+<td>系统提示词</td>
+<td>角色定义</td>
+</tr>
+<tr>
+<td>ADAPTER</td>
+<td>LoRA 适配器路径</td>
+<td>./lora-adapter.bin</td>
+</tr>
+<tr>
+<td>LICENSE</td>
+<td>许可证声明</td>
+<td>MIT</td>
+</tr>
+<tr>
+<td>MESSAGE</td>
+<td>对话历史</td>
+<td>user/assistant 消息</td>
+</tr>
+</tbody></table>
+<h3>模型管理</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># 拉取模型
+ollama pull llama3.1:8b          # 8B 参数，适合本地开发
+ollama pull qwen2.5:7b           # 7B，中文最佳
+ollama pull qwen2.5:14b          # 14B，更强大（需要更多内存）
+ollama pull codellama:7b         # 代码专用
+
+# 列出本地模型
+ollama list
+# NAME            ID              SIZE      MODIFIED
+# llama3.1:8b    abc123def456    4.7 GB    2 days ago
+# qwen2.5:7b     xyz789ghi012    4.4 GB    5 days ago
+
+# 查看模型详情
+ollama show llama3.1:8b
+# 输出：Modelfile、参数、量化方式、层数等
+
+# 删除模型
+ollama rm llama3.1:8b
+
+# 复制模型（创建别名/变体）
+ollama cp llama3.1:8b my-llama:latest
+
+# 创建自定义模型（从 Modelfile）
+ollama create java-assistant -f Modelfile
+
+# 运行模型
+ollama run java-assistant
+</code></pre></div>
+<h3>REST API</h3>
+<p>Ollama 默认在 <code>http://localhost:11434</code> 上启动 HTTP 服务。</p>
+<p><strong>Generate API（单轮生成）：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># 非流式
+curl http://localhost:11434/api/generate -d &#39;{
+  &quot;model&quot;: &quot;llama3.1:8b&quot;,
+  &quot;prompt&quot;: &quot;Why is the sky blue?&quot;,
+  &quot;stream&quot;: false
+}&#39;
+
+# 流式
+curl http://localhost:11434/api/generate -d &#39;{
+  &quot;model&quot;: &quot;llama3.1:8b&quot;,
+  &quot;prompt&quot;: &quot;Write a haiku about programming&quot;,
+  &quot;stream&quot;: true
+}&#39;
+</code></pre></div>
+<p><strong>Chat API（多轮对话）：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash">curl http://localhost:11434/api/chat -d &#39;{
+  &quot;model&quot;: &quot;llama3.1:8b&quot;,
+  &quot;messages&quot;: [
+    {&quot;role&quot;: &quot;system&quot;, &quot;content&quot;: &quot;You are a Java expert.&quot;},
+    {&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;What are Virtual Threads?&quot;}
+  ],
+  &quot;stream&quot;: false
+}&#39;
+</code></pre></div>
+<p><strong>Embeddings API：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash">curl http://localhost:11434/api/embeddings -d &#39;{
+  &quot;model&quot;: &quot;nomic-embed-text&quot;,
+  &quot;prompt&quot;: &quot;The quick brown fox jumps over the lazy dog&quot;
+}&#39;
+</code></pre></div>
+<h3>OpenAI 兼容端点</h3>
+<p>Ollama 提供了 OpenAI 兼容的端点：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># Chat Completions (兼容 OpenAI)
+curl http://localhost:11434/v1/chat/completions \
+  -H &quot;Content-Type: application/json&quot; \
+  -d &#39;{
+    &quot;model&quot;: &quot;llama3.1:8b&quot;,
+    &quot;messages&quot;: [
+      {&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;Hello!&quot;}
+    ],
+    &quot;temperature&quot;: 0.7,
+    &quot;stream&quot;: false
+  }&#39;
+
+# Embeddings (兼容 OpenAI)
+curl http://localhost:11434/v1/embeddings \
+  -H &quot;Content-Type: application/json&quot; \
+  -d &#39;{
+    &quot;model&quot;: &quot;nomic-embed-text&quot;,
+    &quot;input&quot;: &quot;Your text to embed&quot;
+  }&#39;
+
+# 列出模型 (兼容 OpenAI)
+curl http://localhost:11434/v1/models
+</code></pre></div>
+<h3>并发控制</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># 环境变量控制
+OLLAMA_NUM_PARALLEL=4    # 最大并行请求数（默认1）
+OLLAMA_MAX_LOADED=2      # 最大同时加载的模型数
+OLLAMA_KEEP_ALIVE=5m     # 模型在内存中的保持时间
+OLLAMA_HOST=0.0.0.0      # 绑定地址
+OLLAMA_PORT=11434        # 端口
+
+# 启动示例
+OLLAMA_NUM_PARALLEL=4 OLLAMA_HOST=0.0.0.0 ollama serve
+</code></pre></div>
+<h3>GPU 加速</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># Ollama 支持的 GPU 后端：
+# - CUDA (NVIDIA)：自动检测
+# - ROCm (AMD)：需安装 ROCm 驱动
+# - Metal (Apple Silicon)：macOS 自动使用
+
+# 检查 GPU 使用
+ollama ps
+# NAME            ID              SIZE      PROCESSOR    UNTIL
+# llama3.1:8b    abc123          5.8 GB    100% GPU     4 minutes from now
+</code></pre></div>
+<h3>量化格式</h3>
+<p>Ollama 使用 GGUF 格式存储量化模型。不同量化级别是存储大小、推理速度和质量的三角权衡。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>常见量化格式对比：
+
+格式        bits/weight  模型大小(7B)  质量损失   速度    推荐场景
+Q2_K       2             2.8 GB       中        极快    资源极度受限
+Q3_K_M     3             3.8 GB       中低      很快    低资源设备
+Q4_0       4             4.3 GB       低        快      标准推荐
+Q4_K_M     4             4.7 GB       很低      快      最佳性价比 ★
+Q5_K_M     5             5.5 GB       极低      中等    高精度需求
+Q8_0       8             7.7 GB       可忽略     慢      需要接近全精度
+F16        16            15 GB        无        慢      研究/精调
+
+Q4_K_M 是本地开发的&quot;甜点&quot;：
+  - 质量接近全精度（PPL 增加 &lt; 0.5）
+  - 大小适中（7B 模型约 4.7GB）
+  - 速度足够（在 M2/M3 Mac 上可达 20-30 tokens/s）
+</code></pre></div>
+<p><strong>量化技术差异：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Q4_0: 简单的 4-bit 整数量化
+  - 每个权重 4 bits
+  - 每 32 个权重共享一个 scale
+
+Q4_K_M: K-Quants 4-bit 量化（改进版）
+  - 使用重要性矩阵指导量化
+  - 对重要权重（Attention 层的 K/Q/V）使用更高精度
+  - SuperBlock 结构优化
+  - 实际效果显著优于 Q4_0
+
+Q5_K_M: K-Quants 5-bit
+  - Attention 权重 5-bit，FFN 权重 4-bit
+  - 质量接近 Q8_0，大小接近 Q4_K_M
+</code></pre></div>
+<h3>Java 集成</h3>
+<p><strong>方式一：使用 Spring AI Ollama Starter（推荐）</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;dependency&gt;
+    &lt;groupId&gt;org.springframework.ai&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-ai-ollama-spring-boot-starter&lt;/artifactId&gt;
+&lt;/dependency&gt;
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># application.yml
+spring:
+  ai:
+    ollama:
+      base-url: http://localhost:11434
+      chat:
+        enabled: true
+        options:
+          model: llama3.1:8b
+          temperature: 0.7
+      embedding:
+        enabled: true
+        options:
+          model: nomic-embed-text
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@SpringBootApplication
+public class OllamaDemoApplication {
+
+    public static void main(String[] args) {
+        SpringApplication.run(OllamaDemoApplication.class, args);
+    }
+
+    @Bean
+    CommandLineRunner demo(ChatClient.Builder chatClientBuilder) {
+        return args -&gt; {
+            var chatClient = chatClientBuilder.build();
+
+            System.out.println(chatClient.prompt()
+                .user(&quot;用一句话解释什么是Virtual Threads&quot;)
+                .call()
+                .content());
+        };
+    }
+}
+</code></pre></div>
+<p><strong>方式二：手动 HTTP 调用</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
+public class OllamaHttpClient {
+
+    private final HttpClient httpClient = HttpClient.newHttpClient();
+    private final ObjectMapper mapper = new ObjectMapper();
+    private final String baseUrl;
+
+    public OllamaHttpClient(String baseUrl) {
+        this.baseUrl = baseUrl;
+    }
+
+    /**
+     * 生成文本（非流式）
+     */
+    public String generate(String model, String prompt, float temperature) {
+        try {
+            var body = mapper.writeValueAsString(Map.of(
+                &quot;model&quot;, model,
+                &quot;prompt&quot;, prompt,
+                &quot;temperature&quot;, temperature,
+                &quot;stream&quot;, false
+            ));
+
+            var request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + &quot;/api/generate&quot;))
+                .header(&quot;Content-Type&quot;, &quot;application/json&quot;)
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build();
+
+            var response = httpClient.send(request,
+                HttpResponse.BodyHandlers.ofString());
+            var node = mapper.readTree(response.body());
+
+            return node.get(&quot;response&quot;).asText();
+        } catch (Exception e) {
+            throw new RuntimeException(&quot;Ollama调用失败&quot;, e);
+        }
+    }
+
+    /**
+     * 流式对话（使用 SSE）
+     */
+    public void streamChat(String model, List&lt;Map&lt;String, String&gt;&gt; messages,
+            java.util.function.Consumer&lt;String&gt; onToken) {
+        try {
+            var body = mapper.writeValueAsString(Map.of(
+                &quot;model&quot;, model,
+                &quot;messages&quot;, messages,
+                &quot;stream&quot;, true
+            ));
+
+            var request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + &quot;/api/chat&quot;))
+                .header(&quot;Content-Type&quot;, &quot;application/json&quot;)
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build();
+
+            httpClient.send(request, HttpResponse.BodyHandlers.ofLines())
+                .body()
+                .forEach(line -&gt; {
+                    try {
+                        var node = mapper.readTree(line);
+                        var content = node.path(&quot;message&quot;)
+                            .path(&quot;content&quot;).asText();
+                        if (!content.isEmpty()) {
+                            onToken.accept(content);
+                        }
+                    } catch (Exception ignored) {}
+                });
+        } catch (Exception e) {
+            throw new RuntimeException(&quot;流式对话失败&quot;, e);
+        }
+    }
+
+    /**
+     * 获取 Embedding
+     */
+    public float[] getEmbedding(String model, String text) {
+        try {
+            var body = mapper.writeValueAsString(Map.of(
+                &quot;model&quot;, model,
+                &quot;prompt&quot;, text
+            ));
+
+            var request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + &quot;/api/embeddings&quot;))
+                .header(&quot;Content-Type&quot;, &quot;application/json&quot;)
+                .POST(HttpRequest.BodyPublishers.ofString(body))
+                .build();
+
+            var response = httpClient.send(request,
+                HttpResponse.BodyHandlers.ofString());
+            var node = mapper.readTree(response.body());
+
+            var embeddingNode = node.get(&quot;embedding&quot;);
+            var embedding = new float[embeddingNode.size()];
+            for (int i = 0; i &lt; embedding.length; i++) {
+                embedding[i] = (float) embeddingNode.get(i).asDouble();
+            }
+            return embedding;
+        } catch (Exception e) {
+            throw new RuntimeException(&quot;Embedding生成失败&quot;, e);
+        }
+    }
+
+    /**
+     * 列出所有本地模型
+     */
+    public List&lt;String&gt; listModels() {
+        try {
+            var request = HttpRequest.newBuilder()
+                .uri(URI.create(baseUrl + &quot;/api/tags&quot;))
+                .GET()
+                .build();
+
+            var response = httpClient.send(request,
+                HttpResponse.BodyHandlers.ofString());
+            var node = mapper.readTree(response.body());
+
+            var models = new ArrayList&lt;String&gt;();
+            node.get(&quot;models&quot;).forEach(m -&gt;
+                models.add(m.get(&quot;name&quot;).asText()));
+            return models;
+        } catch (Exception e) {
+            throw new RuntimeException(&quot;获取模型列表失败&quot;, e);
+        }
+    }
+}
+</code></pre></div>
+<h2>Docker Model Runner</h2>
+<p>Docker 也进入了本地模型推理领域，提供 Docker Model Runner。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># 拉取模型
+docker model pull ai/llama3.1:8b
+
+# 列出模型
+docker model list
+
+# 推理（使用 OpenAI 兼容端点）
+docker model run ai/llama3.1:8b
+
+# 启动 HTTP 服务
+docker model serve ai/llama3.1:8b --port 8080
+# 然后访问 http://localhost:8080/v1/chat/completions
+</code></pre></div>
+<p><strong>Docker Model Runner vs Ollama：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌────────────────────┬───────────────────┬─────────────────────────┐
+│ 特性                │ Docker Model Runner│ Ollama                  │
+├────────────────────┼───────────────────┼─────────────────────────┤
+│ 容器生态集成        │ ★★★★★ 原生         │ ★★★                    │
+│ 模型库              │ Docker Hub 模型     │ Ollama 模型库(丰富)    │
+│ Docker Compose 集成 │ ★★★★★              │ ★★★ (需手动配置)       │
+│ Modelfile 支持      │ 通过Dockerfile      │ ★★★★★ 原生Modelfile    │
+│ GPU 支持            │ ★★★★               │ ★★★★★(自动检测)        │
+│ 量化支持            │ 有限               │ ★★★★★                  │
+│ 社区成熟度          │ 较新 (2024+)       │ ★★★★★ 非常成熟         │
+└────────────────────┴───────────────────┴─────────────────────────┘
+</code></pre></div>
+<blockquote>
+<p>当前建议：Ollama 作为本地开发主栈，Docker Model Runner 保持关注。</p>
+</blockquote>
+<h2>推理服务对比</h2>
+<h3>vLLM</h3>
+<p>vLLM 是当前生产推理服务的首选。核心创新是 PagedAttention。</p>
+<p><strong>架构特点：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>vLLM 架构亮点：
+
+1. PagedAttention
+   - 将 KV Cache 分页管理（类似 OS 虚拟内存）
+   - 零内存碎片
+   - 支持 KV Cache 共享（beam search / parallel sampling）
+
+2. Continuous Batching
+   - 请求动态插入和移除
+   - GPU 利用率 80%+ (vs 20-40% static batching)
+
+3. 前缀缓存 (Prefix Caching)
+   - 相同 system prompt 的 KV Cache 自动复用
+   - 对 RAG 场景（相同 system prompt + 不同文档）加速显著
+
+4. 多GPU张量并行
+   - 大模型跨 GPU 自动切分
+   - 支持流水线并行
+
+5. OpenAI 兼容 API
+   - 直接作为 OpenAI 替代品
+</code></pre></div>
+<p><strong>启动和 Java 调用：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># 启动 vLLM (带 OpenAI 兼容 API)
+vllm serve meta-llama/Llama-3.1-8B-Instruct \
+  --host 0.0.0.0 \
+  --port 8000 \
+  --max-model-len 8192 \
+  --gpu-memory-utilization 0.9 \
+  --tensor-parallel-size 1
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+ * 调用 vLLM 的 OpenAI 兼容端点
+ * 因为协议兼容，可以直接使用 OpenAI SDK
+ */
+public class VllmClient {
+
+    public static String vllmChat(String prompt) {
+        // vLLM 默认在 localhost:8000 提供 OpenAI 兼容 API
+        var client = OpenAiOkHttpClient.builder()
+            .baseUrl(&quot;http://localhost:8000/v1&quot;)  // 指向 vLLM
+            .apiKey(&quot;not-needed&quot;)  // vLLM 本地不需要
+            .build();
+
+        var params = ChatCompletionCreateParams.builder()
+            .model(&quot;meta-llama/Llama-3.1-8B-Instruct&quot;)
+            .messages(List.of(
+                ChatCompletionMessageParam.ofUser(prompt)
+            ))
+            .maxTokens(500)
+            .temperature(0.7d)
+            .build();
+
+        var response = client.chat().completions().create(params);
+        return response.choices().get(0).message().content().orElse(&quot;&quot;);
+    }
+}
+</code></pre></div>
+<h3>TensorRT-LLM</h3>
+<p>NVIDIA 的优化推理引擎，对 NVIDIA GPU 进行了深度优化。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>TensorRT-LLM 工作流：
+
+模型 (HuggingFace)  →  构建 (build)  →  TensorRT Engine  →  部署 (serve)
+                                  ↓
+                          图优化 + 算子融合
+                          + FP8/INT4 量化
+                          + 内核自动调优
+
+
+关键优化：
+  - 图优化：算子融合（LayerNorm + Attention + GeLU）
+  - FlashAttention：高效 attention 计算
+  - 量化：FP8 (H100+) / INT4 (weight-only)
+  - In-flight Batching：类似 Continuous Batching
+  - 多GPU: Tensor Parallelism + Pipeline Parallelism
+</code></pre></div>
+<p><strong>量化对比：</strong></p>
+<table>
+<thead>
+<tr>
+<th>引擎</th>
+<th>量化方式</th>
+<th>精度损失</th>
+<th>加速比</th>
+<th>GPU 要求</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>TensorRT-LLM FP16</td>
+<td>无</td>
+<td>0</td>
+<td>1.5x</td>
+<td>任何 NVIDIA</td>
+</tr>
+<tr>
+<td>TensorRT-LLM FP8</td>
+<td>浮点8位</td>
+<td>极低</td>
+<td>2.5x</td>
+<td>H100/Ada</td>
+</tr>
+<tr>
+<td>TensorRT-LLM INT4</td>
+<td>4位整数(weight only)</td>
+<td>低</td>
+<td>4x</td>
+<td>任何 NVIDIA</td>
+</tr>
+<tr>
+<td>vLLM FP16</td>
+<td>无</td>
+<td>0</td>
+<td>1x (基准)</td>
+<td>任何 NVIDIA</td>
+</tr>
+<tr>
+<td>vLLM AWQ</td>
+<td>4位</td>
+<td>低</td>
+<td>3x</td>
+<td>任何 NVIDIA</td>
+</tr>
+<tr>
+<td>Ollama Q4_K_M</td>
+<td>4位 GGUF</td>
+<td>低</td>
+<td>N/A</td>
+<td>CPU/GPU 皆可</td>
+</tr>
+</tbody></table>
+<h3>HuggingFace TGI (Text Generation Inference)</h3>
+<p>HuggingFace 的官方推理服务，适合 HuggingFace 生态。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>TGI 特点：
+  - 原生支持 HuggingFace 模型（一键部署）
+  - 内置 Flash Attention / Paged Attention
+  - 支持量化（bitsandbytes / GPT-Q / AWQ / EETQ）
+  - Watermark 支持（检测 AI 生成文本）
+  - Safetensors 权重加载
+  - 与 HuggingFace Hub 无缝集成
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># Docker 启动 TGI
+docker run --gpus all -p 8080:80 \
+  -e HF_TOKEN=$HF_TOKEN \
+  ghcr.io/huggingface/text-generation-inference:latest \
+  --model-id meta-llama/Llama-3.1-8B-Instruct \
+  --max-total-tokens 4096
+</code></pre></div>
+<h3>推理服务选择决策树</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>你部署推理服务的环境？
+├── NVIDIA GPU
+│   ├── H100 或 Ada 架构（支持 FP8）
+│   │   └── TensorRT-LLM (最佳性能)
+│   ├── 有 CUDA 环境
+│   │   ├── 追求最佳 Token/s + 成熟度
+│   │   │   └── vLLM ★ (当前最佳通用选择)
+│   │   ├── HuggingFace 生态深度用户
+│   │   │   └── TGI
+│   │   └── 极致性能优化（NVIDIA 专门优化）
+│   │       └── TensorRT-LLM
+│   └── 需要快速原型/测试
+│       └── Ollama
+├── Apple Silicon (M系列)
+│   └── Ollama (通过 Metal 加速，体验极佳)
+├── AMD GPU
+│   └── Ollama (ROCm 支持) / vLLM (ROCm 实验性支持)
+└── CPU only
+    └── Ollama (GGUF 量化，可接受的小模型推理)
+</code></pre></div>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>你的需求场景？
+├── 本地开发/测试
+│   └── Ollama ★
+│       - 一条命令启动
+│       - 丰富的模型库
+│       - 支持 Modelfile 自定义
+│       - 自动 GPU 加速
+│
+├── 生产 API 服务（高吞吐）
+│   └── vLLM ★
+│       - Continuous Batching
+│       - 高 GPU 利用率
+│       - OpenAI 兼容 API
+│       - 前缀缓存（RAG场景必备）
+│
+├── 生产 API 服务（极致性能/NVIDIA优化）
+│   └── TensorRT-LLM
+│       - FP8/INT4 量化
+│       - 算子融合优化
+│       - 2-4x 吞吐提升
+│
+├── HuggingFace 模型部署
+│   └── TGI
+│       - 原生支持
+│       - 一键部署
+│       - watermarking
+│
+└── 嵌入式/JVM内嵌
+    └── DJL / ONNX Runtime / llama.cpp (JNI)
+        - 仅适合小模型 (&lt; 3B)
+        - 详见 JVM内嵌推理条目
+</code></pre></div>
+<h2>最佳实践</h2>
+<ol>
+<li><strong>开发环境 = Ollama，生产环境 = vLLM</strong>：这是最成熟、最安全的组合。开发时用 Ollama 快速迭代，上线时用 vLLM 的性能和稳定性</li>
+<li><strong>Ollama 使用 Q4_K_M 量化</strong>：7B 模型约 4.7GB，在普通开发机（16GB+ RAM）上运行舒适</li>
+<li><strong>启用 Ollama 的 OpenAI 兼容端点</strong>：这意味着你的代码不用改一行就可以同时支持 Ollama（本地）和 OpenAI（云端），切换只需改 base URL</li>
+<li><strong>vLLM 的前缀缓存对 RAG 特别有效</strong>：相同的 system prompt + 不同的检索文档 → 前缀缓存命中 → 延迟降低 30-50%</li>
+<li><strong>生产环境不要用 Ollama</strong>：Ollama 缺少 Continuous Batching、前缀缓存、多GPU并行等生产必需特性</li>
+<li><strong>监控推理服务的 GPU 利用率</strong>：GPU 利用率 &lt; 50% 可能是 batch size 太小或请求太少，考虑降低实例数</li>
+</ol>
+<h2>常见问题</h2>
+<p><strong>Q: 7B 模型够用吗？</strong></p>
+<p>A: 对于特定任务（代码补全、简单问答、文本分类、信息提取），7B 模型配合好的 prompt 工程效果可以接近大型闭源模型。对于复杂推理（多步数学、深度代码分析），需要更大模型（14B+）或使用闭源 API。</p>
+<p><strong>Q: Ollama 的内存占用怎么计算？</strong></p>
+<p>A: 模型大小 + KV Cache 开销。以 Q4_K_M 量化的 7B 模型为例：模型约 4.7GB + KV Cache (num_ctx=8192) 约 2GB = 总计约 7GB。建议至少 16GB RAM。</p>
+<p><strong>Q: vLLM 和 Ollama 可以共存吗？</strong></p>
+<p>A: 完全可以，而且推荐。开发用 Ollama（快速迭代），预发布环境用 vLLM（性能验证），生产用 vLLM（正式服务）。</p>
+<h2>相关条目</h2>
+<ul>
+<li><a href="/08-模型接入与推理/模型API/08-OpenAI兼容协议详解" class="cross-ref" data-ref="08-OpenAI兼容协议详解">08-OpenAI兼容协议详解</a> — OpenAI 兼容协议（Ollama 和 vLLM 都支持）</li>
+<li><a href="/08-模型接入与推理/模型API/08-云模型API与SDK使用" class="cross-ref" data-ref="08-云模型API与SDK使用">08-云模型API与SDK使用</a> — 云模型 API 对比</li>
+<li><a href="/08-模型接入与推理/推理部署/08-模型能力矩阵与路由策略" class="cross-ref" data-ref="08-模型能力矩阵与路由策略">08-模型能力矩阵与路由策略</a> — 模型选择和路由</li>
+<li><a href="/09-Java AI框架/09-SpringAI2深度解析" class="cross-ref" data-ref="09-SpringAI2深度解析">09-SpringAI2深度解析</a> — Spring AI 与 Ollama Starter 集成</li>
+</ul>
+</div>
+</article>

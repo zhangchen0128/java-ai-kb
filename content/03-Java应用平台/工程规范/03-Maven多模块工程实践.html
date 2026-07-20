@@ -1,0 +1,585 @@
+
+<article class="kb-entry" data-path="/03-Java应用平台/工程规范/03-Maven多模块工程实践">
+  <div class="entry-meta">
+    <div class="entry-domain"><a href="/?d=03">03-Java应用平台</a></div>
+    <h1>Maven多模块工程实践</h1>
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#["maven"</span><span class="badge badge-tag">#"multi-module"</span><span class="badge badge-tag">#"dependency-management"</span><span class="badge badge-tag">#"bom"</span></div>
+    
+  </div>
+  <div class="entry-body"><h1>Maven 多模块工程实践</h1>
+<h2>概述</h2>
+<p>Maven 是 Java 生态事实上的构建标准。在 AI 应用开发中，一个典型的项目往往包含多个模块：Web API 层、业务服务层、AI 集成层、数据访问层、公共工具层。如何合理划分模块、管理依赖、配置插件，直接影响项目的可维护性和构建效率。</p>
+<p>本文从模块拆分原则、POM 管理策略、依赖治理、插件配置到静态分析集成，覆盖 Maven 多模块工程的完整实践。技术雷达中 Maven 4.x 是 Adopt 象限的主构建工具。</p>
+<hr>
+<h2>一、多模块设计</h2>
+<h3>1.1 模块拆分原则</h3>
+<p><strong>按层拆分（传统分层架构）：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>my-app/
+├── my-app-api/          # 对外接口定义（DTO、Feign 接口）
+├── my-app-common/       # 公共工具类、常量、异常
+├── my-app-service/      # 业务逻辑层
+├── my-app-repository/   # 数据访问层（JPA/MyBatis Mapper）
+└── my-app-web/          # Web 层（Controller、配置）
+</code></pre></div>
+<p><strong>按领域拆分（DDD 风格）：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>my-app/
+├── my-app-common/       # 共享基础设施
+├── my-app-user/         # 用户领域（service + repository + api）
+├── my-app-order/        # 订单领域
+├── my-app-product/      # 产品领域
+└── my-app-web/          # Web 聚合层
+</code></pre></div>
+<h3>1.2 AI 项目推荐模块结构</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>ai-knowledge-platform/
+├── ai-knowledge-api/          # 公共 API 接口定义（Port 接口）
+│   └── com.example.ai.api
+│       ├── ChatModelPort.java
+│       ├── EmbeddingModelPort.java
+│       └── RetrievalPort.java
+├── ai-knowledge-common/       # 公共工具、常量、DTO
+│   └── com.example.ai.common
+│       ├── dto/
+│       ├── exception/
+│       └── util/
+├── ai-knowledge-domain/       # 领域模型与业务规则
+│   └── com.example.ai.domain
+│       ├── knowledge/
+│       ├── agent/
+│       └── conversation/
+├── ai-knowledge-infra/        # 基础设施实现
+│   └── com.example.ai.infra
+│       ├── chat/              # Spring AI 适配器实现
+│       ├── embedding/
+│       ├── vectorstore/
+│       └── mcp/               # MCP 客户端实现
+├── ai-knowledge-service/      # 应用服务层
+│   └── com.example.ai.service
+│       ├── KnowledgeService.java
+│       ├── AgentService.java
+│       └── RagService.java
+└── ai-knowledge-web/          # Web 层（启动入口）
+    └── com.example.ai.web
+        ├── controller/
+        ├── config/
+        └── AiKnowledgeApplication.java
+</code></pre></div>
+<p><strong>依赖方向（单向依赖，防止循环）：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>web → service → domain → common
+web → infra → domain → common
+service → api
+infra → api
+</code></pre></div>
+<hr>
+<h2>二、POM 管理</h2>
+<h3>2.1 Parent POM</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;project xmlns=&quot;http://maven.apache.org/POM/4.0.0&quot;
+         xmlns:xsi=&quot;http://www.w3.org/2001/XMLSchema-instance&quot;
+         xsi:schemaLocation=&quot;http://maven.apache.org/POM/4.0.0
+         https://maven.apache.org/xsd/maven-4.0.0.xsd&quot;&gt;
+    &lt;modelVersion&gt;4.0.0&lt;/modelVersion&gt;
+
+    &lt;parent&gt;
+        &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+        &lt;artifactId&gt;spring-boot-starter-parent&lt;/artifactId&gt;
+        &lt;version&gt;4.0.0&lt;/version&gt;
+        &lt;relativePath/&gt;
+    &lt;/parent&gt;
+
+    &lt;groupId&gt;com.example&lt;/groupId&gt;
+    &lt;artifactId&gt;ai-knowledge-platform&lt;/artifactId&gt;
+    &lt;version&gt;1.0.0-SNAPSHOT&lt;/version&gt;
+    &lt;packaging&gt;pom&lt;/packaging&gt;
+
+    &lt;name&gt;AI Knowledge Platform&lt;/name&gt;
+    &lt;description&gt;AI Knowledge Platform — Multi-module Spring Boot 4.x Project&lt;/description&gt;
+
+    &lt;!-- 子模块声明（聚合） --&gt;
+    &lt;modules&gt;
+        &lt;module&gt;ai-knowledge-api&lt;/module&gt;
+        &lt;module&gt;ai-knowledge-common&lt;/module&gt;
+        &lt;module&gt;ai-knowledge-domain&lt;/module&gt;
+        &lt;module&gt;ai-knowledge-infra&lt;/module&gt;
+        &lt;module&gt;ai-knowledge-service&lt;/module&gt;
+        &lt;module&gt;ai-knowledge-web&lt;/module&gt;
+    &lt;/modules&gt;
+
+    &lt;!-- 统一版本管理 --&gt;
+    &lt;properties&gt;
+        &lt;java.version&gt;25&lt;/java.version&gt;
+        &lt;maven.compiler.release&gt;25&lt;/maven.compiler.release&gt;
+        &lt;spring-ai.version&gt;2.0.0&lt;/spring-ai.version&gt;
+        &lt;mybatis-plus.version&gt;3.5.10&lt;/mybatis-plus.version&gt;
+        &lt;mapstruct.version&gt;1.6.3&lt;/mapstruct.version&gt;
+        &lt;guava.version&gt;33.4.0-jre&lt;/guava.version&gt;
+        &lt;spotbugs.version&gt;4.8.6&lt;/spotbugs.version&gt;
+        &lt;checkstyle.version&gt;3.6.0&lt;/checkstyle.version&gt;
+        &lt;pmd.version&gt;3.26.0&lt;/pmd.version&gt;
+    &lt;/properties&gt;
+
+    &lt;!-- 依赖管理（不实际引入，只管理版本） --&gt;
+    &lt;dependencyManagement&gt;
+        &lt;dependencies&gt;
+            &lt;!-- Spring AI BOM --&gt;
+            &lt;dependency&gt;
+                &lt;groupId&gt;org.springframework.ai&lt;/groupId&gt;
+                &lt;artifactId&gt;spring-ai-bom&lt;/artifactId&gt;
+                &lt;version&gt;${spring-ai.version}&lt;/version&gt;
+                &lt;type&gt;pom&lt;/type&gt;
+                &lt;scope&gt;import&lt;/scope&gt;
+            &lt;/dependency&gt;
+
+            &lt;!-- 项目内部模块 --&gt;
+            &lt;dependency&gt;
+                &lt;groupId&gt;com.example&lt;/groupId&gt;
+                &lt;artifactId&gt;ai-knowledge-api&lt;/artifactId&gt;
+                &lt;version&gt;${project.version}&lt;/version&gt;
+            &lt;/dependency&gt;
+            &lt;dependency&gt;
+                &lt;groupId&gt;com.example&lt;/groupId&gt;
+                &lt;artifactId&gt;ai-knowledge-common&lt;/artifactId&gt;
+                &lt;version&gt;${project.version}&lt;/version&gt;
+            &lt;/dependency&gt;
+
+            &lt;!-- 第三方库锁定版本 --&gt;
+            &lt;dependency&gt;
+                &lt;groupId&gt;com.baomidou&lt;/groupId&gt;
+                &lt;artifactId&gt;mybatis-plus-spring-boot3-starter&lt;/artifactId&gt;
+                &lt;version&gt;${mybatis-plus.version}&lt;/version&gt;
+            &lt;/dependency&gt;
+            &lt;dependency&gt;
+                &lt;groupId&gt;org.mapstruct&lt;/groupId&gt;
+                &lt;artifactId&gt;mapstruct&lt;/artifactId&gt;
+                &lt;version&gt;${mapstruct.version}&lt;/version&gt;
+            &lt;/dependency&gt;
+        &lt;/dependencies&gt;
+    &lt;/dependencyManagement&gt;
+
+    &lt;!-- 所有子模块共享的依赖 --&gt;
+    &lt;dependencies&gt;
+        &lt;!-- 编译时工具 --&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.projectlombok&lt;/groupId&gt;
+            &lt;artifactId&gt;lombok&lt;/artifactId&gt;
+            &lt;optional&gt;true&lt;/optional&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.mapstruct&lt;/groupId&gt;
+            &lt;artifactId&gt;mapstruct&lt;/artifactId&gt;
+        &lt;/dependency&gt;
+
+        &lt;!-- 测试 --&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-boot-starter-test&lt;/artifactId&gt;
+            &lt;scope&gt;test&lt;/scope&gt;
+        &lt;/dependency&gt;
+    &lt;/dependencies&gt;
+
+    &lt;!-- 插件管理（统一版本和配置） --&gt;
+    &lt;build&gt;
+        &lt;pluginManagement&gt;
+            &lt;plugins&gt;
+                &lt;plugin&gt;
+                    &lt;groupId&gt;org.apache.maven.plugins&lt;/groupId&gt;
+                    &lt;artifactId&gt;maven-compiler-plugin&lt;/artifactId&gt;
+                    &lt;configuration&gt;
+                        &lt;release&gt;25&lt;/release&gt;
+                        &lt;parameters&gt;true&lt;/parameters&gt; &lt;!-- 保留方法参数名（反射需要） --&gt;
+                        &lt;annotationProcessorPaths&gt;
+                            &lt;path&gt;
+                                &lt;groupId&gt;org.projectlombok&lt;/groupId&gt;
+                                &lt;artifactId&gt;lombok&lt;/artifactId&gt;
+                            &lt;/path&gt;
+                            &lt;path&gt;
+                                &lt;groupId&gt;org.mapstruct&lt;/groupId&gt;
+                                &lt;artifactId&gt;mapstruct-processor&lt;/artifactId&gt;
+                                &lt;version&gt;${mapstruct.version}&lt;/version&gt;
+                            &lt;/path&gt;
+                        &lt;/annotationProcessorPaths&gt;
+                    &lt;/configuration&gt;
+                &lt;/plugin&gt;
+
+                &lt;plugin&gt;
+                    &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+                    &lt;artifactId&gt;spring-boot-maven-plugin&lt;/artifactId&gt;
+                    &lt;configuration&gt;
+                        &lt;excludes&gt;
+                            &lt;exclude&gt;
+                                &lt;groupId&gt;org.projectlombok&lt;/groupId&gt;
+                                &lt;artifactId&gt;lombok&lt;/artifactId&gt;
+                            &lt;/exclude&gt;
+                        &lt;/excludes&gt;
+                    &lt;/configuration&gt;
+                    &lt;executions&gt;
+                        &lt;execution&gt;
+                            &lt;id&gt;process-aot&lt;/id&gt;
+                            &lt;goals&gt;
+                                &lt;goal&gt;process-aot&lt;/goal&gt; &lt;!-- AOT 编译预处理 --&gt;
+                            &lt;/goals&gt;
+                        &lt;/execution&gt;
+                    &lt;/executions&gt;
+                &lt;/plugin&gt;
+
+                &lt;plugin&gt;
+                    &lt;groupId&gt;org.codehaus.mojo&lt;/groupId&gt;
+                    &lt;artifactId&gt;flatten-maven-plugin&lt;/artifactId&gt;
+                    &lt;version&gt;1.6.0&lt;/version&gt;
+                    &lt;configuration&gt;
+                        &lt;flattenMode&gt;ci&lt;/flattenMode&gt; &lt;!-- CI 友好 POM（去除变量引用） --&gt;
+                    &lt;/configuration&gt;
+                &lt;/plugin&gt;
+            &lt;/plugins&gt;
+        &lt;/pluginManagement&gt;
+    &lt;/build&gt;
+&lt;/project&gt;
+</code></pre></div>
+<h3>2.2 BOM（Bill of Materials）</h3>
+<p>BOM 是 Maven 提供的版本管理机制，用于统一管理一组依赖的版本：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;!-- 创建自定义 BOM（供公司内部多个项目使用） --&gt;
+&lt;project&gt;
+    &lt;groupId&gt;com.example&lt;/groupId&gt;
+    &lt;artifactId&gt;ai-platform-bom&lt;/artifactId&gt;
+    &lt;version&gt;1.0.0&lt;/version&gt;
+    &lt;packaging&gt;pom&lt;/packaging&gt;
+
+    &lt;dependencyManagement&gt;
+        &lt;dependencies&gt;
+            &lt;dependency&gt;
+                &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+                &lt;artifactId&gt;spring-boot-starter-parent&lt;/artifactId&gt;
+                &lt;version&gt;4.0.0&lt;/version&gt;
+                &lt;type&gt;pom&lt;/type&gt;
+                &lt;scope&gt;import&lt;/scope&gt;
+            &lt;/dependency&gt;
+            &lt;!-- 锁定所有 AI 相关依赖版本 --&gt;
+        &lt;/dependencies&gt;
+    &lt;/dependencyManagement&gt;
+&lt;/project&gt;
+
+&lt;!-- 其他项目使用这个 BOM --&gt;
+&lt;dependencyManagement&gt;
+    &lt;dependencies&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;com.example&lt;/groupId&gt;
+            &lt;artifactId&gt;ai-platform-bom&lt;/artifactId&gt;
+            &lt;version&gt;1.0.0&lt;/version&gt;
+            &lt;type&gt;pom&lt;/type&gt;
+            &lt;scope&gt;import&lt;/scope&gt;
+        &lt;/dependency&gt;
+    &lt;/dependencies&gt;
+&lt;/dependencyManagement&gt;
+</code></pre></div>
+<h3>2.3 聚合 vs 继承</h3>
+<table>
+<thead>
+<tr>
+<th>机制</th>
+<th>作用</th>
+<th>关键标签</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>聚合（Aggregation）</strong></td>
+<td>一次构建所有子模块</td>
+<td><code>&lt;modules&gt;</code></td>
+</tr>
+<tr>
+<td><strong>继承（Inheritance）</strong></td>
+<td>复用 POM 配置</td>
+<td><code>&lt;parent&gt;</code></td>
+</tr>
+</tbody></table>
+<p>两者通常结合使用：Parent POM 同时声明子模块（聚合）和提供公共配置（继承）。</p>
+<hr>
+<h2>三、Maven Wrapper</h2>
+<p>Maven Wrapper 确保所有开发者使用相同版本的 Maven：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># 在项目根目录执行（一次性）
+mvn wrapper:wrapper -Dmaven=4.0.0
+
+# 生成文件：
+# .mvn/wrapper/maven-wrapper.properties  ← 配置 Maven 版本和下载地址
+# mvnw                                    ← Unix/Mac 可执行脚本
+# mvnw.cmd                                ← Windows 可执行脚本
+
+# 之后所有构建命令使用 mvnw 代替 mvn：
+./mvnw clean package
+./mvnw spring-boot:run
+</code></pre></div>
+<hr>
+<h2>四、依赖管理</h2>
+<h3>4.1 Scope（作用域）</h3>
+<table>
+<thead>
+<tr>
+<th>Scope</th>
+<th>编译时</th>
+<th>测试时</th>
+<th>运行时</th>
+<th>传递性</th>
+<th>典型场景</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>compile</strong>（默认）</td>
+<td>是</td>
+<td>是</td>
+<td>是</td>
+<td>是</td>
+<td>业务依赖</td>
+</tr>
+<tr>
+<td><strong>provided</strong></td>
+<td>是</td>
+<td>是</td>
+<td>否</td>
+<td>否</td>
+<td>Servlet API、Lombok</td>
+</tr>
+<tr>
+<td><strong>runtime</strong></td>
+<td>否</td>
+<td>是</td>
+<td>是</td>
+<td>是</td>
+<td>JDBC 驱动</td>
+</tr>
+<tr>
+<td><strong>test</strong></td>
+<td>否</td>
+<td>是</td>
+<td>否</td>
+<td>否</td>
+<td>JUnit、Mockito</td>
+</tr>
+<tr>
+<td><strong>system</strong></td>
+<td>是</td>
+<td>是</td>
+<td>否</td>
+<td>否</td>
+<td>本地 jar（不推荐）</td>
+</tr>
+</tbody></table>
+<h3>4.2 Optional 依赖</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;!-- 声明可选依赖：不会传递给依赖方 --&gt;
+&lt;dependency&gt;
+    &lt;groupId&gt;com.example&lt;/groupId&gt;
+    &lt;artifactId&gt;optional-lib&lt;/artifactId&gt;
+    &lt;optional&gt;true&lt;/optional&gt;
+&lt;/dependency&gt;
+</code></pre></div>
+<h3>4.3 依赖排除</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;dependency&gt;
+    &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-boot-starter-web&lt;/artifactId&gt;
+    &lt;!-- 排除 Tomcat，使用 Undertow --&gt;
+    &lt;exclusions&gt;
+        &lt;exclusion&gt;
+            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-boot-starter-tomcat&lt;/artifactId&gt;
+        &lt;/exclusion&gt;
+    &lt;/exclusions&gt;
+&lt;/dependency&gt;
+&lt;dependency&gt;
+    &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-boot-starter-undertow&lt;/artifactId&gt;
+&lt;/dependency&gt;
+</code></pre></div>
+<h3>4.4 依赖冲突解决</h3>
+<p><strong>冲突原则：最短路径优先（Nearest Wins）</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>项目
+ ├─ spring-boot-starter-web (依赖 Jackson 2.18.0)
+ └─ 直接声明 jackson-databind 2.19.0
+
+结果：使用 2.19.0（直接依赖路径更短）
+</code></pre></div>
+<p><strong>最佳实践：</strong> 使用 <code>dependencyManagement</code> 显式锁定版本，并配合 <code>maven-enforcer-plugin</code> 检测冲突：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;plugin&gt;
+    &lt;groupId&gt;org.apache.maven.plugins&lt;/groupId&gt;
+    &lt;artifactId&gt;maven-enforcer-plugin&lt;/artifactId&gt;
+    &lt;executions&gt;
+        &lt;execution&gt;
+            &lt;id&gt;enforce-dependency-convergence&lt;/id&gt;
+            &lt;goals&gt;
+                &lt;goal&gt;enforce&lt;/goal&gt;
+            &lt;/goals&gt;
+            &lt;configuration&gt;
+                &lt;rules&gt;
+                    &lt;dependencyConvergence/&gt; &lt;!-- 检测依赖版本不一致 --&gt;
+                &lt;/rules&gt;
+            &lt;/configuration&gt;
+        &lt;/execution&gt;
+    &lt;/executions&gt;
+&lt;/plugin&gt;
+</code></pre></div>
+<hr>
+<h2>五、关键插件配置</h2>
+<h3>5.1 spring-boot-maven-plugin（AOT 处理）</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;plugin&gt;
+    &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-boot-maven-plugin&lt;/artifactId&gt;
+    &lt;configuration&gt;
+        &lt;image&gt;
+            &lt;builder&gt;paketobuildpacks/builder-jammy-base:latest&lt;/builder&gt;
+            &lt;name&gt;registry.example.com/${project.artifactId}:${project.version}&lt;/name&gt;
+        &lt;/image&gt;
+    &lt;/configuration&gt;
+    &lt;executions&gt;
+        &lt;execution&gt;
+            &lt;id&gt;process-aot&lt;/id&gt;
+            &lt;goals&gt;
+                &lt;goal&gt;process-aot&lt;/goal&gt;
+            &lt;/goals&gt;
+        &lt;/execution&gt;
+    &lt;/executions&gt;
+&lt;/plugin&gt;
+</code></pre></div>
+<h3>5.2 flatten-maven-plugin（CI 友好 POM）</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;plugin&gt;
+    &lt;groupId&gt;org.codehaus.mojo&lt;/groupId&gt;
+    &lt;artifactId&gt;flatten-maven-plugin&lt;/artifactId&gt;
+    &lt;configuration&gt;
+        &lt;flattenMode&gt;ci&lt;/flattenMode&gt;
+    &lt;/configuration&gt;
+    &lt;executions&gt;
+        &lt;execution&gt;
+            &lt;id&gt;flatten&lt;/id&gt;
+            &lt;phase&gt;process-resources&lt;/phase&gt;
+            &lt;goals&gt;
+                &lt;goal&gt;flatten&lt;/goal&gt;
+            &lt;/goals&gt;
+        &lt;/execution&gt;
+    &lt;/executions&gt;
+&lt;/plugin&gt;
+</code></pre></div>
+<p><strong>作用：</strong> 发布时生成去除了 <code>${revision}</code> 等变量引用的 <code>.flattened-pom.xml</code>，确保 CI 系统和 Maven Central 能正确解析。</p>
+<hr>
+<h2>六、静态分析集成</h2>
+<h3>6.1 SpotBugs（字节码级别缺陷检测）</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;plugin&gt;
+    &lt;groupId&gt;com.github.spotbugs&lt;/groupId&gt;
+    &lt;artifactId&gt;spotbugs-maven-plugin&lt;/artifactId&gt;
+    &lt;version&gt;${spotbugs.version}&lt;/version&gt;
+    &lt;configuration&gt;
+        &lt;effort&gt;Max&lt;/effort&gt;
+        &lt;threshold&gt;Low&lt;/threshold&gt;
+        &lt;failOnError&gt;true&lt;/failOnError&gt;
+    &lt;/configuration&gt;
+    &lt;executions&gt;
+        &lt;execution&gt;
+            &lt;goals&gt;
+                &lt;goal&gt;check&lt;/goal&gt;
+            &lt;/goals&gt;
+        &lt;/execution&gt;
+    &lt;/executions&gt;
+&lt;/plugin&gt;
+</code></pre></div>
+<h3>6.2 Checkstyle（代码风格检查）</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;plugin&gt;
+    &lt;groupId&gt;org.apache.maven.plugins&lt;/groupId&gt;
+    &lt;artifactId&gt;maven-checkstyle-plugin&lt;/artifactId&gt;
+    &lt;version&gt;${checkstyle.version}&lt;/version&gt;
+    &lt;configuration&gt;
+        &lt;configLocation&gt;checkstyle.xml&lt;/configLocation&gt;
+        &lt;failsOnError&gt;true&lt;/failsOnError&gt;
+    &lt;/configuration&gt;
+    &lt;executions&gt;
+        &lt;execution&gt;
+            &lt;goals&gt;
+                &lt;goal&gt;check&lt;/goal&gt;
+            &lt;/goals&gt;
+        &lt;/execution&gt;
+    &lt;/executions&gt;
+&lt;/plugin&gt;
+</code></pre></div>
+<h3>6.3 PMD（源码级别潜在问题检测）</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;plugin&gt;
+    &lt;groupId&gt;org.apache.maven.plugins&lt;/groupId&gt;
+    &lt;artifactId&gt;maven-pmd-plugin&lt;/artifactId&gt;
+    &lt;version&gt;${pmd.version}&lt;/version&gt;
+    &lt;configuration&gt;
+        &lt;rulesets&gt;
+            &lt;ruleset&gt;category/java/bestpractices.xml&lt;/ruleset&gt;
+            &lt;ruleset&gt;category/java/errorprone.xml&lt;/ruleset&gt;
+        &lt;/rulesets&gt;
+    &lt;/configuration&gt;
+&lt;/plugin&gt;
+</code></pre></div>
+<hr>
+<h2>七、子模块 Web 层完整 pom.xml 示例</h2>
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
+&lt;project xmlns=&quot;http://maven.apache.org/POM/4.0.0&quot;
+         xmlns:xsi=&quot;http://www.w3.org/2001/XMLSchema-instance&quot;
+         xsi:schemaLocation=&quot;http://maven.apache.org/POM/4.0.0
+         https://maven.apache.org/xsd/maven-4.0.0.xsd&quot;&gt;
+    &lt;modelVersion&gt;4.0.0&lt;/modelVersion&gt;
+
+    &lt;parent&gt;
+        &lt;groupId&gt;com.example&lt;/groupId&gt;
+        &lt;artifactId&gt;ai-knowledge-platform&lt;/artifactId&gt;
+        &lt;version&gt;1.0.0-SNAPSHOT&lt;/version&gt;
+    &lt;/parent&gt;
+
+    &lt;artifactId&gt;ai-knowledge-web&lt;/artifactId&gt;
+    &lt;packaging&gt;jar&lt;/packaging&gt;
+
+    &lt;dependencies&gt;
+        &lt;!-- 内部模块 --&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;com.example&lt;/groupId&gt;
+            &lt;artifactId&gt;ai-knowledge-service&lt;/artifactId&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;com.example&lt;/groupId&gt;
+            &lt;artifactId&gt;ai-knowledge-infra&lt;/artifactId&gt;
+        &lt;/dependency&gt;
+
+        &lt;!-- Spring Boot Starters --&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-boot-starter-web&lt;/artifactId&gt;
+        &lt;/dependency&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+            &lt;artifactId&gt;spring-boot-starter-actuator&lt;/artifactId&gt;
+        &lt;/dependency&gt;
+
+        &lt;!-- 数据库（运行时依赖） --&gt;
+        &lt;dependency&gt;
+            &lt;groupId&gt;org.postgresql&lt;/groupId&gt;
+            &lt;artifactId&gt;postgresql&lt;/artifactId&gt;
+            &lt;scope&gt;runtime&lt;/scope&gt;
+        &lt;/dependency&gt;
+    &lt;/dependencies&gt;
+
+    &lt;build&gt;
+        &lt;plugins&gt;
+            &lt;plugin&gt;
+                &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+                &lt;artifactId&gt;spring-boot-maven-plugin&lt;/artifactId&gt;
+            &lt;/plugin&gt;
+        &lt;/plugins&gt;
+    &lt;/build&gt;
+&lt;/project&gt;
+</code></pre></div>
+<hr>
+<h2>常见问题</h2>
+<p><strong>Q: Maven 多模块中如何避免循环依赖？</strong>
+A: 1) 遵循依赖方向原则（上层依赖下层，下层不依赖上层）；2) 使用 <code>maven-enforcer-plugin</code> 的 <code>banCircularDependencies</code> 规则；3) 出现循环时，抽取公共接口到独立模块（依赖倒置）。</p>
+<p><strong>Q: dependencyManagement 和 dependencies 的区别？</strong>
+A: <code>dependencyManagement</code> 只声明版本（不实际引入），子模块需要显式声明 <code>groupId</code> + <code>artifactId</code> 才会引入依赖。<code>dependencies</code> 直接引入依赖。最佳实践：版本管理放在 parent 的 <code>dependencyManagement</code> 中。</p>
+<p><strong>Q: Spring Boot 项目一定要用 spring-boot-starter-parent 吗？</strong>
+A: 不必须，但强烈推荐。它预设了所有合理的默认配置（Java 版本、编码、资源过滤、插件管理）。如果公司有自己的 parent POM，可用 <code>spring-boot-dependencies</code> BOM 替代。</p>
+<p><strong>Q: Maven 和 Gradle 如何选？</strong>
+A: 项目中 Maven 是主栈（Adopt）。Gradle 构建速度快（增量构建和缓存），适合超大型多模块项目，但学习成本高。默认使用 Maven。</p>
+<hr>
+<h2>相关条目</h2>
+<ul>
+<li><a href="/03-Java应用平台/Spring核心/03-SpringBoot4深度解析" class="cross-ref" data-ref="03-SpringBoot4深度解析">03-SpringBoot4深度解析</a>：Spring Boot 启动流程</li>
+<li><a href="/03-Java应用平台/工程规范/03-Jackson-MapStruct-Validator序列化与校验" class="cross-ref" data-ref="03-Jackson-MapStruct-Validator序列化与校验">03-Jackson-MapStruct-Validator序列化与校验</a>：编译期代码生成与序列化</li>
+<li><a href="/03-Java应用平台/工程规范/03-任务调度Quartz与XXL-JOB" class="cross-ref" data-ref="03-任务调度Quartz与XXL-JOB">03-任务调度Quartz与XXL-JOB</a>：定时任务依赖配置</li>
+<li><a href="/09-Java AI框架/09-架构抽象层设计" class="cross-ref" data-ref="09-架构抽象层设计">09-架构抽象层设计</a>：AI 项目模块结构设计</li>
+</ul>
+</div>
+</article>

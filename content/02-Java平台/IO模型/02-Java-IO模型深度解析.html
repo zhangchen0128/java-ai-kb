@@ -1,0 +1,1646 @@
+
+<article class="kb-entry" data-path="/02-Java平台/IO模型/02-Java-IO模型深度解析">
+  <div class="entry-meta">
+    <div class="entry-domain"><a href="/?d=02">02-Java平台</a></div>
+    <h1>Java IO 模型深度解析 — BIO、NIO、epoll、零拷贝、Netty 与 AI 场景实战</h1>
+    <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#["java-nio"</span><span class="badge badge-tag">#"bio"</span><span class="badge badge-tag">#"epoll"</span><span class="badge badge-tag">#"zero-copy"</span></div>
+    
+  </div>
+  <div class="entry-body"><h1>Java IO 模型深度解析 — BIO、NIO、epoll、零拷贝、Netty 与 AI 场景实战</h1>
+<h2>概述</h2>
+<p>Java 的 IO 模型演进是理解高性能网络编程的基础。从 JDK 1.0 的阻塞式 BIO，到 JDK 1.4 引入的 NIO（New IO / Non-blocking IO），再到 JDK 7 的 NIO.2（异步 IO），以及 Netty 对 NIO 的工程化封装，Java IO 的发展脉络清晰地反映了操作系统底层 IO 模型（select/poll/epoll）的进化。在大模型时代，SSE 流式响应、大文件上传、WebSocket 实时通信等 AI 应用场景对 IO 模型提出了新的要求。本文将深入剖析这六个维度，并提供可直接运行的代码示例。</p>
+<p>Java IO 的整体演进路线：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>BIO (JDK 1.0) ──► NIO (JDK 1.4) ──► NIO.2 / AIO (JDK 7)
+                      │
+                      └──► Netty (社区主导的 NIO 工程化封装)
+                                │
+                                └──► AI 场景适配（SSE / WebSocket / Virtual Threads）
+</code></pre></div>
+<hr>
+<h2>一、BIO（Blocking IO）— 一切的开端</h2>
+<h3>1.1 核心抽象：InputStream / OutputStream</h3>
+<p>BIO 是 Java 最原始的 IO 模型，其核心是面向字节流的 <code>InputStream</code> 和 <code>OutputStream</code> 两个抽象类。所有操作都是<strong>阻塞</strong>的：当线程调用 <code>read()</code> 时，如果数据尚未到达，线程会被操作系统挂起，直到有数据可读为止。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// JDK 25 风格 — BIO 文件读取示例
+import java.io.*;
+
+void bioFileRead() throws IOException {
+    var file = new File(&quot;/tmp/test.txt&quot;);
+    try (var fis = new FileInputStream(file);
+         var bis = new BufferedInputStream(fis);
+         var reader = new InputStreamReader(bis);
+         var br = new BufferedReader(reader)) {
+
+        String line;
+        while ((line = br.readLine()) != null) {
+            System.out.println(line);
+        }
+    }
+}
+</code></pre></div>
+<h3>1.2 字符流：Reader / Writer</h3>
+<p>Java 区分字节流和字符流。字节流（InputStream/OutputStream）处理原始字节，字符流（Reader/Writer）处理字符数据，内部进行编解码转换。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>字节流                       字符流
+InputStream    ──────────►   Reader      (输入)
+OutputStream   ──────────►   Writer      (输出)
+
+转换桥梁：InputStreamReader / OutputStreamWriter
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 字符流 + 字符编码处理
+void charStreamExample() throws IOException {
+    var path = java.nio.file.Path.of(&quot;/tmp/test.txt&quot;);
+    // 使用 Files 工具类，内部自动管理字符编码
+    var content = java.nio.file.Files.readString(path);
+    System.out.println(content);
+
+    // 显式指定编码写入
+    java.nio.file.Files.writeString(
+        path, &quot;你好，世界！&quot;, java.nio.file.StandardOpenOption.APPEND);
+}
+</code></pre></div>
+<h3>1.3 Decorator（装饰器）模式</h3>
+<p>Java IO 类库大量使用装饰器模式。核心组件 <code>FileInputStream</code> 提供基本功能，而 <code>BufferedInputStream</code>、<code>DataInputStream</code>、<code>ObjectInputStream</code> 等通过层层包装添加缓冲、数据类型解析、对象序列化等功能。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 装饰器模式示意
+void decoratorPattern() throws IOException {
+    // 核心组件：只提供逐字节读取
+    var fileInput = new FileInputStream(&quot;/tmp/data.bin&quot;);
+
+    // 装饰层1：添加缓冲
+    var buffered = new BufferedInputStream(fileInput);
+
+    // 装饰层2：添加原始数据类型读取能力
+    var dataInput = new DataInputStream(buffered);
+
+    // 现在可以读 int、double 等类型
+    int value = dataInput.readInt();
+    double price = dataInput.readDouble();
+    dataInput.close();
+}
+</code></pre></div>
+<p>这种设计的好处是<strong>组合优于继承</strong>：你可以按需组合不同的功能层（缓冲 + 数据解析 + 校验和 等），避免了类爆炸问题。</p>
+<h3>1.4 BIO 网络编程的困境</h3>
+<p>BIO 在网络编程中的经典模式是&quot;一个连接一个线程&quot;（Thread-per-Connection）：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// BIO Socket 服务端 — 经典模式
+void bioSocketServer() throws IOException {
+    try (var serverSocket = new java.net.ServerSocket(8080)) {
+        System.out.println(&quot;BIO Server listening on port 8080&quot;);
+        while (true) {
+            // accept() 阻塞，等待新连接
+            var clientSocket = serverSocket.accept();
+            // 每个连接创建一个新线程
+            Thread.ofPlatform().start(() -&gt; handleClient(clientSocket));
+        }
+    }
+}
+
+void handleClient(java.net.Socket socket) {
+    try (socket;
+         var in = new BufferedReader(
+             new InputStreamReader(socket.getInputStream()));
+         var out = new PrintWriter(socket.getOutputStream(), true)) {
+
+        String line;
+        while ((line = in.readLine()) != null) {
+            out.println(&quot;Echo: &quot; + line);
+        }
+    } catch (IOException e) {
+        e.printStackTrace();
+    }
+}
+</code></pre></div>
+<p><strong>问题：</strong> 当并发连接数上升到数千甚至数万时，线程数爆炸导致：</p>
+<ul>
+<li><strong>内存开销大</strong>：每个线程约占用 1MB 栈空间（可通过 <code>-Xss</code> 调优但仍有限）</li>
+<li><strong>上下文切换成本高</strong>：CPU 大量时间花在切换线程而非处理业务</li>
+<li><strong>C10K 问题</strong>：无法高效处理 10000+ 并发连接</li>
+</ul>
+<blockquote>
+<p><strong>注意：</strong> Virtual Threads（JEP 444）改善了线程的内存开销问题，但 BIO 的根本问题——I/O 操作的阻塞等待导致线程空转——依然存在。Virtual Threads 的价值体现在业务代码可以用同步风格写异步逻辑，但底层 IO 实现仍应使用 NIO。</p>
+</blockquote>
+<hr>
+<h2>二、NIO（Non-blocking IO）— 高并发的基石</h2>
+<p>JDK 1.4 引入的 NIO（<code>java.nio</code> 包）是 Java 高性能网络编程的转折点。其核心抽象是一个三位一体：</p>
+<h3>2.1 核心三角：Channel + Buffer + Selector</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>                 Selector（多路复用器）
+                      │
+         ┌────────────┼────────────┐
+         │            │            │
+    SocketChannel  SocketChannel  ServerSocketChannel
+         │            │            │
+      Buffer        Buffer        Buffer
+</code></pre></div>
+<p><strong>Channel（通道）：</strong> 双向的数据传输通道，既可以读也可以写。与 BIO 的 Stream 不同，Channel 是双向的。主要实现：</p>
+<ul>
+<li><code>FileChannel</code> — 文件 IO</li>
+<li><code>SocketChannel</code> — TCP 客户端</li>
+<li><code>ServerSocketChannel</code> — TCP 服务端</li>
+<li><code>DatagramChannel</code> — UDP</li>
+</ul>
+<p><strong>Buffer（缓冲区）：</strong> 一块内存区域，用于在 Channel 和用户代码之间中转数据。所有数据都必须经过 Buffer：从 Channel 读到 Buffer，或从 Buffer 写到 Channel。</p>
+<p><strong>Selector（选择器）：</strong> NIO 实现非阻塞 IO 的关键。一个 Selector 线程可以监控多个 Channel 的 IO 事件（连接就绪、读就绪、写就绪），实现单线程管理成千上万个连接——这就是 IO 多路复用（IO Multiplexing）。</p>
+<h3>2.2 Buffer 三大核心属性：position / limit / capacity</h3>
+<p>Buffer 是理解 NIO 的核心。它的三个属性决定了对缓冲区的读写行为：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>                     capacity（容量，不可变）
+┌─────────────────────────────────────────────────────┐
+│  已读/已写区域  │     可读/可写区域    │  不可访问   │
+│  [0, position) │ [position, limit)   │ [limit, cap) │
+└─────────────────────────────────────────────────────┘
+                 ▲                      ▲
+             position                 limit
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>属���</th>
+<th>含义</th>
+<th>写模式初始值</th>
+<th>读模式初始值（flip 后）</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>capacity</strong></td>
+<td>Buffer 的总容量，创建后不可变</td>
+<td>分配时指定</td>
+<td>不变</td>
+</tr>
+<tr>
+<td><strong>position</strong></td>
+<td>下一个要读/写的元素索引</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td><strong>limit</strong></td>
+<td>第一个不可读/写的元素索引</td>
+<td>capacity</td>
+<td>写模式时的 position（即已写入的数量）</td>
+</tr>
+</tbody></table>
+<p><strong>关键操作：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">void bufferOperations() {
+    // 分配一个 10 字节的 HeapByteBuffer
+    var buffer = java.nio.ByteBuffer.allocate(10);
+    // 写模式：position=0, limit=10, capacity=10
+
+    // 写入 5 个字节：&#39;H&#39;,&#39;e&#39;,&#39;l&#39;,&#39;l&#39;,&#39;o&#39;
+    buffer.put((byte) &#39;H&#39;);
+    buffer.put((byte) &#39;e&#39;);
+    buffer.put((byte) &#39;l&#39;);
+    buffer.put((byte) &#39;l&#39;);
+    buffer.put((byte) &#39;o&#39;);
+    // position=5, limit=10, capacity=10
+
+    // flip()：切换到读模式
+    buffer.flip();
+    // position=0, limit=5, capacity=10
+
+    // 读取数据
+    while (buffer.hasRemaining()) {
+        System.out.print((char) buffer.get());
+    }
+    // position=5, limit=5, capacity=10
+    System.out.println();
+
+    // rewind()：重新读取（position 归零，limit 不变）
+    buffer.rewind();
+    // position=0, limit=5, capacity=10
+
+    // clear()：准备下一次写入（position=0, limit=capacity）
+    // 注意：数据并未被清除，只是&quot;逻辑清空&quot;
+    buffer.clear();
+    // position=0, limit=10, capacity=10
+
+    // compact()：将未读数据移到开头，准备写入
+    // 适用于读了一半想写的场景
+}
+</code></pre></div>
+<p><strong>Buffer 方法速查表：</strong></p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>作用</th>
+<th>position</th>
+<th>limit</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>allocate(n)</code></td>
+<td>分配 Heap 缓冲区</td>
+<td>0</td>
+<td>n</td>
+</tr>
+<tr>
+<td><code>allocateDirect(n)</code></td>
+<td>分配 Direct 缓冲区</td>
+<td>0</td>
+<td>n</td>
+</tr>
+<tr>
+<td><code>put(data)</code></td>
+<td>写入数据</td>
+<td>递增</td>
+<td>不变</td>
+</tr>
+<tr>
+<td><code>flip()</code></td>
+<td>写 → 读</td>
+<td>0</td>
+<td>原 position</td>
+</tr>
+<tr>
+<td><code>get()</code></td>
+<td>读取数据</td>
+<td>递增</td>
+<td>不变</td>
+</tr>
+<tr>
+<td><code>rewind()</code></td>
+<td>重读</td>
+<td>0</td>
+<td>不变</td>
+</tr>
+<tr>
+<td><code>clear()</code></td>
+<td>准备写（清空逻辑内容）</td>
+<td>0</td>
+<td>capacity</td>
+</tr>
+<tr>
+<td><code>compact()</code></td>
+<td>压缩（保留未读数据）</td>
+<td>remaining()</td>
+<td>capacity</td>
+</tr>
+<tr>
+<td><code>mark()</code> / <code>reset()</code></td>
+<td>标记/恢复位置</td>
+<td>—</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>slice()</code></td>
+<td>创建共享数据的子 Buffer</td>
+<td>0</td>
+<td>子范围</td>
+</tr>
+</tbody></table>
+<h3>2.3 Direct Memory vs Heap Memory</h3>
+<p>ByteBuffer 有两种内存分配方式，这是理解 NIO 性能的关键。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">void bufferMemoryComparison() {
+    // Heap Buffer：数据在 JVM 堆中
+    var heapBuffer = java.nio.ByteBuffer.allocate(1024);
+    // heapBuffer.hasArray() == true
+    // heapBuffer.array() 返回底层 byte[]
+
+    // Direct Buffer：数据在堆外内存（OS 管理）
+    var directBuffer = java.nio.ByteBuffer.allocateDirect(1024);
+    // directBuffer.hasArray() == false (不一定，取决于实现)
+    // 通过 Unsafe 或 native 方法分配
+}
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>对比维度</th>
+<th>Heap Buffer</th>
+<th>Direct Buffer</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>内存位置</strong></td>
+<td>JVM 堆内</td>
+<td>堆外（OS 管理）</td>
+</tr>
+<tr>
+<td><strong>分配/回收成本</strong></td>
+<td>低（TLAB 分配）</td>
+<td>高（系统调用）</td>
+</tr>
+<tr>
+<td><strong>IO 操作路径</strong></td>
+<td>堆内 → 临时 Direct Buffer → OS（多一次拷贝）</td>
+<td>直接 → OS</td>
+</tr>
+<tr>
+<td><strong>GC 影响</strong></td>
+<td>受 GC 管理，可能被移动</td>
+<td>不受 GC 移动，但有单独的内存清理机制</td>
+</tr>
+<tr>
+<td><strong>适用场景</strong></td>
+<td>业务数据处理</td>
+<td>高频网络 IO、大文件传输</td>
+</tr>
+</tbody></table>
+<p><strong>Direct Buffer 的 IO 优势：</strong> 当进行网络 IO 或文件 IO 时，操作系统只能操作堆外内存。如果使用 Heap Buffer，JVM 需要先将数据复制到一个临时的 Direct Buffer 中，再进行系统调用。使用 Direct Buffer 可以省去这次拷贝。这也是为什么 Netty 的 <code>ByteBuf</code> 默认优先使用 Direct Memory。</p>
+<p><strong>Direct Buffer 的内存管理：</strong> Direct Buffer 的内存不属于 JVM 堆，不会被普通 GC 回收。Java 通过 <code>Cleaner</code> 和虚引用（PhantomReference）机制在 DirectByteBuffer 对象被 GC 时释放堆外内存。但如果 Direct ByteBuffer 分配过快，可能触发显式的 <code>System.gc()</code> 调用。Netty 通过自己的内存池（<code>PooledByteBufAllocator</code>）来规避这个问题。</p>
+<h3>2.4 Scatter / Gather（分散读写）</h3>
+<p>Scatter（分散读）和 Gather（聚集写）允许单次 IO 操作读写多个 Buffer。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">void scatterGatherExample() throws IOException {
+    // 模拟一个网络协议：header(8字节) + body(变长)
+    var headerBuf = java.nio.ByteBuffer.allocate(8);
+    var bodyBuf = java.nio.ByteBuffer.allocate(1024);
+
+    // Scatter Read：将 Channel 的数据按顺序&quot;分散&quot;到多个 Buffer
+    try (var channel = java.nio.channels.SocketChannel.open()) {
+        var buffers = new java.nio.ByteBuffer[]{headerBuf, bodyBuf};
+        // 先填满 headerBuf，再填 bodyBuf
+        long bytesRead = channel.read(buffers);
+
+        headerBuf.flip();
+        int bodyLength = headerBuf.getInt();  // 读取 body 长度
+
+        bodyBuf.flip();
+        bodyBuf.limit(bodyLength);
+        // 处理 body 数据...
+    }
+
+    // Gather Write：将多个 Buffer 的数据按顺序&quot;聚集&quot;写入 Channel
+    // headerBuf 写完后自动写 bodyBuf
+    // channel.write(new ByteBuffer[]{headerBuf, bodyBuf});
+}
+</code></pre></div>
+<p>Scatter/Gather 在 Netty 中被广泛使用，例如 HTTP 协议的 Header + Body 分离读写。</p>
+<hr>
+<h2>三、epoll 与 Java NIO — 从操作系统到 JDK</h2>
+<h3>3.1 IO 多路复用的三代演进：select → poll → epoll</h3>
+<p>Java 的 <code>Selector</code> 在 Linux 上底层依赖 <code>epoll</code>（JDK 1.6+ 默认），在 macOS/BSD 上使用 <code>kqueue</code>。理解 epoll 的演进有助于理解为什么 NIO 能高效处理数万连接。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>select (1983)              poll (1997)              epoll (2002)
+┌──────────────┐     ┌──────────────┐        ┌──────────────────┐
+│ fd_set 位图   │     │ pollfd 数组   │        │ 红黑树 + 就绪链表  │
+│ 最大 1024    │     │ 无限制        │        │ 无限制            │
+│ O(n) 遍历    │     │ O(n) 遍历     │        │ O(1) 获取就绪事件  │
+│ 每次传入全量  │     │ 每次传入全量   │        │ 增量式：只关注变化  │
+└──────────────┘     └──────────────┘        └──────────────────┘
+</code></pre></div>
+<p><strong>epoll 的核心 API：</strong></p>
+<table>
+<thead>
+<tr>
+<th>API</th>
+<th>功能</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>epoll_create()</code></td>
+<td>创建 epoll 实例，返回文件描述符</td>
+</tr>
+<tr>
+<td><code>epoll_ctl(fd, OP, sockfd, event)</code></td>
+<td>向 epoll 实例添加/修改/删除要监听的 socket fd</td>
+</tr>
+<tr>
+<td><code>epoll_wait(fd, events, maxevents, timeout)</code></td>
+<td>等待事件发生，返回就绪事件列表</td>
+</tr>
+</tbody></table>
+<p><strong>epoll 为什么快？</strong></p>
+<ol>
+<li><strong>事件驱动（Event-driven）</strong>：epoll 不轮询所有 fd，而是通过内核回调机制，在数据到达时直接将 fd 放入就绪链表</li>
+<li><strong>内存映射（mmap）</strong>：内核和用户空间共享内存，减少了数据拷贝</li>
+<li><strong>增量管理</strong>：fd 只在连接建立/关闭时调用 <code>epoll_ctl</code>，不随每次 <code>epoll_wait</code> 重复传递</li>
+</ol>
+<h3>3.2 水平触发（Level-Triggered, LT）vs 边缘触发（Edge-Triggered, ET）</h3>
+<p>epoll 提供两种事件通知模式。Java 的 <code>Selector</code> <strong>默认使用 LT 模式</strong>。</p>
+<table>
+<thead>
+<tr>
+<th>对比维度</th>
+<th>LT（水平触发）</th>
+<th>ET（边缘触发）</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>触发条件</strong></td>
+<td>只要缓冲区有数据，每次 epoll_wait 都通知</td>
+<td>只在缓冲区状态变化时通知一次</td>
+</tr>
+<tr>
+<td><strong>通知次数</strong></td>
+<td>可能多次（缓冲区未读空）</td>
+<td>只通知一次</td>
+</tr>
+<tr>
+<td><strong>编程模型</strong></td>
+<td>简单，类似 select/poll</td>
+<td>复杂，必须用非阻塞 IO + 循环读到 EAGAIN</td>
+</tr>
+<tr>
+<td><strong>线程模型</strong></td>
+<td>可以多线程处理同一 fd</td>
+<td>通常同一 fd 由一个线程处理</td>
+</tr>
+<tr>
+<td><strong>性能</strong></td>
+<td>略低（可能有重复通知）</td>
+<td>更高（无重复通知）</td>
+</tr>
+<tr>
+<td><strong>Java 支持</strong></td>
+<td>默认模式</td>
+<td>可通过 register 时传入额外参数启用</td>
+</tr>
+</tbody></table>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Java Selector 注册时的触发模式（默认 LT）
+void selectorTriggerModes() throws IOException {
+    var selector = java.nio.channels.Selector.open();
+    var channel = java.nio.channels.SocketChannel.open();
+    channel.configureBlocking(false);
+
+    // 默认：水平触发（不需要额外参数）
+    channel.register(selector, java.nio.channels.SelectionKey.OP_READ);
+
+    // 边缘触发（需要通过内部实现类设置，不推荐）
+    // Netty 的 EpollEventLoop 在 Linux 上使用 ET 模式
+}
+</code></pre></div>
+<blockquote>
+<p><strong>Netty 的选择：</strong> Netty 的 <code>EpollEventLoop</code> 在 Linux 上<strong>使用 ET 模式</strong>以追求极致性能。通过在每个 Channel 的 <code>unsafe().read()</code> 中循环读取直到返回 0（数据已读空），Netty 实现了 ET 模式的高效处理。这也是 Netty 性能优于原生 JDK Selector 的原因之一。</p>
+</blockquote>
+<h3>3.3 Java Selector 的 epoll 空轮询 Bug</h3>
+<p>这是一个经典且影响深远的 JDK Bug（JDK-6403933）。在 Linux 平台，有时 <code>Selector.select()</code> 会在没有任何就绪 Channel 的情况下<strong>被唤醒并返回 0</strong>，导致 CPU 100% 空转。</p>
+<p><strong>根因：</strong> epoll 的 <code>epoll_wait</code> 在某些场景下会<strong>虚假唤醒</strong>（spurious wakeup），但 JDK 的 Selector 实现没有正确处理这种情况。具体触发条件包括：被中断的系统调用（如信号处理）、已关闭的 fd 仍被监听等。</p>
+<p><strong>Netty 的应对策略：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Netty 中 EpollEventLoop 的空轮询检测策略（简化示意）
+public class EpollBugWorkaround {
+    private static final int SELECTOR_AUTO_REBUILD_THRESHOLD = 512;
+    private int selectCnt = 0;
+
+    void select() throws IOException {
+        // 执行 select 操作
+        int selectedKeys = selector.select(timeoutMillis);
+
+        if (selectedKeys == 0) {
+            // select 返回 0，可能是空轮询
+            long time = System.nanoTime() - startTime;
+            if (time &lt; timeoutMillis - SLEEP_MS) {
+                // 远早于超时时间就醒了 → 很可能是空轮询 bug
+                selectCnt++;
+            }
+        } else {
+            selectCnt = 0;  // 正常返回，重置计数
+        }
+
+        // 如果空轮询次数超过阈值：重建 Selector
+        if (selectCnt &gt; SELECTOR_AUTO_REBUILD_THRESHOLD) {
+            rebuildSelector();  // 创建新 Selector，将所有 Channel 重新注册
+            selectCnt = 0;
+        }
+    }
+
+    void rebuildSelector() {
+        // 创建新的 Selector
+        // 遍历旧 Selector 上所有注册的 Channel
+        // 取消旧注册，重新注册到新 Selector
+        // 关闭旧 Selector
+    }
+}
+</code></pre></div>
+<p><strong>JDK 层面的修复：</strong> 从 JDK 11 开始，OpenJDK 社区逐步改进了 <code>EPollSelectorImpl</code> 的实现，通过更严格的轮询状态检查和更精细的 epoll_wait 超时处理来缓解此问题。但在高负载场景下，Netty 的防御性重建策略仍然是必要的。</p>
+<hr>
+<h2>四、零拷贝（Zero-Copy）— 让数据&quot;飞&quot;起来</h2>
+<p>零拷贝是高性能 IO 的核心优化技术。传统 IO 操作需要数据在用户态和内核态之间反复拷贝，而零拷贝技术旨在减少甚至消除这些不必要的拷贝。</p>
+<h3>4.1 传统 IO 的数据拷贝路径</h3>
+<p>以&quot;将文件内容通过 Socket 发送&quot;为例，传统方式经历 4 次拷贝和 4 次上下文切换：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>传统 IO 数据路径（read + write）：
+┌─────────┐    read()    ┌─────────┐    DMA     ┌──────────┐
+│ 应用程序  │ ◄────────── │ 内核缓冲  │ ◄───────── │    磁盘    │
+│ (用户态)  │ ──────────► │ (内核态)  │ ──────────► │ (硬件)    │
+└─────────┘    write()   └─────────┘    DMA     └──────────┘
+                             │
+                         内核 Socket 缓冲
+                             │
+                          DMA ──► 网卡
+
+上下文切换：用户态→内核态（read）→用户态→内核态（write）= 4 次
+数据拷贝：磁盘→内核→用户→内核→Socket = 4 次
+</code></pre></div>
+<h3>4.2 sendfile 系统调用</h3>
+<p>Linux 2.1 引入的 <code>sendfile()</code> 将两次系统调用合并为一次，数据路径变为：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>sendfile 数据路径：
+磁盘 ──DMA──► 内核缓冲 ──CPU拷贝──► Socket 缓冲 ──DMA──► 网卡
+
+上下文切换：仅 1 次
+数据拷贝：磁盘→内核→Socket = 3 次（其中 2 次 DMA，1 次 CPU）
+</code></pre></div>
+<p>如果网卡支持 <strong>Scatter-Gather DMA</strong>（Linux 2.4+），可以进一步减少到 2 次 DMA 拷贝：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>sendfile + SG-DMA 数据路径：
+磁盘 ──DMA──► 内核缓冲 ──► Socket 缓冲（仅传递文件描述符和长度）
+                │
+                └── DMA（通过 gather 操作直接从内核缓冲到网卡）
+
+数据拷贝：仅 2 次 DMA，0 次 CPU 拷贝 — 真正的&quot;零&quot;拷贝
+</code></pre></div>
+<h3>4.3 mmap（内存映射）</h3>
+<p><code>mmap</code> 将文件映射到虚拟内存地址空间，让应用程序像访问内存一样访问文件：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">void mmapExample() throws IOException {
+    try (var channel = java.nio.channels.FileChannel.open(
+            java.nio.file.Path.of(&quot;/tmp/large_file.dat&quot;),
+            java.nio.file.StandardOpenOption.READ)) {
+
+        // 将文件映射到虚拟内存（从偏移 0 开始，映射全部）
+        var mappedBuffer = channel.map(
+            java.nio.channels.FileChannel.MapMode.READ_ONLY,
+            0, channel.size());
+
+        // 像操作 ByteBuffer 一样操作文件内容
+        // 修改会直接反映到文件（READ_WRITE 模式）
+        byte[] data = new byte[1024];
+        mappedBuffer.get(data);
+    }
+}
+</code></pre></div>
+<p><strong>mmap vs sendfile：</strong></p>
+<table>
+<thead>
+<tr>
+<th>对比</th>
+<th>mmap</th>
+<th>sendfile (SG-DMA)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>CPU 拷贝</td>
+<td>1 次（内核→用户映射，无需拷贝）</td>
+<td>0 次</td>
+</tr>
+<tr>
+<td>用户态访问</td>
+<td>可以，像操作内存</td>
+<td>不可以，数据不经过用户空间</td>
+</tr>
+<tr>
+<td>适用场景</td>
+<td>需要修改文件内容</td>
+<td>纯转发（文件→网络）</td>
+</tr>
+<tr>
+<td>Java API</td>
+<td><code>FileChannel.map()</code></td>
+<td><code>FileChannel.transferTo()</code></td>
+</tr>
+</tbody></table>
+<h3>4.4 FileChannel.transferTo — Java 中的 sendfile</h3>
+<p>JDK 1.4 引入的 <code>transferTo/transferFrom</code> 是 Java 中使用 sendfile 的标准方式：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">void zeroCopyTransfer() throws IOException {
+    try (var srcChannel = java.nio.channels.FileChannel.open(
+            java.nio.file.Path.of(&quot;/tmp/large_file.dat&quot;),
+            java.nio.file.StandardOpenOption.READ);
+         var destChannel = java.nio.channels.SocketChannel.open(
+             new java.net.InetSocketAddress(&quot;localhost&quot;, 8080))) {
+
+        long position = 0;
+        long size = srcChannel.size();
+
+        // transferTo 内部调用 sendfile() 系统调用（Linux）
+        // 数据不经过用户空间，零 CPU 拷贝
+        while (position &lt; size) {
+            position += srcChannel.transferTo(position, size - position, destChannel);
+        }
+    }
+}
+
+// 同样用于文件间拷贝（sendfile 也支持文件到文件，Linux 2.6.33+）
+void fileToFileCopy() throws IOException {
+    try (var src = java.nio.channels.FileChannel.open(
+            java.nio.file.Path.of(&quot;/tmp/source.dat&quot;),
+            java.nio.file.StandardOpenOption.READ);
+         var dest = java.nio.channels.FileChannel.open(
+             java.nio.file.Path.of(&quot;/tmp/target.dat&quot;),
+             java.nio.file.StandardOpenOption.CREATE,
+             java.nio.file.StandardOpenOption.WRITE)) {
+
+        src.transferTo(0, src.size(), dest);
+        // 或者 dest.transferFrom(src, 0, src.size());
+    }
+}
+</code></pre></div>
+<h3>4.5 零拷贝在 Kafka 中的应用</h3>
+<p>Apache Kafka 是零拷贝技术的经典案例。Kafka 的消息传递路径是&quot;生产者写入 → Broker 存储 → 消费者读取&quot;，Broker 的核心职责是将磁盘上的消息分发给消费者。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Kafka 的 FileRecords.writeTo() 核心逻辑（简化示意）
+// 实际实现在 kafka/server/src/main/java/org/apache/kafka/storage/internals/log/FileRecords.java
+public class FileRecords {
+    // ...
+    public long writeTo(java.nio.channels.GatheringByteChannel destChannel,
+                         long offset, int length) throws IOException {
+        // 使用 FileChannel.transferTo() 直接发送文件到网络
+        // 底层调用 sendfile()，实现零拷贝
+        return channel.transferTo(offset, length, destChannel);
+    }
+}
+</code></pre></div>
+<p><strong>Kafka 零拷贝的价值：</strong></p>
+<ul>
+<li><strong>不经过用户态</strong>：消息从磁盘页缓存直接发送到网卡，不经过 Broker 的 JVM 堆</li>
+<li><strong>降低 CPU 使用率</strong>：省去了用户态/内核态切换和内存拷贝的 CPU 开销</li>
+<li><strong>提升吞吐量</strong>：在 Kafka 的基准测试中，零拷贝使吞吐量提升 2-3 倍</li>
+<li><strong>减少内存占用</strong>：不需要在 JVM 堆中缓存消息数据</li>
+</ul>
+<p><strong>为什么 Kafka 能做到而传统方案做不到？</strong></p>
+<p>传统消息队列（如 ActiveMQ）将消息从磁盘读到 JVM 堆中，处理（反序列化、路由）后再写入 Socket。Kafka 的设计哲学就是不处理消息内容，因此可以直接使用 sendfile 将磁盘数据原样转发。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>传统 MQ：磁盘 → 内核缓冲 → JVM 堆（反序列化 → 业务逻辑 → 序列化）→ 内核 Socket 缓冲 → 网卡
+Kafka：  磁盘 → 内核缓冲（sendfile + SG-DMA）─────────────────────→ 网卡
+                     ↑
+               0 次 CPU 拷贝，0 次用户态介入
+</code></pre></div>
+<hr>
+<h2>五、Netty 核心架构 — 工业级 NIO 框架</h2>
+<p>Netty 是目前 Java 生态中事实标准的 NIO 网络框架。它将原生 NIO 的复杂性封装为清晰的抽象。几乎所有需要高性能网络通信的 Java 项目（Dubbo、gRPC-Java、RocketMQ、Elasticsearch、Spark）都基于 Netty。</p>
+<h3>5.1 EventLoop 模型</h3>
+<p>EventLoop 是 Netty 的核心线程模型。它将事件循环、IO 处理和任务执行统一在一个线程中。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>                    ┌──────────────────────────┐
+                    │       EventLoopGroup      │
+                    │   (通常 = CPU 核心数)      │
+                    └─────┬────────────────────┘
+                          │
+          ┌───────────────┼───────────────┐
+          │               │               │
+   ┌──────▼──────┐ ┌──────▼──────┐ ┌──────▼──────┐
+   │ EventLoop 1 │ │ EventLoop 2 │ │ EventLoop N │
+   │ ┌─────────┐ │ │ ┌─────────┐ │ │ ┌─────────┐ │
+   │ │Selector │ │ │ │Selector │ │ │ │Selector │ │
+   │ └─────────┘ │ │ └─────────┘ │ │ └─────────┘ │
+   │ ┌─────────┐ │ │ ┌─────────┐ │ │ ┌─────────┐ │
+   │ │TaskQueue│ │ │ │TaskQueue│ │ │ │TaskQueue│ │
+   │ └─────────┘ │ │ └─────────┘ │ │ └─────────┘ │
+   └──────┬──────┘ └──────┬──────┘ └──────┬──────┘
+          │               │               │
+     Channel 1..N    Channel N+1..2N   Channel ...
+
+ 一个 Channel 的所有 IO 操作由同一个 EventLoop 处理（线程安全）
+</code></pre></div>
+<p><strong>关键设计原则：</strong></p>
+<ol>
+<li><strong>一个 EventLoop 绑定一个 Selector + 一个 Thread</strong>：避免 Channel 间的并发竞争</li>
+<li><strong>一个 Channel 绑定一个 EventLoop</strong>：该 Channel 的所有 IO 事件和 Handler 处理都在同一个线程中执行，天然线程安全</li>
+<li><strong>多个 EventLoop 组成 EventLoopGroup</strong>：提供并行处理能力，通常配置为 CPU 核心数 * 2</li>
+</ol>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Netty EventLoop 的简化概念模型
+public interface EventLoop extends java.util.concurrent.ScheduledExecutorService {
+    // 注册 Channel 并返回 Future
+    io.netty.channel.ChannelFuture register(io.netty.channel.Channel channel);
+
+    // 在 EventLoop 线程中执行任务
+    void execute(Runnable command);
+}
+
+// 核心循环（简化）
+// while (!shutdown) {
+//     selector.select();              // 等待 IO 事件
+//     for (SelectionKey key : selectedKeys) {
+//         channel.unsafe().read();     // 处理 IO 事件，触发 pipeline
+//     }
+//     runAllTasks();                   // 处理任务队列
+// }
+</code></pre></div>
+<h3>5.2 ChannelPipeline — 责任链模式</h3>
+<p>Netty 的 ChannelPipeline 是一个责任链（Chain of Responsibility），由一系列 ChannelHandler 组成，数据在管道中流动并被依次处理。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>                    I/O Request (入站)
+                    via Channel or ChannelHandlerContext
+                         │
+  ┌──────────────────────────────────────────────────────────────┐
+  │                  ChannelPipeline                             │
+  │                                                             │
+  │  ┌───────────────────────────────────────────────────────┐  │
+  │  │  [ Handler1 (inbound) ]  →  [ Handler2 (inbound) ]  → │  │ 入站
+  │  │  (Decoder / Biz Logic)      (Biz Logic Handler)       │  │
+  │  └───────────────────────────────────────────────────────┘  │
+  │                            │                                │
+  │                        TailContext                          │
+  │                            │                                │
+  │                        HeadContext                          │
+  │                            │                                │
+  │  ┌───────────────────────────────────────────────────────┐  │
+  │  │  [ Handler3 (outbound) ] ← [ Handler4 (outbound) ] ←  │  │ 出站
+  │  │  (Encoder)                  (Header Appender)         │  │
+  │  └───────────────────────────────────────────────────────┘  │
+  │                                                             │
+  └─────────────────────────────────────────────────────────────┘
+                         │
+                    I/O Response (出站)
+                    via Channel or ChannelHandlerContext
+</code></pre></div>
+<p><strong>ChannelHandler 类型：</strong></p>
+<table>
+<thead>
+<tr>
+<th>类型</th>
+<th>接口</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>ChannelInboundHandler</td>
+<td><code>channelRead()</code>, <code>channelActive()</code>, <code>exceptionCaught()</code></td>
+<td>处理入站数据（数据读取、业务逻辑）</td>
+</tr>
+<tr>
+<td>ChannelOutboundHandler</td>
+<td><code>write()</code>, <code>flush()</code>, <code>close()</code></td>
+<td>处理出站数据（编码、发送）</td>
+</tr>
+</tbody></table>
+<p><strong>事件的传播方式：</strong></p>
+<ul>
+<li>入站事件（Inbound）：从 Pipeline 头部（Head）向尾部（Tail）传播</li>
+<li>出站事件（Outbound）：从 Pipeline 尾部（Tail）向头部（Head）传播</li>
+</ul>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Handler 中的事件传播
+public class MyInboundHandler extends io.netty.channel.ChannelInboundHandlerAdapter {
+    @Override
+    public void channelRead(io.netty.channel.ChannelHandlerContext ctx, Object msg) {
+        // 处理消息...
+        System.out.println(&quot;Received: &quot; + msg);
+
+        // 传递给下一个 Inbound Handler
+        ctx.fireChannelRead(msg);
+        // 或者 ctx.write() 触发 Outbound 链
+    }
+}
+</code></pre></div>
+<p><strong>ChannelHandlerContext</strong> 是 Handler 与 Pipeline 之间的桥梁，提供了事件触发和 Pipeline 操作的能力。每个 Handler 被添加到 Pipeline 时会创建一个对应的 Context。</p>
+<h3>5.3 ByteBuf — Netty 的字节容器</h3>
+<p>Netty 的 <code>ByteBuf</code> 是对 JDK <code>ByteBuffer</code> 的增强替代，解决了原生 Buffer 的诸多痛点。</p>
+<p><strong>ByteBuf 相对于 ByteBuffer 的优势：</strong></p>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th>JDK ByteBuffer</th>
+<th>Netty ByteBuf</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>读写模式切换</td>
+<td>需要 <code>flip()</code> 手动切换</td>
+<td>独立的读索引（readerIndex）和写索引（writerIndex），无需切换</td>
+</tr>
+<tr>
+<td>容量扩展</td>
+<td>固定容量</td>
+<td>支持动态扩容（最多到 maxCapacity）</td>
+</tr>
+<tr>
+<td>引用计数</td>
+<td>无</td>
+<td>支持引用计数（ReferenceCounted），利于内存池管理</td>
+</tr>
+<tr>
+<td>缓冲区类型组合</td>
+<td>Heap / Direct</td>
+<td>Pooled+Heap / Pooled+Direct / Unpooled+Heap / Unpooled+Direct</td>
+</tr>
+<tr>
+<td>零拷贝操作</td>
+<td>无</td>
+<td>slice()、duplicate()、composite() 等组合操作</td>
+</tr>
+<tr>
+<td>字节序</td>
+<td>默认 Big-Endian</td>
+<td>支持动态切换 Little/Big-Endian</td>
+</tr>
+</tbody></table>
+<p><strong>ByteBuf 的读写索引设计：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>         readerIndex         writerIndex           capacity
+            │                    │                     │
+┌───────────┼────────────────────┼─────────────────────┼────┐
+│ 已读(废弃)  │   可读区域          │      可写区域         │    │
+│  discard   │   readable bytes   │   writable bytes    │    │
+└───────────┴────────────────────┴─────────────────────┴────┘
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">void byteBufBasicOperations() {
+    // 1. 分配 ByteBuf（默认 Pooled + Direct）
+    var buf = io.netty.buffer.PooledByteBufAllocator.DEFAULT.buffer(256);
+    // 或者：var buf = io.netty.buffer.Unpooled.buffer(256);
+
+    // 2. 写入数据
+    buf.writeInt(42);           // writerIndex += 4
+    buf.writeLong(System.currentTimeMillis());  // writerIndex += 8
+    buf.writeBytes(&quot;hello netty&quot;.getBytes());   // writerIndex += 11
+
+    // 3. 读取数据（无需 flip！）
+    int value = buf.readInt();  // readerIndex += 4
+    long timestamp = buf.readLong();  // readerIndex += 8
+
+    // 4. 查看可读数据（Mark 模式，不移动 readerIndex）
+    buf.markReaderIndex();
+    byte firstByte = buf.readByte();
+    buf.resetReaderIndex();  // readerIndex 恢复
+
+    // 5. 零拷贝 slice
+    var slice = buf.slice(buf.readerIndex(), 5);  // 共享底层数据
+
+    // 6. 引用计数管理
+    buf.retain();   // 引用计数 +1
+    buf.release();  // 引用计数 -1，归零后释放回内存池
+}
+</code></pre></div>
+<p><strong>四种分配器组合：</strong></p>
+<table>
+<thead>
+<tr>
+<th>分配器</th>
+<th>说明</th>
+<th>使用场景</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>PooledByteBufAllocator.DEFAULT.buffer()</code></td>
+<td>池化 + Direct</td>
+<td>默认，高频网络 IO（推荐）</td>
+</tr>
+<tr>
+<td><code>PooledByteBufAllocator.DEFAULT.heapBuffer()</code></td>
+<td>池化 + Heap</td>
+<td>需要 <code>array()</code> 操作的场景</td>
+</tr>
+<tr>
+<td><code>Unpooled.buffer()</code></td>
+<td>非池化 + Heap</td>
+<td>短期使用、测试</td>
+</tr>
+<tr>
+<td><code>Unpooled.directBuffer()</code></td>
+<td>非池化 + Direct</td>
+<td>需要 Direct 但不值得池化的场景</td>
+</tr>
+</tbody></table>
+<p><strong>CompositeByteBuf — 零拷贝组合多个 ByteBuf：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">void compositeBufferExample() {
+    // 传统方式：需要复制数据到新缓冲区
+    // byte[] merged = new byte[buf1.readableBytes() + buf2.readableBytes()];
+
+    // Netty 方式：零拷贝组合
+    var headerBuf = io.netty.buffer.Unpooled.wrappedBuffer(&quot;HTTP/1.1 200 OK\r\n&quot;.getBytes());
+    var bodyBuf = io.netty.buffer.Unpooled.wrappedBuffer(&quot;{\&quot;status\&quot;:\&quot;ok\&quot;}&quot;.getBytes());
+
+    var composite = io.netty.buffer.PooledByteBufAllocator.DEFAULT.compositeBuffer();
+    composite.addComponents(true, headerBuf, bodyBuf);
+    // headerBuf 和 bodyBuf 的 refCnt 已转移给 composite
+}
+</code></pre></div>
+<h3>5.4 Codecs（编解码器）</h3>
+<p>Netty 的编解码器是 ChannelHandler 的特化：</p>
+<ul>
+<li><strong>Decoder（解码）</strong>：<code>ByteToMessageDecoder</code> — 字节 → 消息对象（Inbound）</li>
+<li><strong>Encoder（编码）</strong>：<code>MessageToByteEncoder</code> — 消息对象 → 字节（Outbound）</li>
+<li><strong>Codec（编解码器）</strong>：<code>ByteToMessageCodec</code> / <code>MessageToMessageCodec</code> — 双向转换</li>
+</ul>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 自定义帧解码器：基于长度前缀的协议
+import io.netty.buffer.ByteBuf;
+import io.netty.channel.ChannelHandlerContext;
+import io.netty.handler.codec.ByteToMessageDecoder;
+import java.util.List;
+
+public class LengthFieldBasedFrameDecoder extends ByteToMessageDecoder {
+    private static final int MAX_FRAME_LENGTH = 65536;
+    private static final int LENGTH_FIELD_OFFSET = 0;
+    private static final int LENGTH_FIELD_LENGTH = 4;
+
+    @Override
+    protected void decode(ChannelHandlerContext ctx, ByteBuf in, List&lt;Object&gt; out) {
+        // 检查是否足够读取长度字段
+        if (in.readableBytes() &lt; LENGTH_FIELD_LENGTH) {
+            return; // 等待更多数据
+        }
+
+        // 标记当前位置，以便后续回退
+        in.markReaderIndex();
+
+        // 读取帧长度
+        int frameLength = in.readInt();
+
+        // 长度合法性检查
+        if (frameLength &lt; 0 || frameLength &gt; MAX_FRAME_LENGTH) {
+            in.resetReaderIndex();
+            throw new IllegalArgumentException(&quot;Invalid frame length: &quot; + frameLength);
+        }
+
+        // 检查完整帧是否已到达
+        if (in.readableBytes() &lt; frameLength) {
+            in.resetReaderIndex();  // 数据不完整，回退等待
+            return;
+        }
+
+        // 提取完整帧数据
+        var frameData = in.readBytes(frameLength);
+        out.add(frameData);  // 传递给下一个 Handler
+    }
+}
+</code></pre></div>
+<p><strong>Netty 内置的编解码器：</strong></p>
+<table>
+<thead>
+<tr>
+<th>编解码器</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>HttpRequestDecoder</code> / <code>HttpResponseEncoder</code></td>
+<td>HTTP 协议的编解码</td>
+</tr>
+<tr>
+<td><code>SslHandler</code></td>
+<td>TLS/SSL 加密解密</td>
+</tr>
+<tr>
+<td><code>LengthFieldBasedFrameDecoder</code></td>
+<td>基于长度字段的帧解码</td>
+</tr>
+<tr>
+<td><code>DelimiterBasedFrameDecoder</code></td>
+<td>基于分隔符的帧解码</td>
+</tr>
+<tr>
+<td><code>FixedLengthFrameDecoder</code></td>
+<td>固定长度帧解码</td>
+</tr>
+<tr>
+<td><code>ProtobufDecoder</code> / <code>ProtobufEncoder</code></td>
+<td>Protocol Buffers 编解码</td>
+</tr>
+<tr>
+<td><code>StringDecoder</code> / <code>StringEncoder</code></td>
+<td>字符串编解码</td>
+</tr>
+<tr>
+<td><code>ObjectDecoder</code> / <code>ObjectEncoder</code></td>
+<td>Java 序列化编解码（不推荐）</td>
+</tr>
+</tbody></table>
+<h3>5.5 TCP 粘包/拆包问题与解决方案</h3>
+<p>TCP 是流式协议，没有消息边界，会导致所谓的&quot;粘包&quot;和&quot;拆包&quot;：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>发送端连续发送：  [MSG1][MSG2][MSG3]
+                      │
+                 TCP 流传输（无边界的字节流）
+                      │
+接收端可能收到：
+  情景1（粘包）：[MSG1 MSG2  MSG3]
+  情景2（拆包）：[MSG1 MS][G2 MSG3]
+  情景3（混合）：[MSG1 MSG2][MSG3]
+</code></pre></div>
+<p><strong>四种经典解决方案：</strong></p>
+<table>
+<thead>
+<tr>
+<th>方案</th>
+<th>原理</th>
+<th>Netty 实现</th>
+<th>适用场景</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>固定长度</strong></td>
+<td>每个消息固定字节数，不足填充</td>
+<td><code>FixedLengthFrameDecoder</code></td>
+<td>简单协议、指令型协议</td>
+</tr>
+<tr>
+<td><strong>分隔符</strong></td>
+<td>消息间用特殊分隔符分隔</td>
+<td><code>DelimiterBasedFrameDecoder</code></td>
+<td>文本协议、Redis 协议（<code>\r\n</code>）</td>
+</tr>
+<tr>
+<td><strong>长度字段</strong></td>
+<td>在消息头中指定消息体长度</td>
+<td><code>LengthFieldBasedFrameDecoder</code></td>
+<td>大多数二进制协议</td>
+</tr>
+<tr>
+<td><strong>行分隔</strong></td>
+<td>按行分隔（<code>\r\n</code> 或 <code>\n</code>）</td>
+<td><code>LineBasedFrameDecoder</code></td>
+<td>Telnet、简单文本协议</td>
+</tr>
+</tbody></table>
+<p><strong>Netty HTTP Server 完整示例：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 使用 Netty 构建一个完整的 HTTP 服务器
+import io.netty.bootstrap.ServerBootstrap;
+import io.netty.channel.*;
+import io.netty.channel.nio.NioEventLoopGroup;
+import io.netty.channel.socket.nio.NioServerSocketChannel;
+import io.netty.handler.codec.http.*;
+import io.netty.buffer.Unpooled;
+import java.nio.charset.StandardCharsets;
+
+public class NettyHttpServer {
+    private final int port;
+
+    public NettyHttpServer(int port) {
+        this.port = port;
+    }
+
+    public void start() throws InterruptedException {
+        var bossGroup = new NioEventLoopGroup(1);    // 接收连接
+        var workerGroup = new NioEventLoopGroup();    // 处理 IO
+
+        try {
+            var bootstrap = new ServerBootstrap();
+            bootstrap.group(bossGroup, workerGroup)
+                .channel(NioServerSocketChannel.class)
+                .childHandler(new ChannelInitializer&lt;Channel&gt;() {
+                    @Override
+                    protected void initChannel(Channel ch) {
+                        var pipeline = ch.pipeline();
+                        // HTTP 编解码器（解决粘包/拆包）
+                        pipeline.addLast(new HttpServerCodec());
+                        // HTTP 消息聚合器（将分块的 HTTP 消息聚合成完整消息）
+                        pipeline.addLast(new HttpObjectAggregator(65536));
+                        // 业务处理器
+                        pipeline.addLast(new HttpServerHandler());
+                    }
+                })
+                .option(ChannelOption.SO_BACKLOG, 128)
+                .childOption(ChannelOption.SO_KEEPALIVE, true);
+
+            var future = bootstrap.bind(port).sync();
+            System.out.println(&quot;Netty HTTP Server started on port &quot; + port);
+            future.channel().closeFuture().sync();
+        } finally {
+            bossGroup.shutdownGracefully();
+            workerGroup.shutdownGracefully();
+        }
+    }
+
+    static class HttpServerHandler extends SimpleChannelInboundHandler&lt;FullHttpRequest&gt; {
+        @Override
+        protected void channelRead0(ChannelHandlerContext ctx, FullHttpRequest request) {
+            var uri = request.uri();
+            if (&quot;/health&quot;.equals(uri)) {
+                var responseContent = Unpooled.copiedBuffer(
+                    &quot;{\&quot;status\&quot;:\&quot;UP\&quot;}&quot;, StandardCharsets.UTF_8);
+                var response = new DefaultFullHttpResponse(
+                    HttpVersion.HTTP_1_1, HttpResponseStatus.OK, responseContent);
+                response.headers()
+                    .set(HttpHeaderNames.CONTENT_TYPE, &quot;application/json&quot;)
+                    .set(HttpHeaderNames.CONTENT_LENGTH, responseContent.readableBytes());
+                ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
+            } else {
+                var response = new DefaultFullHttpResponse(
+                    HttpVersion.HTTP_1_1, HttpResponseStatus.NOT_FOUND);
+                ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
+            }
+        }
+
+        @Override
+        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+            cause.printStackTrace();
+            ctx.close();
+        }
+    }
+
+    public static void main(String[] args) throws Exception {
+        new NettyHttpServer(8080).start();
+    }
+}
+</code></pre></div>
+<hr>
+<h2>六、NIO 服务器实战</h2>
+<h3>6.1 原生 NIO Echo 服务器</h3>
+<p>下面是一个完整可运行的 NIO Echo 服务器，展示了 Selector 的完整使用流程：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.io.IOException;
+import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
+import java.nio.channels.*;
+import java.util.Iterator;
+
+public class NioEchoServer {
+    private static final int PORT = 8080;
+    private static final int BUFFER_SIZE = 1024;
+
+    public void start() throws IOException {
+        var selector = Selector.open();
+        var serverChannel = ServerSocketChannel.open();
+        serverChannel.configureBlocking(false);
+        serverChannel.bind(new InetSocketAddress(PORT));
+        serverChannel.register(selector, SelectionKey.OP_ACCEPT);
+        System.out.println(&quot;NIO Echo Server started on port &quot; + PORT);
+
+        var buffer = ByteBuffer.allocate(BUFFER_SIZE);
+
+        while (true) {
+            // 阻塞等待就绪事件
+            selector.select();
+
+            Iterator&lt;SelectionKey&gt; keyIterator = selector.selectedKeys().iterator();
+            while (keyIterator.hasNext()) {
+                var key = keyIterator.next();
+                keyIterator.remove();  // 必须手动移除，否则下次还会被处理
+
+                try {
+                    if (key.isAcceptable()) {
+                        // 处理新连接
+                        var server = (ServerSocketChannel) key.channel();
+                        var client = server.accept();
+                        client.configureBlocking(false);
+                        client.register(selector, SelectionKey.OP_READ);
+                        System.out.println(&quot;New client: &quot; + client.getRemoteAddress());
+
+                    } else if (key.isReadable()) {
+                        // 处理读事件
+                        var client = (SocketChannel) key.channel();
+                        buffer.clear();
+                        int bytesRead = client.read(buffer);
+
+                        if (bytesRead == -1) {
+                            // 客户端关闭连接
+                            System.out.println(&quot;Client disconnected: &quot; + client.getRemoteAddress());
+                            key.cancel();
+                            client.close();
+                            continue;
+                        }
+
+                        buffer.flip();
+                        byte[] data = new byte[buffer.remaining()];
+                        buffer.get(data);
+                        String message = new String(data);
+
+                        // Echo 回去（注册写事件）
+                        key.interestOps(SelectionKey.OP_WRITE);
+                        key.attach(message);  // 附加数据
+
+                    } else if (key.isWritable()) {
+                        // 处理写事件
+                        var client = (SocketChannel) key.channel();
+                        String message = (String) key.attachment();
+
+                        buffer.clear();
+                        buffer.put((&quot;Echo: &quot; + message).getBytes());
+                        buffer.flip();
+                        client.write(buffer);
+
+                        // 切回读模式
+                        key.interestOps(SelectionKey.OP_READ);
+                    }
+                } catch (IOException e) {
+                    // 连接异常，取消注册并关闭
+                    key.cancel();
+                    key.channel().close();
+                }
+            }
+        }
+    }
+
+    public static void main(String[] args) throws IOException {
+        new NioEchoServer().start();
+    }
+}
+</code></pre></div>
+<p><strong>关键要点：</strong></p>
+<ol>
+<li><code>keyIterator.remove()</code> 必须调用——Selector 不会自动从 <code>selectedKeys</code> 集合中移除已处理的 Key</li>
+<li><code>interestOps()</code> 用于动态切换感兴趣的事件类型（读写交替）</li>
+<li><code>key.attach()</code> 可以在 SelectionKey 上附加任意 Object，用于在事件间传递上下文</li>
+<li><code>read()</code> 返回 -1 表示对端关闭连接（EOF），必须调用 <code>key.cancel()</code> 和 <code>channel.close()</code></li>
+</ol>
+<hr>
+<h2>七、IO 在 AI 应用中的实践</h2>
+<p>在大模型（LLM）应用开发中，IO 模型直接影响用户体验和系统吞吐。以下是三个核心场景。</p>
+<h3>7.1 SSE 流式响应处理</h3>
+<p>SSE（Server-Sent Events）是 LLM streaming 的标准协议。当用户发起一个 Chat Completion 请求时，服务端以 SSE 流式地返回每个 token，前端逐步渲染。</p>
+<p><strong>SSE 协议格式：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>data: {&quot;choices&quot;:[{&quot;delta&quot;:{&quot;content&quot;:&quot;你&quot;}}],&quot;id&quot;:&quot;chatcmpl-xxx&quot;}
+
+data: {&quot;choices&quot;:[{&quot;delta&quot;:{&quot;content&quot;:&quot;好&quot;}}],&quot;id&quot;:&quot;chatcmpl-xxx&quot;}
+
+data: [DONE]
+</code></pre></div>
+<p><strong>服务端：使用 Virtual Threads + Spring MVC SSE</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.http.MediaType;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+import java.io.IOException;
+import java.util.concurrent.Executors;
+
+@RestController
+@RequestMapping(&quot;/api/chat&quot;)
+public class ChatStreamController {
+
+    // 注意：SSE 请求必须在 Virtual Thread 上处理
+    // 配置：spring.threads.virtual.enabled=true
+
+    @GetMapping(value = &quot;/stream&quot;, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter chatStream(@RequestParam String prompt) {
+        var emitter = new SseEmitter(0L);  // 0 = 无超时
+
+        // SseEmitter 内部使用阻塞 write，适合 Virtual Threads
+        Thread.ofVirtual().start(() -&gt; {
+            try {
+                // 模拟 LLM token 流式返回
+                String[] tokens = {&quot;你好&quot;, &quot;！&quot;, &quot;我是&quot;, &quot;AI&quot;, &quot;助手&quot;, &quot;，&quot;, &quot;很高兴&quot;, &quot;为你&quot;, &quot;服务&quot;, &quot;。&quot;};
+                for (String token : tokens) {
+                    // 每个 token 作为一个 SSE 事件发送
+                    emitter.send(SseEmitter.event()
+                        .data(&quot;{\&quot;token\&quot;:\&quot;&quot; + token + &quot;\&quot;}&quot;)
+                        .id(String.valueOf(System.currentTimeMillis())));
+                    Thread.sleep(200); // 模拟生成延迟
+                }
+                emitter.complete();
+            } catch (IOException | InterruptedException e) {
+                emitter.completeWithError(e);
+            }
+        });
+
+        return emitter;
+    }
+}
+</code></pre></div>
+<p><strong>客户端：使用 JDK HttpClient 消费 SSE 流</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.util.concurrent.Flow;
+import java.util.concurrent.CompletableFuture;
+
+public class SseStreamClient {
+
+    public void consumeSseStream() throws Exception {
+        var client = HttpClient.newHttpClient();
+        var request = HttpRequest.newBuilder()
+            .uri(URI.create(&quot;http://localhost:8080/api/chat/stream?prompt=hello&quot;))
+            .header(&quot;Accept&quot;, &quot;text/event-stream&quot;)
+            .GET()
+            .build();
+
+        // 使用 BodySubscribers 的 fromLineSubscriber 逐行解析 SSE
+        var subscriber = new Flow.Subscriber&lt;String&gt;() {
+            private Flow.Subscription subscription;
+
+            @Override
+            public void onSubscribe(Flow.Subscription subscription) {
+                this.subscription = subscription;
+                subscription.request(Long.MAX_VALUE); // 反压策略：无限制
+            }
+
+            @Override
+            public void onNext(String line) {
+                if (line.startsWith(&quot;data:&quot;)) {
+                    String data = line.substring(5).trim();
+                    if (!&quot;[DONE]&quot;.equals(data)) {
+                        System.out.println(&quot;Received: &quot; + data);
+                        // 实时渲染 token...
+                    }
+                }
+            }
+
+            @Override
+            public void onError(Throwable throwable) {
+                throwable.printStackTrace();
+            }
+
+            @Override
+            public void onComplete() {
+                System.out.println(&quot;SSE stream completed.&quot;);
+            }
+        };
+
+        client.sendAsync(request, HttpResponse.BodyHandlers.fromLineSubscriber(subscriber))
+            .thenAccept(response -&gt; System.out.println(&quot;Response status: &quot; + response.statusCode()))
+            .join();
+    }
+}
+</code></pre></div>
+<p><strong>Virtual Threads 在 SSE 场景中的价值：</strong></p>
+<p>在传统线程模型下，每个 SSE 连接会长时间占用一个平台线程（可能持续数十秒到数分钟）。如果有 10000 个并发 SSE 连接，传统的线程池模型会面临严重的资源问题。Virtual Threads 的轻量级特性（每个 VT 仅占用几百字节）使得用同步阻塞风格处理大量 SSE 连接成为可能。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>传统线程模型（ThreadPool）： 10000 并发 SSE → 10000 平台线程 → ~10GB 栈内存
+Virtual Threads：             10000 并发 SSE → 10000 虚拟线程  → ~几 MB 内存
+</code></pre></div>
+<h3>7.2 大文件上传</h3>
+<p>AI 应用中常见的文件上传场景（如知识库文档上传）需要处理大文件。基本模式是：接收文件 → 流式写入磁盘/对象存储 → 异步处理。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
+import java.io.IOException;
+import java.nio.channels.FileChannel;
+import java.nio.file.Path;
+import java.nio.file.StandardOpenOption;
+
+@RestController
+@RequestMapping(&quot;/api/files&quot;)
+public class FileUploadController {
+
+    private static final long MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
+    private static final Path UPLOAD_DIR = Path.of(&quot;/tmp/uploads&quot;);
+
+    @PostMapping(&quot;/upload&quot;)
+    public String uploadFile(@RequestParam(&quot;file&quot;) MultipartFile file) throws IOException {
+        if (file.getSize() &gt; MAX_FILE_SIZE) {
+            throw new IllegalArgumentException(&quot;File too large: &quot; + file.getSize());
+        }
+
+        // 获取原始文件的 InputStream（封装了临时文件或内存缓冲）
+        // 对于大文件，Spring 会将文件写入临时目录
+        var fileName = System.currentTimeMillis() + &quot;_&quot; + file.getOriginalFilename();
+        var targetPath = UPLOAD_DIR.resolve(fileName);
+
+        java.nio.file.Files.createDirectories(UPLOAD_DIR);
+
+        // 使用 transferTo 实现高效的流式写入（利用零拷贝）
+        try (var inputStream = file.getInputStream();
+             var fileChannel = FileChannel.open(targetPath,
+                 StandardOpenOption.CREATE, StandardOpenOption.WRITE)) {
+
+            // 用 Channel 方式写入（避免不必要的 buffer 复制）
+            var readableByteChannel = java.nio.channels.Channels.newChannel(inputStream);
+            long transferred = 0;
+            long position = 0;
+            while ((transferred = fileChannel.transferFrom(readableByteChannel, position, 8192)) &gt; 0) {
+                position += transferred;
+            }
+        }
+
+        // 异步触发后续处理（文档解析、切片、Embedding 等）
+        Thread.ofVirtual().start(() -&gt; processUploadedFile(targetPath));
+
+        return &quot;Uploaded: &quot; + fileName + &quot; (&quot; + file.getSize() + &quot; bytes)&quot;;
+    }
+
+    private void processUploadedFile(Path filePath) {
+        // 异步处理：文档解析 → 切片 → Embedding → 写入向量数据库
+        System.out.println(&quot;Processing: &quot; + filePath);
+    }
+}
+</code></pre></div>
+<p><strong>大文件上传的最佳实践：</strong></p>
+<ol>
+<li><strong>分片上传（Multipart Upload）</strong>：对于超大文件（&gt; 100MB），使用分片上传。MinIO/S3 支持 multipart upload API</li>
+<li><strong>流式处理，避免全量加载进内存</strong>：无论文件多大，始终使用流（Stream/Channel）</li>
+<li><strong>异步处理</strong>：上传完成后立即返回响应，后台异步处理（解析、切片等）</li>
+<li><strong>限制并发</strong>：使用 Semaphore 或 RateLimiter 限制同时上传的数量</li>
+</ol>
+<h3>7.3 WebSocket 实时通信</h3>
+<p>WebSocket 在 AI 应用中有多个场景：Agent 状态的实时推送、多 Agent 协作的消息通道、推理进度的实时更新。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.web.socket.*;
+import org.springframework.web.socket.handler.TextWebSocketHandler;
+import org.springframework.stereotype.Component;
+import java.io.IOException;
+import java.util.concurrent.ConcurrentHashMap;
+
+@Component
+public class AiAgentWebSocketHandler extends TextWebSocketHandler {
+
+    // 保存所有活跃的 WebSocket 会话
+    private final ConcurrentHashMap&lt;String, WebSocketSession&gt; sessions = new ConcurrentHashMap&lt;&gt;();
+
+    @Override
+    public void afterConnectionEstablished(WebSocketSession session) {
+        sessions.put(session.getId(), session);
+        System.out.println(&quot;WebSocket connected: &quot; + session.getId());
+
+        // 发送欢迎消息
+        try {
+            session.sendMessage(new TextMessage(
+                &quot;{\&quot;type\&quot;:\&quot;connected\&quot;,\&quot;sessionId\&quot;:\&quot;&quot; + session.getId() + &quot;\&quot;}&quot;));
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    @Override
+    protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
+        var payload = message.getPayload();
+        System.out.println(&quot;Received: &quot; + payload);
+
+        // 模拟 Agent 处理并返回结果
+        // 实际场景中，这里会调用 Agent 执行引擎
+        Thread.ofVirtual().start(() -&gt; {
+            try {
+                for (int i = 0; i &lt; 5; i++) {
+                    var progressMsg = String.format(
+                        &quot;{\&quot;type\&quot;:\&quot;agent_progress\&quot;,\&quot;step\&quot;:%d,\&quot;status\&quot;:\&quot;thinking\&quot;}&quot;, i);
+                    session.sendMessage(new TextMessage(progressMsg));
+                    Thread.sleep(1000);
+                }
+                session.sendMessage(new TextMessage(
+                    &quot;{\&quot;type\&quot;:\&quot;agent_result\&quot;,\&quot;data\&quot;:\&quot;Task completed successfully\&quot;}&quot;));
+            } catch (IOException | InterruptedException e) {
+                e.printStackTrace();
+            }
+        });
+    }
+
+    @Override
+    public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
+        sessions.remove(session.getId());
+        System.out.println(&quot;WebSocket disconnected: &quot; + session.getId());
+    }
+
+    // 向指定会话推送消息
+    public void pushToSession(String sessionId, String message) throws IOException {
+        var session = sessions.get(sessionId);
+        if (session != null &amp;&amp; session.isOpen()) {
+            session.sendMessage(new TextMessage(message));
+        }
+    }
+
+    // 广播消息
+    public void broadcast(String message) {
+        sessions.values().forEach(session -&gt; {
+            try {
+                if (session.isOpen()) {
+                    session.sendMessage(new TextMessage(message));
+                }
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        });
+    }
+}
+</code></pre></div>
+<p><strong>WebSocket 配置类：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.context.annotation.Configuration;
+import org.springframework.web.socket.config.annotation.*;
+
+@Configuration
+@EnableWebSocket
+public class WebSocketConfig implements WebSocketConfigurer {
+
+    private final AiAgentWebSocketHandler handler;
+
+    public WebSocketConfig(AiAgentWebSocketHandler handler) {
+        this.handler = handler;
+    }
+
+    @Override
+    public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
+        registry.addHandler(handler, &quot;/ws/agent&quot;)
+            .setAllowedOrigins(&quot;*&quot;);  // 生产环境应限制来源
+    }
+}
+</code></pre></div>
+<p><strong>WebSocket 与 SSE 的选型：</strong></p>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>推荐</th>
+<th>原因</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>LLM 流式响应（单向）</td>
+<td>SSE</td>
+<td>协议简单、自动重连、HTTP/2 多路复用</td>
+</tr>
+<tr>
+<td>Agent 状态推送（单向）</td>
+<td>SSE</td>
+<td>服务端 → 客户端，无需双向</td>
+</tr>
+<tr>
+<td>对话交互（双向）</td>
+<td>WebSocket</td>
+<td>双向通信、低延迟</td>
+</tr>
+<tr>
+<td>文件传输</td>
+<td>WebSocket</td>
+<td>二进制帧支持，效率高</td>
+</tr>
+<tr>
+<td>浏览器兼容</td>
+<td>SSE</td>
+<td>基于 HTTP，穿透代理/防火墙更容易</td>
+</tr>
+<tr>
+<td>极低延迟要求</td>
+<td>WebSocket</td>
+<td>全双工，头部开销极小</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>八、性能对比与选型指南</h2>
+<h3>8.1 IO 模型性能对比</h3>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>BIO</th>
+<th>NIO (Selector)</th>
+<th>NIO.2 (AIO)</th>
+<th>Netty</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>并发连接数</strong></td>
+<td>~1000</td>
+<td>~10000+</td>
+<td>~10000+</td>
+<td>100000+</td>
+</tr>
+<tr>
+<td><strong>线程模型</strong></td>
+<td>1 连接 1 线程</td>
+<td>1 Selector 多连接</td>
+<td>回调式</td>
+<td>EventLoop 组</td>
+</tr>
+<tr>
+<td><strong>编程复杂度</strong></td>
+<td>低</td>
+<td>中</td>
+<td>高（回调地狱）</td>
+<td>中（Pipeline 抽象）</td>
+</tr>
+<tr>
+<td><strong>性能</strong></td>
+<td>低</td>
+<td>高</td>
+<td>中（依赖 OS 实现）</td>
+<td>最高</td>
+</tr>
+<tr>
+<td><strong>社区生态</strong></td>
+<td>基础</td>
+<td>基础</td>
+<td>少</td>
+<td>极丰富（编解码、安全）</td>
+</tr>
+</tbody></table>
+<h3>8.2 技术选型决策树</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>需要什么 IO 能力？
+│
+├── 简单文件读写
+│   └── java.io / java.nio.file.Files
+│
+├── 低并发网络服务（&lt; 1000 连接）
+│   └── BIO + Virtual Threads
+│       （同步编程模型 + 轻量级线程 = 开发效率最优）
+│
+├── 高并发网络服务（&gt; 10000 连接）
+│   ├── 协议简单 → 原生 NIO + Selector
+│   ├── 复杂协议/需要编解码 → Netty
+│   └── HTTP 服务 → Spring Boot (底层 Tomcat/Netty)
+│
+├── 大文件传输
+│   ├── 纯转发 → FileChannel.transferTo()（sendfile）
+│   ├── 需要处理内容 → MappedByteBuffer（mmap）
+│   └── AI 文档上传 → 流式接收 + 异步处理
+│
+├── LLM 流式响应
+│   └── SSE (Spring MVC SseEmitter) + Virtual Threads
+│
+├── 实时双向通信
+│   └── WebSocket (Spring WebSocket + Netty)
+│
+└── 消息队列/事件驱动
+    └── Netty（Kafka、RocketMQ 的底层）
+</code></pre></div>
+<h3>8.3 Virtual Threads 时代 IO 模型的变化</h3>
+<p>JDK 21+ Virtual Threads 改变了 IO 模型的选型逻辑：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 以前：高并发 IO 必须用 NIO + Reactor / CompletableFuture
+// 现在：可以用 BIO 风格 + Virtual Threads（底层仍然是 NIO 实现）
+
+void modernConcurrentIo() throws Exception {
+    try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+        var futures = new java.util.ArrayList&lt;java.util.concurrent.Future&lt;String&gt;&gt;(1000);
+
+        for (int i = 0; i &lt; 1000; i++) {
+            int taskId = i;
+            futures.add(executor.submit(() -&gt; {
+                // 同步风格的网络调用
+                // 当 IO 阻塞时，VT 被卸载（unmount），平台线程继续处理其他 VT
+                // IO 就绪后，VT 被重新挂载（mount）到平台线程
+                var url = URI.create(&quot;http://localhost:8080/api/task/&quot; + taskId);
+                try (var client = java.net.http.HttpClient.newHttpClient()) {
+                    var request = java.net.http.HttpRequest.newBuilder(url).GET().build();
+                    var response = client.send(request,
+                        java.net.http.HttpResponse.BodyHandlers.ofString());
+                    return response.body();
+                }
+            }));
+        }
+
+        for (var future : futures) {
+            System.out.println(future.get().substring(0, Math.min(100, future.get().length())));
+        }
+    }
+}
+</code></pre></div>
+<p><strong>关键认知转变：</strong> Virtual Threads 不替代 NIO，而是改变了&quot;如何使用 NIO&quot;。底层 JDK 已将 <code>SocketChannel</code> 等 IO 操作的阻塞实现改造为通过 Virtual Threads 的 <code>park/unpark</code> 机制触发。开发者可以享受同步编程的简洁性，同时获得 NIO 的高并发能力。</p>
+<hr>
+<h2>九、常见问题</h2>
+<h3>Q1: ByteBuffer 的 flip() 到底做了什么？</h3>
+<p><code>flip()</code> 将 Buffer 从写模式切换到读模式。具体操作是：<code>limit = position; position = 0;</code>。这意味着：可读范围的起点是 0，终点是之前写入的最后一个位置。忘记调用 <code>flip()</code> 是最常见的 NIO Bug 之一。</p>
+<h3>Q2: Direct Buffer 何时释放？</h3>
+<p>Direct Buffer 的内存释放依赖于 <code>Cleaner</code> 和虚引用机制。当 DirectByteBuffer 对象被 GC 回收时，Cleaner 会调用 <code>Unsafe.freeMemory()</code> 释放堆外内存。由于依赖 GC，释放时机不确���，因此 Netty 实现了自己的引用计数和内存池机制。</p>
+<h3>Q3: Netty 的 EventLoop 是否线程安全？</h3>
+<p>Netty 的设计保证了：一个 EventLoop 内的所有操作都是线程安全的，因为它们在同一个线程中串行执行。但<strong>跨 EventLoop 的操作需要额外同步</strong>。因此，不要在一个 EventLoop 中直接操作另一个 EventLoop 管理的 Channel。</p>
+<h3>Q4: 何时使用 Pooled vs Unpooled ByteBuf？</h3>
+<p><strong>Pooled（推荐）</strong>：高频分配/释放场景，如网络 IO、消息处理。池化减少了内存分配和 GC 压力。
+<strong>Unpooled</strong>：一次性操作、测试代码、或分配频率极低的场景。简单但每次分配有开销。</p>
+<h3>Q5: epoll 空轮询 Bug 会影响 JDK 25 吗？</h3>
+<p>JDK 25 中的 <code>EPollSelectorImpl</code> 已经实现了类似于 Netty 的防御性检查机制（JDK 11+ 开始逐步改进）。在大多数场景下，该问题已得到缓解。但 Netty 仍然保留重建 Selector 的策略作为双重保险。</p>
+<hr>
+<h2>相关条目</h2>
+<ul>
+<li><a href="/02-Java平台/语言特性/02-现代Java25深度解析" class="cross-ref" data-ref="02-现代Java25深度解析">02-现代Java25深度解析</a> — Virtual Threads 深入解析：park/unpark 机制与 NIO 的关系</li>
+<li><a href="/02-Java平台/并发/02-Java并发深度解析" class="cross-ref" data-ref="02-Java并发深度解析">02-Java并发深度解析</a> — Java 并发编程：线程模型、Structured Concurrency、CompletableFuture</li>
+<li><a href="/01-计算机基础/操作系统/01-操作系统基础" class="cross-ref" data-ref="01-操作系统基础">01-操作系统基础</a> — 操作系统 IO 模型：select/poll/epoll/kqueue 系统调用层分析</li>
+<li><a href="/04-数据与中间件/消息与搜索/04-Kafka深度解析" class="cross-ref" data-ref="04-Kafka深度解析">04-Kafka深度解析</a> — Kafka 核心设计：零拷贝在 Kafka 中的完整实现路线</li>
+</ul>
+</div>
+</article>

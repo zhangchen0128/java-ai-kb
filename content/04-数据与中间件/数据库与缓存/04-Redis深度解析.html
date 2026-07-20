@@ -1,0 +1,630 @@
+
+<article class="kb-entry" data-path="/04-数据与中间件/数据库与缓存/04-Redis深度解析">
+  <div class="entry-meta">
+    <div class="entry-domain"><a href="/?d=04">04-数据与中间件</a></div>
+    <h1>Redis 深度解析</h1>
+    <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#["redis"</span><span class="badge badge-tag">#"sds"</span><span class="badge badge-tag">#"rdb"</span><span class="badge badge-tag">#"aof"</span></div>
+    
+  </div>
+  <div class="entry-body"><h1>Redis 深度解析</h1>
+<h2>概述</h2>
+<p>Redis 是高性能的内存键值存储，广泛用于缓存、分布式锁、消息队列、限流和实时数据场景。在 AI 应用中，Redis Vector Search 为实时语义缓存和低延迟向量检索提供了新可能。</p>
+<p>本文深入 Redis 内部数据结构实现、持久化机制、高可用架构、分布式锁原理、缓存策略模式，以及 Java 客户端选择和 AI 场景应用。</p>
+<hr>
+<h2>一、数据结构深入</h2>
+<h3>1.1 String — SDS（Simple Dynamic String）</h3>
+<p>Redis 不直接使用 C 字符串，而是实现了 SDS：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">c</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-c">// Redis 7.x sds.h（简化）
+typedef char *sds;
+struct __attribute__ ((__packed__)) sdshdr64 {
+    uint64_t len;    // 已使用长度（O(1) 获取）
+    uint64_t alloc;  // 分配的总容量（不含头和空终止符）
+    unsigned char flags; // sdshdr 类型标识
+    char buf[];      // 实际数据
+};
+</code></pre></div>
+<p><strong>与 C 字符串的优势：</strong></p>
+<ul>
+<li>O(1) 获取长度（len 字段）</li>
+<li>杜绝缓冲区溢出（alloc 预分配）</li>
+<li>二进制安全（不依赖 <code>\0</code> 终止，len 决定长度）</li>
+<li>空间预分配和惰性释放（减少内存分配次数）</li>
+</ul>
+<h3>1.2 Hash — ziplist 到 hashtable 的演进</h3>
+<p><strong>小哈希使用 ziplist：</strong> 连续内存块的紧凑结构，存储相邻的 field-value 对。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>ziplist 触发条件（可配置）：
+- hash-max-ziplist-entries = 512
+- hash-max-ziplist-value = 64
+</code></pre></div>
+<p><strong>大哈希使用 hashtable：</strong> 标准链式哈希表，使用 MurmurHash2 算法，渐进式 rehash。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">c</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-c">// dict.h（简化）
+typedef struct dict {
+    dictType *type;
+    dictEntry **ht_table[2];  // 两个哈希表，用于渐进式 rehash
+    unsigned long ht_used[2];
+    long rehashidx;           // -1 表示未在 rehash
+    int16_t pauserehash;
+} dict;
+</code></pre></div>
+<p><strong>渐进式 rehash 流程：</strong></p>
+<ol>
+<li>为 <code>ht_table[1]</code> 分配内存（通常为 <code>ht_table[0]</code> 已使用的 2 倍）</li>
+<li><code>rehashidx = 0</code>，开始渐进迁移</li>
+<li>每次增删改查操作顺带迁移一个槽位</li>
+<li>后台定时任务批量迁移（1ms 内迁移 100 个槽位）</li>
+<li>迁移完毕后 <code>ht_table[1]</code> 成为 <code>ht_table[0]</code>，释放旧表</li>
+</ol>
+<h3>1.3 List — quicklist</h3>
+<p>Redis 7.x 使用 quicklist（ziplist + linkedlist 的混合体）：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>quicklist
+┌──────────┐   ┌──────────┐   ┌──────────┐
+│ listNode │──▶│ listNode │──▶│ listNode │
+│ ziplist  │   │ ziplist  │   │ ziplist  │
+└──────────┘   └──────────┘   └──────────┘
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-ini"># quicklist 参数
+list-max-ziplist-size = -2  # 每个 ziplist 最大 8KB
+list-compress-depth = 0     # 不压缩（1 表示两端不压缩中间压缩）
+</code></pre></div>
+<h3>1.4 ZSet — skiplist + dict</h3>
+<p>有序集合使用跳表 + 哈希表的组合：<code>dict</code> 提供 O(1) 按成员查分值，<code>skiplist</code> 提供 O(log N) 范围查询。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">c</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-c">// server.h（简化）
+typedef struct zskiplistNode {
+    sds ele;                    // 成员
+    double score;               // 分值
+    struct zskiplistNode *backward; // 后退指针
+    struct zskiplistLevel {
+        struct zskiplistNode *forward;
+        unsigned long span;     // 到下一节点的跨度（用于计算 rank）
+    } level[];                  // 多层索引
+} zskiplistNode;
+
+typedef struct zskiplist {
+    struct zskiplistNode *header, *tail;
+    unsigned long length;
+    int level;                  // 当前最大层数
+} zskiplist;
+</code></pre></div>
+<p><strong>跳表层数随机生成：</strong> 每层有 25% 概率增加一层（p=0.25），因此平均层数 = 1/(1-p) = 1.33 层。</p>
+<h3>1.5 Stream — 消费组与 ACK</h3>
+<p>Stream 是 Redis 5.0 引入的持久化消息队列，支持消费组、ACK 机制和死信处理。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Stream 内部结构（radix tree 按消息 ID 组织）：
+stream
+├── consumer_group_1
+│   ├── consumer_A: pending_ids = [id1, id3]
+│   └── consumer_B: pending_ids = [id2]
+└── consumer_group_2
+    └── consumer_C: pending_ids = [id4]
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># 创建消费组
+XGROUP CREATE mystream mygroup $ MKSTREAM
+
+# 消费消息（消费者 A）
+XREADGROUP GROUP mygroup consumer_a COUNT 2 BLOCK 5000 STREAMS mystream &gt;
+
+# 确认消息
+XACK mystream mygroup 1692632086370-0
+
+# 处理死信（pending 超过 60 秒未 ACK 的消息）
+XPENDING mystream mygroup - + 100
+# 认领超时消息
+XCLAIM mystream mygroup consumer_b 60000 1692632086370-0
+</code></pre></div>
+<hr>
+<h2>二、持久化机制</h2>
+<h3>2.1 RDB（Redis Database）</h3>
+<p><strong>触发时机：</strong></p>
+<ul>
+<li><code>SAVE</code>（阻塞主线程） / <code>BGSAVE</code>（fork 子进程）</li>
+<li>配置 <code>save &lt;seconds&gt; &lt;changes&gt;</code> 自动触发</li>
+</ul>
+<p><strong>COW（Copy-On-Write）原理：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>BGSAVE 过程：
+1. fork() 子进程（父进程内存页表复制，数据页标记为只读）
+2. 父进程继续处理命令，写操作时触发页错误 → 内核复制页 → 标记可写
+3. 子进程读取原始数据页，写入 RDB 文件
+4. 子进程完成后通知父进程，替换旧 RDB
+</code></pre></div>
+<p><strong>RDB 调优：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-ini">save 900 1     # 900秒内1次修改 → 触发
+save 300 10    # 300秒内10次修改
+save 60 10000  # 60秒内10000次修改
+
+rdbcompression yes       # LZF 压缩
+rdbchecksum yes          # CRC64 校验
+stop-writes-on-bgsave-error yes
+</code></pre></div>
+<h3>2.2 AOF（Append Only File）</h3>
+<p><strong>fsync 策略：</strong></p>
+<table>
+<thead>
+<tr>
+<th>策略</th>
+<th><code>appendfsync</code></th>
+<th>安全性</th>
+<th>性能</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>always</td>
+<td>每次命令 fsync</td>
+<td>最高，不丢数据</td>
+<td>最低（磁盘速度）</td>
+</tr>
+<tr>
+<td>everysec</td>
+<td>每秒 fsync</td>
+<td>最多丢 1 秒数据</td>
+<td>中等（推荐）</td>
+</tr>
+<tr>
+<td>no</td>
+<td>交由 OS</td>
+<td>最差</td>
+<td>取决于 OS 配置</td>
+</tr>
+</tbody></table>
+<p><strong>AOF 重写机制：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>重写前（AOF 文件）：
+SET counter 1
+INCR counter
+INCR counter
+INCR counter
+
+重写后：
+SET counter 4
+</code></pre></div>
+<p>重写过程：</p>
+<ol>
+<li><code>BGREWRITEAOF</code> → fork 子进程</li>
+<li>子进程读取数据库当前状态，写入新 AOF</li>
+<li>重写期间的新命令写入 AOF 重写缓冲区</li>
+<li>子进程完成后，将缓冲区的命令追加到新 AOF</li>
+<li>原子 rename 替换旧 AOF</li>
+</ol>
+<h3>2.3 混合持久化（Redis 4.0+）</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-ini">aof-use-rdb-preamble yes
+</code></pre></div>
+<p>混合持久化将 RDB 快照 + AOF 增量日志结合：</p>
+<ol>
+<li>AOF 重写时，先写入 RDB 格式的快照</li>
+<li>快照后的命令以 AOF 格式追加</li>
+</ol>
+<p>恢复时先加载 RDB 快照（快速），再重放增量 AOF 命令（数据一致）。</p>
+<hr>
+<h2>三、高可用架构</h2>
+<h3>3.1 主从复制</h3>
+<p><strong>全量复制流程：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Slave                              Master
+  | --- PSYNC ? -1 ---------------&gt; |  （首次：请求全量）
+  |                                  |  fork → BGSAVE
+  | &lt;-- FULLRESYNC &lt;replid&gt; 0 ---- | 
+  |                                  |  发送 RDB
+  | &lt;-- RDB 文件传输 ------------- |
+  |                                  加载 RDB
+  | --- PSYNC &lt;replid&gt; &lt;offset&gt; --&gt; |  （请求增量同步）
+  | &lt;-- 增量数据（replication buffer）
+</code></pre></div>
+<p><strong>部分复制（PSYNC）：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Slave                              Master
+  | --- PSYNC &lt;replid&gt; &lt;offset&gt; --&gt; |
+  |                                  |  检查 replication backlog
+  |                                  |  如果 offset 在 backlog 范围内
+  | &lt;-- CONTINUE ----------------- |  （增量同步）
+  |                                  |  否则
+  | &lt;-- FULLRESYNC --------------  |  （全量同步）
+</code></pre></div>
+<p>关键参数：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-ini">repl-backlog-size = 64mb      # 复制积压缓冲区大小
+repl-backlog-ttl = 3600       # 1 小时后未使用释放
+</code></pre></div>
+<h3>3.2 Sentinel</h3>
+<p>Sentinel 解决主从架构的故障自动转移问题。</p>
+<p><strong>主观下线（SDOWN）vs 客观下线（ODOWN）：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Sentinel 节点判断链路：
+PING 超时 → SDOWN（单 Sentinel 认为下线）
+         → 询问其他 Sentinel → quorum 个确认 → ODOWN（共识下线）
+</code></pre></div>
+<p><strong>领头选举（Leader Election）：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>1. 发现 ODOWN 的 Sentinel 发起选举（epoch 自增）
+2. 向其他 Sentinel 发送 is-master-down-by-addr（含 runid）
+3. 收到请求的 Sentinel：先到先得（同一 epoch 内）
+4. 获得多数票（&gt; N/2）的 Sentinel 成为 Leader
+5. Leader 执行故障转移
+</code></pre></div>
+<p><strong>故障转移步骤：</strong></p>
+<ol>
+<li>选出新主（优先级最高 &gt; 复制偏移最大 &gt; runid 最小）</li>
+<li>从节点 <code>SLAVEOF NEW_MASTER</code></li>
+<li>旧主恢复后成为新主的从节点</li>
+</ol>
+<h3>3.3 Cluster</h3>
+<p>Redis Cluster 使用哈希槽（16384 个）分片数据。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>CRC16(key) % 16384 → 哈希槽 → 负责的节点
+</code></pre></div>
+<p><strong>MOVED vs ASK 重定向：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Client                         Node A (槽 0-5000)
+  | --- GET key{slot=6000} ---&gt; |
+  | &lt;-- MOVED 6000 192.168.1.3:6379 （永久重定向）
+  |                              客户端更新槽位映射表
+
+Client                         Node B (槽 5001-10000)
+  | --- GET key{slot=6000} ---&gt; |
+  |                              正在迁移，本地无此 key
+  | &lt;-- ASK 6000 192.168.1.3:6379 （临时重定向）
+  | --- ASKING → GET key ------&gt; | (Node C)
+</code></pre></div>
+<p><strong>客户端路由策略（Lettuce 实现）：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Lettuce 集群客户端自动处理 MOVED/ASK
+var client = RedisClusterClient.create(&quot;redis://localhost:7000,localhost:7001&quot;);
+var connection = client.connect();
+var commands = connection.sync();
+commands.set(&quot;key&quot;, &quot;value&quot;); // 自动路由到正确节点
+</code></pre></div>
+<hr>
+<h2>四、分布式锁</h2>
+<h3>4.1 Redisson 看门狗（Watchdog）</h3>
+<p>Redisson 解决了简单 SET NX PX 锁的&quot;锁提前释放&quot;问题：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 1. 获取锁
+RLock lock = redisson.getLock(&quot;order:123:lock&quot;);
+
+// 自动续期（看门狗每 10 秒检查，持锁超时 30 秒）
+lock.lock();  // 等价于 lock.lock(30, TimeUnit.SECONDS)
+
+try {
+    // 业务逻辑
+} finally {
+    lock.unlock();
+}
+</code></pre></div>
+<p><strong>看门狗原理（Redisson 源码分析）：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>lock() 流程：
+1. Lua 脚本：SETNX + PEXPIRE（原子）
+2. 定时任务（netty timer）：
+   - 每 internalLockLeaseTime/3 = 10s 执行一次
+   - 检查锁是否还被当前线程持有
+   - 如果持有 → PEXPIRE 续期到 30s
+3. unlock() 时取消定时任务
+
+Lua 续期脚本（简化）：
+if redis.call(&#39;hexists&#39;, KEYS[1], ARGV[2]) == 1 then
+    return redis.call(&#39;pexpire&#39;, KEYS[1], ARGV[1])
+end
+</code></pre></div>
+<h3>4.2 红锁（RedLock）争议</h3>
+<p>Martin Kleppmann 在《How to do distributed locking》中指出红锁的问题：</p>
+<ol>
+<li><strong>时钟跳跃：</strong> 如果获取锁后 GC/时钟跳跃，锁可能在&quot;还持有&quot;的幻觉中过期</li>
+<li><strong>Fencing Token：</strong> 应附带单调递增的 token，资源服务器需要校验</li>
+</ol>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Redisson 的红锁实现
+RLock lock1 = redisson1.getLock(&quot;lock&quot;);
+RLock lock2 = redisson2.getLock(&quot;lock&quot;);
+RLock lock3 = redisson3.getLock(&quot;lock&quot;);
+RedissonRedLock redLock = new RedissonRedLock(lock1, lock2, lock3);
+
+redLock.lock();
+try {
+    // 关键资源操作
+} finally {
+    redLock.unlock();
+}
+</code></pre></div>
+<p><strong>生产建议：</strong> 在多数场景中，单 Redis 实例 + Redisson 看门狗 已足够。红锁仅在对一致性有极高要求且可接受复杂度和性能开销时使用。更严格的一致性场景应使用 ZooKeeper 或数据库锁。</p>
+<h3>4.3 SET NX PX 原子性</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Jedis 方式（SET NX PX 原子命令）
+String result = jedis.set(&quot;lock:key&quot;, &quot;unique_value&quot;,
+        SetParams.setParams().nx().px(30000));
+if (&quot;OK&quot;.equals(result)) {
+    try {
+        // 业务逻辑
+    } finally {
+        // Lua 脚本原子释放（确保释放的是自己持有的锁）
+        String script = &quot;&quot;&quot;
+            if redis.call(&#39;get&#39;, KEYS[1]) == ARGV[1] then
+                return redis.call(&#39;del&#39;, KEYS[1])
+            else
+                return 0
+            end&quot;&quot;&quot;;
+        jedis.eval(script, List.of(&quot;lock:key&quot;), List.of(&quot;unique_value&quot;));
+    }
+}
+</code></pre></div>
+<hr>
+<h2>五、缓存策略</h2>
+<h3>5.1 Cache-Aside 模式</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>读操作：
+1. 查缓存
+2. 命中 → 返回
+3. 未命中 → 查 DB → 写缓存 → 返回
+
+写操作：
+1. 更新 DB
+2. 删除缓存（而非更新缓存）
+</code></pre></div>
+<p><strong>为什么是删除缓存而非更新？</strong></p>
+<ul>
+<li>更新缓存+更新DB之间存在时序问题</li>
+<li>如果写入顺序是 写DB→写缓存，并发读写可能导致缓存脏数据</li>
+<li>删除缓存+惰性加载更简单可靠</li>
+</ul>
+<p><strong>先删缓存还是先更新DB？</strong></p>
+<table>
+<thead>
+<tr>
+<th>顺序</th>
+<th>风险</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>先删缓存 → 更新DB</td>
+<td>删缓存后、更新DB前的空隙，读请求查到旧数据并写入缓存</td>
+</tr>
+<tr>
+<td>先更新DB → 删缓存</td>
+<td>更新DB后、删缓存前读到的仍是旧缓存（窗口极小）</td>
+</tr>
+</tbody></table>
+<h3>5.2 延迟双删</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
+public class UserService {
+
+    private final UserRepository userRepo;
+    private final StringRedisTemplate redis;
+    private final TaskExecutor taskExecutor;
+
+    // 延迟双删策略
+    public void updateUser(Long userId, UserDto dto) {
+        // 1. 第一次删除缓存
+        redis.delete(&quot;user:&quot; + userId);
+
+        // 2. 更新数据库
+        userRepo.update(userId, dto);
+
+        // 3. 延迟第二次删除（异步，等待并发读完成）
+        taskExecutor.execute(() -&gt; {
+            try {
+                Thread.sleep(500); // 视业务场景调整
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+            redis.delete(&quot;user:&quot; + userId);
+        });
+    }
+}
+</code></pre></div>
+<h3>5.3 布隆过滤器穿透防护</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Configuration
+public class BloomFilterConfig {
+
+    @Bean
+    public BloomFilter&lt;String&gt; userIdBloomFilter() {
+        // Guava 本地布隆过滤器
+        return BloomFilter.create(
+                Funnels.stringFunnel(StandardCharsets.UTF_8),
+                1_000_000,  // 期望元素数
+                0.01        // 误判率 1%
+        );
+    }
+}
+
+// 结合 Redis 模块布隆过滤器（更推荐，共享状态）
+// BF.RESERVE user:bloom 0.01 1000000
+// BF.ADD user:bloom &quot;user_123&quot;
+// BF.EXISTS user:bloom &quot;user_123&quot;
+
+@Service
+public class UserQueryService {
+
+    public User getUser(String userId) {
+        // 1. 布隆过滤器快速排除不存在的 key
+        Boolean exists = redis.opsForValue()
+                .getOperations().execute((RedisCallback&lt;Boolean&gt;) conn -&gt;
+                        conn.execute(&quot;BF.EXISTS&quot;, &quot;user:bloom&quot;.getBytes(), userId.getBytes()));
+
+        if (Boolean.FALSE.equals(exists)) {
+            return null; // 一定不存在，无需查 DB
+        }
+
+        // 2. 查缓存 / 查 DB
+        // ...
+    }
+}
+</code></pre></div>
+<hr>
+<h2>六、Java 客户端对比</h2>
+<h3>6.1 Lettuce vs Jedis</h3>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>Lettuce</th>
+<th>Jedis</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>连接模型</td>
+<td>单连接复用（基于 Netty）</td>
+<td>每线程一个连接</td>
+</tr>
+<tr>
+<td>异步支持</td>
+<td>原生异步/响应式 API</td>
+<td>需额外 JedisPool 封装</td>
+</tr>
+<tr>
+<td>线程安全</td>
+<td>完全线程安全</td>
+<td>Jedis 实例非线程安全</td>
+</tr>
+<tr>
+<td>连接数占用</td>
+<td>低（单连接）</td>
+<td>高（每线程一个）</td>
+</tr>
+<tr>
+<td>集群支持</td>
+<td>原生支持 Cluster/Sentinel</td>
+<td>支持但 API 较旧</td>
+</tr>
+<tr>
+<td>Spring Boot 默认</td>
+<td>Spring Boot 2.x+ 默认</td>
+<td>旧版默认</td>
+</tr>
+</tbody></table>
+<p><strong>Lettuce 异步 API 示例：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 异步 API
+var future = redisAsyncCommands.get(&quot;key&quot;);
+future.thenAccept(value -&gt; System.out.println(&quot;Got: &quot; + value));
+
+// 响应式 API
+redisReactiveCommands.get(&quot;key&quot;)
+        .map(value -&gt; &quot;Processed: &quot; + value)
+        .subscribe(System.out::println);
+</code></pre></div>
+<h3>6.2 Spring Data Redis 配置</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">spring:
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      password: ${REDIS_PASSWORD}
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 4
+          max-wait: 2000ms
+      timeout: 3000ms
+      cluster:
+        nodes:
+          - 192.168.1.10:6379
+          - 192.168.1.11:6379
+          - 192.168.1.12:6379
+</code></pre></div>
+<hr>
+<h2>七、AI 场景：Redis Vector Search</h2>
+<h3>7.1 向量索引创建</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># 创建向量索引（余弦距离）
+FT.CREATE idx:docs ON HASH PREFIX 1 doc:
+  SCHEMA text TEXT content VARCHAR
+  embedding VECTOR FLAT 6 TYPE FLOAT32 DIM 1536 DISTANCE_METRIC COSINE
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
+public class RedisVectorService {
+
+    private final RedissonClient redisson;
+    private final EmbeddingModel embeddingModel;
+
+    // 添加文档向量
+    public void addDocument(String docId, String content, float[] embedding) {
+        var key = &quot;doc:&quot; + docId;
+        var map = new HashMap&lt;String, Object&gt;();
+        map.put(&quot;content&quot;, content);
+        map.put(&quot;embedding&quot;, embeddingToBytes(embedding));
+        redisson.getMap(key).putAll(map);
+    }
+
+    private byte[] embeddingToBytes(float[] embedding) {
+        var buffer = ByteBuffer.allocate(embedding.length * Float.BYTES);
+        buffer.order(ByteOrder.LITTLE_ENDIAN);
+        for (var val : embedding) {
+            buffer.putFloat(val);
+        }
+        return buffer.array();
+    }
+}
+</code></pre></div>
+<h3>7.2 KNN 查询</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># KNN 搜索（返回最近 10 个）
+FT.SEARCH idx:docs &quot;*=&gt;[KNN 10 @embedding $vec AS dist]&quot;
+  SORTBY dist
+  PARAMS 2 vec &lt;binary_blob&gt;
+  RETURN 3 content dist
+  DIALECT 2
+</code></pre></div>
+<h3>7.3 语义缓存</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
+public class SemanticCacheService {
+
+    private final EmbeddingModel embeddingModel;
+    private final StringRedisTemplate redis;
+
+    public record CachedResponse(String query, String response, long timestamp) {}
+
+    public Optional&lt;CachedResponse&gt; findSimilarQuery(String userQuery, double threshold) {
+        var queryEmbedding = embeddingModel.embed(userQuery);
+
+        // FT.SEARCH 执行 KNN 查找语义相似的已缓存查询
+        // 如果相似度 &gt; threshold，返回缓存的响应
+        // 否则返回 empty，触发实际 LLM 调用并写入缓存
+        // ...
+        return Optional.empty();
+    }
+}
+</code></pre></div>
+<hr>
+<h2>八、常见问题</h2>
+<h3>8.1 热 Key / 大 Key</h3>
+<p><strong>热 Key 应对：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 1. 本地缓存前置（Caffeine + Redis）
+@Cacheable(cacheNames = &quot;hot-products&quot;, key = &quot;#productId&quot;)
+public Product getProduct(Long productId) { ... }
+
+// 2. key 分片（冗余多份 + 随机访问其一）
+String key = &quot;product:&quot; + productId + &quot;:&quot; + ThreadLocalRandom.current().nextInt(10);
+</code></pre></div>
+<p><strong>大 Key 检测与处理：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># 检测
+redis-cli --bigkeys
+redis-cli MEMORY USAGE big:hash:key
+
+# 异步删除（Redis 4.0+，避免阻塞）
+UNLINK big:hash:key
+</code></pre></div>
+<h3>8.2 缓存雪崩 / 击穿</h3>
+<p><strong>雪崩（大量 key 同时过期）：</strong> 随机 TTL（base_ttl + random_ttl），多级缓存，熔断降级。</p>
+<p><strong>击穿（热点 key 过期时大量请求直达 DB）：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public String getWithMutex(String key) {
+    var value = redis.opsForValue().get(key);
+    if (value != null) return value;
+
+    // 加互斥锁
+    var lockKey = &quot;lock:&quot; + key;
+    try {
+        if (redis.opsForValue().setIfAbsent(lockKey, &quot;1&quot;, 10, TimeUnit.SECONDS)) {
+            // 查 DB
+            value = db.query(key);
+            redis.opsForValue().set(key, value, 30, TimeUnit.MINUTES);
+        } else {
+            Thread.sleep(50); // 等持锁线程写入缓存
+            return getWithMutex(key);  // 重试
+        }
+    } finally {
+        redis.delete(lockKey);
+    }
+    return value;
+}
+</code></pre></div>
+<h3>8.3 集群扩容与数据倾斜</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># 查看槽位分布
+redis-cli CLUSTER NODES
+redis-cli CLUSTER SLOTS
+
+# 重新分片（在线）
+redis-cli --cluster reshard 192.168.1.10:6379 \
+  --cluster-from &lt;source_node_id&gt; \
+  --cluster-to &lt;target_node_id&gt; \
+  --cluster-slots 1000
+</code></pre></div>
+<hr>
+<h2>相关条目</h2>
+<ul>
+<li><a href="/04-数据与中间件/数据库与缓存/04-PostgreSQL与pgvector深度解析" class="cross-ref" data-ref="04-PostgreSQL与pgvector深度解析">04-PostgreSQL与pgvector深度解析</a> — PostgreSQL 深度解析</li>
+<li><a href="/05-分布式架构/事务与一致性/05-缓存策略与多级缓存架构" class="cross-ref" data-ref="05-缓存策略与多级缓存架构">05-缓存策略与多级缓存架构</a> — 缓存策略与多级缓存</li>
+<li><a href="/05-分布式架构/弹性设计/05-幂等设计与分布式锁" class="cross-ref" data-ref="05-幂等设计与分布式锁">05-幂等设计与分布式锁</a> — 幂等性与分布式锁</li>
+<li><a href="/04-数据与中间件/消息与搜索/04-Kafka深度解析" class="cross-ref" data-ref="04-Kafka深度解析">04-Kafka深度解析</a> — Kafka 消息队列</li>
+</ul>
+</div>
+</article>

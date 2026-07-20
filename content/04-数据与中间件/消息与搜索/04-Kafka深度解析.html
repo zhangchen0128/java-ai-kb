@@ -1,0 +1,574 @@
+
+<article class="kb-entry" data-path="/04-数据与中间件/消息与搜索/04-Kafka深度解析">
+  <div class="entry-meta">
+    <div class="entry-domain"><a href="/?d=04">04-数据与中间件</a></div>
+    <h1>Kafka 深度解析</h1>
+    <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#["kafka"</span><span class="badge badge-tag">#"partition"</span><span class="badge badge-tag">#"consumer-group"</span><span class="badge badge-tag">#"isr"</span></div>
+    
+  </div>
+  <div class="entry-body"><h1>Kafka 深度解析</h1>
+<h2>概述</h2>
+<p>Apache Kafka 是分布式流处理平台，同时承担消息队列、事件存储和流处理三种角色。在 AI 应用中，Kafka 常用于数据管道（CDC 捕获数据变更触发 Embedding 更新）、Agent 间事件驱动通信、异步推理结果回调等场景。</p>
+<p>本文深入 Kafka 架构、日志存储、生产者和消费者机制、副本一致性、KRaft 共识层和 Spring Kafka 集成。</p>
+<hr>
+<h2>一、架构核心</h2>
+<h3>1.1 核心组件</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌─────────────────────────────────────────────────────┐
+│                     Kafka Cluster                    │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐          │
+│  │ Broker 0 │  │ Broker 1 │  │ Broker 2 │          │
+│  │ P0(L) P1 │  │ P1(L) P2 │  │ P2(L) P0 │          │
+│  └──────────┘  └──────────┘  └──────────┘          │
+│        ▲             ▲             ▲                │
+└────────┼─────────────┼─────────────┼────────────────┘
+         │             │             │
+    ┌────┴────┐   ┌────┴────┐   ┌────┴────┐
+    │Producer │   │Consumer │   │Consumer │
+    │         │   │ Group A  │   │ Group B  │
+    └─────────┘   └─────────┘   └─────────┘
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>组件</th>
+<th>职责</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Broker</td>
+<td>Kafka 服务实例，处理请求和存储</td>
+</tr>
+<tr>
+<td>Topic</td>
+<td>消息的逻辑分类</td>
+</tr>
+<tr>
+<td>Partition</td>
+<td>Topic 的物理分片，顺序追加日志</td>
+</tr>
+<tr>
+<td>Consumer Group</td>
+<td>协同消费，每个分区只能被组内一个消费者消费</td>
+</tr>
+<tr>
+<td>Controller</td>
+<td>负责分区 Leader 选举和集群元数据管理</td>
+</tr>
+<tr>
+<td>Group Coordinator</td>
+<td>管理消费组的成员和偏移提交</td>
+</tr>
+</tbody></table>
+<h3>1.2 Controller 选举</h3>
+<p>Controller 是集群的&quot;大脑&quot;，负责：</p>
+<ul>
+<li>分区 Leader 选举</li>
+<li>副本分配</li>
+<li>集群元数据变更广播</li>
+</ul>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Controller 选举（基于 ZooKeeper，KRaft 模式不同）
+// 简化逻辑：
+// 1. 所有 Broker 在 /controller 路径创建临时节点（先到先得）
+// 2. 成功创建的成为 Controller，watch 该节点的 Broker 推送元数据
+// 3. Controller 挂掉 → 临时节点删除 → 其他 Broker 抢占
+</code></pre></div>
+<h3>1.3 Group Coordinator</h3>
+<p>每个 Consumer Group 有一个 Coordinator（由 Group ID 哈希到分区 Leader 所在 Broker）：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Coordinator 职责：
+- 管理消费者加入/离开（Rebalance）
+- 接收 offset 提交
+- 维护 __consumer_offsets topic 中的偏移信息
+</code></pre></div>
+<hr>
+<h2>二、日志存储</h2>
+<h3>2.1 Segment 文件</h3>
+<p>每个分区在磁盘上由多个 Segment 文件组成：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>topic-partition-0/
+├── 00000000000000000000.log        # 数据文件（日志记录）
+├── 00000000000000000000.index      # 偏移索引（稀疏索引）
+├── 00000000000000000000.timeindex  # 时间戳索引
+├── 00000000000000100000.log        # 下一个 Segment
+├── 00000000000000100000.index
+└── 00000000000000100000.timeindex
+</code></pre></div>
+<p><strong>索引结构：</strong> 稀疏索引，每隔 <code>log.index.interval.bytes</code>（默认 4KB）创建一个索引条目。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>offset 索引格式：相对偏移(4B) → 物理位置(4B)
+timestamp 索引格式：时间戳(8B) → 相对偏移(4B)
+</code></pre></div>
+<p><strong>查找消息流程：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>1. 根据 offset 做二分查找确定 Segment 文件
+2. 在 Segment 的 .index 中二分查找 &lt;= offset 的最近条目
+3. 从物理位置开始顺序扫描 .log 直到找到目标 offset
+</code></pre></div>
+<h3>2.2 日志清理策略</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-ini"># delete 策略（按时间和大小删除）
+log.retention.hours = 168           # 7 天
+log.retention.bytes = -1            # 不限大小
+log.segment.bytes = 1073741824      # 1GB segment
+
+# compact 策略（保留每个 key 的最新值）
+log.cleanup.policy = compact
+log.cleaner.min.cleanable.ratio = 0.5  # 50% 脏数据时触发压缩
+</code></pre></div>
+<p><strong>日志压缩（Log Compaction）原理：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>压缩前：
+key:A val:1 | key:B val:2 | key:A val:3 | key:C val:4 | key:B val:5
+
+压缩后（保留每个 key 的最新值）：
+key:A val:3 | key:C val:4 | key:B val:5
+</code></pre></div>
+<p>适用场景：CDC 数据、KV 存储、配置变化日志。</p>
+<hr>
+<h2>三、生产者</h2>
+<h3>3.1 分区策略</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 默认分区策略（Sticky Partitioner，Kafka 2.4+）
+// 1. 如果指定了 key → hash(key) % partition_count
+// 2. 如果没指定 key → 批次满前粘在同一分区，批次满后切换
+
+// 自定义分区器
+public class RegionPartitioner implements Partitioner {
+    @Override
+    public int partition(String topic, Object key, byte[] keyBytes,
+                         Object value, byte[] valueBytes, Cluster cluster) {
+        var region = extractRegion(value);
+        return Math.abs(region.hashCode()) % cluster.partitionCountForTopic(topic);
+    }
+}
+</code></pre></div>
+<h3>3.2 acks 配置</h3>
+<table>
+<thead>
+<tr>
+<th>acks</th>
+<th>含义</th>
+<th>持久性</th>
+<th>延迟</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>0</td>
+<td>不等待确认，发送到缓冲区即返回</td>
+<td>最低（可能丢消息）</td>
+<td>最低</td>
+</tr>
+<tr>
+<td>1</td>
+<td>Leader 写入日志后确认</td>
+<td>中等（Leader 宕机可能丢消息）</td>
+<td>中等</td>
+</tr>
+<tr>
+<td>all (-1)</td>
+<td>所有 ISR 副本确认后才返回</td>
+<td>最高</td>
+<td>最高</td>
+</tr>
+</tbody></table>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Spring Kafka 配置
+spring:
+  kafka:
+    producer:
+      acks: all
+      retries: 3
+      properties:
+        enable.idempotence: true
+      compression-type: lz4   # lz4 &gt; snappy &gt; gzip（速度）; gzip（压缩率最高）
+</code></pre></div>
+<h3>3.3 幂等与事务</h3>
+<p><strong>幂等生产者（enable.idempotence=true）：</strong></p>
+<ul>
+<li>每个 Producer 分配唯一 <code>Producer ID (PID)</code></li>
+<li>每条消息附加 <code>&lt;PID, Sequence Number&gt;</code></li>
+<li>Broker 检测收到的序列号：如果有重复或跳跃 → 丢弃重复/抛出 OutOfOrderSequenceException</li>
+</ul>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>幂等保证范围：单个分区内，单次会话内
+</code></pre></div>
+<p><strong>事务生产者：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Spring Kafka 事务配置
+spring:
+  kafka:
+    producer:
+      transaction-id-prefix: &quot;tx-&quot;
+
+// 使用
+@Service
+public class OrderService {
+    private final KafkaTemplate&lt;String, Object&gt; kafkaTemplate;
+
+    @Transactional
+    public void createOrder(Order order) {
+        kafkaTemplate.send(&quot;orders&quot;, order);            // 1. 发送订单事件
+        kafkaTemplate.send(&quot;inventory&quot;, order.getItems()); // 2. 发送库存事件
+        // 两个操作原子性：要么都提交，要么都不发
+    }
+
+    // 使用 executeInTransaction 手动控制
+    public void manualTx() {
+        kafkaTemplate.executeInTransaction(kt -&gt; {
+            kt.send(&quot;topic1&quot;, &quot;msg1&quot;);
+            kt.send(&quot;topic2&quot;, &quot;msg2&quot;);
+            return true;
+        });
+    }
+}
+</code></pre></div>
+<h3>3.4 批量发送优化</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">spring:
+  kafka:
+    producer:
+      batch-size: 16384         # 16KB 批处理大小
+      linger-ms: 10             # 等待 10ms 攒批
+      buffer-memory: 33554432   # 32MB 发送缓冲区
+      compression-type: lz4
+</code></pre></div>
+<p><strong>linger.ms vs batch.size：</strong> linger.ms 是时间上限，batch.size 是大小上限，二者任一满足即发送。</p>
+<hr>
+<h2>四、消费者</h2>
+<h3>4.1 Rebalance 协议</h3>
+<p>Rebalance 是 Consumer Group 内重新分配分区的过程。触发条件：消费者加入/离开、分区数变化、超时未心跳。</p>
+<p><strong>协议流程：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>1. FindCoordinator — 找到 Group Coordinator
+2. JoinGroup：
+   - Consumer → Coordinator: JoinGroupRequest (含分区策略)
+   - Coordinator 选一个 Consumer 为 Group Leader
+   - Coordinator → Consumer: JoinGroupResponse
+3. SyncGroup：
+   - Leader 执行分区分配计算
+   - Leader → Coordinator: SyncGroupRequest (分配方案)
+   - Coordinator 分发分配结果给所有消费者
+</code></pre></div>
+<h3>4.2 分区分配策略</h3>
+<table>
+<thead>
+<tr>
+<th>策略</th>
+<th>算法</th>
+<th>问题</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Range</td>
+<td>每个 Topic 的分区按 Range 分配给消费者</td>
+<td>数据倾斜</td>
+</tr>
+<tr>
+<td>RoundRobin</td>
+<td>所有分区轮询分配给所有消费者</td>
+<td>Rebalance 影响大</td>
+</tr>
+<tr>
+<td>Sticky</td>
+<td>尽量保持原分配，仅移动最少分区</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Cooperative Sticky</td>
+<td>Sticky + 分批 Rebalance（Kafka 2.4+，推荐）</td>
+<td>—</td>
+</tr>
+</tbody></table>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">spring:
+  kafka:
+    consumer:
+      properties:
+        partition.assignment.strategy:
+          org.apache.kafka.clients.consumer.CooperativeStickyAssignor
+</code></pre></div>
+<p><strong>Cooperative Sticky 优势：</strong> 消费者逐步放弃分区（而非全部放弃→再分配），减少 Rebalance 期间不可用时间。</p>
+<h3>4.3 Offset 管理</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 自动提交（不推荐生产环境核心业务）
+spring.kafka.consumer.enable-auto-commit: false
+
+// 手动提交
+@KafkaListener(topics = &quot;orders&quot;)
+public void consume(ConsumerRecord&lt;String, Order&gt; record,
+                    Acknowledgment ack) {
+    try {
+        processOrder(record.value());
+        ack.acknowledge(); // 处理成功后提交
+    } catch (Exception e) {
+        // 不 ack → 下次 poll 会重新消费
+        log.error(&quot;Order processing failed: {}&quot;, record.key(), e);
+        throw e; // 触发重试
+    }
+}
+</code></pre></div>
+<h3>4.4 再平衡监听器</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Component
+public class OrderRebalanceListener implements ConsumerAwareRebalanceListener {
+
+    private final Map&lt;TopicPartition, OffsetAndMetadata&gt; currentOffsets = new ConcurrentHashMap&lt;&gt;();
+
+    @Override
+    public void onPartitionsAssigned(Consumer&lt;?, ?&gt; consumer,
+                                     Collection&lt;TopicPartition&gt; partitions) {
+        // 恢复分区后，可以从外部存储恢复 offset
+        partitions.forEach(tp -&gt;
+            consumer.seek(tp, findSeekOffset(tp)));
+    }
+
+    @Override
+    public void onPartitionsRevokedBeforeCommit(Consumer&lt;?, ?&gt; consumer,
+                                                 Collection&lt;TopicPartition&gt; partitions) {
+        // 分区被撤销前：保存当前 offset 到外部存储
+        currentOffsets.forEach((tp, offset) -&gt; saveOffset(tp, offset.offset()));
+    }
+
+    @Override
+    public void onPartitionsLost(Consumer&lt;?, ?&gt; consumer,
+                                 Collection&lt;TopicPartition&gt; partitions) {
+        // 分区丢失（异常情况）：放弃当前处理
+        partitions.forEach(tp -&gt; {
+            currentOffsets.remove(tp);
+            cleanupPartialState(tp);
+        });
+    }
+}
+</code></pre></div>
+<hr>
+<h2>五、副本机制</h2>
+<h3>5.1 ISR（In-Sync Replica）</h3>
+<p>ISR 是与 Leader 保持同步的副本集合。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>ISR 维护条件（replica.lag.time.max.ms = 30000）：
+- 过去 30 秒内向 Leader 发送过 Fetch 请求
+- 过去 30 秒内追上了 Leader 的 LEO
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-ini">min.insync.replicas = 2   # ISR 至少 2 个副本时才能写入
+</code></pre></div>
+<h3>5.2 Leader Epoch</h3>
+<p>解决副本恢复时的&quot;日志截断不一致&quot;问题：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>无 Leader Epoch 时的问题：
+1. Leader 写入 [m1, m2]，follower1 同步到 m2
+2. Leader 宕机，follower1 成为新 Leader，写入 m3
+3. 旧 Leader 恢复成为 follower，发现本地有 m1,m2，但新 Leader 有 m1,m2,m3
+4. 旧 Leader 截断到 High Watermark → 正确
+
+但如果发生：
+1. Leader 写入 [m1, m2] 但 follower 没有同步 m2
+2. Leader 宕机，follower （仅有 m1） 成为新 Leader
+3. 旧 Leader 恢复，它以为自己是 Leader，但实际上需要回退 m2
+4. 副本可能互相覆盖造成数据丢失
+</code></pre></div>
+<p><strong>Leader Epoch 解决：</strong> 每次 Leader 变更时 Epoch 递增，副本用 Epoch 判断是否需要回退不一致部分。</p>
+<h3>5.3 水位线（High Watermark）</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>对于分区 P0（3 副本）：
+                Leader        Follower 1     Follower 2
+LEO:            offset 100    offset 95      offset 98
+HW:             offset 95                              ← min(所有ISR的LEO)
+消费者可见:     offset 0-94
+</code></pre></div>
+<p><code>HW</code> 确保消费者只看到所有 ISR 副本都已写入的消息。只有 <code>acks=all</code> 的消息超过 <code>HW</code> 后才对消费者可见。</p>
+<h3>5.4 Unclean Leader Election</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-ini">unclean.leader.election.enable = false  # 默认：不允许非 ISR 副本成为 Leader
+</code></pre></div>
+<ul>
+<li><code>false</code>：牺牲可用性保证一致性（ISR 全挂了，分区不可写）</li>
+<li><code>true</code>：牺牲一致性保证可用性（非 ISR 副本成为 Leader，可能丢数据）</li>
+</ul>
+<hr>
+<h2>六、性能设计</h2>
+<h3>6.1 Page Cache 与顺序写</h3>
+<p>Kafka 利用 OS 的 Page Cache 而非自建缓存：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>写入路径：Producer → Broker 内存 → OS Page Cache → 磁盘（顺序追加）
+读取路径：Consumer → OS Page Cache（高龄消息） / 磁盘（低龄消息）
+</code></pre></div>
+<p>顺序写入性能：机械盘 100+ MB/s，SSD 500+ MB/s。Kafka 不做随机写，所有写入是日志尾部追加。</p>
+<h3>6.2 零拷贝（Zero Copy / sendfile）</h3>
+<p>传统数据发送路径（4 次拷贝 + 4 次上下文切换）：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>磁盘 → Read Buffer → 应用 Buffer → Socket Buffer → 网卡
+</code></pre></div>
+<p>Kafka 使用 <code>sendfile()</code> 系统调用（2 次拷贝 + 2 次上下文切换）：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>磁盘 → Read Buffer → Socket Buffer → 网卡  （DMA 直接内存操作）
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Kafka 中 sendfile 的使用
+// FileRecords.writeTo() 最终调用 FileChannel.transferTo()
+// → Java NIO → sendfile() 系统调用
+</code></pre></div>
+<h3>6.3 批处理与压缩</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Producer 端批处理（减少网络 IOPS）：
+多个消息 → RecordBatch → compress(lz4/gzip/snappy/zstd) → TCP 发送
+
+Broker 端：不解压，原样写入日志（减少 CPU 开销）
+Consumer 端：解压后消费
+</code></pre></div>
+<hr>
+<h2>七、KRaft：ZooKeeper 替代</h2>
+<p>Kafka 4.x 已废弃 ZooKeeper 依赖，全面迁移到 KRaft（Kafka Raft Metadata Mode）。</p>
+<h3>7.1 架构对比</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>旧架构（ZooKeeper）：
+┌──────────────┐     ┌──────────────┐
+│  Kafka       │────▶│  ZooKeeper   │
+│  Brokers     │     │  Ensemble    │
+└──────────────┘     └──────────────┘
+
+KRaft 架构：
+┌──────────────────────────────────────┐
+│            Kafka Cluster             │
+│  ┌──────────────────────────────┐    │
+│  │ Controller Quorum (KRaft)     │    │
+│  │ Controller-0 (Active)        │    │
+│  │ Controller-1 (Standby)       │    │
+│  │ Controller-2 (Standby)       │    │
+│  └──────────────────────────────┘    │
+│  ┌──────────┐  ┌──────────┐         │
+│  │ Broker 0 │  │ Broker 1 │         │
+│  └──────────┘  └──────────┘         │
+└──────────────────────────────────────┘
+</code></pre></div>
+<h3>7.2 KRaft 共识</h3>
+<p>基于 Raft 协议的多节点共识层，元数据日志（<code>@metadata</code> topic）作为事件日志：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>KRaft 日志记录内容：
+- Topic/Partition 创建和删除
+- Broker 注册和去注册
+- 配置变更
+- 配额变更
+- 生产者 ID 分配
+</code></pre></div>
+<hr>
+<h2>八、Spring Kafka 核心</h2>
+<h3>8.1 KafkaTemplate</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
+public class EventPublisher {
+
+    private final KafkaTemplate&lt;String, Object&gt; kafkaTemplate;
+
+    // 异步发送
+    public void sendEvent(String key, Object event) {
+        var future = kafkaTemplate.send(&quot;ai-events&quot;, key, event);
+        future.whenComplete((result, ex) -&gt; {
+            if (ex != null) {
+                log.error(&quot;Failed to send event: key={}&quot;, key, ex);
+                // 记录到 outbox 表供后续重试
+            } else {
+                log.debug(&quot;Event sent: topic={}, partition={}, offset={}&quot;,
+                        result.getRecordMetadata().topic(),
+                        result.getRecordMetadata().partition(),
+                        result.getRecordMetadata().offset());
+            }
+        });
+    }
+
+    // 同步发送（带超时）
+    public void sendSync(String topic, String key, Object event) {
+        try {
+            kafkaTemplate.send(topic, key, event).get(5, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            // 超时处理
+        }
+    }
+}
+</code></pre></div>
+<h3>8.2 @KafkaListener + 错误处理</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Configuration
+public class KafkaConsumerConfig {
+
+    @Bean
+    public ConcurrentKafkaListenerContainerFactory&lt;String, Object&gt; kafkaListenerContainerFactory(
+            ConsumerFactory&lt;String, Object&gt; consumerFactory,
+            DefaultErrorHandler errorHandler) {
+
+        var factory = new ConcurrentKafkaListenerContainerFactory&lt;String, Object&gt;();
+        factory.setConsumerFactory(consumerFactory);
+        factory.setCommonErrorHandler(errorHandler);
+        factory.getContainerProperties().setAckMode(ContainerProperties.AckMode.MANUAL);
+        return factory;
+    }
+
+    @Bean
+    public DefaultErrorHandler errorHandler(DeadLetterPublishingRecoverer recoverer) {
+        // 3 次重试，间隔 2s, 4s, 8s 指数退避
+        var backOff = new ExponentialBackOffWithMaxRetries(3);
+        backOff.setInitialInterval(2000);
+        backOff.setMultiplier(2.0);
+
+        var handler = new DefaultErrorHandler(recoverer, backOff);
+        // 不重试的异常
+        handler.addNotRetryableExceptions(IllegalArgumentException.class);
+        return handler;
+    }
+
+    @Bean
+    public DeadLetterPublishingRecoverer recoverer(KafkaTemplate&lt;String, Object&gt; template) {
+        return new DeadLetterPublishingRecoverer(template,
+                (record, ex) -&gt; new TopicPartition(
+                        record.topic() + &quot;.DLT&quot;, record.partition()));
+    }
+}
+
+@Component
+public class OrderConsumer {
+
+    @KafkaListener(topics = &quot;orders&quot;, groupId = &quot;order-processor&quot;)
+    public void onMessage(ConsumerRecord&lt;String, Order&gt; record, Acknowledgment ack) {
+        try {
+            orderProcessor.process(record.value());
+            ack.acknowledge();
+        } catch (RetryableException e) {
+            throw e; // DefaultErrorHandler 在 KafkaListener 抛出异常时自动重试
+        }
+    }
+}
+</code></pre></div>
+<hr>
+<h2>九、AI 场景应用</h2>
+<h3>9.1 CDC 数据管道（CDC → Kafka → Embedding 更新）</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Debezium + Kafka 监听 PostgreSQL 变更
+// 表变更 → Debezium Connector 捕获 → Kafka topic → Consumer 更新 Embedding
+
+@Component
+public class DocumentChangeConsumer {
+
+    private final VectorStore vectorStore;
+
+    @KafkaListener(topics = &quot;pg.public.documents&quot;, groupId = &quot;embedding-updater&quot;)
+    public void onDocumentChange(String changeEvent, Acknowledgment ack) {
+        var payload = parseDebeziumEvent(changeEvent);
+        switch (payload.operation()) {
+            case &quot;c&quot;, &quot;u&quot; -&gt; { // create/update
+                var doc = payload.after();
+                vectorStore.add(List.of(
+                    Document.builder()
+                        .id(doc.getId())
+                        .text(doc.getContent())
+                        .metadata(Map.of(&quot;source&quot;, &quot;cdc&quot;, &quot;timestamp&quot;, doc.getUpdatedAt()))
+                        .build()
+                ));
+            }
+            case &quot;d&quot; -&gt; vectorStore.delete(List.of(payload.before().getId()));
+        }
+        ack.acknowledge();
+    }
+}
+</code></pre></div>
+<h3>9.2 Agent 事件驱动通信</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Agent 间的异步工具调用结果通知
+// Agent A 调用耗时推理工具 → 中间状态发 Kafka → Agent B 订阅结果
+
+@KafkaListener(topics = &quot;agent-tool-results&quot;, groupId = &quot;agent-b&quot;)
+public void onToolResult(ToolResultEvent event, Acknowledgment ack) {
+    // 根据 workflowId 关联到具体的 Agent 会话
+    agentSessionManager.deliverToolResult(event.getWorkflowId(), event.getResult());
+    ack.acknowledge();
+}
+</code></pre></div>
+<hr>
+<h2>常见问题</h2>
+<p><strong>Q: Kafka 的 Exactly-Once 语义如何实现？</strong>
+A: 幂等生产者（单分区）+ 事务（跨分区），但成本高。多数场景下至少一次 + 消费者幂等处理已是够用方案。</p>
+<p><strong>Q: Rebalance 太久怎么优化？</strong>
+A: 使用 Cooperative Sticky 策略；减少分区数；增加 <code>session.timeout.ms</code>；避免消费者逻辑耗时过长。</p>
+<p><strong>Q: Kafka 能替代传统 MQ 吗？</strong>
+A: 高吞吐/事件流/日志场景推荐 Kafka；低延迟/复杂路由/优先级队列场景 RabbitMQ 更合适。</p>
+<p><strong>Q: 什么时候用 log compact？</strong>
+A: CDC 数据变更、KV 型状态存储、配置变更日志。数据查询需要完整最新状态时。</p>
+<p><strong>Q: KRaft 迁移的必要性？</strong>
+A: Kafka 4.x 不再支持 ZooKeeper，所有新集群应使用 KRaft 模式。简化运维（少一组集群），Controller 故障转移更快。</p>
+<hr>
+<h2>相关条目</h2>
+<ul>
+<li><a href="/04-数据与中间件/数据库与缓存/04-Redis深度解析" class="cross-ref" data-ref="04-Redis深度解析">04-Redis深度解析</a> — Redis 与消息队列对比</li>
+<li><a href="/04-数据与中间件/消息与搜索/04-Elasticsearch深度解析" class="cross-ref" data-ref="04-Elasticsearch深度解析">04-Elasticsearch深度解析</a> — ES 与 Kafka 的 CDC 联动</li>
+<li><a href="/05-分布式架构/弹性设计/05-幂等设计与分布式锁" class="cross-ref" data-ref="05-幂等设计与分布式锁">05-幂等设计与分布式锁</a> — 消息重复消费的幂等处理</li>
+</ul>
+</div>
+</article>

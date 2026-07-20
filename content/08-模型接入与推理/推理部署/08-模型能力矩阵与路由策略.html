@@ -1,0 +1,599 @@
+
+<article class="kb-entry" data-path="/08-模型接入与推理/推理部署/08-模型能力矩阵与路由策略">
+  <div class="entry-meta">
+    <div class="entry-domain"><a href="/?d=08">08-模型接入与推理</a></div>
+    <h1>Model Capability and Routing</h1>
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#["model-capability"</span><span class="badge badge-tag">#"model-routing"</span><span class="badge badge-tag">#"cost-optimization"</span><span class="badge badge-tag">#"model-selection"</span></div>
+    
+  </div>
+  <div class="entry-body"><h1>Model Capability and Routing</h1>
+<h2>概述</h2>
+<p>截至 2026 年 7 月，LLM 市场已经从&quot;一家独大&quot;走向&quot;百花齐放&quot;。不同的模型在推理、代码、多语言、多模态、成本等维度各有优劣。选对模型可以显著降低成本同时保持甚至提升质量。本文提供模型能力矩阵、选型决策树和模型路由的工程实现。</p>
+<h2>模型能力矩阵（2026年7月）</h2>
+<h3>旗舰推理模型</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌──────────────────────────┬──────────┬──────────┬──────────┬──────────┬──────────┐
+│ 模型                      │ 推理能力  │ 代码能力  │ 中文能力  │ 上下文    │ 多模态   │
+├──────────────────────────┼──────────┼──────────┼──────────┼──────────┼──────────┤
+│ Claude Opus 4.8          │ ★★★★★   │ ★★★★★   │ ★★★★    │ 200K     │ Vision   │
+│ GPT-5                     │ ★★★★★   │ ★★★★★   │ ★★★★½   │ 128K     │ Vision+  │
+│ Gemini 3 Ultra            │ ★★★★½   │ ★★★★½   │ ★★★★    │ 2M       │ Vision+  │
+│ Claude Sonnet 4.5         │ ★★★★½   │ ★★★★★   │ ★★★★    │ 200K     │ Vision   │
+│ Qwen3-235B               │ ★★★★½   │ ★★★★    │ ★★★★★   │ 128K     │ Vision   │
+│ DeepSeek-R1              │ ★★★★    │ ★★★★    │ ★★★★★   │ 128K     │ Text     │
+└──────────────────────────┴──────────┴──────────┴──────────┴──────────┴──────────┘
+</code></pre></div>
+<h3>中端/高性价比模型</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌──────────────────────────┬──────────┬──────────┬──────────┬──────────┬──────────┐
+│ 模型                      │ 推理能力  │ 代码能力  │ 中文能力  │ 上下文    │ 多模态   │
+├──────────────────────────┼──────────┼──────────┼──────────┼──────────┼──────────┤
+│ Claude Haiku 4.5         │ ★★★★    │ ★★★★    │ ★★★★    │ 200K     │ Vision   │
+│ GPT-5 Mini               │ ★★★★    │ ★★★★½   │ ★★★★    │ 128K     │ Vision   │
+│ Gemini 3 Flash           │ ★★★★    │ ★★★★    │ ★★★★    │ 1M       │ Vision+  │
+│ DeepSeek-V3              │ ★★★★    │ ★★★★    │ ★★★★★   │ 128K     │ Text     │
+│ Qwen3-32B               │ ★★★½    │ ★★★½    │ ★★★★★   │ 128K     │ Text     │
+│ Mistral Large 3          │ ★★★★    │ ★★★★    │ ★★★½    │ 256K     │ Vision   │
+└──────────────────────────┴──────────┴──────────┴──────────┴──────────┴──────────┘
+</code></pre></div>
+<h3>成本对比 (2026年7月参考)</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌──────────────────────────┬─────────────────┬─────────────────┬──────────────┐
+│ 模型                      │ $/1M input       │ $/1M output      │ 速度(Token/s)│
+├──────────────────────────┼─────────────────┼─────────────────┼──────────────┤
+│ Claude Opus 4.8          │ $15.00          │ $75.00          │ ~80          │
+│ GPT-5                     │ $12.50          │ $50.00          │ ~100         │
+│ Claude Sonnet 4.5         │ $3.00           │ $15.00          │ ~120         │
+│ GPT-5 Mini               │ $0.75           │ $3.00           │ ~200         │
+│ Claude Haiku 4.5          │ $0.80           │ $4.00           │ ~180         │
+│ Gemini 3 Flash           │ $0.35           │ $1.05           │ ~250         │
+│ DeepSeek-V3              │ $0.27           │ $1.10           │ ~60          │
+│ Qwen3-32B (自托管)       │ N/A             │ N/A             │ ~100-200     │
+└──────────────────────────┴─────────────────┴─────────────────┴──────────────┘
+</code></pre></div>
+<blockquote>
+<p>注：价格为 2026 年 7 月参考值，实际价格以各 Provider 官网为准。自托管模型成本为 GPU 实例费用，取决于部署方式。</p>
+</blockquote>
+<h3>特长对比</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>推理/分析 (复杂多步推理)：
+  第1梯队: Claude Opus 4.8, GPT-5
+  第2梯队: DeepSeek-R1, Claude Sonnet 4.5, Qwen3-235B
+
+代码生成 (HumanEval/SWE-bench)：
+  第1梯队: Claude Opus 4.8, GPT-5, Claude Sonnet 4.5
+  第2梯队: GPT-5 Mini, DeepSeek-V3, Qwen3-32B
+
+中文能力：
+  第1梯队: Qwen3-235B, DeepSeek-R1/V3
+  第2梯队: GPT-5, Claude Opus 4.8 (中文很强但不如国产)
+
+超长上下文 (&gt; 200K)：
+  Gemini 3 Ultra: 2M (当前最长)
+  Claude 系列: 200K
+  Mistral Large 3: 256K
+  
+多语言支持 (非中英文)：
+  日韩: GPT-5 ≈ Claude ≈ Gemini
+  欧洲语言: Mistral &gt; GPT-5 &gt; Claude
+  阿拉伯/印地语: GPT-5 &gt; Gemini &gt; Claude
+</code></pre></div>
+<h2>模型选型决策树</h2>
+<h3>按场景选择</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>你的使用场景是什么？
+
+├── 简单任务（分类、提取、格式化）
+│   └── 小模型即可 (Haiku 4.5 / GPT-5 Mini / Qwen3-7B)
+│       成本极低，延迟极小
+│       示例：情感分析、命名实体识别、JSON格式化
+│
+├── 代码生成/代码审查
+│   ├── 简单代码 → GPT-5 Mini / Claude Haiku 4.5
+│   ├── 复杂代码/架构 → Claude Opus 4.8 / Claude Sonnet 4.5
+│   └── 中文代码注释/文档 → DeepSeek-V3 / Qwen3
+│
+├── 长文档理解 (&gt;50页)
+│   ├── 200K 以内 → Claude 系列 (200K 原生)
+│   ├── 200K-2M → Gemini 3 (2M 上下文)
+│   └── 极高精度需求 → Claude (长文档理解公认最强)
+│
+├── 中文为主场景
+│   ├── 高精度 → Qwen3-235B / DeepSeek-V3
+│   ├── 性价比 → DeepSeek-V3 (极低成本)
+│   └── 闭源 → GPT-5 (中文很强)
+│
+├── 多模态理解 (含图片)
+│   ├── Vision 精度 → GPT-5 ≈ Claude Sonnet
+│   ├── 多模态+推理 → GPT-5 (最强多模态推理)
+│   └── 性价比 → GPT-5 Mini / Gemini Flash
+│
+├── 工具调用 (Agent)
+│   ├── 最佳准确率 → Claude Sonnet 4.5 (Tool Calling 最强)
+│   ├── 性价比 → GPT-5 Mini
+│   └── 并行工具调用 → GPT-5
+│
+├── 创意写作
+│   ├── 英文创意 → Claude Opus 4.8
+│   ├── 中文创意 → GPT-5 / Qwen3
+│   └── 多语言创意 → GPT-5
+│
+└── 翻译
+    ├── 高质量翻译 → GPT-5 / DeepSeek-V3
+    └── 批量低成本 → GPT-5 Mini / Qwen3
+</code></pre></div>
+<h3>按成本约束选择</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>你的预算约束？
+
+├── 无预算限制 → 默认 Claude Opus 4.8 (质量最高)
+│
+├── 中等预算 (降低50-70%成本)
+│   └── Claude Sonnet 4.5 / GPT-5 Mini
+│       对 80% 任务质量无显著差异
+│
+├── 严格预算 (降低80-90%成本)
+│   └── DeepSeek-V3 (中文场景)
+│       或 GPT-5 Mini / Gemini Flash (通用)
+│
+└── 近乎零成本
+    └── 自托管开源模型 (Qwen3-7B/32B, Llama 3.1)
+        使用 vLLM / Ollama
+</code></pre></div>
+<h2>模型路由策略</h2>
+<h3>1. 能力路由（Capability-based Routing）</h3>
+<p>按任务类型自动分发到最合适的模型。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.util.*;
+import java.util.function.Predicate;
+
+/**
+ * 能力路由：根据任务类型选择模型
+ */
+public class CapabilityBasedRouter {
+
+    public enum TaskType {
+        CODE_GENERATION(&quot;代码生成/审查&quot;),
+        DOCUMENT_ANALYSIS(&quot;长文档分析&quot;),
+        CHINESE_TASK(&quot;中文为主任务&quot;),
+        SIMPLE_EXTRACTION(&quot;简单提取/分类&quot;),
+        TOOL_CALLING(&quot;工具调用/Agent&quot;),
+        CREATIVE_WRITING(&quot;创意写作&quot;),
+        GENERAL(&quot;通用对话&quot;);
+
+        private final String description;
+        TaskType(String desc) { this.description = desc; }
+    }
+
+    public record RouteConfig(
+        String modelId,
+        String provider,
+        TaskType taskType,
+        int priority  // 同类型有多个候选时按优先级
+    ) {}
+
+    /**
+     * 模型路由表
+     */
+    public static final Map&lt;TaskType, List&lt;RouteConfig&gt;&gt; ROUTING_TABLE = Map.of(
+        TaskType.CODE_GENERATION, List.of(
+            new RouteConfig(&quot;claude-sonnet-4-20250514&quot;, &quot;anthropic&quot;, TaskType.CODE_GENERATION, 1),
+            new RouteConfig(&quot;claude-opus-4-20250514&quot;, &quot;anthropic&quot;, TaskType.CODE_GENERATION, 2),
+            new RouteConfig(&quot;gpt-5&quot;, &quot;openai&quot;, TaskType.CODE_GENERATION, 3)
+        ),
+        TaskType.CHINESE_TASK, List.of(
+            new RouteConfig(&quot;deepseek-v3&quot;, &quot;deepseek&quot;, TaskType.CHINESE_TASK, 1),
+            new RouteConfig(&quot;qwen3-235b&quot;, &quot;self-hosted&quot;, TaskType.CHINESE_TASK, 2),
+            new RouteConfig(&quot;gpt-5&quot;, &quot;openai&quot;, TaskType.CHINESE_TASK, 3)
+        ),
+        TaskType.SIMPLE_EXTRACTION, List.of(
+            new RouteConfig(&quot;claude-haiku-4-5&quot;, &quot;anthropic&quot;, TaskType.SIMPLE_EXTRACTION, 1),
+            new RouteConfig(&quot;gpt-5-mini&quot;, &quot;openai&quot;, TaskType.SIMPLE_EXTRACTION, 2),
+            new RouteConfig(&quot;gemini-3-flash&quot;, &quot;google&quot;, TaskType.SIMPLE_EXTRACTION, 3)
+        ),
+        TaskType.GENERAL, List.of(
+            new RouteConfig(&quot;claude-sonnet-4-20250514&quot;, &quot;anthropic&quot;, TaskType.GENERAL, 1)
+        )
+    );
+
+    /**
+     * 根据任务类型路由
+     */
+    public RouteConfig route(TaskType taskType) {
+        var candidates = ROUTING_TABLE.getOrDefault(taskType,
+            ROUTING_TABLE.get(TaskType.GENERAL));
+
+        return candidates.stream()
+            .min(Comparator.comparingInt(RouteConfig::priority))
+            .orElseThrow(() -&gt; new IllegalStateException(
+                &quot;No route for task type: &quot; + taskType));
+    }
+}
+</code></pre></div>
+<h3>2. 成本路由（Cost-based Routing）</h3>
+<p>在预算范围内自动选择最优模型。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+ * 成本路由：在预算约束下选择最优模型
+ */
+public class CostBasedRouter {
+
+    public record ModelInfo(
+        String modelId,
+        double inputPricePer1M,
+        double outputPricePer1M,
+        double qualityScore,     // 1-10 质量评级
+        int contextWindow,
+        boolean available         // 当前是否可用
+    ) {
+        /**
+         * 性价比 = 质量 / 成本
+         */
+        public double qualityCostRatio(int estimatedTokens) {
+            double estimatedCost = (estimatedTokens / 1_000_000.0) *
+                (inputPricePer1M + outputPricePer1M) / 2;
+            return qualityScore / Math.max(estimatedCost, 0.0001);
+        }
+    }
+
+    private final List&lt;ModelInfo&gt; models = List.of(
+        new ModelInfo(&quot;claude-opus-4-20250514&quot;, 15.0, 75.0, 9.5, 200_000, true),
+        new ModelInfo(&quot;claude-sonnet-4-20250514&quot;, 3.0, 15.0, 9.0, 200_000, true),
+        new ModelInfo(&quot;claude-haiku-4-5&quot;, 0.8, 4.0, 8.0, 200_000, true),
+        new ModelInfo(&quot;gpt-5&quot;, 12.5, 50.0, 9.3, 128_000, true),
+        new ModelInfo(&quot;gpt-5-mini&quot;, 0.75, 3.0, 8.2, 128_000, true),
+        new ModelInfo(&quot;deepseek-v3&quot;, 0.27, 1.10, 8.5, 128_000, true),
+        new ModelInfo(&quot;qwen3-32b-self-host&quot;, 0, 0, 7.5, 128_000, true)
+    );
+
+    /**
+     * 在预算内选性价比最高的模型
+     * @param estimatedTokens 预估总 token 数
+     * @param maxBudget 最大预算（美元）
+     * @param minQuality 最低质量要求
+     */
+    public Optional&lt;ModelInfo&gt; selectBestWithinBudget(
+            int estimatedTokens, double maxBudget, double minQuality) {
+
+        return models.stream()
+            .filter(ModelInfo::available)
+            .filter(m -&gt; m.qualityScore() &gt;= minQuality)
+            .filter(m -&gt; {
+                double cost = estimatedTokens / 1_000_000.0 *
+                    (m.inputPricePer1M() + m.outputPricePer1M()) / 2;
+                return cost &lt;= maxBudget;
+            })
+            .max(Comparator.comparingDouble(m -&gt;
+                m.qualityCostRatio(estimatedTokens)));
+    }
+
+    /**
+     * 获取当前最便宜的可用模型
+     */
+    public ModelInfo getCheapest() {
+        return models.stream()
+            .filter(ModelInfo::available)
+            .min(Comparator.comparingDouble(
+                m -&gt; m.inputPricePer1M() + m.outputPricePer1M()))
+            .orElseThrow();
+    }
+}
+</code></pre></div>
+<h3>3. 故障转移路由（Fallback Routing）</h3>
+<p>主模型不可用时自动切换到备用模型。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.time.Instant;
+import java.time.Duration;
+
+/**
+ * 故障转移路由器
+ */
+public class FallbackRouter {
+
+    public record ModelEndpoint(
+        String modelId,
+        String provider,
+        String apiKey,
+        int priority,             // 1=首选, 2=备用, 3=兜底
+        boolean healthy,
+        int consecutiveFailures,
+        Instant lastFailureTime
+    ) {}
+
+    private final List&lt;ModelEndpoint&gt; endpoints;
+    private static final int FAILURE_THRESHOLD = 3;
+    private static final Duration COOLDOWN_DURATION = Duration.ofMinutes(5);
+
+    public FallbackRouter(List&lt;ModelEndpoint&gt; endpoints) {
+        this.endpoints = new ArrayList&lt;&gt;(endpoints);
+        this.endpoints.sort(Comparator.comparingInt(ModelEndpoint::priority));
+    }
+
+    /**
+     * 按优先级依次尝试，直到有一个成功
+     */
+    public String executeWithFallback(
+            java.util.function.Function&lt;ModelEndpoint, String&gt; apiCall) {
+
+        List&lt;String&gt; errors = new ArrayList&lt;&gt;();
+
+        for (var endpoint : endpoints) {
+            // 跳过不健康的端点
+            if (!endpoint.healthy()) {
+                errors.add(endpoint.modelId() + &quot;: unhealthy (skipped)&quot;);
+                continue;
+            }
+            // 跳过低优先级的本地模型（在非必要情况下不使用）
+            if (endpoint.priority() &gt; 2) {
+                errors.add(endpoint.modelId() + &quot;: low priority, trying main&quot;);
+                continue;
+            }
+
+            try {
+                var result = apiCall.apply(endpoint);
+                // 成功后重置失败计数
+                resetFailureCount(endpoint);
+                return result;
+            } catch (Exception e) {
+                recordFailure(endpoint);
+                errors.add(endpoint.modelId() + &quot;: &quot; + e.getMessage());
+            }
+        }
+
+        // 全部失败，尝试低优先级本地模型作为最后兜底
+        for (var endpoint : endpoints) {
+            if (endpoint.priority() &lt;= 2) continue;  // 已经尝试过
+            try {
+                var result = apiCall.apply(endpoint);
+                resetFailureCount(endpoint);
+                return result;
+            } catch (Exception e) {
+                recordFailure(endpoint);
+                errors.add(endpoint.modelId() + &quot;: &quot; + e.getMessage());
+            }
+        }
+
+        throw new RuntimeException(&quot;所有模型端点均失败:\n&quot; +
+            String.join(&quot;\n&quot;, errors));
+    }
+
+    private void recordFailure(ModelEndpoint endpoint) {
+        // 实际实现使用原子操作更新共享状态
+    }
+
+    private void resetFailureCount(ModelEndpoint endpoint) {
+        // 实际实现使用原子操作更新共享状态
+    }
+}
+</code></pre></div>
+<h3>4. 灰度发布路由</h3>
+<p>将新技术模型逐步放量。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.security.MessageDigest;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+
+/**
+ * 灰度发布路由器
+ * 支持按比例将流量分流到新模型
+ */
+public class CanaryRouter {
+
+    public record CanaryConfig(
+        String stableModelId,      // 稳定模型（主线）
+        String canaryModelId,      // 金丝雀模型（灰度）
+        int canaryPercentage,      // 灰度流量百分比 (0-100)
+        Instant startedAt,         // 灰度开始时间
+        EvaluationCriteria criteria // 评估标准
+    ) {}
+
+    public record EvaluationCriteria(
+        double minQualityThreshold,
+        double maxLatencyMs,
+        double maxCostPerRequest
+    ) {}
+
+    private CanaryConfig config;
+    private final AtomicLong canaryRequests = new AtomicLong(0);
+    private final AtomicInteger canaryErrors = new AtomicInteger(0);
+
+    /**
+     * 判断当前请求是否走灰度
+     */
+    public String selectModel(String requestId) {
+        if (config == null) {
+            return config.stableModelId();
+        }
+
+        // 用请求 ID 做确定性哈希，保证同一请求稳定
+        int hash = Math.abs(requestId.hashCode()) % 100;
+
+        if (hash &lt; config.canaryPercentage()) {
+            canaryRequests.incrementAndGet();
+            return config.canaryModelId();
+        }
+
+        return config.stableModelId();
+    }
+
+    /**
+     * 记录灰度模型的结果
+     */
+    public void recordCanaryResult(String requestId, boolean success,
+            long latencyMs, double cost) {
+        if (!success) {
+            canaryErrors.incrementAndGet();
+        }
+    }
+
+    /**
+     * 评估灰度是否应该全量
+     */
+    public boolean shouldPromoteToFull() {
+        long total = canaryRequests.get();
+        if (total &lt; 1000) return false;  // 样本太少
+
+        double errorRate = (double) canaryErrors.get() / total;
+        return errorRate &lt; 0.01;  // 错误率 &lt; 1% → 全量
+    }
+
+    /**
+     * 评估灰度是否应该回滚
+     */
+    public boolean shouldRollback() {
+        long total = canaryRequests.get();
+        if (total &lt; 100) return false;
+
+        double errorRate = (double) canaryErrors.get() / total;
+        return errorRate &gt; 0.05;  // 错误率 &gt; 5% → 回滚
+    }
+}
+</code></pre></div>
+<h3>5. Spring AI 实现示例</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.stereotype.Component;
+
+/**
+ * Spring AI 环境下的模型路由实现
+ */
+@Component
+public class SpringAiModelRouter {
+
+    private final ChatClient.Builder chatClientBuilder;
+
+    public record RouterDecision(
+        String chatModelBeanName,
+        double temperature,
+        int maxTokens,
+        String reason
+    ) {}
+
+    public SpringAiModelRouter(ChatClient.Builder chatClientBuilder) {
+        this.chatClientBuilder = chatClientBuilder;
+    }
+
+    /**
+     * 根据请求内容智能路由
+     */
+    public RouterDecision decide(String userMessage) {
+        // 简单任务的信号
+        if (isSimpleClassification(userMessage)) {
+            return new RouterDecision(
+                &quot;haikuChatModel&quot;,     // bean name
+                0.0,                   // 零温度确保确定性
+                100,
+                &quot;简单分类任务 → Haiku&quot;);
+        }
+
+        // 代码生成
+        if (isCodeGeneration(userMessage)) {
+            return new RouterDecision(
+                &quot;claudeSonnetChatModel&quot;,
+                0.2,
+                4096,
+                &quot;代码生成 → Claude Sonnet&quot;);
+        }
+
+        // 中文任务
+        if (isChineseTask(userMessage)) {
+            return new RouterDecision(
+                &quot;deepseekChatModel&quot;,
+                0.7,
+                2048,
+                &quot;中文任务 → DeepSeek V3 (高性价比)&quot;);
+        }
+
+        // 默认
+        return new RouterDecision(
+            &quot;claudeSonnetChatModel&quot;,
+            0.7,
+            2048,
+            &quot;通用任务 → Claude Sonnet&quot;);
+    }
+
+    /**
+     * 使用路由决策发起调用
+     */
+    public String routeAndCall(String userMessage) {
+        var decision = decide(userMessage);
+        System.out.println(&quot;路由决策: &quot; + decision.reason());
+
+        // 从 ApplicationContext 获取对应 Bean
+        // 在实际 Spring 应用中通过 ApplicationContext.getBean()
+        // ChatModel chatModel = context.getBean(decision.chatModelBeanName(),
+        //     ChatModel.class);
+        // ChatClient client = ChatClient.builder(chatModel).build();
+
+        // 伪代码（实际需注入 ApplicationContext）
+        return &quot;Response from &quot; + decision.chatModelBeanName() +
+            &quot; (温度=&quot; + decision.temperature() + &quot;)&quot;;
+    }
+
+    private boolean isSimpleClassification(String message) {
+        return message.length() &lt; 100 &amp;&amp;
+            (message.contains(&quot;分类&quot;) || message.contains(&quot;提取&quot;) ||
+             message.contains(&quot;判断&quot;) || message.contains(&quot;是否&quot;));
+    }
+
+    private boolean isCodeGeneration(String message) {
+        return message.contains(&quot;代码&quot;) || message.contains(&quot;code&quot;) ||
+            message.contains(&quot;写一个&quot;) || message.contains(&quot;实现&quot;) ||
+            message.contains(&quot;函数&quot;) || message.contains(&quot;class&quot;);
+    }
+
+    private boolean isChineseTask(String message) {
+        int chineseChars = 0;
+        int totalChars = message.length();
+        for (char c : message.toCharArray()) {
+            if (Character.UnicodeScript.of(c) ==
+                    Character.UnicodeScript.HAN) chineseChars++;
+        }
+        return (double) chineseChars / totalChars &gt; 0.5;
+    }
+}
+</code></pre></div>
+<h2>完整路由架构</h2>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>请求进入
+    │
+    ▼
+┌──────────────────────────────────────────────────────────┐
+│                    ModelRouter                           │
+│                                                          │
+│  1. 任务分类 (Capability Classification)                 │
+│     ├── 分析请求内容                                      │
+│     ├── 识别任务类型（代码/中文/长文档/简单提取...）       │
+│     └── 确定最低质量要求                                  │
+│                                                          │
+│  2. 模型选择 (Model Selection)                           │
+│     ├── 能力匹配：筛选支持该任务类型的模型                  │
+│     ├── 成本过滤：滤除超出预算的模型                       │
+│     ├── 健康检查：滤除不可用的模型                         │
+│     └── 灰度规则：检查是否命中金丝雀                       │
+│                                                          │
+│  3. 执行调用                                             │
+│     ├── 尝试首选模型                                      │
+│     ├── 失败？→ 尝试备用模型                               │
+│     └── 全部失败？→ 尝试本地兜底模型                       │
+│                                                          │
+│  4. 结果记录                                             │
+│     ├── 延迟、成本、成功率                                │
+│     └── 反馈到路由决策（在线学习）                         │
+└──────────────────────────────────────────────────────────┘
+</code></pre></div>
+<h2>最佳实践</h2>
+<ol>
+<li><strong>默认模型选择</strong>：Claude Sonnet 4.5 是当前质量/速度/成本的最佳平衡点，适合作为默认模型</li>
+<li><strong>中文场景</strong>：如果项目大量使用中文，DeepSeek-V3 是性价比之王——质量接近 GPT-5，成本只有 1/20</li>
+<li><strong>简单任务不要用大模型</strong>：情感分析、NER、文本分类等任务，Haiku 4.5 和 GPT-5 Mini 的质量与大模型几乎无差异，但成本差 10 倍以上</li>
+<li><strong>工具调用用 Claude</strong>：Claude 系列（特别是 Sonnet 4.5）在 Tool Calling 准确性和一致性上公认最强</li>
+<li><strong>长文档理解用 Claude</strong>：200K 原生上下文窗口 + 极高召回率，是长文档任务的不二之选</li>
+<li><strong>灰度发布新模型时务必设立明确的回滚标准</strong>：错误率 &gt; 5% 或 P95 延迟 &gt; 2x → 立即回滚</li>
+<li><strong>本地自托管模型最好作为兜底而非主力</strong>：质量有差距，但可以保证服务可用性</li>
+</ol>
+<h2>常见问题</h2>
+<p><strong>Q: 什么时候应该用 Claude Opus 4.8 而不是 Sonnet 4.5？</strong></p>
+<p>A: 当任务难度足够高时——复杂多步推理、高难度代码架构设计、需要&quot;深思熟虑&quot;的法律/金融分析。对日常任务，Sonnet 4.5 的质量已足够，Opus 的额外成本不值得。</p>
+<p><strong>Q: 国产模型（Qwen/DeepSeek）能替代 GPT/Claude 吗？</strong></p>
+<p>A: 对于中文为主、代码辅助、通用问答场景，完全可以。但对于需要极高推理精度或 Tool Calling 准确性的场景，闭源模型仍有优势。建议中文场景用国产模型主力，复杂推理补充用闭源模型。</p>
+<p><strong>Q: 模型路由的 overhead 是多少？</strong></p>
+<p>A: 任务分类的开销。通常使用简单的规则（关键词匹配 + 百分比规则）+ 一个超轻量分类器（~10ms）。如果使用 LLM 做分类，增加约 0.5-1s 延迟但结果更准。推荐：先上规则，规则无法覆盖的再用 LLM 分类。</p>
+<h2>相关条目</h2>
+<ul>
+<li><a href="/07-AI基础/07-推理策略与评估方法" class="cross-ref" data-ref="07-推理策略与评估方法">07-推理策略与评估方法</a> — 推理策略和模型评估</li>
+<li><a href="/08-模型接入与推理/模型API/08-OpenAI兼容协议详解" class="cross-ref" data-ref="08-OpenAI兼容协议详解">08-OpenAI兼容协议详解</a> — API 协议</li>
+<li><a href="/08-模型接入与推理/模型API/08-云模型API与SDK使用" class="cross-ref" data-ref="08-云模型API与SDK使用">08-云模型API与SDK使用</a> — 各 Provider 的 Java SDK</li>
+<li><a href="/08-模型接入与推理/推理部署/08-本地推理与Ollama" class="cross-ref" data-ref="08-本地推理与Ollama">08-本地推理与Ollama</a> — 本地推理服务</li>
+<li><a href="/09-Java AI框架/09-架构抽象层设计" class="cross-ref" data-ref="09-架构抽象层设计">09-架构抽象层设计</a> — 抽象层与路由接口设计</li>
+</ul>
+</div>
+</article>

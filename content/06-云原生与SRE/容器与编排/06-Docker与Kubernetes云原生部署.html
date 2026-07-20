@@ -1,0 +1,706 @@
+
+<article class="kb-entry" data-path="/06-云原生与SRE/容器与编排/06-Docker与Kubernetes云原生部署">
+  <div class="entry-meta">
+    <div class="entry-domain"><a href="/?d=06">06-云原生与SRE</a></div>
+    <h1>Docker 与 Kubernetes — Java 应用云原生部署</h1>
+    <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#["docker"</span><span class="badge badge-tag">#"kubernetes"</span><span class="badge badge-tag">#"helm"</span><span class="badge badge-tag">#"java-container"</span></div>
+    
+  </div>
+  <div class="entry-body"><h1>Docker 与 Kubernetes — Java 应用云原生部署</h1>
+<h2>概述</h2>
+<p>容器化和编排是现代 Java 应用部署的标准方式。对于 AI 应用，容器化还涉及 GPU 资源调度、模型推理服务的 K8s 集成、大镜像优化等额外挑战。</p>
+<p>本文覆盖 Docker 核心原理与 Java 镜像最佳实践、Kubernetes 核心资源、Java 应用 K8s 部署策略、Helm 包管理，以及 AI 服务部署的特殊考量。</p>
+<hr>
+<h2>一、Docker 核心</h2>
+<h3>1.1 镜像分层（UnionFS）</h3>
+<p>Docker 镜像由多个只读层叠加而成，使用 UnionFS（Overlay2）技术：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌──────────────────────┐
+│ writable layer (R/W)  │ ← 容器层（临时，容器删除即丢失）
+├──────────────────────┤
+│ COPY --from=builder   │ ← 构建产物层 (10 MB)
+├──────────────────────┤
+│ COPY app.jar          │ ← 应用层 (50 MB)
+├──────────────────────┤
+│ RUN apt-get install   │ ← 依赖安装层 (200 MB)
+├──────────────────────┤
+│ FROM eclipse-temurin  │ ← 基础镜像层 (200 MB)
+├──────────────────────┤
+│ FROM ubuntu:24.04     │ ← OS 层 (70 MB)
+└──────────────────────┘
+</code></pre></div>
+<p><strong>分层复用：</strong> 如果多个镜像共享相同的基础层，Docker 只存储一份（Content-Addressable Storage）。</p>
+<h3>1.2 Java Dockerfile 最佳实践</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">dockerfile</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-dockerfile"># ============================================
+# Stage 1: Build
+# ============================================
+FROM eclipse-temurin:25-jdk-alpine AS builder
+
+WORKDIR /workspace
+
+# 1. 先复制依赖描述文件（利用 Docker 层缓存）
+COPY pom.xml mvnw ./
+COPY .mvn .mvn
+
+# 2. 下载依赖（此层在 pom.xml 不变时可缓存）
+RUN --mount=type=cache,target=/root/.m2 \
+    ./mvnw dependency:go-offline -B
+
+# 3. 复制源码并构建
+COPY src src
+RUN --mount=type=cache,target=/root/.m2 \
+    ./mvnw package -DskipTests -B
+
+# 4. 使用 Spring Boot layertools 提取分层 JAR
+RUN java -Djarmode=layertools -jar target/*.jar extract \
+    --destination /extracted
+
+# ============================================
+# Stage 2: Runtime（最小化镜像）
+# ============================================
+FROM eclipse-temurin:25-jre-alpine AS runtime
+
+# 安全：创建非 root 用户
+RUN addgroup -S appgroup &amp;&amp; adduser -S appuser -G appgroup
+
+WORKDIR /app
+
+# 按变更频率分层复制，最大化缓存利用
+COPY --from=builder /extracted/dependencies/ ./
+COPY --from=builder /extracted/spring-boot-loader/ ./
+COPY --from=builder /extracted/snapshot-dependencies/ ./
+COPY --from=builder /extracted/application/ ./
+
+# JVM 容器感知参数
+ENV JAVA_OPTS=&quot;-XX:+UseZGC \
+ -XX:MaxRAMPercentage=75.0 \
+ -XX:+ExitOnOutOfMemoryError \
+ -XX:+HeapDumpOnOutOfMemoryError \
+ -XX:HeapDumpPath=/tmp/heapdump.hprof&quot;
+
+USER appuser
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
+  CMD wget -qO- http://localhost:8080/actuator/health/liveness || exit 1
+
+ENTRYPOINT [&quot;sh&quot;, &quot;-c&quot;, &quot;java $JAVA_OPTS org.springframework.boot.loader.launch.JarLauncher&quot;]
+</code></pre></div>
+<h3>1.3 JVM 容器感知配置</h3>
+<p>JDK 10+ 默认启用 <code>UseContainerSupport</code>，JVM 自动读取 cgroup 限制而非宿主机配置。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-ini"># 核心参数
+-XX:+UseContainerSupport           # 自动检测 cgroup 限制（默认开启）
+-XX:MaxRAMPercentage=75.0          # 使用容器内存的 75% 作为最大堆
+-XX:InitialRAMPercentage=50.0      # 初始堆为容器内存的 50%
+
+# GC 选择
+-XX:+UseZGC                        # ZGC：低延迟（&lt;1ms），大堆（TB 级别）
+-XX:+UseG1GC                       # G1：均衡选择（默认）
+-XX:+UseSerialGC                   # Serial：小内存容器（&lt;512MB）
+
+# Spring Boot 配合
+-XX:+ExitOnOutOfMemoryError        # OOM 时退出而非僵死（K8s 重启）
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># K8s 资源配置（与 JVM 参数匹配）
+resources:
+  requests:
+    memory: &quot;1Gi&quot;
+    cpu: &quot;500m&quot;
+  limits:
+    memory: &quot;2Gi&quot;    # JVM 检测到 limits=2Gi
+    cpu: &quot;2000m&quot;     # MaxRAMPercentage=75 → max heap = 1.5Gi
+</code></pre></div>
+<h3>1.4 最小化基础镜像选择</h3>
+<table>
+<thead>
+<tr>
+<th>基础镜像</th>
+<th>大小</th>
+<th>JRE 包含</th>
+<th>安全扫描</th>
+<th>推荐场景</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>eclipse-temurin:25-jre-alpine</code></td>
+<td>~180 MB</td>
+<td>OpenJDK JRE</td>
+<td>定期</td>
+<td>通用场景</td>
+</tr>
+<tr>
+<td><code>eclipse-temurin:25-jre</code> (Ubuntu)</td>
+<td>~220 MB</td>
+<td>OpenJDK JRE</td>
+<td>定期</td>
+<td>glibc 依赖</td>
+</tr>
+<tr>
+<td><code>distroless/java17-debian12</code></td>
+<td>~150 MB</td>
+<td>OpenJDK JRE</td>
+<td>Google 维护</td>
+<td>安全敏感（无 Shell）</td>
+</tr>
+<tr>
+<td><code>azul/zulu-openjdk-alpine:25-jre</code></td>
+<td>~180 MB</td>
+<td>Zulu JRE</td>
+<td>定期</td>
+<td>商业支持</td>
+</tr>
+</tbody></table>
+<p><strong>distroless 镜像注意：</strong> 没有 Shell（不能 exec 进去调试），没有包管理器。通过 K8s ephemeral containers 进行调试。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">dockerfile</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-dockerfile"># Distroless 多阶段构建
+FROM eclipse-temurin:25-jdk-alpine AS builder
+# ... 构建步骤 ...
+
+FROM gcr.io/distroless/java25-debian12
+COPY --from=builder /app /app
+WORKDIR /app
+USER 65532:65532
+CMD [&quot;Main.jar&quot;]
+</code></pre></div>
+<h3>1.5 Docker Compose 本地开发</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># docker-compose.yml
+services:
+  postgres:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: ai_knowledge
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    ports: [&quot;5432:5432&quot;]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: [&quot;CMD-SHELL&quot;, &quot;pg_isready -U app -d ai_knowledge&quot;]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7.4-alpine
+    ports: [&quot;6379:6379&quot;]
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
+    volumes:
+      - redisdata:/data
+
+  ollama:
+    image: ollama/ollama:latest
+    ports: [&quot;11434:11434&quot;]
+    volumes:
+      - ollama_data:/root/.ollama
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+
+  ai-rag-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports: [&quot;8080:8080&quot;]
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/ai_knowledge
+      SPRING_DATASOURCE_USERNAME: app
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
+      SPRING_AI_OLLAMA_BASE_URL: http://ollama:11434
+      JAVA_OPTS: &quot;-XX:+UseZGC -XX:MaxRAMPercentage=75.0&quot;
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+
+volumes:
+  pgdata:
+  redisdata:
+  ollama_data:
+</code></pre></div>
+<hr>
+<h2>二、Kubernetes 核心概念</h2>
+<h3>2.1 核心资源关系</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌─────────────────────────────────────────────────────────┐
+│                       Namespace                          │
+│  ┌──────────────────────────────────────────────────┐   │
+│  │                    Deployment                     │   │
+│  │  ┌────────┐  ┌────────┐  ┌────────┐             │   │
+│  │  │  Pod   │  │  Pod   │  │  Pod   │             │   │
+│  │  │(容器们) │  │(容器们) │  │(容器们) │             │   │
+│  │  └────────┘  └────────┘  └────────┘             │   │
+│  └──────────────────┬───────────────────────────────┘   │
+│                     │                                    │
+│              ┌──────▼──────┐                            │
+│              │   Service    │  (ClusterIP/LoadBalancer) │
+│              └──────┬──────┘                            │
+│                     │                                    │
+│              ┌──────▼──────┐                            │
+│              │   Ingress    │  (外部流量入口)             │
+│              └─────────────┘                            │
+│                                                         │
+│  ┌───────────┐  ┌───────────┐  ┌───────────┐          │
+│  │ ConfigMap │  │  Secret   │  │    PVC    │          │
+│  └───────────┘  └───────────┘  └───────────┘          │
+└─────────────────────────────────────────────────────────┘
+</code></pre></div>
+<h3>2.2 Pod 生命周期与健康检查</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">apiVersion: v1
+kind: Pod
+metadata:
+  name: ai-rag-service
+spec:
+  terminationGracePeriodSeconds: 60  # 优雅关闭时间
+
+  containers:
+  - name: app
+    image: registry.example.com/ai-rag-service:1.0.0
+    ports:
+    - containerPort: 8080
+
+    # Startup Probe（启动探测）
+    # 仅在容器启动阶段执行，通过后才执行 Liveness/Readiness
+    startupProbe:
+      httpGet:
+        path: /actuator/health/readiness
+        port: 8080
+      initialDelaySeconds: 10
+      periodSeconds: 5
+      failureThreshold: 30  # 最多 150 秒启动时间
+
+    # Liveness Probe（存活探测）
+    # 失败 → Kubelet 重启容器
+    livenessProbe:
+      httpGet:
+        path: /actuator/health/liveness
+        port: 8080
+      initialDelaySeconds: 0    # Startup Probe 通过后立即开始
+      periodSeconds: 15
+      timeoutSeconds: 3
+      failureThreshold: 3       # 连续 3 次失败 → 重启
+
+    # Readiness Probe（就绪探测）
+    # 失败 → 从 Service Endpoints 移除，不接收流量
+    readinessProbe:
+      httpGet:
+        path: /actuator/health/readiness
+        port: 8080
+      initialDelaySeconds: 0
+      periodSeconds: 10
+      timeoutSeconds: 3
+      failureThreshold: 3
+
+    # 优雅关闭：preStop Hook + Spring graceful shutdown
+    lifecycle:
+      preStop:
+        exec:
+          command: [&quot;/bin/sh&quot;, &quot;-c&quot;, &quot;sleep 10&quot;] # 等待 Endpoints 更新传播
+
+    env:
+    - name: SERVER_SHUTDOWN
+      value: &quot;graceful&quot;
+    - name: SPRING_LIFECYCLE_TIMEOUT_PER_SHUTDOWN_PHASE
+      value: &quot;30s&quot;
+
+    # 资源限制
+    resources:
+      requests:           # 调度保证
+        memory: &quot;1Gi&quot;
+        cpu: &quot;500m&quot;
+      limits:             # 硬限制
+        memory: &quot;2Gi&quot;
+        cpu: &quot;2000m&quot;
+</code></pre></div>
+<h3>2.3 Deployment 与滚动更新</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-rag-service
+spec:
+  replicas: 3
+  revisionHistoryLimit: 5
+
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1         # 允许超出 replicas 的 Pod 数
+      maxUnavailable: 0   # 更新期间不可用 Pod 数（0=先启动新 Pod 再停止旧 Pod）
+
+  selector:
+    matchLabels:
+      app: ai-rag-service
+
+  template:
+    metadata:
+      labels:
+        app: ai-rag-service
+        version: &quot;1.0.0&quot;
+    spec:
+      # Pod 反亲和：尽量分布到不同节点
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchLabels:
+                  app: ai-rag-service
+              topologyKey: kubernetes.io/hostname
+
+      containers:
+      - name: app
+        image: registry.example.com/ai-rag-service:1.0.0
+        # ... (Pod 配置同上)
+</code></pre></div>
+<h3>2.4 Service 与 Ingress</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-rag-service
+spec:
+  type: ClusterIP
+  selector:
+    app: ai-rag-service
+  ports:
+  - name: http
+    port: 8080
+    targetPort: 8080
+  sessionAffinity: None   # AI 推理服务通常无状态，不需要 Session 亲和
+
+---
+# Ingress
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: ai-api-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: &quot;50m&quot;
+    nginx.ingress.kubernetes.io/proxy-read-timeout: &quot;300&quot;
+    nginx.ingress.kubernetes.io/proxy-send-timeout: &quot;300&quot;
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - ai-api.example.com
+    secretName: ai-api-tls
+  rules:
+  - host: ai-api.example.com
+    http:
+      paths:
+      - path: /api/v1/rag
+        pathType: Prefix
+        backend:
+          service:
+            name: ai-rag-service
+            port:
+              number: 8080
+      - path: /api/v1/agent
+        pathType: Prefix
+        backend:
+          service:
+            name: ai-agent-service
+            port:
+              number: 8080
+</code></pre></div>
+<h3>2.5 ConfigMap 与 Secret</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-service-config
+data:
+  application.yml: |
+    spring:
+      ai:
+        ollama:
+          base-url: http://ollama-service:11434
+          chat:
+            options:
+              model: qwen3:14b
+              temperature: 0.7
+        openai:
+          base-url: https://api.openai.com
+      datasource:
+        hikari:
+          maximum-pool-size: 20
+          minimum-idle: 5
+    logging:
+      level:
+        com.example.ai: DEBUG
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: ai-service-secrets
+type: Opaque
+stringData:
+  openai-api-key: &quot;sk-...&quot;        # 生产环境使用 External Secrets Operator
+  db-password: &quot;secure-password&quot;
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># Deployment 中使用
+spec:
+  containers:
+  - name: app
+    envFrom:
+    - configMapRef:
+        name: ai-service-config
+    - secretRef:
+        name: ai-service-secrets
+    volumeMounts:
+    - name: config
+      mountPath: /app/config
+      readOnly: true
+  volumes:
+  - name: config
+    configMap:
+      name: ai-service-config
+</code></pre></div>
+<h3>2.6 HPA（水平自动伸缩）</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ai-rag-service-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ai-rag-service
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  # CPU 利用率
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+
+  # 自定义指标（如请求延迟 P95）
+  - type: Pods
+    pods:
+      metric:
+        name: http_request_duration_milliseconds_p95
+      target:
+        type: AverageValue
+        averageValue: &quot;500&quot;   # P95 延迟超过 500ms 时扩展
+
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300  # 稳定窗口 5 分钟
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 15
+      - type: Pods
+        value: 4
+        periodSeconds: 15
+      selectPolicy: Max
+</code></pre></div>
+<hr>
+<h2>三、Helm</h2>
+<h3>3.1 Chart 结构</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>ai-rag-service/
+├── Chart.yaml            # Chart 元数据
+├── values.yaml           # 默认配置值
+├── values-prod.yaml      # 生产环境覆盖
+├── templates/
+│   ├── deployment.yaml
+│   ├── service.yaml
+│   ├── ingress.yaml
+│   ├── configmap.yaml
+│   ├── secret.yaml
+│   ├── hpa.yaml
+│   └── _helpers.tpl      # 模板辅助函数
+└── charts/               # 子 Chart 依赖
+</code></pre></div>
+<h3>3.2 Chart.yaml</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">apiVersion: v2
+name: ai-rag-service
+description: AI RAG Knowledge Service
+type: application
+version: 1.0.0
+appVersion: &quot;1.0.0&quot;
+dependencies:
+  - name: postgresql
+    version: &quot;15.x.x&quot;
+    repository: &quot;https://charts.bitnami.com/bitnami&quot;
+    condition: postgresql.enabled
+  - name: redis
+    version: &quot;19.x.x&quot;
+    repository: &quot;https://charts.bitnami.com/bitnami&quot;
+    condition: redis.enabled
+</code></pre></div>
+<h3>3.3 values.yaml 模板</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># values.yaml
+replicaCount: 3
+
+image:
+  repository: registry.example.com/ai-rag-service
+  tag: &quot;1.0.0&quot;
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: true
+  className: nginx
+  hosts:
+    - host: ai-api.example.com
+      paths:
+        - path: /api/v1/rag
+          pathType: Prefix
+
+resources:
+  limits:
+    memory: &quot;2Gi&quot;
+    cpu: &quot;2000m&quot;
+  requests:
+    memory: &quot;1Gi&quot;
+    cpu: &quot;500m&quot;
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+jvm:
+  gc: &quot;ZGC&quot;
+  maxRAMPercentage: 75.0
+
+# 模型服务和 Embedding 配置
+ai:
+  openai:
+    apiKeySecretName: &quot;ai-service-secrets&quot;
+    apiKeySecretKey: &quot;openai-api-key&quot;
+  ollama:
+    baseUrl: &quot;http://ollama-service:11434&quot;
+  embedding:
+    model: &quot;text-embedding-3-small&quot;
+    dimensions: 1536
+
+# 依赖服务配置
+postgresql:
+  enabled: true
+  auth:
+    username: app
+    database: ai_knowledge
+    existingSecret: db-credentials
+
+redis:
+  enabled: true
+  auth:
+    existingSecret: redis-credentials
+</code></pre></div>
+<hr>
+<h2>四、AI 服务部署</h2>
+<h3>4.1 vLLM 推理服务 K8s 部署</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vllm-qwen3
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vllm-qwen3
+  template:
+    spec:
+      containers:
+      - name: vllm
+        image: vllm/vllm-openai:latest
+        command:
+        - python
+        - -m
+        - vllm.entrypoints.openai.api_server
+        args:
+        - --model
+        - Qwen/Qwen3-14B
+        - --tensor-parallel-size
+        - &quot;1&quot;
+        - --max-model-len
+        - &quot;32768&quot;
+        - --gpu-memory-utilization
+        - &quot;0.90&quot;
+        ports:
+        - containerPort: 8000
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+          requests:
+            nvidia.com/gpu: 1
+        volumeMounts:
+        - name: model-cache
+          mountPath: /root/.cache/huggingface
+        env:
+        - name: HF_HOME
+          value: /root/.cache/huggingface
+      volumes:
+      - name: model-cache
+        persistentVolumeClaim:
+          claimName: hf-model-cache
+</code></pre></div>
+<h3>4.2 GPU 调度</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># GPU 节点选择
+spec:
+  nodeSelector:
+    accelerator: nvidia-tesla-t4
+  tolerations:
+  - key: &quot;nvidia.com/gpu&quot;
+    operator: &quot;Exists&quot;
+    effect: &quot;NoSchedule&quot;
+</code></pre></div>
+<h3>4.3 KServe（Serverless 模型推理）</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">apiVersion: serving.kserve.io/v1beta1
+kind: InferenceService
+metadata:
+  name: qwen3-14b
+spec:
+  predictor:
+    pytorch:
+      storageUri: &quot;s3://models/qwen3-14b&quot;
+      resources:
+        limits:
+          nvidia.com/gpu: 1
+        requests:
+          nvidia.com/gpu: 1
+      # Scale to zero when idle
+      minReplicas: 0
+      maxReplicas: 3
+      scaleTarget: 1
+      scaleMetric: concurrency
+</code></pre></div>
+<hr>
+<h2>常见问题</h2>
+<p><strong>Q: JVM 容器内存 OOMKilled 怎么办？</strong>
+A: 检查 <code>limits.memory</code> 是否大于 <code>MaxRAMPercentage</code> 的堆 + Metaspace + 线程栈 + 直接内存 + Native 内存。公式：<code>总内存 &gt;= 堆(75%) + Metaspace(256MB) + 线程栈(1MB * threads) + 直接内存 + 系统开销(200MB)</code>。</p>
+<p><strong>Q: Spring Boot 优雅关闭在 K8s 中如何保证？</strong>
+A: 启用 <code>spring.lifecycle.timeout-per-shutdown-phase=30s</code> + K8s <code>terminationGracePeriodSeconds=45s</code> + preStop hook 延迟。顺序：K8s 发 SIGTERM → preStop sleep → Spring 优雅关闭 → Pod 终止。</p>
+<p><strong>Q: K8s Secret 安全性够吗？</strong>
+A: 仅 Base64 编码不够。生产环境使用 External Secrets Operator（集成 Vault/AWS Secret Manager）或 Sealed Secrets。</p>
+<p><strong>Q: 为什么用 distroless 基础镜像？</strong>
+A: 攻击面最小（无 Shell、无包管理器、无系统工具），CVE 少，镜像更小。但调试依赖 K8s ephemeral containers。</p>
+<hr>
+<h2>相关条目</h2>
+<ul>
+<li><a href="/06-云原生与SRE/可观测性与CI/06-OpenTelemetry可观测性体系" class="cross-ref" data-ref="06-OpenTelemetry可观测性体系">06-OpenTelemetry可观测性体系</a> — 可观测性与监控</li>
+<li><a href="/06-云原生与SRE/可观测性与CI/06-CICD与基础设施即代码" class="cross-ref" data-ref="06-CICD与基础设施即代码">06-CICD与基础设施即代码</a> — CI/CD 流水线和 GitOps</li>
+<li><a href="/05-分布式架构/弹性设计/05-熔断限流与弹性设计" class="cross-ref" data-ref="05-熔断限流与弹性设计">05-熔断限流与弹性设计</a> — K8s 中的弹性设计</li>
+</ul>
+</div>
+</article>

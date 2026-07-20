@@ -1,0 +1,509 @@
+
+<article class="kb-entry" data-path="/01-计算机基础/分布式理论/01-分布式系统理论">
+  <div class="entry-meta">
+    <div class="entry-domain"><a href="/?d=01">01-计算机基础</a></div>
+    <h1>分布式系统理论 — CAP、一致性模型与共识算法</h1>
+    <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#["distributed-systems"</span><span class="badge badge-tag">#"cap-theorem"</span><span class="badge badge-tag">#"consensus"</span><span class="badge badge-tag">#"raft"</span></div>
+    
+  </div>
+  <div class="entry-body"><h1>分布式系统理论</h1>
+<h2>概述</h2>
+<p>分布式系统是现代互联网后端的基础设施。当系统从单机扩展到多机时，一系列全新的问题涌现：部分失败（Partial Failure）、时钟不可靠、网络分区、数据一致性等。这些不是单机系统的&quot;放大版&quot;问题，而是不同性质的问题。本文覆盖 CAP 定理与 PACELC 扩展、BASE 与一致性模型、共识算法（Paxos/Raft/ZAB）、分布式时钟、一致性哈希、故障模型和 Quorum 机制，帮助建立分布式系统的理论框架。</p>
+<hr>
+<h2>核心内容</h2>
+<h3>一、CAP 定理</h3>
+<h4>1.1 正式定义</h4>
+<p>Eric Brewer 在 2000 年提出 CAP 猜想，2002 年由 Seth Gilbert 和 Nancy Lynch 形式化证明。CAP 定理指出：在一个异步网络模型中，分布式系统最多只能同时满足以下三点中的两点：</p>
+<table>
+<thead>
+<tr>
+<th>属性</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>C (Consistency)</strong></td>
+<td>一致性。所有节点在同一时刻看到相同的数据。更精确地说：任意读操作必须返回最近的写操作的结果（或错误）。</td>
+</tr>
+<tr>
+<td><strong>A (Availability)</strong></td>
+<td>可用性。每个请求（只要节点没有故障）都能收到一个非错误的响应（不保证是最新数据）。</td>
+</tr>
+<tr>
+<td><strong>P (Partition Tolerance)</strong></td>
+<td>分区容错性。系统在任意消息丢失（网络分区）的情况下仍能继续运行。</td>
+</tr>
+</tbody></table>
+<p><strong>关键认知纠正：</strong> CAP 不是&quot;三选二&quot;——在网络分区发生时，必须在 C 和 A 之间做选择。当没有分区时，C 和 A 可以同时满足。换句话说：<strong>通常情况选 CA，分区情况选 CP 或 AP。</strong></p>
+<h4>1.2 常见误解</h4>
+<p><strong>误解 1：&quot;CAP 意味着分布式系统只能保证 C 或 A 之一，不能两者兼顾。&quot;</strong>
+正解：在没有网络分区时，系统可以既一致又可用。CAP 说的是分区发生时必须做出取舍。</p>
+<p><strong>误解 2：&quot;NoSQL 放弃了 C 选择了 A，传统关系数据库放弃了 A 选择了 C。&quot;</strong>
+正解：这种简化过于粗糙。许多 NoSQL 系统（如 MongoDB、HBase）默认提供强一致性。许多关系数据库也通过主从复制在特定场景下提供弱一致性。</p>
+<p><strong>误解 3：&quot;CAP 已经过时了，被 PACELC 取代。&quot;</strong>
+正解：PACELC 是 CAP 的扩展和细化，不是替代。CAP 的核心洞察（分区发生时的一致性与可用性权衡）依然成立。</p>
+<h4>1.3 CP vs AP 的实际选择</h4>
+<table>
+<thead>
+<tr>
+<th>选择</th>
+<th>含义</th>
+<th>典型系统</th>
+<th>适用场景</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>CP（Consistency + Partition Tolerance）</td>
+<td>分区时牺牲可用性，拒绝写入</td>
+<td>ZooKeeper、etcd、HBase</td>
+<td>配置管理、分布式锁、元数据存储</td>
+</tr>
+<tr>
+<td>AP（Availability + Partition Tolerance）</td>
+<td>分区时牺牲一致性，允许写入</td>
+<td>Cassandra、DynamoDB、CouchDB</td>
+<td>用户数据存储、社交网络、已读未读</td>
+</tr>
+</tbody></table>
+<p><strong>选择建议：</strong></p>
+<ul>
+<li>涉及钱的场景（支付、转账）→ CP</li>
+<li>用户生成内容（帖子、评论）→ AP（最终一致性即可）</li>
+<li>配置/协调服务 → CP</li>
+</ul>
+<hr>
+<h3>二、PACELC — CAP 的扩展模型</h3>
+<p>PACELC 由 Daniel Abadi 在 2010 年提出，是对 CAP 的细化和补充：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>如果发生网络分区 (P)：
+  在 A 和 C 之间选择 (同 CAP)
+否则 (E, Else) 没有分区：
+  在 L (Latency) 和 C (Consistency) 之间选择
+</code></pre></div>
+<p><strong>PACELC 分类：</strong></p>
+<table>
+<thead>
+<tr>
+<th>类型</th>
+<th>分区时</th>
+<th>无分区时</th>
+<th>代表系统</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>PC/EC</td>
+<td>C</td>
+<td>C</td>
+<td>BigTable, HBase, VoltDB</td>
+</tr>
+<tr>
+<td>PC/EL</td>
+<td>C</td>
+<td>L</td>
+<td>MongoDB（默认）</td>
+</tr>
+<tr>
+<td>PA/EC</td>
+<td>A</td>
+<td>C</td>
+<td>DynamoDB（强一致性读模式）</td>
+</tr>
+<tr>
+<td>PA/EL</td>
+<td>A</td>
+<td>L</td>
+<td>Cassandra, Riak, DynamoDB（默认）</td>
+</tr>
+</tbody></table>
+<p>PACELC 的一个重要洞察：即使在正常运行（无分区）时，分布式系统也面临权衡——高一致性需要节点间同步（增加延迟），低延迟意味着可能读到过期数据。这不是 CAP 的分区异常场景，而是分布式系统的日常权衡。</p>
+<hr>
+<h3>三、BASE — 最终一致性的哲学</h3>
+<p>BASE 是为大规模分布式系统提出的 ACID 替代哲学：</p>
+<ul>
+<li><strong>BA (Basically Available)：</strong> 基本可用。系统保证核心功能可用，但可能降级（返回部分结果、返回过期数据）</li>
+<li><strong>S (Soft State)：</strong> 软状态。系统状态不需要时刻一致，可以处于中间状态</li>
+<li><strong>E (Eventually Consistent)：</strong> 最终一致性。在没有新更新的情况下，系统最终会收敛到一致状态</li>
+</ul>
+<p><strong>BASE vs ACID 不是对立的——它们针对不同的设计目标：</strong></p>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>ACID</th>
+<th>BASE</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>核心关注</td>
+<td>一致性</td>
+<td>可用性</td>
+</tr>
+<tr>
+<td>适用场景</td>
+<td>单机事务系统、金融场景</td>
+<td>大规模分布式系统、互联网服务</td>
+</tr>
+<tr>
+<td>一致性强度</td>
+<td>强一致（立即）</td>
+<td>最终一致（收敛）</td>
+</tr>
+<tr>
+<td>复杂度</td>
+<td>集中在数据库层</td>
+<td>转移到应用层（处理不一致）</td>
+</tr>
+</tbody></table>
+<p><strong>在现实中，许多系统是 ACID + BASE 的混合：</strong> 核心交易使用 ACID 事务（如账户余额变化），非关键数据使用 BASE（如用户偏好、活动流）。</p>
+<hr>
+<h3>四、一致性模型</h3>
+<p>从强到弱排列的一致性模型：</p>
+<h4>4.1 强一致性（Strong/Linearizable Consistency）</h4>
+<p>所有操作看起来就像在一个副本上按某种全局顺序执行。读一定返回最近一次写的结果。</p>
+<p><strong>实现代价：</strong> 需要共识算法（Paxos/Raft）或同步复制。延迟高，可用性在有分区时受损。</p>
+<h4>4.2 顺序一致性（Sequential Consistency）</h4>
+<p>所有操作在所有副本上按相同的顺序执行，但不需要与真实时间顺序一致。Lamport 的定义：任何执行的结果都像所有处理器按某种顺序顺序执行，每个处理器内部的操作按程序指定的顺序。</p>
+<p><strong>关键区别：</strong> 顺序一致性不要求&quot;读一定返回最近写的结果&quot;——只要所有节点看到的操作顺序一致即可。</p>
+<h4>4.3 因果一致性（Causal Consistency）</h4>
+<p>有因果关系的操作在所有节点按相同顺序执行，没有因果关系的操作可以乱序。</p>
+<p><strong>如何判断因果关系：</strong> 使用 Vector Clock 或 Lamport Timestamp 追踪 happens-before 关系。例如：A 发了帖子，B 评论了 A 的帖子——评论和帖子有因果关系，必须按先后顺序。而 C 发的另一篇帖子和 A 没有因果关系，可以乱序。</p>
+<h4>4.4 最终一致性（Eventual Consistency）</h4>
+<p>如果没有新的写入，最终所有副本都会收敛到相同的值。这是最弱的一致性保证，也是互联网系统中最常见的选择。</p>
+<p><strong>问题：</strong> &quot;最终&quot;是多久？1 秒？1 分钟？没有定义。DNS 的最终一致性（TTL 内可能读到旧记录）和 Cassandra 的最终一致性（毫秒级到秒级）差别很大。</p>
+<h4>4.5 读己之写（Read-Your-Writes）</h4>
+<p>用户总是能读到自己写入的数据（保证自己看到的是最新的），但其他用户可能看到旧版本。这是最终一致性在用户体验上的重要增强——用户不能忍受自己写的东西&quot;消失&quot;了。</p>
+<p><strong>实现方式：</strong></p>
+<ul>
+<li>主从复制中的读写分离：写后立刻读主库</li>
+<li>客户端携带写入的版本号，读操作检查版本</li>
+</ul>
+<h4>4.6 一致性模型的实践意义</h4>
+<p>在 Java 后端开发中，一致性模型的选择体现为：</p>
+<ul>
+<li>使用强一致性 → 读写都在主库</li>
+<li>使用最终一致性 → 读写分离（写主库读从库），接受复制延迟</li>
+<li>使用读己之写 → 写后一定时间内读主库，之后可以切回从库</li>
+<li>使用因果一致性 → 用户间有关联的数据路由到同一分片</li>
+</ul>
+<hr>
+<h3>五、共识算法</h3>
+<p>共识（Consensus）是分布式系统中最本质的问题之一：如何让多个节点对一个值达成一致？</p>
+<h4>5.1 Paxos</h4>
+<p>Leslie Lamport 提出的 Paxos 是共识算法的理论基础。Basic Paxos 解决单值共识，Multi-Paxos 处理连续多个值的共识。</p>
+<p><strong>Basic Paxos 角色：</strong></p>
+<ul>
+<li><strong>Proposer：</strong> 提出提案</li>
+<li><strong>Acceptor：</strong> 接受或拒绝提案（投票）</li>
+<li><strong>Learner：</strong> 学习最终结果</li>
+</ul>
+<p><strong>两个阶段（Phase 1: Prepare, Phase 2: Accept）：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Phase 1 (Prepare):
+  Proposer → Acceptors: Prepare(n)   // n 是提案编号
+  Acceptor → Proposer:  Promise(已接受的最高编号提案，如果有)
+
+Phase 2 (Accept):
+  Proposer → Acceptors: Accept(n, value)  // value 可能是从 Promise 中获得的
+  Acceptor → Proposer:  Accepted(n, value)
+</code></pre></div>
+<p><strong>Multi-Paxos 优化：</strong> Basic Paxos 的单值共识需要两次往返。Multi-Paxos 在选出 Leader 后，Phase 1 只需要执行一次（Leader 任期内的后续提案只执行 Phase 2），将每次共识降为一次网络往返。</p>
+<p><strong>Paxos 的工程挑战：</strong></p>
+<ul>
+<li>难以理解和实现正确</li>
+<li>论文中的描述是单值共识，不包含日志复制、成员变更等实际生产需求</li>
+<li>不同的 Multi-Paxos 实现差异大，没有统一规范</li>
+</ul>
+<h4>5.2 Raft</h4>
+<p>Raft 是 Diego Ongaro 在 2014 年提出的共识算法，设计目标是<strong>可理解性</strong>。它将共识分解为三个独立的子问题：</p>
+<p><strong>1. 领导者选举（Leader Election）：</strong></p>
+<ul>
+<li>每个节点是 Follower、Candidate 或 Leader</li>
+<li>心跳机制维持 Leader 地位（Leader → Follower 的心跳）</li>
+<li>选举超时（150-300ms 随机）触发 Candidate 发起选举</li>
+<li>获得多数票的 Candidate 成为 Leader</li>
+</ul>
+<p><strong>2. 日志复制（Log Replication）：</strong></p>
+<ul>
+<li>Leader 将客户端请求追加到自己的日志</li>
+<li>Leader 将日志条目发送给 Followers（AppendEntries RPC）</li>
+<li>当日志条目被多数节点安全复制后，Leader 提交（Commit）</li>
+<li>Leader 在后续 AppendEntries 中通知 Followers 提交</li>
+<li>Follower 的日志可能与 Leader 不一致——Leader 通过回退找到一致点然后覆盖</li>
+</ul>
+<p><strong>3. 安全性（Safety）：</strong></p>
+<ul>
+<li><strong>选举限制：</strong> Candidate 的日志不能比多数节点旧（否则无法当选）</li>
+<li><strong>Leader 只能提交当前任期的日志：</strong> 不允许通过提交旧任期的日志来间接提交当前任期的日志</li>
+<li><strong>成员变更（Joint Consensus）：</strong> 两阶段方法——先过渡到旧配置+新配置的联合状态，再切换到新配置</li>
+</ul>
+<p><strong>Raft 的 Java 实现示例（日志复制状态机关键结构）：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">record LogEntry(int term, int index, byte[] command) {}
+
+class RaftNode {
+    // 持久状态（所有节点）
+    int currentTerm = 0;
+    Integer votedFor = null;
+    List&lt;LogEntry&gt; log = new ArrayList&lt;&gt;();
+
+    // 易失状态（所有节点）
+    int commitIndex = 0;
+    int lastApplied = 0;
+
+    // 易失状态（Leader 节点）
+    Map&lt;String, Integer&gt; nextIndex = new HashMap&lt;&gt;();   // 每个 Follower 的下一个索引
+    Map&lt;String, Integer&gt; matchIndex = new HashMap&lt;&gt;();  // 每个 Follower 已复制的最高索引
+
+    void appendEntries(String followerId) {
+        // Leader 给每个 Follower 发送 AppendEntries RPC
+        int prevLogIndex = nextIndex.get(followerId) - 1;
+        int prevLogTerm = prevLogIndex &gt;= 0
+            ? log.get(prevLogIndex).term() : 0;
+
+        var entries = log.subList(nextIndex.get(followerId), log.size());
+        // 发送给 Follower: (term, prevLogIndex, prevLogTerm, entries, commitIndex)
+        // Follower 检查 prevLogIndex 和 prevLogTerm 是否匹配
+        //   匹配 → 追加 entries，更新 commitIndex
+        //   不匹配 → 返回 false，Leader 减小 nextIndex 并重试
+    }
+}
+</code></pre></div>
+<h4>5.3 ZAB（ZooKeeper Atomic Broadcast）</h4>
+<p>ZAB 是 ZooKeeper 使用的共识协议，与 Raft 在结构上相似（都是 Leader-based、日志复制、多数派提交），但有一些差异：</p>
+<ul>
+<li><strong>顺序保证：</strong> ZAB 保证所有提议按相同的顺序提交（全序广播/Atomic Broadcast）</li>
+<li><strong>快速选举：</strong> ZAB 的领导者选举与日志恢复紧密结合，支持比 Raft 更快的故障恢复</li>
+<li><strong>模糊处理：</strong> ZAB 允许部分 Follower 的日志比 Leader 多（多余部分被截断）</li>
+</ul>
+<p><strong>ZAB 的四个阶段：</strong></p>
+<ol>
+<li><strong>选举（Election）：</strong> 选出一个 Leader</li>
+<li><strong>发现（Discovery）：</strong> Leader 收集 Follower 的最后一个已提交事务</li>
+<li><strong>同步（Synchronization）：</strong> Leader 与 Follower 同步日志</li>
+<li><strong>广播（Broadcast）：</strong> 正常处理客户端请求</li>
+</ol>
+<h4>5.4 共识算法的实际应用</h4>
+<table>
+<thead>
+<tr>
+<th>算法</th>
+<th>代表系统</th>
+<th>典型用途</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Paxos</td>
+<td>Chubby (Google)</td>
+<td>分布式锁服务</td>
+</tr>
+<tr>
+<td>Multi-Paxos</td>
+<td>OceanBase、TiKV (早期)</td>
+<td>分布式数据库复制</td>
+</tr>
+<tr>
+<td>Raft</td>
+<td>etcd、TiKV、Consul、Nacos</td>
+<td>配置中心、服务发现、分布式协调</td>
+</tr>
+<tr>
+<td>ZAB</td>
+<td>ZooKeeper</td>
+<td>分布式协调服务</td>
+</tr>
+</tbody></table>
+<p><strong>对 Java 开发者的启示：</strong> 大多数 Java 应用不会直接实现共识算法，但会用 ZooKeeper/etcd 做服务发现和配置管理。理解共识算法的原理有助于理解为什么 ZooKeeper 集群必须是奇数个节点（3/5/7）、为什么过半节点故障会导致集群不可用。</p>
+<hr>
+<h3>六、时钟与顺序</h3>
+<h4>6.1 物理时钟问题</h4>
+<p>分布式系统中的物理时钟不可靠：</p>
+<ul>
+<li><strong>时钟漂移（Clock Drift）：</strong> 石英钟每天可能漂移几秒</li>
+<li><strong>时钟跳跃：</strong> NTP 同步可能导致时钟向前或向后跳</li>
+<li><strong>闰秒：</strong> 全球统一调整可能导致 23:59:60</li>
+</ul>
+<p><strong>规则：</strong> 永远不要依赖不同机器上的时钟值来比较事件的先后顺序。</p>
+<h4>6.2 Lamport Timestamp（逻辑时钟）</h4>
+<p>每个节点维护一个计数器 <code>C</code>：</p>
+<ul>
+<li>发生本地事件：<code>C++</code></li>
+<li>发送消息时附上当前 <code>C</code>，接收方设置 <code>C = max(local_C, received_C) + 1</code></li>
+</ul>
+<p><strong>性质：</strong> 如果事件 A happens-before 事件 B，则 <code>LC(A) &lt; LC(B)</code>。但反之不成立（<code>LC(A) &lt; LC(B)</code> 不保证 A happens-before B）。</p>
+<p><strong>Java 示例：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">class LamportClock {
+    private final AtomicInteger counter = new AtomicInteger(0);
+
+    int tick() { return counter.incrementAndGet(); }
+
+    int update(int receivedTimestamp) {
+        return counter.updateAndGet(
+            current -&gt; Math.max(current, receivedTimestamp) + 1);
+    }
+}
+</code></pre></div>
+<h4>6.3 Vector Clock（向量时钟）</h4>
+<p>Vector Clock 解决了 Lamport 时钟无法判断因果关系的局限。每个节点维护一个向量 <code>[C1, C2, ..., Cn]</code>，其中 <code>Ci</code> 是节点 i 的本地计数器。</p>
+<p><strong>因果判断规则：</strong></p>
+<ul>
+<li><code>VC(A) &lt; VC(B)</code> （每个分量都不大于，且至少一个严格小于）→ A happens-before B</li>
+<li><code>VC(A)</code> 与 <code>VC(B)</code> 不可比较 → A 和 B 是并发的</li>
+<li><code>VC(A) == VC(B)</code> → A 和 B 是同一个事件的可能性极高</li>
+</ul>
+<p><strong>应用：</strong> Dynamo 和 Riak 使用 Vector Clock 检测并发写入（同一 key 被多个客户端同时修改），并在后续读取时返回所有冲突版本供客户端解决。</p>
+<h4>6.4 Google TrueTime</h4>
+<p>Google Spanner 使用 TrueTime API 提供全球范围的事务一致性。TrueTime 基于 GPS 和原子钟，提供一个有界的时间不确定性区间 <code>[earliest, latest]</code>。</p>
+<p>Spanner 的提交等待：事务发起者在提交后必须等待一个时间区间（直到 <code>TT.now().latest &lt; commit_timestamp</code>），保证所有后续事务的时间戳都大于当前事务。这是外部一致性（External Consistency / Linearizability）在全局范围内的实现。</p>
+<hr>
+<h3>七、一致性哈希</h3>
+<p>一致性哈希（Consistent Hashing）解决了动态增删节点时的数据迁移问题。</p>
+<p><strong>普通哈希取模的问题：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>node = hash(key) % N
+</code></pre></div>
+<p>当 N 变化时，几乎所有的 key 都需要重新映射。</p>
+<p><strong>一致性哈希的解决方案：</strong></p>
+<ul>
+<li>将哈希空间组织为环形（0 到 2^32 - 1）</li>
+<li>每个节点映射到环上的一个或多个位置（虚节点/Virtual Nodes）</li>
+<li>key 映射到环上顺时针最近的节点</li>
+<li>增减节点时，只有相邻节点之间的数据需要迁移</li>
+</ul>
+<p><strong>Java 实现示例：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">class ConsistentHash&lt;T&gt; {
+    private final TreeMap&lt;Integer, T&gt; ring = new TreeMap&lt;&gt;();
+    private final int virtualNodeCount;
+    private final HashFunction hashFunction = Hashing.murmur3_32_fixed();
+
+    ConsistentHash(int virtualNodeCount, Collection&lt;T&gt; nodes) {
+        this.virtualNodeCount = virtualNodeCount;
+        for (T node : nodes) addNode(node);
+    }
+
+    void addNode(T node) {
+        for (int i = 0; i &lt; virtualNodeCount; i++) {
+            int hash = hashFunction.hashUnencodedChars(
+                node.toString() + &quot;#&quot; + i).asInt();
+            ring.put(hash, node);
+        }
+    }
+
+    T getNode(String key) {
+        int hash = hashFunction.hashUnencodedChars(key).asInt();
+        var entry = ring.ceilingEntry(hash);
+        if (entry == null) entry = ring.firstEntry();
+        return entry.getValue();
+    }
+}
+</code></pre></div>
+<p><strong>虚节点的作用：</strong> 物理节点映射到环上多个位置，使数据分布更均匀，避免&quot;数据倾斜&quot;。</p>
+<hr>
+<h3>八、分布式系统故障模型</h3>
+<table>
+<thead>
+<tr>
+<th>故障类型</th>
+<th>描述</th>
+<th>举例</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>崩溃故障（Crash Fault）</td>
+<td>节点停止响应（不发送任何消息）</td>
+<td>进程退出、服务器宕机</td>
+</tr>
+<tr>
+<td>遗漏故障（Omission Fault）</td>
+<td>节点发送或接收部分消息失败</td>
+<td>网络丢包</td>
+</tr>
+<tr>
+<td>时序故障（Timing Fault）</td>
+<td>消息在错误的时间到达或未在预期时间到达</td>
+<td>网络延迟超限</td>
+</tr>
+<tr>
+<td>响应故障（Response Fault）</td>
+<td>节点返回错误的值</td>
+<td>数据损坏、bug</td>
+</tr>
+<tr>
+<td>拜占庭故障（Byzantine Fault）</td>
+<td>任意行为（包括恶意行为）</td>
+<td>恶意攻击、任意节点行为</td>
+</tr>
+</tbody></table>
+<p><strong>大多数分布式系统只容忍崩溃故障（Crash Fault-Tolerant, CFT）</strong>，因为容忍拜占庭故障（Byzantine Fault-Tolerant, BFT）的协议代价极高（需要至少 3f+1 个节点，而 CFT 只需 2f+1）。</p>
+<p>区块链系统（如 Bitcoin、Ethereum）基于 BFT 共识，因为它们运行的节点是敌对环境（不信任任何节点）。</p>
+<hr>
+<h3>九、Quorum 机制</h3>
+<p>在分布式系统中，读写操作需要获得一定数量的节点&quot;投票&quot;才能成功：</p>
+<ul>
+<li><strong>N：</strong> 总副本数</li>
+<li><strong>R：</strong> 读操作需要确认的副本数</li>
+<li><strong>W：</strong> 写操作需要确认的副本数</li>
+</ul>
+<p><strong>约束：</strong></p>
+<ul>
+<li><code>R + W &gt; N</code>：保证读写至少有一个节点重叠（强一致性）</li>
+<li><code>W &gt; N/2</code>：保证两个写操作不能同时在两个多数派上成功（写冲突避免）</li>
+</ul>
+<p><strong>常见配置：</strong></p>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>N</th>
+<th>R</th>
+<th>W</th>
+<th>特点</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>强一致性</td>
+<td>3</td>
+<td>2</td>
+<td>2</td>
+<td>读写都需多数派，最小配置</td>
+</tr>
+<tr>
+<td>读优化</td>
+<td>3</td>
+<td>2</td>
+<td>1</td>
+<td>写快，但 R+W=3=N+1 不够强一致？不，只要 R+W&gt;N 即可</td>
+</tr>
+<tr>
+<td>写优化</td>
+<td>3</td>
+<td>1</td>
+<td>2</td>
+<td>读快</td>
+</tr>
+<tr>
+<td>最终一致性</td>
+<td>3</td>
+<td>1</td>
+<td>1</td>
+<td>没有重叠保证</td>
+</tr>
+</tbody></table>
+<p><strong>注意：</strong> <code>R + W &gt; N</code> 保证了读写重叠，但这只是&quot;至少有一个副本拥有最新数据&quot;的必要条件——还需要版本检测（Vector Clock）和冲突解决策略（last-write-wins, read-repair 等）。</p>
+<hr>
+<h2>常见问题 / 面试题</h2>
+<p><strong>Q1: ZooKeeper 为什么推荐奇数个节点？</strong>
+因为 ZAB 协议采用多数派（quorum）决策。3 个节点容忍 1 个故障（多数 = 2），4 个节点也容忍 1 个故障（多数 = 3），但 4 节点增加了成本却没有提高容错能力。5 个节点容忍 2 个故障。一般规律：2f+1 个节点容忍 f 个故障。</p>
+<p><strong>Q2: Raft 的领导者选举中，如何保证不会出现两个 Leader（脑裂）？</strong>
+每个任期内最多有一个 Leader 当选——因为要当选需要获得多数票（过半节点）。两个 Candidate 无法同时获得多数票（总票数是固定的）。此外，每个节点在一个 term 内只能投一次票。收到更高 term 的消息时，节点更新时间并转为 Follower。</p>
+<p><strong>Q3: 如何选择 CP 系统还是 AP 系统？</strong>
+检查业务需求：如果数据不一致会导致资金损失、安全事故或法律风险，选 CP。如果允许短暂不一致，且对用户体验影响小于服务不可用的影响，选 AP。大多数面向消费者的互联网服务选 AP（宁可返回过期数据也不拒绝服务）。</p>
+<p><strong>Q4: Vector Clock 的缺陷是什么？</strong>
+Vector Clock 的大小随节点数线性增长。在大规模系统中（数千个节点），向量时钟可能比数据本身还大。Dynamo 通过定期截断（基于时间戳清除旧版本）和 gossip 协议同步来管理向量时钟的大小。</p>
+<p><strong>Q5: 两阶段提交（2PC）与共识算法（Paxos/Raft）有什么区别？</strong>
+2PC 解决分布式事务问题（一个协调者 + 多个参与者，要么全部提交要么全部回滚），但协调者故障可能导致阻塞。共识算法解决的是让多个节点对&quot;接下来做什么&quot;达成一致，不阻塞——只要多数节点存活就能继续。2PC 的协调者是单点；共识算法的 Leader 可以重新选举。</p>
+<hr>
+<h2>相关条目</h2>
+<ul>
+<li><a href="/01-计算机基础/数据库原理/01-数据库原理" class="cross-ref" data-ref="01-数据库原理">01-数据库原理</a> — 数据库原理（ACID、MVCC、事务）</li>
+<li><a href="/01-计算机基础/计算机网络/01-计算机网络" class="cross-ref" data-ref="01-计算机网络">01-计算机网络</a> — 计算机网络（TCP、负载均衡）</li>
+<li><a href="/01-计算机基础/操作系统/01-操作系统基础" class="cross-ref" data-ref="01-操作系统基础">01-操作系统基础</a> — 操作系统基础（同步、调度）</li>
+<li><a href="/01-计算机基础/数据结构与算法/01-数据结构与算法" class="cross-ref" data-ref="01-数据结构与算法">01-数据结构与算法</a> — 数据结构与算法（一致性哈希、B+Tree）</li>
+</ul>
+</div>
+</article>

@@ -1,0 +1,1057 @@
+
+<article class="kb-entry" data-path="/13-AI协议/13-A2A协议与Agent互操作">
+  <div class="entry-meta">
+    <div class="entry-domain"><a href="/?d=13">13-AI协议</a></div>
+    <h1>A2A协议背景与Agent互操作实战</h1>
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#["a2a"</span><span class="badge badge-tag">#"agent-to-agent"</span><span class="badge badge-tag">#"agent-interop"</span><span class="badge badge-tag">#"java"</span></div>
+    
+  </div>
+  <div class="entry-body"><h1>A2A协议背景与Agent互操作实战</h1>
+<h2>一、A2A协议背景与动机</h2>
+<h3>1.1 为什么需要A2A？</h3>
+<p>MCP（Model Context Protocol）解决了AI模型如何调用外部工具和数据的问题——它将LLM与外部世界连接起来。然而，随着Agent技术的成熟，一个更高级的问题浮现：<strong>不同的AI Agent之间如何协作？</strong></p>
+<p>考虑以下场景：</p>
+<ul>
+<li>一个Research Agent负责搜索和收集资料</li>
+<li>一个Writer Agent负责将资料整理成文档</li>
+<li>一个Reviewer Agent负责审查文档质量</li>
+<li>一个Translator Agent负责将文档翻译成多语言</li>
+</ul>
+<p>这些Agent可能由不同团队开发、运行在不同的服务器上、使用不同的框架。如何让它们自主发现彼此、协商能力、传递任务、交换结果？这就是Agent-to-Agent（A2A）协议要解决的核心问题。</p>
+<h3>1.2 A2A的定位</h3>
+<p>A2A是一个开放标准协议，定义了AI Agent之间通信的规范。它不关注Agent的内部实现（用的是哪个LLM、用了什么框架），而是规范Agent对外暴露的接口和行为。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌──────────┐  A2A Protocol  ┌──────────┐
+│ Agent A  │ ◄──────────────► │ Agent B  │
+│ (Research)│                 │ (Writer) │
+└────┬─────┘                 └────┬─────┘
+     │ MCP                         │ MCP
+     ▼                             ▼
+┌──────────┐                 ┌──────────┐
+│ Tools &amp;  │                 │ Tools &amp;  │
+│ Resources│                 │ Resources│
+└──────────┘                 └──────────┘
+</code></pre></div>
+<p><strong>A2A与MCP的关系</strong>：MCP解决Agent与工具/数据之间的交互（纵向），A2A解决Agent与Agent之间的协作（横向）。两者是互补的，不是替代关系。</p>
+<h2>二、核心概念</h2>
+<h3>2.1 Agent Card（Agent名片）</h3>
+<p>Agent Card是A2A协议的基石——每个Agent通过一个JSON描述文件声明自己的身份和能力。其他Agent通过读取这个文件来发现和了解对方。</p>
+<p>Agent Card包含以下关键信息：</p>
+<ul>
+<li><strong>身份信息</strong>：name、description、version、url</li>
+<li><strong>能力声明</strong>：skills列表（每个skill有id、name、description、tags、examples）</li>
+<li><strong>端点信息</strong>：任务创建端点、状态查询端点、流式响应端点</li>
+<li><strong>认证方式</strong>：支持的认证机制（OAuth2、API Key等）</li>
+<li><strong>安全策略</strong>：支持的签名算法、信任模型</li>
+</ul>
+<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-json">{
+  &quot;name&quot;: &quot;Research Agent&quot;,
+  &quot;description&quot;: &quot;Specialized in web research, data gathering, and fact verification&quot;,
+  &quot;url&quot;: &quot;https://agents.example.com/research&quot;,
+  &quot;version&quot;: &quot;1.2.0&quot;,
+  &quot;capabilities&quot;: {
+    &quot;streaming&quot;: true,
+    &quot;pushNotifications&quot;: true
+  },
+  &quot;skills&quot;: [
+    {
+      &quot;id&quot;: &quot;web_search&quot;,
+      &quot;name&quot;: &quot;Web Search&quot;,
+      &quot;description&quot;: &quot;Search the web for information on any topic&quot;,
+      &quot;tags&quot;: [&quot;search&quot;, &quot;research&quot;, &quot;information-gathering&quot;],
+      &quot;examples&quot;: [
+        &quot;Find the latest papers on quantum computing&quot;,
+        &quot;Search for market data on electric vehicles&quot;
+      ]
+    }
+  ],
+  &quot;defaultInputModes&quot;: [&quot;text&quot;, &quot;file&quot;],
+  &quot;defaultOutputModes&quot;: [&quot;text&quot;, &quot;file&quot;],
+  &quot;authentication&quot;: {
+    &quot;schemes&quot;: [&quot;oauth2&quot;],
+    &quot;authorizationServer&quot;: &quot;https://auth.example.com&quot;
+  }
+}
+</code></pre></div>
+<h3>2.2 Message（消息）</h3>
+<p>A2A中的Message是Agent间通信的基本单位。每条Message包含role（谁发送的）、parts（内容部分）、metadata（元数据）。</p>
+<p>Message的role可以是：</p>
+<ul>
+<li><code>user</code>：最终用户的消息</li>
+<li><code>agent</code>：Agent代理用户发出的消息</li>
+<li><code>system</code>：系统级指令和上下文</li>
+</ul>
+<p>每个part可以是文本、文件引用、结构化数据等。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Message构建示例
+var message = A2aMessage.builder()
+    .messageId(&quot;msg-001&quot;)
+    .role(A2aMessage.Role.AGENT)
+    .parts(List.of(
+        A2aPart.text(&quot;请根据以下资料撰写一份技术报告&quot;),
+        A2aPart.file(&quot;research-data.json&quot;, &quot;application/json&quot;,
+            &quot;{&#39;findings&#39;: [&#39;...&#39;]}&quot;.getBytes()),
+        A2aPart.data(Map.of(&quot;targetLength&quot;, 2000, &quot;format&quot;, &quot;markdown&quot;))
+    ))
+    .metadata(Map.of(&quot;priority&quot;, &quot;high&quot;, &quot;deadline&quot;, &quot;2026-07-20&quot;))
+    .build();
+</code></pre></div>
+<h3>2.3 Task（任务）</h3>
+<p>Task是A2A对长耗时操作的抽象。当一个Agent向另一个Agent发起请求时，后者可能创建一个Task来跟踪工作进度。</p>
+<p>Task的生命周期状态：</p>
+<ul>
+<li><code>input-required</code>：等待用户或上游Agent提供更多信息</li>
+<li><code>working</code>：正在处理中</li>
+<li><code>rejected</code>：任务被拒绝</li>
+<li><code>completed</code>：任务成功完成</li>
+<li><code>failed</code>：任务处理失败</li>
+<li><code>canceled</code>：任务被取消</li>
+</ul>
+<p>每个Task包含：</p>
+<ul>
+<li><strong>id</strong>：唯一标识符</li>
+<li><strong>status</strong>：当前状态</li>
+<li><strong>history</strong>：任务处理过程中的所有Message</li>
+<li><strong>artifacts</strong>：任务产生的产出物</li>
+</ul>
+<h3>2.4 Artifact（产出物）</h3>
+<p>Artifact是Task完成后产生的成果。一个Task可以产生多个Artifact。每个Artifact包含：</p>
+<ul>
+<li><strong>name</strong>：产出物名称</li>
+<li><strong>parts</strong>：内容部分（与Message的parts结构相同）</li>
+<li><strong>metadata</strong>：扩展元数据</li>
+</ul>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">var artifact = Artifact.builder()
+    .name(&quot;research-report.md&quot;)
+    .description(&quot;电动汽车市场研究报告&quot;)
+    .parts(List.of(
+        A2aPart.text(&quot;# 电动汽车市场研究报告\n\n## 摘要\n...&quot;),
+        A2aPart.file(&quot;chart.png&quot;, &quot;image/png&quot;, chartBytes)
+    ))
+    .metadata(Map.of(&quot;wordCount&quot;, 2500, &quot;language&quot;, &quot;zh-CN&quot;))
+    .build();
+</code></pre></div>
+<h2>三、协议交互流程</h2>
+<h3>3.1 Agent Card发现</h3>
+<p>A2A采用Well-Known URI模式进行Agent发现。每个Agent在其域名根路径下暴露发现端点：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>GET https://agents.example.com/.well-known/agent-card.json
+</code></pre></div>
+<p>此外，Agent Card还支持通过DNS TXT记录和Agent Registry进行发现。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Agent Card 发现客户端
+public class AgentCardDiscovery {
+
+    private final java.net.http.HttpClient httpClient;
+
+    public AgentCardDiscovery() {
+        this.httpClient = java.net.http.HttpClient.newBuilder()
+            .connectTimeout(java.time.Duration.ofSeconds(10))
+            .build();
+    }
+
+    /**
+     * 通过 Well-Known URI 发现 Agent Card
+     */
+    public AgentCard discover(String agentBaseUrl) throws Exception {
+        var wellKnownUrl = agentBaseUrl + &quot;/.well-known/agent-card.json&quot;;
+        var request = java.net.http.HttpRequest.newBuilder()
+            .uri(java.net.URI.create(wellKnownUrl))
+            .GET()
+            .header(&quot;Accept&quot;, &quot;application/json&quot;)
+            .build();
+
+        var response = httpClient.send(request,
+            java.net.http.HttpResponse.BodyHandlers.ofString());
+
+        if (response.statusCode() == 200) {
+            return parseAgentCard(response.body());
+        }
+        throw new RuntimeException(&quot;Failed to discover agent card: HTTP &quot; 
+            + response.statusCode());
+    }
+
+    /**
+     * 从Agent Card JSON解析
+     */
+    private AgentCard parseAgentCard(String json) {
+        // 使用Jackson或Gson解析
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        try {
+            return mapper.readValue(json, AgentCard.class);
+        } catch (Exception e) {
+            throw new RuntimeException(&quot;Failed to parse agent card&quot;, e);
+        }
+    }
+}
+</code></pre></div>
+<h3>3.2 任务创建（tasks/send）</h3>
+<p>当Agent A需要Agent B执行任务时，A向B的<code>/tasks/send</code>端点发送消息：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 任务发送示例
+public class TaskClient {
+
+    private final java.net.http.HttpClient httpClient;
+    private final String agentEndpoint;
+
+    public TaskClient(String agentEndpoint) {
+        this.agentEndpoint = agentEndpoint;
+        this.httpClient = java.net.http.HttpClient.newBuilder()
+            .version(java.net.http.HttpClient.Version.HTTP_2)
+            .connectTimeout(java.time.Duration.ofSeconds(30))
+            .build();
+    }
+
+    /**
+     * 向目标Agent发送任务
+     */
+    public Task sendTask(A2aMessage message, boolean stream) throws Exception {
+        var taskRequest = Map.of(
+            &quot;message&quot;, message,
+            &quot;streaming&quot;, stream,
+            &quot;configuration&quot;, Map.of(
+                &quot;blocking&quot;, false,
+                &quot;timeoutSeconds&quot;, 300
+            )
+        );
+
+        var request = java.net.http.HttpRequest.newBuilder()
+            .uri(java.net.URI.create(agentEndpoint + &quot;/tasks/send&quot;))
+            .POST(java.net.http.HttpRequest.BodyPublishers.ofString(
+                JacksonUtils.toJson(taskRequest)))
+            .header(&quot;Content-Type&quot;, &quot;application/json&quot;)
+            .header(&quot;Authorization&quot;, &quot;Bearer &quot; + getAccessToken())
+            .build();
+
+        var response = httpClient.send(request,
+            java.net.http.HttpResponse.BodyHandlers.ofString());
+
+        if (response.statusCode() == 200) {
+            return parseTask(response.body());
+        }
+        throw new RuntimeException(&quot;Task send failed: HTTP &quot; + response.statusCode());
+    }
+
+    /**
+     * 发送任务并流式接收结果（SSE）
+     */
+    public void sendTaskStreaming(A2aMessage message,
+            java.util.function.Consumer&lt;StreamEvent&gt; eventHandler) throws Exception {
+        var taskRequest = Map.of(&quot;message&quot;, message, &quot;streaming&quot;, true);
+
+        var request = java.net.http.HttpRequest.newBuilder()
+            .uri(java.net.URI.create(agentEndpoint + &quot;/tasks/send&quot;))
+            .POST(java.net.http.HttpRequest.BodyPublishers.ofString(
+                JacksonUtils.toJson(taskRequest)))
+            .header(&quot;Content-Type&quot;, &quot;application/json&quot;)
+            .header(&quot;Accept&quot;, &quot;text/event-stream&quot;)
+            .build();
+
+        // 使用SSE流式解析
+        httpClient.send(request, java.net.http.HttpResponse.BodyHandlers
+            .ofLines())
+            .body()
+            .forEach(line -&gt; {
+                if (line.startsWith(&quot;data: &quot;)) {
+                    var eventData = line.substring(6);
+                    var event = parseStreamEvent(eventData);
+                    eventHandler.accept(event);
+                }
+            });
+    }
+
+    private Task parseTask(String json) {
+        // JSON解析逻辑
+        return new ObjectMapper().readValue(json, Task.class);
+    }
+
+    private StreamEvent parseStreamEvent(String json) {
+        return new ObjectMapper().readValue(json, StreamEvent.class);
+    }
+
+    private String getAccessToken() {
+        // OAuth2 Token获取逻辑
+        return System.getenv(&quot;A2A_ACCESS_TOKEN&quot;);
+    }
+}
+</code></pre></div>
+<h3>3.3 任务状态轮询（tasks/get）</h3>
+<p>对于非流式任务，客户端通过轮询获取任务状态：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+ * 轮询任务直到完成
+ */
+public Task pollUntilComplete(String taskId, 
+        java.time.Duration maxWait,
+        java.time.Duration pollInterval) throws Exception {
+    
+    var deadline = java.time.Instant.now().plus(maxWait);
+
+    while (java.time.Instant.now().isBefore(deadline)) {
+        var task = getTaskStatus(taskId);
+        var status = task.getStatus().getState();
+
+        switch (status) {
+            case COMPLETED -&gt; { return task; }
+            case FAILED -&gt; throw new RuntimeException(
+                &quot;Task failed: &quot; + task.getStatus().getMessage());
+            case CANCELED -&gt; throw new RuntimeException(&quot;Task was canceled&quot;);
+            case REJECTED -&gt; throw new RuntimeException(&quot;Task was rejected&quot;);
+            case INPUT_REQUIRED -&gt; {
+                // 需要用户输入——返回当前Task让调用方处理
+                return task;
+            }
+            case WORKING -&gt; {
+                // 继续等待
+                Thread.sleep(pollInterval.toMillis());
+            }
+        }
+    }
+
+    throw new RuntimeException(&quot;Task timeout after &quot; + maxWait);
+}
+
+/**
+ * 获取任务状态
+ */
+public Task getTaskStatus(String taskId) throws Exception {
+    var request = java.net.http.HttpRequest.newBuilder()
+        .uri(java.net.URI.create(agentEndpoint + &quot;/tasks/get?taskId=&quot; + taskId))
+        .GET()
+        .header(&quot;Authorization&quot;, &quot;Bearer &quot; + getAccessToken())
+        .build();
+
+    var response = httpClient.send(request,
+        java.net.http.HttpResponse.BodyHandlers.ofString());
+
+    if (response.statusCode() == 200) {
+        return parseTask(response.body());
+    }
+    throw new RuntimeException(&quot;Failed to get task status: HTTP &quot; 
+        + response.statusCode());
+}
+</code></pre></div>
+<h3>3.4 任务取消（tasks/cancel）</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+ * 取消正在执行的任务
+ */
+public Task cancelTask(String taskId) throws Exception {
+    var cancelRequest = Map.of(&quot;taskId&quot;, taskId);
+
+    var request = java.net.http.HttpRequest.newBuilder()
+        .uri(java.net.URI.create(agentEndpoint + &quot;/tasks/cancel&quot;))
+        .POST(java.net.http.HttpRequest.BodyPublishers.ofString(
+            JacksonUtils.toJson(cancelRequest)))
+        .header(&quot;Content-Type&quot;, &quot;application/json&quot;)
+        .header(&quot;Authorization&quot;, &quot;Bearer &quot; + getAccessToken())
+        .build();
+
+    var response = httpClient.send(request,
+        java.net.http.HttpResponse.BodyHandlers.ofString());
+
+    return parseTask(response.body());
+}
+</code></pre></div>
+<h3>3.5 流式响应（SSE Events）</h3>
+<p>A2A支持通过Server-Sent Events（SSE）进行流式响应：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>event: status_change
+data: {&quot;taskId&quot;: &quot;task-001&quot;, &quot;state&quot;: &quot;working&quot;, &quot;timestamp&quot;: &quot;...&quot;}
+
+event: artifact_update
+data: {&quot;taskId&quot;: &quot;task-001&quot;, &quot;artifact&quot;: {&quot;name&quot;: &quot;report.md&quot;, &quot;parts&quot;: [...]}}
+
+event: status_change
+data: {&quot;taskId&quot;: &quot;task-001&quot;, &quot;state&quot;: &quot;completed&quot;, &quot;timestamp&quot;: &quot;...&quot;}
+</code></pre></div>
+<h2>四、认证与信任</h2>
+<h3>4.1 OAuth2 / OIDC集成</h3>
+<p>A2A推荐使用OAuth 2.0进行Agent间认证。Agent Card中声明其Authorization Server，客户端通过标准OAuth流程获取Token：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Client → Authorization Server: POST /token (client_credentials)
+Client ← Authorization Server: {&quot;access_token&quot;: &quot;...&quot;, &quot;expires_in&quot;: 3600}
+
+Client → Agent B: GET /tasks/get?taskId=xxx
+           Authorization: Bearer &lt;access_token&gt;
+</code></pre></div>
+<h3>4.2 Agent间权限委托（Delegation）</h3>
+<p>当Agent A代表用户向Agent B请求服务时，A2A支持权限委托机制。Agent A可以携带用户的权限声明，Agent B根据权限声明决定是否执行操作。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Delegation Token构建
+public record DelegationProof(
+    String userIdentity,      // 用户身份
+    String[] scopes,          // 授权的权限范围
+    String delegatedBy,       // 委托方Agent ID
+    java.time.Instant issuedAt,
+    java.time.Instant expiresAt,
+    String signature          // 数字签名
+) {}
+
+public class DelegationManager {
+
+    /**
+     * 创建委托证明
+     */
+    public DelegationProof createDelegation(String userId, 
+            String[] scopes, String agentId) {
+        var now = java.time.Instant.now();
+        var proof = new DelegationProof(
+            userId,
+            scopes,
+            agentId,
+            now,
+            now.plus(java.time.Duration.ofHours(1)),
+            null  // 待签名
+        );
+        // 使用Agent私钥签名
+        return sign(proof);
+    }
+
+    /**
+     * 验证委托证明
+     */
+    public boolean verifyDelegation(DelegationProof proof, String agentId) {
+        // 1. 检查过期时间
+        if (java.time.Instant.now().isAfter(proof.expiresAt())) {
+            return false;
+        }
+        // 2. 验证数字签名
+        if (!verifySignature(proof)) {
+            return false;
+        }
+        // 3. 检查权限范围是否足够
+        return true;
+    }
+
+    private DelegationProof sign(DelegationProof proof) {
+        // 实际应使用 Ed25519 或 RS256 签名
+        var signed = new DelegationProof(
+            proof.userIdentity(), proof.scopes(), proof.delegatedBy(),
+            proof.issuedAt(), proof.expiresAt(),
+            &quot;base64-encoded-signature&quot;
+        );
+        return signed;
+    }
+
+    private boolean verifySignature(DelegationProof proof) {
+        // 验证数字签名
+        return proof.signature() != null &amp;&amp; !proof.signature().isEmpty();
+    }
+}
+</code></pre></div>
+<h2>五、Java A2A SDK使用</h2>
+<h3>5.1 Maven依赖</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;!-- A2A Java SDK --&gt;
+&lt;dependency&gt;
+    &lt;groupId&gt;org.a2a-protocol&lt;/groupId&gt;
+    &lt;artifactId&gt;a2a-sdk&lt;/artifactId&gt;
+    &lt;version&gt;0.8.0&lt;/version&gt;
+&lt;/dependency&gt;
+
+&lt;!-- Spring AI A2A Starter --&gt;
+&lt;dependency&gt;
+    &lt;groupId&gt;org.springframework.ai&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-ai-a2a-spring-boot-starter&lt;/artifactId&gt;
+    &lt;version&gt;2.1.0&lt;/version&gt;
+&lt;/dependency&gt;
+</code></pre></div>
+<h3>5.2 构建A2A Agent Server</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// A2aAgentServer.java
+import org.a2a.protocol.server.A2aServer;
+import org.a2a.protocol.server.AgentCardBuilder;
+import org.a2a.protocol.model.*;
+
+@SpringBootApplication
+public class A2aAgentServer {
+
+    public static void main(String[] args) {
+        SpringApplication.run(A2aAgentServer.class, args);
+    }
+
+    @Bean
+    A2aServer a2aServer() {
+        var agentCard = AgentCardBuilder.create()
+            .name(&quot;Research Agent&quot;)
+            .description(&quot;专业网络研究Agent，负责信息搜集和事实核查&quot;)
+            .version(&quot;1.2.0&quot;)
+            .url(&quot;https://agents.example.com/research&quot;)
+            .addSkill(Skill.builder()
+                .id(&quot;web_search&quot;)
+                .name(&quot;网络搜索&quot;)
+                .description(&quot;搜索互联网信息&quot;)
+                .addTag(&quot;search&quot;)
+                .addExample(&quot;搜索量子计算最新进展&quot;)
+                .build())
+            .addSkill(Skill.builder()
+                .id(&quot;fact_check&quot;)
+                .name(&quot;事实核查&quot;)
+                .description(&quot;验证信息的真实性&quot;)
+                .addTag(&quot;verification&quot;)
+                .build())
+            .streamingCapable(true)
+            .addAuthScheme(&quot;oauth2&quot;)
+            .build();
+
+        return A2aServer.builder()
+            .agentCard(agentCard)
+            .port(8080)
+            .taskHandler(new ResearchTaskHandler())
+            .build();
+    }
+}
+
+/**
+ * 任务处理器——实现Agent的核心逻辑
+ */
+class ResearchTaskHandler implements A2aTaskHandler {
+
+    @Override
+    public Task handleTask(A2aMessage message, TaskContext context) {
+        // 解析用户请求
+        var query = extractUserQuery(message);
+        
+        // 创建Task跟踪进度
+        var task = Task.builder()
+            .id(context.taskId())
+            .status(TaskStatus.working(&quot;开始研究: &quot; + query))
+            .build();
+
+        // 执行研究（这里用Virtual Thread）
+        Thread.ofVirtual().start(() -&gt; {
+            try {
+                // 步骤1: 搜索资料
+                context.updateStatus(TaskStatus.working(&quot;正在搜索相关资源...&quot;));
+                var searchResults = performWebSearch(query);
+
+                // 步骤2: 交叉验证
+                context.updateStatus(TaskStatus.working(&quot;正在交叉验证信息...&quot;));
+                var verifiedResults = crossVerify(searchResults);
+
+                // 步骤3: 生成报告
+                context.updateStatus(TaskStatus.working(&quot;正在生成研究报告...&quot;));
+                var report = generateReport(verifiedResults);
+
+                // 完成
+                context.completeWithArtifact(Artifact.builder()
+                    .name(&quot;research-report.md&quot;)
+                    .description(&quot;研究报告: &quot; + query)
+                    .addPart(A2aPart.text(report))
+                    .build());
+            } catch (Exception e) {
+                context.fail(&quot;研究过程中出现错误: &quot; + e.getMessage());
+            }
+        });
+
+        return task;
+    }
+
+    private String extractUserQuery(A2aMessage message) {
+        return message.getParts().stream()
+            .filter(p -&gt; p instanceof A2aPart.TextPart)
+            .map(p -&gt; ((A2aPart.TextPart) p).getText())
+            .collect(java.util.stream.Collectors.joining(&quot;\n&quot;));
+    }
+
+    private List&lt;SearchResult&gt; performWebSearch(String query) {
+        // 模拟搜索
+        return List.of(
+            new SearchResult(&quot;量子计算论文&quot;, &quot;https://arxiv.org/...&quot;, 0.95),
+            new SearchResult(&quot;量子芯片进展&quot;, &quot;https://example.com/...&quot;, 0.88)
+        );
+    }
+
+    private List&lt;SearchResult&gt; crossVerify(List&lt;SearchResult&gt; results) {
+        // 模拟交叉验证
+        return results;
+    }
+
+    private String generateReport(List&lt;SearchResult&gt; results) {
+        return &quot;# 研究报告\n\n&quot; + results.stream()
+            .map(r -&gt; &quot;## &quot; + r.title() + &quot;\n来源: &quot; + r.url() + &quot;\n可信度: &quot; + r.confidence())
+            .collect(java.util.stream.Collectors.joining(&quot;\n\n&quot;));
+    }
+
+    record SearchResult(String title, String url, double confidence) {}
+}
+</code></pre></div>
+<h2>六、MCP与A2A的对比与协作</h2>
+<h3>6.1 对比表</h3>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>MCP</th>
+<th>A2A</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>解决什么问题</strong></td>
+<td>Agent如何调用外部工具和数据</td>
+<td>Agent之间如何协作通信</td>
+</tr>
+<tr>
+<td><strong>通信方向</strong></td>
+<td>纵向：Agent ↔ 工具/数据</td>
+<td>横向：Agent ↔ Agent</td>
+</tr>
+<tr>
+<td><strong>核心原语</strong></td>
+<td>Tools, Resources, Prompts</td>
+<td>Messages, Tasks, Artifacts</td>
+</tr>
+<tr>
+<td><strong>生命周期</strong></td>
+<td>请求-响应（短连接）</td>
+<td>任务跟踪（长连接/轮询）</td>
+</tr>
+<tr>
+<td><strong>发现机制</strong></td>
+<td>Client在初始化时获取能力列表</td>
+<td>Agent Card Well-Known URI</td>
+</tr>
+<tr>
+<td><strong>交互模式</strong></td>
+<td>工具调用、资源读取</td>
+<td>任务委托、结果传递、状态同步</td>
+</tr>
+<tr>
+<td><strong>传输协议</strong></td>
+<td>stdio / HTTP (JSON-RPC 2.0)</td>
+<td>HTTP (REST + SSE)</td>
+</tr>
+<tr>
+<td><strong>典型场景</strong></td>
+<td>查询数据库、发送邮件、读取文件</td>
+<td>Agent协作流水线、分布式任务编排</td>
+</tr>
+</tbody></table>
+<h3>6.2 协同工作模式</h3>
+<p>MCP和A2A不是互斥的，在实际系统中它们经常配合使用：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>用户请求: &quot;分析Q2销售数据并生成报告&quot;
+
+┌─────────────────────────────────────────────────────┐
+│ Orchestrator Agent (A2A)                           │
+│  - 接收用户请求                                      │
+│  - 分解任务                                          │
+│  - 协调子Agent                                       │
+└──────┬──────────────┬──────────────────────┬────────┘
+       │ A2A          │ A2A                  │ A2A
+       ▼              ▼                      ▼
+┌────────────┐  ┌────────────┐  ┌────────────────────┐
+│Data Agent  │  │Analysis    │  │Writer Agent        │
+│            │  │Agent       │  │                    │
+│ MCP Tools: │  │ MCP Tools: │  │ MCP Tools:         │
+│ - SQL查询  │  │ - 统计分析 │  │ - 文档模板          │
+│ - 数据导出 │  │ - 图表生成 │  │ - 格式转换          │
+│ MCP Res:   │  │ MCP Res:   │  │ MCP Res:           │
+│ - DB Schema│  │ - 分析模型  │  │ - 样式库           │
+│ - 数据字典 │  │ - 指标定义 │  │ - 模板库           │
+└────────────┘  └────────────┘  └────────────────────┘
+</code></pre></div>
+<h2>七、完整示例：多Agent协作系统</h2>
+<p>以下是一个完整的多Agent协作示例：Research Agent负责收集信息，Writer Agent负责撰写报告，Orchestrator Agent负责协调。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// ===== 1. Agent Card定义 =====
+// ResearchAgentCard.java
+public class ResearchAgentCard {
+    public static AgentCard create() {
+        return AgentCard.builder()
+            .name(&quot;Research Agent&quot;)
+            .description(&quot;专业研究Agent：网络搜索、信息搜集、事实核查&quot;)
+            .version(&quot;1.2.0&quot;)
+            .url(&quot;http://localhost:8081&quot;)
+            .addSkill(org.a2a.protocol.model.Skill.builder()
+                .id(&quot;deep_research&quot;)
+                .name(&quot;深度研究&quot;)
+                .description(&quot;对指定主题进行全面的网络研究和信息搜集&quot;)
+                .addTag(&quot;research&quot;)
+                .addExample(&quot;研究2026年电动车市场趋势&quot;)
+                .build())
+            .addSkill(org.a2a.protocol.model.Skill.builder()
+                .id(&quot;fact_verification&quot;)
+                .name(&quot;事实核查&quot;)
+                .description(&quot;验证给定信息的准确性和来源可靠性&quot;)
+                .addTag(&quot;verification&quot;)
+                .build())
+            .streamingCapable(true)
+            .addInputMode(&quot;text&quot;)
+            .addOutputMode(&quot;text&quot;)
+            .addOutputMode(&quot;file&quot;)
+            .addAuthScheme(&quot;none&quot;)
+            .build();
+    }
+}
+
+// WriterAgentCard.java
+public class WriterAgentCard {
+    public static AgentCard create() {
+        return AgentCard.builder()
+            .name(&quot;Writer Agent&quot;)
+            .description(&quot;专业写作Agent：根据研究资料撰写结构化文档&quot;)
+            .version(&quot;2.0.0&quot;)
+            .url(&quot;http://localhost:8082&quot;)
+            .addSkill(org.a2a.protocol.model.Skill.builder()
+                .id(&quot;report_writing&quot;)
+                .name(&quot;报告撰写&quot;)
+                .description(&quot;根据提供的研究资料撰写格式化的报告&quot;)
+                .addTag(&quot;writing&quot;)
+                .addTag(&quot;report&quot;)
+                .build())
+            .addSkill(org.a2a.protocol.model.Skill.builder()
+                .id(&quot;content_summarize&quot;)
+                .name(&quot;内容摘要&quot;)
+                .description(&quot;将长文档精炼为简洁的摘要&quot;)
+                .addTag(&quot;summary&quot;)
+                .build())
+            .streamingCapable(false)
+            .addInputMode(&quot;text&quot;)
+            .addOutputMode(&quot;text&quot;)
+            .addOutputMode(&quot;file&quot;)
+            .addAuthScheme(&quot;none&quot;)
+            .build();
+    }
+}
+
+// ===== 2. Research Agent 实现 =====
+// ResearchAgentServer.java
+public class ResearchAgentServer {
+
+    public static void main(String[] args) throws Exception {
+        var agentCard = ResearchAgentCard.create();
+        var server = com.sun.net.httpserver.HttpServer.create(
+            new java.net.InetSocketAddress(8081), 0);
+
+        // Agent Card发现端点
+        server.createContext(&quot;/.well-known/agent-card.json&quot;, exchange -&gt; {
+            var cardJson = agentCard.toJson();
+            exchange.getResponseHeaders().set(&quot;Content-Type&quot;, &quot;application/json&quot;);
+            exchange.sendResponseHeaders(200, cardJson.getBytes().length);
+            try (var os = exchange.getResponseBody()) {
+                os.write(cardJson.getBytes());
+            }
+        });
+
+        // Task处理端点
+        server.createContext(&quot;/tasks/send&quot;, exchange -&gt; {
+            if (!&quot;POST&quot;.equals(exchange.getRequestMethod())) {
+                exchange.sendResponseHeaders(405, -1);
+                return;
+            }
+
+            var body = new String(exchange.getRequestBody().readAllBytes());
+            var request = JacksonUtils.fromJson(body, Map.class);
+
+            // 使用Virtual Thread处理任务
+            Thread.ofVirtual().start(() -&gt; {
+                try {
+                    var query = extractQuery(request);
+                    System.out.println(&quot;[Research Agent] 开始研究: &quot; + query);
+
+                    // 模拟研究过程
+                    Thread.sleep(java.time.Duration.ofSeconds(2));
+                    var findings = performResearch(query);
+
+                    // 构建响应
+                    var response = Map.of(
+                        &quot;taskId&quot;, &quot;research-&quot; + System.currentTimeMillis(),
+                        &quot;status&quot;, Map.of(&quot;state&quot;, &quot;completed&quot;),
+                        &quot;artifacts&quot;, List.of(Map.of(
+                            &quot;name&quot;, &quot;research-findings.md&quot;,
+                            &quot;description&quot;, &quot;研究结果: &quot; + query,
+                            &quot;parts&quot;, List.of(Map.of(
+                                &quot;type&quot;, &quot;text&quot;,
+                                &quot;text&quot;, findings
+                            ))
+                        ))
+                    );
+
+                    // 注意：非流式场景下，Server直接返回结果
+                    // 流式场景下，通过SSE逐步发送
+                } catch (Exception e) {
+                    System.err.println(&quot;[Research Agent] 错误: &quot; + e.getMessage());
+                }
+            });
+
+            // 立即返回Task ID
+            var taskResponse = JacksonUtils.toJson(Map.of(
+                &quot;taskId&quot;, &quot;research-&quot; + System.currentTimeMillis(),
+                &quot;status&quot;, Map.of(&quot;state&quot;, &quot;working&quot;,
+                    &quot;message&quot;, &quot;正在研究中...&quot;)
+            ));
+            exchange.getResponseHeaders().set(&quot;Content-Type&quot;, &quot;application/json&quot;);
+            exchange.sendResponseHeaders(202, taskResponse.getBytes().length);
+            try (var os = exchange.getResponseBody()) {
+                os.write(taskResponse.getBytes());
+            }
+        });
+
+        server.setExecutor(java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor());
+        server.start();
+        System.out.println(&quot;[Research Agent] 启动于 http://localhost:8081&quot;);
+    }
+
+    @SuppressWarnings(&quot;unchecked&quot;)
+    private static String extractQuery(Map&lt;String, Object&gt; request) {
+        var message = (Map&lt;String, Object&gt;) request.get(&quot;message&quot;);
+        var parts = (List&lt;Map&lt;String, Object&gt;&gt;) message.get(&quot;parts&quot;);
+        return parts.stream()
+            .filter(p -&gt; &quot;text&quot;.equals(p.get(&quot;type&quot;)))
+            .map(p -&gt; (String) p.get(&quot;text&quot;))
+            .collect(java.util.stream.Collectors.joining(&quot;\n&quot;));
+    }
+
+    private static String performResearch(String query) {
+        return &quot;&quot;&quot;
+            # 研究报告: %s
+            
+            ## 核心发现
+            1. 市场规模预计在2026年达到5000亿美元
+            2. 技术创新集中在固态电池和自动驾驶领域
+            3. 各国政策持续向新能源汽车倾斜
+            
+            ## 数据支持
+            - 全球电动车销量同比增长35%%
+            - 中国市场占比超过60%%
+            - 充电基础设施增长40%%
+            
+            ## 关键参与者
+            - 特斯拉: Model Y持续领跑
+            - 比亚迪: 刀片电池技术领先
+            - 蔚来: 换电模式差异化
+            
+            ---
+            研究时间: %s
+            数据来源: 多渠道交叉验证
+            &quot;&quot;&quot;.formatted(query, java.time.Instant.now());
+    }
+}
+
+// ===== 3. Orchestrator Agent（协调者）=====
+// OrchestratorAgent.java
+public class OrchestratorAgent {
+
+    private final AgentCardDiscovery discovery;
+    private final TaskClient taskClient;
+
+    public OrchestratorAgent() {
+        this.discovery = new AgentCardDiscovery();
+        this.taskClient = new TaskClient(null); // endpoint动态设置
+    }
+
+    /**
+     * 完整的协作流程：Research Agent研究 → Writer Agent撰写 → 返回最终报告
+     */
+    public String executeCollaboration(String userQuery) throws Exception {
+        // 阶段1: 发现Agent
+        System.out.println(&quot;[Orchestrator] 阶段1: 发现可用Agent...&quot;);
+        var researchCard = discovery.discover(&quot;http://localhost:8081&quot;);
+        var writerCard = discovery.discover(&quot;http://localhost:8082&quot;);
+        
+        System.out.println(&quot;[Orchestrator] 发现: &quot; + researchCard.getName());
+        System.out.println(&quot;[Orchestrator] 发现: &quot; + writerCard.getName());
+
+        // 阶段2: 委托Research Agent进行研究
+        System.out.println(&quot;[Orchestrator] 阶段2: 委托Research Agent...&quot;);
+        var researchMessage = A2aMessage.builder()
+            .messageId(&quot;msg-&quot; + System.currentTimeMillis())
+            .role(A2aMessage.Role.AGENT)
+            .parts(List.of(A2aPart.text(&quot;请研究以下主题并提供详细报告: &quot; + userQuery)))
+            .metadata(Map.of(
+                &quot;priority&quot;, &quot;high&quot;,
+                &quot;depth&quot;, &quot;comprehensive&quot;
+            ))
+            .build();
+
+        var researchTask = taskClientFor(researchCard.getUrl())
+            .sendTask(researchMessage, false);
+        var completedResearch = taskClientFor(researchCard.getUrl())
+            .pollUntilComplete(researchTask.getId(),
+                java.time.Duration.ofMinutes(5),
+                java.time.Duration.ofSeconds(5));
+
+        var researchFindings = extractArtifactText(completedResearch);
+        System.out.println(&quot;[Orchestrator] 研究完成, 获取到 &quot; +
+            researchFindings.length() + &quot; 字符的研究结果&quot;);
+
+        // 阶段3: 委托Writer Agent撰写报告
+        System.out.println(&quot;[Orchestrator] 阶段3: 委托Writer Agent...&quot;);
+        var writerMessage = A2aMessage.builder()
+            .messageId(&quot;msg-&quot; + System.currentTimeMillis())
+            .role(A2aMessage.Role.AGENT)
+            .parts(List.of(
+                A2aPart.text(&quot;&quot;&quot;
+                    请根据以下研究结果撰写一份结构清晰、语言专业的正式报告。
+                    要求: 包含摘要、分析、结论三部分，总字数约2000字。
+                    
+                    研究资料:
+                    &quot;&quot;&quot;),
+                A2aPart.text(researchFindings)
+            ))
+            .metadata(Map.of(
+                &quot;format&quot;, &quot;report&quot;,
+                &quot;targetLength&quot;, 2000,
+                &quot;language&quot;, &quot;zh-CN&quot;
+            ))
+            .build();
+
+        var writerTask = taskClientFor(writerCard.getUrl())
+            .sendTask(writerMessage, false);
+        var completedWriter = taskClientFor(writerCard.getUrl())
+            .pollUntilComplete(writerTask.getId(),
+                java.time.Duration.ofMinutes(5),
+                java.time.Duration.ofSeconds(5));
+
+        var finalReport = extractArtifactText(completedWriter);
+        System.out.println(&quot;[Orchestrator] 协作完成! 最终报告长度: &quot; +
+            finalReport.length() + &quot; 字符&quot;);
+
+        return finalReport;
+    }
+
+    /**
+     * 为指定endpoint创建TaskClient
+     */
+    private TaskClient taskClientFor(String endpoint) {
+        return new TaskClient(endpoint);
+    }
+
+    /**
+     * 从Task中提取Artifact文本内容
+     */
+    private String extractArtifactText(Task task) {
+        if (task.getArtifacts() == null || task.getArtifacts().isEmpty()) {
+            return &quot;&quot;;
+        }
+        return task.getArtifacts().get(0).getParts().stream()
+            .filter(p -&gt; p instanceof A2aPart.TextPart)
+            .map(p -&gt; ((A2aPart.TextPart) p).getText())
+            .collect(java.util.stream.Collectors.joining(&quot;\n&quot;));
+    }
+
+    // ===== 主程序入口 =====
+    public static void main(String[] args) {
+        var orchestrator = new OrchestratorAgent();
+
+        try {
+            var query = &quot;2026年全球电动车市场趋势分析&quot;;
+            System.out.println(&quot;\n=== 多Agent协作开始 ===&quot;);
+            System.out.println(&quot;用户查询: &quot; + query + &quot;\n&quot;);
+
+            var finalReport = orchestrator.executeCollaboration(query);
+
+            System.out.println(&quot;\n=== 最终报告 ===&quot;);
+            System.out.println(finalReport);
+            System.out.println(&quot;\n=== 协作完成 ===&quot;);
+
+        } catch (Exception e) {
+            System.err.println(&quot;协作失败: &quot; + e.getMessage());
+            e.printStackTrace();
+        }
+    }
+}
+
+// ===== 4. 支持模型类 =====
+// 简化版A2A模型（实际应使用A2A SDK的模型类）
+record AgentCard(String name, String description, String version, 
+                 String url, List&lt;Skill&gt; skills, 
+                 Map&lt;String, Object&gt; properties) {}
+
+record Skill(String id, String name, String description, 
+             List&lt;String&gt; tags, List&lt;String&gt; examples) {}
+
+record Task(String id, TaskStatus status, List&lt;A2aMessage&gt; history, 
+            List&lt;Artifact&gt; artifacts) {}
+
+record TaskStatus(String state, String message) {
+    static final String INPUT_REQUIRED = &quot;input-required&quot;;
+    static final String WORKING = &quot;working&quot;;
+    static final String REJECTED = &quot;rejected&quot;;
+    static final String COMPLETED = &quot;completed&quot;;
+    static final String FAILED = &quot;failed&quot;;
+    static final String CANCELED = &quot;canceled&quot;;
+}
+
+record Artifact(String name, String description, List&lt;A2aPart&gt; parts,
+                Map&lt;String, Object&gt; metadata) {}
+
+interface A2aPart {
+    record TextPart(String text) implements A2aPart {}
+    record FilePart(String name, String mimeType, byte[] content) 
+        implements A2aPart {}
+    record DataPart(Map&lt;String, Object&gt; data) implements A2aPart {}
+}
+
+record A2aMessage(String messageId, String role, List&lt;A2aPart&gt; parts,
+                  Map&lt;String, Object&gt; metadata) {}
+
+record StreamEvent(String eventType, String taskId, Artifact artifact) {}
+</code></pre></div>
+<h2>八、常见问题与最佳实践</h2>
+<h3>Q1: 如何处理A2A中的超时和重试？</h3>
+<p>A2A的Task机制天然支持长耗时操作。对于超时场景，建议：</p>
+<ul>
+<li>在Task创建时设置合理的<code>timeoutSeconds</code></li>
+<li>使用指数退避策略进行重试</li>
+<li>对于幂等操作，使用<code>idempotencyKey</code>防止重复执行</li>
+</ul>
+<h3>Q2: Agent Card的缓存策略？</h3>
+<p>Agent Card可能频繁变化（Agent升级、能力变更）。建议：</p>
+<ul>
+<li>缓存Agent Card但设置较短的TTL（如5分钟）</li>
+<li>支持<code>ETag</code>/<code>If-None-Match</code>条件请求</li>
+<li>Agent启动时主动向Registry更新自己的Card</li>
+</ul>
+<h3>Q3: 如何处理Agent之间的版本兼容性？</h3>
+<ul>
+<li>Agent Card中包含version字段</li>
+<li>遵循语义化版本规范</li>
+<li>重大变更时创建新Agent端点，保留旧版本一段时间</li>
+</ul>
+<h3>Q4: A2A的安全性考量？</h3>
+<ul>
+<li>始终使用HTTPS传输</li>
+<li>启用双向TLS（mTLS）进行Agent身份验证</li>
+<li>实现细粒度的权限控制：不是所有Agent都需要访问全部能力</li>
+<li>审计所有跨Agent的Task操作</li>
+<li>对敏感数据在Artifact中进行脱敏处理</li>
+</ul>
+<h3>Q5: MCP + A2A应该怎样组合使用？</h3>
+<p>最佳实践是分层架构：</p>
+<ul>
+<li><strong>工具层（MCP）</strong>：每个Agent通过MCP连接所需的工具和数据源</li>
+<li><strong>协作层（A2A）</strong>：Agent之间通过A2A进行任务委托和结果传递</li>
+<li><strong>编排层</strong>：一个Orchestrator Agent负责整体工作流的编排和监控</li>
+</ul>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 理想的Agent架构
+public class IdealAgentArchitecture {
+
+    // MCP: 工具和数据层
+    @MCPTool(name = &quot;search_database&quot;, description = &quot;...&quot;)
+    public SearchResult searchDatabase(String query) { /* ... */ }
+
+    @MCPResource(uri = &quot;schema://tables/{name}&quot;)
+    public TableSchema getTableSchema(String name) { /* ... */ }
+
+    // A2A: Agent协作层
+    @A2AEndpoint(path = &quot;/tasks/send&quot;)
+    public Task handleExternalTask(A2aMessage message) {
+        // 1. 解析外部Agent的请求
+        // 2. 使用本地MCP Tool收集数据
+        // 3. 调用LLM进行推理
+        // 4. 将结果作为Artifact返回
+    }
+
+    // Orchestration: 编排其他Agent
+    public Report orchestrateResearch() {
+        var dataAgentResult = a2aClient.sendTask(
+            &quot;http://data-agent:8081/tasks/send&quot;, queryMessage);
+        var analysisAgentResult = a2aClient.sendTask(
+            &quot;http://analysis-agent:8082/tasks/send&quot;, dataMessage);
+        var writerAgentResult = a2aClient.sendTask(
+            &quot;http://writer-agent:8083/tasks/send&quot;, analysisMessage);
+        return compileFinalReport(writerAgentResult);
+    }
+}
+</code></pre></div>
+<hr>
+<p><strong>关键要点</strong>：</p>
+<ul>
+<li>A2A解决的是Agent之间的互操作问题，与MCP是互补关系</li>
+<li>Agent Card是Agent发现和能力声明的核心机制</li>
+<li>Task抽象支持长耗时操作的跟踪和管理</li>
+<li>A2A SDK提供了完整的Java API，配合Virtual Threads实现高效并发</li>
+<li>安全方面：OAuth 2.0认证、权限委托、mTLS是生产环境的标配</li>
+<li>MCP + A2A组合构成了完整的企业级AI Agent架构：MCP管工具和数据，A2A管Agent协作</li>
+</ul>
+</div>
+</article>

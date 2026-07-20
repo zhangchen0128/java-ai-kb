@@ -1,0 +1,832 @@
+
+<article class="kb-entry" data-path="/07-AI基础/07-Embedding与Tokenization">
+  <div class="entry-meta">
+    <div class="entry-domain"><a href="/?d=07">07-AI基础</a></div>
+    <h1>Embeddings and Tokenization</h1>
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#["tokenization"</span><span class="badge badge-tag">#"bpe"</span><span class="badge badge-tag">#"wordpiece"</span><span class="badge badge-tag">#"sentencepiece"</span></div>
+    
+  </div>
+  <div class="entry-body"><h1>Embeddings and Tokenization</h1>
+<h2>概述</h2>
+<p>Tokenization（分词）和 Embedding（嵌入）是 LLM 的&quot;入口&quot;和&quot;感知层&quot;。Tokenization 决定了模型如何看待文本的最小单位，Embedding 决定了模型如何将离散的符号转换为可计算的连续向量。本条目深入两方面的原理、算法和工程实践。</p>
+<h2>Tokenization 深入</h2>
+<h3>为什么需要子词分词</h3>
+<p>直接将原始文本输入模型是不可行的。需要将文本转换为离散的 token ID。最简单的方案——按单词或按字符分词——都有致命缺陷：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>按单词分词：
+&quot;I love NLP&quot; → [I, love, NLP]
+问题：词汇表爆炸（英语50万+词，中文/日语无天然分词边界），OOV（Out-of-Vocabulary）问题
+
+按字符分词：
+&quot;I love NLP&quot; → [I, &#39; &#39;, l, o, v, e, &#39; &#39;, N, L, P]
+问题：序列过长（同等语义内容需要5-10倍长度），单个字符语义密度极低
+
+子词分词（最优平衡）：
+&quot;I love NLP&quot; → [I, _love, _N, LP]  （BPE示例）
+优势：常见词不拆分（I, love），罕见词拆分为有意义的子词单元（NLP→N+LP）
+</code></pre></div>
+<h3>BPE (Byte-Pair Encoding)</h3>
+<p>BPE 是最广泛使用的子词分词算法，GPT 系列采用。</p>
+<p><strong>算法流程：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>阶段1: 训练（从语料学习合并规则）
+1. 初始化：词汇表 = 所有唯一字符
+2. 统计所有相邻符号对的频率
+3. 合并频率最高的符号对 → 新符号
+4. 重复步骤2-3直到词汇表达到目标大小（如50,000）
+
+阶段2: 编码（将文本转为token id）
+1. 将文本拆分为基础字符序列
+2. 从最高优先级的合并规则开始应用
+3. 无法继续合并时输出 token id
+
+阶段3: 解码（将token id转回文本）
+1. 将token id映射回子词字符串
+2. 拼接后做后处理（如去空格）
+</code></pre></div>
+<p><strong>Java BPE 训练模拟：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.util.*;
+import java.util.stream.Collectors;
+
+public class BPETokenizer {
+
+    record MergeRule(String left, String right, String merged) {}
+
+    private final Map&lt;String, Integer&gt; tokenToId = new HashMap&lt;&gt;();
+    private final Map&lt;Integer, String&gt; idToToken = new HashMap&lt;&gt;();
+    private final List&lt;MergeRule&gt; mergeRules = new ArrayList&lt;&gt;();
+    private final int vocabSize;
+
+    public BPETokenizer(int vocabSize) {
+        this.vocabSize = vocabSize;
+        // 初始化基础字符（简化：ASCII可打印字符）
+        for (int c = 32; c &lt; 127; c++) {
+            var token = String.valueOf((char) c);
+            addToken(token);
+        }
+    }
+
+    private void addToken(String token) {
+        if (!tokenToId.containsKey(token)) {
+            int id = tokenToId.size();
+            tokenToId.put(token, id);
+            idToToken.put(id, token);
+        }
+    }
+
+    /**
+     * 从语料训练 BPE 合并规则
+     */
+    public void train(List&lt;String&gt; corpus) {
+        while (tokenToId.size() &lt; vocabSize) {
+            // 统计所有相邻符号对的频率
+            var pairFreq = new HashMap&lt;String, Integer&gt;();
+
+            for (var text : corpus) {
+                var tokens = new ArrayList&lt;&gt;(tokenizeToChars(text));
+                for (int i = 0; i &lt; tokens.size() - 1; i++) {
+                    var pair = tokens.get(i) + &quot; &quot; + tokens.get(i + 1);
+                    pairFreq.merge(pair, 1, Integer::sum);
+                }
+            }
+
+            if (pairFreq.isEmpty()) break;
+
+            // 找最高频的 pair
+            var bestPair = Collections.max(
+                pairFreq.entrySet(), Map.Entry.comparingByValue());
+            var parts = bestPair.getKey().split(&quot; &quot;);
+            String left = parts[0], right = parts[1];
+            String merged = left + right.replace(&quot;##&quot;, &quot;&quot;);  // 简化
+
+            // 创建合并规则
+            mergeRules.add(new MergeRule(left, right, merged));
+            addToken(merged);
+
+            System.out.println(&quot;Add token: &quot; + merged +
+                &quot; (vocab size: &quot; + tokenToId.size() + &quot;)&quot;);
+        }
+    }
+
+    /**
+     * 编码：将文本转为 token ID 列表
+     */
+    public List&lt;Integer&gt; encode(String text) {
+        var tokens = tokenizeToChars(text);
+        for (var rule : mergeRules) {
+            tokens = applyMerge(tokens, rule);
+        }
+        return tokens.stream()
+            .map(t -&gt; tokenToId.getOrDefault(t, 0))  // 0 = UNK
+            .collect(Collectors.toList());
+    }
+
+    private List&lt;String&gt; tokenizeToChars(String text) {
+        var chars = new ArrayList&lt;String&gt;();
+        for (char c : text.toCharArray()) {
+            chars.add(String.valueOf(c));
+        }
+        return chars;
+    }
+
+    private List&lt;String&gt; applyMerge(List&lt;String&gt; tokens, MergeRule rule) {
+        var result = new ArrayList&lt;String&gt;();
+        int i = 0;
+        while (i &lt; tokens.size()) {
+            if (i + 1 &lt; tokens.size() &amp;&amp;
+                tokens.get(i).equals(rule.left()) &amp;&amp;
+                tokens.get(i + 1).equals(rule.right())) {
+                result.add(rule.merged());
+                i += 2;
+            } else {
+                result.add(tokens.get(i));
+                i++;
+            }
+        }
+        return result;
+    }
+
+    /**
+     * 解码：将 token ID 列表转回文本
+     */
+    public String decode(List&lt;Integer&gt; ids) {
+        return ids.stream()
+            .map(id -&gt; idToToken.getOrDefault(id, &quot;&lt;?&gt;&quot;))
+            .collect(Collectors.joining())
+            .replace(&quot;##&quot;, &quot;&quot;);
+    }
+
+    public static void main(String[] args) {
+        var bpe = new BPETokenizer(300);
+        bpe.train(List.of(
+            &quot;low lower lowest&quot;,
+            &quot;new newer newest&quot;,
+            &quot;wide wider widest&quot;
+        ));
+        var encoded = bpe.encode(&quot;lowest&quot;);
+        System.out.println(&quot;Input: lowest&quot;);
+        System.out.println(&quot;Tokens: &quot; + encoded);
+        System.out.println(&quot;Decoded: &quot; + bpe.decode(encoded));
+    }
+}
+</code></pre></div>
+<h3>WordPiece</h3>
+<p>Google 的 BERT 使用的分词算法。与 BPE 的核心区别在于<strong>合并策略</strong>：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>BPE 合并策略：
+  选频率最高的 pair → 纯频率驱动
+
+WordPiece 合并策略：
+  选分数最高的 pair
+  分数 = pair_freq / (left_freq × right_freq)
+  目的：优先合并&quot;互相依赖&quot;的 pair，而非频率最高的
+</code></pre></div>
+<p><strong>与 BPE 的关键区别 — <code>##</code> 前缀：</strong></p>
+<p>WordPiece 使用 <code>##</code> 标记非词首的 token。这解决了歧义问题：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>&quot;unbelievable&quot; →
+  BPE:      [un, bel, ie, vable]      ← 无法区分词首
+  WordPiece: [un, ##bel, ##ie, ##vable] ← 明确区分词首/非词首
+</code></pre></div>
+<p><strong>为什么 <code>##</code> 重要</strong>：在预训练时，同一个子词在词首和词中位置可能含义不同。<code>##</code> 标记让模型学习不同的 embedding。</p>
+<p><strong>WordPiece 训练 Java 示例：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class WordPieceTrainer {
+
+    record Candidate(String left, String right, String merged, double score) {}
+
+    public Optional&lt;Candidate&gt; findBestMerge(
+            Map&lt;String, Integer&gt; tokenFreq,
+            Map&lt;String, Integer&gt; pairFreq) {
+
+        double bestScore = -1;
+        Candidate bestCandidate = null;
+
+        for (var entry : pairFreq.entrySet()) {
+            var parts = entry.getKey().split(&quot; &quot;);
+            String left = parts[0], right = parts[1];
+            int pairCount = entry.getValue();
+            int leftCount = tokenFreq.getOrDefault(left, 1);
+            int rightCount = tokenFreq.getOrDefault(right, 1);
+
+            // WordPiece 分数 = pair_freq / (left_freq × right_freq)
+            double score = (double) pairCount / (leftCount * rightCount);
+
+            if (score &gt; bestScore) {
+                bestScore = score;
+                String merged = left + right.replace(&quot;##&quot;, &quot;&quot;);
+                bestCandidate = new Candidate(left, right, merged, score);
+            }
+        }
+        return Optional.ofNullable(bestCandidate);
+    }
+
+    // 词首 token 不加 ##，非词首 token 加 ##
+    public static boolean isWordStart(String token) {
+        return !token.startsWith(&quot;##&quot;);
+    }
+}
+</code></pre></div>
+<h3>SentencePiece / Unigram</h3>
+<p>Google 开发的与语言无关的分词器，被 LLaMA、Mistral 等使用。</p>
+<p><strong>核心特点：</strong></p>
+<ol>
+<li><strong>直接在原始文本上训练</strong>：不需要预分词（pre-tokenization），直接处理 Unicode 字符</li>
+<li><strong>将空格视为普通字符</strong>：用 <code>_</code> (U+2581) 代表空格，实现可逆分词</li>
+<li><strong>Unigram 语言模型</strong>：不是贪心合并，而是通过概率模型选择最优分词</li>
+</ol>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>输入: &quot;Hello World&quot;
+SentencePiece: [▁Hello, ▁World]
+              （▁ 是空格占位符）
+
+可逆性：
+  encode(&quot;Hello World&quot;) → [▁Hello, ▁World]
+  decode([▁Hello, ▁World]) → &quot;Hello World&quot;
+  （空格完美恢复，因为空格被编码为▁）
+</code></pre></div>
+<p><strong>Unigram 算法核心：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>1. 从一个大的种子词汇表开始（如所有子串）
+2. 训练 Unigram 语言模型（每个 token 有概率 p(token)）
+3. 重复以下直到词汇表大小合适：
+   a. 对每个 token，计算删除它后总损失增加多少
+   b. 删除损失增加最少的 token（最不重要）
+   c. 重新训练 Unigram 模型
+4. 最终词汇表 + Viterbi 算法做分词
+</code></pre></div>
+<p><strong>Viterbi 分词（前向-后向）：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class UnigramTokenizer {
+    private final Map&lt;String, Double&gt; tokenProb;  // token → log probability
+
+    public UnigramTokenizer(Map&lt;String, Double&gt; tokenProb) {
+        this.tokenProb = tokenProb;
+    }
+
+    /**
+     * Viterbi 算法找最优分词路径
+     * dp[i] = 到位置 i 的最优分词的最高累计 log 概率
+     */
+    public List&lt;String&gt; tokenize(String text) {
+        int n = text.length();
+        var dp = new double[n + 1];
+        var prev = new int[n + 1];
+        Arrays.fill(dp, Double.NEGATIVE_INFINITY);
+        dp[0] = 0;
+
+        for (int i = 0; i &lt; n; i++) {
+            if (dp[i] == Double.NEGATIVE_INFINITY) continue;
+            for (int j = i + 1; j &lt;= Math.min(n, i + 20); j++) {  // 限制最长 token
+                var sub = text.substring(i, j);
+                var prob = tokenProb.get(sub);
+                if (prob != null) {
+                    double newScore = dp[i] + prob;
+                    if (newScore &gt; dp[j]) {
+                        dp[j] = newScore;
+                        prev[j] = i;
+                    }
+                }
+            }
+        }
+
+        // 回溯
+        var tokens = new ArrayList&lt;String&gt;();
+        int pos = n;
+        while (pos &gt; 0) {
+            int start = prev[pos];
+            tokens.add(0, text.substring(start, pos));
+            pos = start;
+        }
+        return tokens;
+    }
+}
+</code></pre></div>
+<h3>Tokenizer 对比</h3>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th>GPT-4 (cl100k_base)</th>
+<th>Claude (Anthropic)</th>
+<th>LLaMA (SentencePiece)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>算法</td>
+<td>BPE</td>
+<td>BPE (改良)</td>
+<td>SentencePiece / BPE</td>
+</tr>
+<tr>
+<td>词汇表大小</td>
+<td>100,256</td>
+<td>~100,000</td>
+<td>32,000 (LLaMA 2) / 128,000 (LLaMA 3)</td>
+</tr>
+<tr>
+<td>中文效率</td>
+<td>中等（1.5-2 token/字）</td>
+<td>中等</td>
+<td>低（2-3 token/字，小词表）</td>
+</tr>
+<tr>
+<td>代码效率</td>
+<td>高</td>
+<td>高</td>
+<td>中等</td>
+</tr>
+<tr>
+<td>多语言</td>
+<td>优秀</td>
+<td>优秀</td>
+<td>LLaMA 2 一般，LLaMA 3 大幅改善</td>
+</tr>
+<tr>
+<td>特殊编码</td>
+<td>自动处理</td>
+<td>自动处理</td>
+<td>需注意空格处理</td>
+</tr>
+</tbody></table>
+<h3>Special Tokens</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>常见特殊 Token：
+┌──────────┬─────────────────────────────────────────────┐
+│ Token    │ 用途                                       │
+├──────────┼─────────────────────────────────────────────┤
+│ BOS      │ Beginning of Sequence (序列开始)            │
+│ EOS      │ End of Sequence (序列结束，停止生成)        │
+│ PAD      │ Padding (批处理时对齐长度)                  │
+│ UNK      │ Unknown (词汇表外的 token)                  │
+│ SEP      │ Separator (分隔两个句子/段落)               │
+│ CLS      │ Classification (BERT 分类任务标记)          │
+│ MASK     │ Mask (MLM 中被遮蔽的 token)                 │
+├──────────┼─────────────────────────────────────────────┤
+│ 控制Token │ &lt;|system|&gt;, &lt;|user|&gt;, &lt;|assistant|&gt;        │
+│          │ &lt;|function_call|&gt;, &lt;|endoftext|&gt;            │
+└──────────┴─────────────────────────────────────────────┘
+</code></pre></div>
+<h3>Token 计数与成本估算</h3>
+<p>在实际调用 API 之前估算 token 数非常重要——直接关系到成本和延迟。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.util.List;
+import java.util.Map;
+
+/**
+ * Token 计数与成本估算工具
+ */
+public class TokenCostEstimator {
+
+    // 大致的 token 换算规则（中文约 1.5-2 token/字，英文约 0.75 token/词）
+    public static final double CHARS_PER_TOKEN_EN = 4.0;     // 英文字符/token
+    public static final double CHARS_PER_TOKEN_ZH = 1.5;     // 中文字符/token
+    public static final double TOKENS_PER_ZH_CHAR = 1.8;     // token/中文字
+
+    // 模型定价 (2026年参考，实际需查最新价格)
+    public record ModelPricing(
+        String model,
+        double inputPricePer1M,   // $/1M input tokens
+        double outputPricePer1M,  // $/1M output tokens
+        int contextWindow
+    ) {}
+
+    public static final Map&lt;String, ModelPricing&gt; PRICING = Map.of(
+        &quot;gpt-4o&quot;, new ModelPricing(&quot;gpt-4o&quot;, 2.50, 10.00, 128_000),
+        &quot;gpt-4o-mini&quot;, new ModelPricing(&quot;gpt-4o-mini&quot;, 0.15, 0.60, 128_000),
+        &quot;claude-3.5-sonnet&quot;, new ModelPricing(&quot;claude-3.5-sonnet&quot;, 3.00, 15.00, 200_000),
+        &quot;deepseek-v3&quot;, new ModelPricing(&quot;deepseek-v3&quot;, 0.27, 1.10, 128_000)
+    );
+
+    /**
+     * 粗略估算 token 数
+     */
+    public static int estimateTokens(String text) {
+        int zhChars = 0;
+        int enChars = 0;
+
+        for (char c : text.toCharArray()) {
+            if (Character.UnicodeScript.of(c) == Character.UnicodeScript.HAN) {
+                zhChars++;
+            } else if (!Character.isWhitespace(c)) {
+                enChars++;
+            }
+        }
+
+        return (int) Math.ceil(
+            zhChars * TOKENS_PER_ZH_CHAR +
+            enChars / CHARS_PER_TOKEN_EN
+        );
+    }
+
+    /**
+     * 计算成本
+     */
+    public record CostEstimate(double inputCost, double outputCost, double totalCost) {
+        @Override
+        public String toString() {
+            return String.format(&quot;Input: $%.6f | Output: $%.6f | Total: $%.6f&quot;,
+                inputCost, outputCost, totalCost);
+        }
+    }
+
+    public static CostEstimate estimateCost(
+            String modelId, int inputTokens, int estimatedOutputTokens) {
+        var pricing = PRICING.getOrDefault(modelId,
+            new ModelPricing(modelId, 5.0, 15.0, 128_000));
+
+        double inputCost = inputTokens / 1_000_000.0 * pricing.inputPricePer1M();
+        double outputCost = estimatedOutputTokens / 1_000_000.0 * pricing.outputPricePer1M();
+
+        return new CostEstimate(inputCost, outputCost, inputCost + outputCost);
+    }
+
+    public static void main(String[] args) {
+        var prompt = &quot;&quot;&quot;
+            你是一位资深Java架构师。请详细解释Virtual Threads的工作原理，
+            包括调度机制、与平台线程的区别、以及在实际项目中的最佳实践。
+            &quot;&quot;&quot;;
+
+        int tokens = estimateTokens(prompt);
+        System.out.println(&quot;Prompt token 估算: &quot; + tokens);
+
+        for (var entry : PRICING.entrySet()) {
+            var cost = estimateCost(entry.getKey(), tokens, 500);
+            System.out.println(entry.getKey() + &quot;: &quot; + cost);
+        }
+    }
+}
+</code></pre></div>
+<h2>Embedding 原理</h2>
+<h3>从 Word2Vec 到 Sentence Embedding</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Embedding 技术演进：
+
+2013 ─ Word2Vec (Mikolov)
+       ├── CBOW: 上下文 → 中心词
+       └── Skip-gram: 中心词 → 上下文
+       局限：静态词向量，一词一义
+
+2018 ─ ELMo / BERT
+       上下文感知的 Embedding
+       同一个词在不同句子中有不同向量
+
+2020 ─ Sentence-BERT
+       直接用 BERT 做句子 Embedding
+       通过 Pooling + 对比学习优化
+
+2022 ─ Instructor / E5 / BGE
+       指令感知的 Embedding
+       不同任务用不同 Prompt 前缀
+
+2024 ─ Matryoshka / BGE-M3
+       多粒度、多维度
+       一个模型，多种用途
+</code></pre></div>
+<h3>对比学习 (Contrastive Learning)</h3>
+<p>现代 Embedding 模型（BGE、E5、GTE）的核心训练方法。</p>
+<p><strong>核心思想</strong>：拉近正样本对的距离，拉远负样本对的距离。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>对比学习训练框架：
+
+Batch 内的每个 sentence 都有：
+  - 1 个正样本（语义相关的句子/段落）
+  - N-1 个负样本（batch 内其他句子的正样本）
+
+目标：正样本对的余弦相似度 &gt; 负样本对的余弦相似度
+</code></pre></div>
+<p><strong>InfoNCE Loss：</strong></p>
+<p>$$\mathcal{L} = -\log \frac{\exp(\text{sim}(h_i, h_i^+) / \tau)}{\exp(\text{sim}(h_i, h_i^+) / \tau) + \sum_{j=1}^{K} \exp(\text{sim}(h_i, h_j^-) / \tau)}$$</p>
+<p>其中 τ 是温度参数（temperature）。</p>
+<p><strong>温度参数的作用：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>温度 τ 控制模型对&quot;困难负样本&quot;的敏感度：
+  τ → 0 (低温)：模型更关注最相似的负样本（hard negatives）
+  τ → ∞ (高温)：所有负样本权重均匀
+  τ ≈ 0.05-0.1：实践经验中的常用值
+</code></pre></div>
+<p><strong>Java 模拟对比学习 Loss：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class ContrastiveLearning {
+
+    /**
+     * 计算 InfoNCE Loss
+     * @param embeddings [batchSize][dim] 所有样本的 embedding
+     * @param positivePairs [batchSize] 每个样本的正样本索引
+     * @param temperature 温度参数
+     */
+    public static double infoNCELoss(
+            float[][] embeddings,
+            int[] positivePairs,
+            float temperature) {
+
+        int batchSize = embeddings.length;
+        double totalLoss = 0;
+
+        for (int i = 0; i &lt; batchSize; i++) {
+            // 计算与所有样本的相似度
+            var sims = new double[batchSize];
+            for (int j = 0; j &lt; batchSize; j++) {
+                sims[j] = cosineSimilarity(embeddings[i], embeddings[j]) / temperature;
+            }
+
+            // 正样本相似度
+            double posSim = sims[positivePairs[i]];
+
+            // Log-sum-exp 技巧防止溢出
+            double maxSim = Arrays.stream(sims).max().orElse(0);
+            double sumExp = 0;
+            for (double s : sims) {
+                sumExp += Math.exp(s - maxSim);
+            }
+            totalLoss += -(posSim - maxSim - Math.log(sumExp));
+        }
+
+        return totalLoss / batchSize;
+    }
+
+    public static double cosineSimilarity(float[] a, float[] b) {
+        double dot = 0, normA = 0, normB = 0;
+        for (int i = 0; i &lt; a.length; i++) {
+            dot += (double) a[i] * b[i];
+            normA += (double) a[i] * a[i];
+            normB += (double) b[i] * b[i];
+        }
+        return dot / (Math.sqrt(normA) * Math.sqrt(normB) + 1e-8);
+    }
+}
+</code></pre></div>
+<h3>常用 Embedding 模型</h3>
+<table>
+<thead>
+<tr>
+<th>模型</th>
+<th>维度</th>
+<th>最大Token</th>
+<th>中文</th>
+<th>MTEB</th>
+<th>特色</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>text-embedding-3-large</td>
+<td>256-3072</td>
+<td>8191</td>
+<td>一般</td>
+<td>64.6</td>
+<td>Matryoshka, 多维度</td>
+</tr>
+<tr>
+<td>BGE-M3</td>
+<td>1024</td>
+<td>8192</td>
+<td>优秀</td>
+<td>64.2</td>
+<td>Dense+Sparse+ColBERT</td>
+</tr>
+<tr>
+<td>GTE-Qwen2-7B</td>
+<td>3584</td>
+<td>32768</td>
+<td>优秀</td>
+<td>67.0+</td>
+<td>大参数量，超长文本</td>
+</tr>
+<tr>
+<td>E5-mistral-7b-instruct</td>
+<td>4096</td>
+<td>32768</td>
+<td>一般</td>
+<td>66.6</td>
+<td>Mistral 底座</td>
+</tr>
+<tr>
+<td>jina-embeddings-v3</td>
+<td>1024</td>
+<td>8192</td>
+<td>一般</td>
+<td>65+</td>
+<td>多任务 LoRA</td>
+</tr>
+</tbody></table>
+<h3>BGE-M3 特色</h3>
+<p>BGE-M3 是目前中文场景最推荐的 Embedding 模型之一，由 BAAI 发布。它的核心创新是<strong>三路输出</strong>：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>BGE-M3 架构：
+
+输入文本
+    │
+    ▼
+BERT-base (XLM-RoBERTa)
+    │
+    ├──► Dense Embedding (1024维)
+    │    标准稠密向量，用于向量检索
+    │    输出: [0.02, -0.15, 0.31, ...]
+    │
+    ├──► Sparse Embedding (词表大小维)
+    │    每个 token 的权重（类 BM25）
+    │    输出: {&quot;虚拟&quot;: 1.2, &quot;线程&quot;: 2.1, &quot;并发&quot;: 0.8, ...}
+    │    用于关键词检索，可解释性强
+    │
+    └──► ColBERT Embedding (token序列 × 维度)
+        每个 token 一个向量（Late Interaction）
+        输出: [[tok1_emb], [tok2_emb], ...]
+        用于精细匹配（如重排）
+</code></pre></div>
+<p><strong>三路输出的使用场景：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>混合检索策略：
+┌──────────────────────────────────────────────────────────┐
+│  Query                                                   │
+│    │                                                     │
+│    ├──► Dense Embedding ──► pgvector ANN 检索            │
+│    ├──► Sparse Embedding ─► Elasticsearch 关键词检索     │
+│    └──► ColBERT ──────────► 候选结果重排（Late Interaction）
+│                              │                           │
+│                              ▼                           │
+│                        融合排序 (RRF)                     │
+│                              │                           │
+│                              ▼                           │
+│                         最终结果                          │
+└──────────────────────────────────────────────────────────┘
+</code></pre></div>
+<h3>Matryoshka Embedding</h3>
+<p>Matryoshka（俄罗斯套娃）Embedding 是 OpenAI 和学术界都在推广的一项关键技术。它的核心思想：<strong>一个向量，多种维度</strong>。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>传统 Embedding：
+  1024维模型 → 只能用1024维 → 想要512维？重新训练
+
+Matryoshka Embedding：
+  1024维模型 → 可以用1024维（最高精度）
+            → 也可以用512维（精度稍降，存储减半）
+            → 也可以用256维（精度再降，存储再减半）
+            → ...
+
+  就像一个俄罗斯套娃，外层包含内层，内层是外层的&quot;粗粒度摘要&quot;
+</code></pre></div>
+<p><strong>训练方法</strong>：在训练时不仅计算全维度的 Loss，还同时计算截断到各种维度的 Loss：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>ℒ_total = ℒ_1024 + ℒ_512 + ℒ_256 + ℒ_128 + ℒ_64 + ...
+
+对于每种维度 d，只取 embedding 的前 d 维计算相似度：
+sim_d(a, b) = cosine_similarity(a[:d], b[:d])
+</code></pre></div>
+<p><strong>维度 vs 性能权衡（实际数据参考）：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>维度    存储(相对)   检索速度   MTEB Recall  适用场景
+1024    1x          基准      100% (max)    高精度需要
+512     0.5x        1.5x      ~99%           生产默认
+256     0.25x       2x        ~97%           高吞吐场景
+128     0.125x      3x        ~93%           初筛/粗排
+64      0.0625x     4x        ~85%           粗略过滤
+</code></pre></div>
+<p><strong>Java 使用 Matryoshka Embedding：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class MatryoshkaEmbedding {
+    private final float[] fullEmbedding;
+    private final int fullDim;
+
+    public MatryoshkaEmbedding(float[] fullEmbedding) {
+        this.fullEmbedding = fullEmbedding;
+        this.fullDim = fullEmbedding.length;
+    }
+
+    /**
+     * 截取前 matryoshkaDim 维
+     */
+    public float[] getEmbedding(int matryoshkaDim) {
+        if (matryoshkaDim &gt; fullDim) {
+            throw new IllegalArgumentException(
+                &quot;matryoshkaDim &quot; + matryoshkaDim + &quot; exceeds fullDim &quot; + fullDim);
+        }
+        return Arrays.copyOf(fullEmbedding, matryoshkaDim);
+    }
+
+    /**
+     * 使用前 dim 维计算相似度
+     */
+    public static double similarity(float[] a, float[] b, int dim) {
+        double dot = 0, normA = 0, normB = 0;
+        for (int i = 0; i &lt; dim; i++) {
+            dot += (double) a[i] * b[i];
+            normA += (double) a[i] * a[i];
+            normB += (double) b[i] * b[i];
+        }
+        return dot / (Math.sqrt(normA) * Math.sqrt(normB) + 1e-8);
+    }
+
+    /**
+     * 自适应维度选择：根据目标召回率选择最小维度
+     */
+    public int selectOptimalDim(double targetRecall) {
+        // 基于维度-召回率曲线的启发式规则
+        // text-embedding-3-large 的大致对应关系
+        if (targetRecall &gt;= 0.99) return 1024;
+        if (targetRecall &gt;= 0.97) return 512;
+        if (targetRecall &gt;= 0.95) return 256;
+        if (targetRecall &gt;= 0.90) return 128;
+        return 64;
+    }
+}
+</code></pre></div>
+<h3>多模态 Embedding：CLIP</h3>
+<p>CLIP (Contrastive Language-Image Pre-training) 是 OpenAI 提出的文本-图像对齐模型。</p>
+<p><strong>核心架构：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>CLIP 双塔模型：
+
+文本塔                         图像塔
+  │                              │
+  ▼                              ▼
+Transformer Encoder          ViT / ResNet
+  │                              │
+  ▼                              ▼
+文本 Embedding (d维)        图像 Embedding (d维)
+  │                              │
+  └──────── 共享投影空间 ─────────┘
+  │                              │
+  ▼                              ▼
+对比学习：正样本对的余弦相似度最大化
+</code></pre></div>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>使用场景：
+
+1. 图像搜索：&quot;a dog playing in the park&quot; → 搜索图片库
+2. 零样本分类：图片 → 计算与 [&quot;cat&quot;, &quot;dog&quot;, &quot;car&quot;] 的相似度 → 最高者为类别
+3. 多模态 RAG：文本 Query 可以检索相关图片，反之亦然
+</code></pre></div>
+<h2>Embedding 质量评估：MTEB 基准</h2>
+<p>MTEB (Massive Text Embedding Benchmark) 是 Embedding 模型的标准评测基准，涵盖 7 大类任务：</p>
+<table>
+<thead>
+<tr>
+<th>任务类别</th>
+<th>说明</th>
+<th>指标</th>
+<th>示例</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Classification</td>
+<td>文本分类</td>
+<td>Accuracy, F1</td>
+<td>情感分析、主题分类</td>
+</tr>
+<tr>
+<td>Clustering</td>
+<td>聚类分析</td>
+<td>V-Measure</td>
+<td>新闻聚类</td>
+</tr>
+<tr>
+<td>PairClassification</td>
+<td>文本对分类</td>
+<td>AP</td>
+<td>语义相似/重复检测</td>
+</tr>
+<tr>
+<td>Reranking</td>
+<td>重排序</td>
+<td>MAP, MRR</td>
+<td>搜索结果重排</td>
+</tr>
+<tr>
+<td>Retrieval</td>
+<td>信息检索</td>
+<td>NDCG@10</td>
+<td>给定 Query 检索相关文档</td>
+</tr>
+<tr>
+<td>STS (Semantic Textual Similarity)</td>
+<td>语义相似度</td>
+<td>Spearman</td>
+<td>两个句子的相似度评分</td>
+</tr>
+<tr>
+<td>Summarization</td>
+<td>摘要评估</td>
+<td>Spearman</td>
+<td>摘要与原文的语义一致性</td>
+</tr>
+</tbody></table>
+<h2>Embedding 应用</h2>
+<h3>语义搜索</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>构建流程：
+文档 → 切片 → Embedding模型 → 向量 → 存入 pgvector/Redis
+                                          ↑
+查询 → Embedding模型 → 查询向量 ── ANN检索 ──→ Top-K 结果
+</code></pre></div>
+<h3>聚类分析</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>嵌入聚类流程：
+1. 对所有文档生成 embedding
+2. 使用 K-means / DBSCAN 聚类
+3. 每个簇代表一个主题
+4. 分析每个簇的关键词和代表文档
+</code></pre></div>
+<h3>异常检测</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>1. 对正常数据生成 embedding
+2. 新数据的 embedding 如果与所有正常簇的距离都超过阈值 → 标记为异常
+3. 应用：客服对话中的异常意图、文档中的异常内容
+</code></pre></div>
+<h2>最佳实践</h2>
+<ol>
+<li><strong>选择 Tokenizer</strong>：中文为主选 LLaMA 3 tokenizer 或 Qwen tokenizer，英文为主选 GPT-4 tokenizer（cl100k_base），不要混用</li>
+<li><strong>成本预估</strong>：开发阶段就建立 cost estimator，给每个 API 调用预估 token 消耗，避免月底账单爆炸</li>
+<li><strong>Embedding 模型选择</strong>：中文场景首选 BGE-M3，英文场景可选 text-embedding-3-large（支持 Matryoshka），超长文本选 GTE-Qwen2</li>
+<li><strong>Matryoshka 实践</strong>：生产环境建议存储全维度（1024/3072），查询时按需截取，这是&quot;不增加存储、降低检索延迟&quot;的免费午餐</li>
+<li><strong>对比学习的温度参数</strong>：如果用对比学习微调 embedding，温度参数 τ 通常取 0.05-0.1，太大会让模型学不到区分度</li>
+</ol>
+<h2>常见问题</h2>
+<p><strong>Q: 中文选哪个 tokenizer 最好？</strong></p>
+<p>A: (1) 如果用闭源 API，GPT-4 的 cl100k_base 对中文支持已经很好（约1.5-2 token/中文字）；(2) 如果用开源模型，Qwen 的 tokenizer 中文效率最高（接近1 token/字），LLaMA 3 也大幅改善了中文（相比 LLaMA 2 的3 token/字）。</p>
+<p><strong>Q: Matryoshka Embedding 会降低全维度质量吗？</strong></p>
+<p>A: 轻微降低（&lt;1% MTEB 分数），但换来了维度灵活性。OpenAI text-embedding-3-large 全维度（3072维）和 text-embedding-ada-002（1536维）相比，即使截取到 256 维也能达到 ada-002 全维度的效果。</p>
+<p><strong>Q: BPE vs WordPiece vs SentencePiece 实际该选哪个？</strong></p>
+<p>A: 不用选——你选的模型已经定了 tokenizer。但从知识角度：BPE 最通用（GPT 系列），WordPiece 适合需要明确词边界（BERT 系），SentencePiece 最语言无关（LLaMA/Mistral/Qwen）。</p>
+<h2>相关条目</h2>
+<ul>
+<li><a href="/07-AI基础/07-Transformer架构深度解析" class="cross-ref" data-ref="07-Transformer架构深度解析">07-Transformer架构深度解析</a> — Transformer 架构深入</li>
+<li><a href="/07-AI基础/07-推理策略与评估方法" class="cross-ref" data-ref="07-推理策略与评估方法">07-推理策略与评估方法</a> — 推理和评估</li>
+<li><a href="/?d=11" class="cross-ref domain-ref">11-检索与RAG/README</a> — 检索与 RAG（Embedding 在 RAG 中的应用）</li>
+<li><a href="/?d=10" class="cross-ref domain-ref">10-AI数据工程/README</a> — 文档切片和 Embedding 索引流水线</li>
+</ul>
+</div>
+</article>

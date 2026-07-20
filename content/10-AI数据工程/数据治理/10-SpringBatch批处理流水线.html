@@ -1,0 +1,1063 @@
+
+<article class="kb-entry" data-path="/10-AI数据工程/数据治理/10-SpringBatch批处理流水线">
+  <div class="entry-meta">
+    <div class="entry-domain"><a href="/?d=10">10-AI数据工程</a></div>
+    <h1>Spring Batch在AI数据工程中的批处理流水线</h1>
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#["spring-batch"</span><span class="badge badge-tag">#"batch-processing"</span><span class="badge badge-tag">#"embedding"</span><span class="badge badge-tag">#"rate-limiting"</span></div>
+    
+  </div>
+  <div class="entry-body"><h1>Spring Batch在AI数据工程中的批处理流水线</h1>
+<h2>概述</h2>
+<p>AI数据工程中的文档处理是一个典型的批处理场景：从文件系统/对象存储读取数千份文档，逐文档执行解析、清洗、切片、Embedding，最后写入向量数据库和搜索引擎。Spring Batch提供了经过生产验证的分区并行、错误处理、检查点和重启能力，是构建AI数据管道的理想基座。</p>
+<p>本文构建一个完整的6步骤AI数据批处理Job，覆盖Reader到Writer的全链路，包含Embedding API速率限制、分区并行和完整的错误处理策略。</p>
+<hr>
+<h2>一、Spring Batch在AI数据工程中的应用场景</h2>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>说明</th>
+<th>典型规模</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>全量文档入库</td>
+<td>首次将文件系统中的所有文档导入知识库</td>
+<td>10K-1M 文档</td>
+</tr>
+<tr>
+<td>增量文档同步</td>
+<td>监听数据库/S3变更，增量处理新文档</td>
+<td>100-10K/day</td>
+</tr>
+<tr>
+<td>Embedding升级迁移</td>
+<td>模型升级时，所有chunk重新Embedding</td>
+<td>100K-10M chunks</td>
+</tr>
+<tr>
+<td>索引重建</td>
+<td>变更索引参数或策略后全量重建</td>
+<td>全量</td>
+</tr>
+<tr>
+<td>定期OCR补扫</td>
+<td>对低文本量的PDF重新OCR</td>
+<td>按需</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>二、批处理流水线设计</h2>
+<h3>2.1 总体架构</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Job: documentIngestionJob
+ │
+ ├─ Step 1: listDocuments (Reader: 从文件系统/S3读取待处理文档列表)
+ │
+ ├─ Step 2: parseDocuments (Processor: Tika/PDFBox/POI解析文档)
+ │
+ ├─ Step 3: cleanDocuments (Processor: Markdown标准化、隐私脱敏)
+ │
+ ├─ Step 4: chunkDocuments (Processor: 智能切片)
+ │
+ ├─ Step 5: embedChunks (Processor: 调用Embedding API — 含速率限制)
+ │
+ └─ Step 6: indexChunks (Writer: 写入pgvector + Elasticsearch)
+</code></pre></div>
+<h3>2.2 Domain Model</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+
+/**
+ * 批处理领域对象
+ */
+public record DocumentItem(
+    UUID documentId,
+    String sourceUri,
+    String fileName,
+    String mimeType,
+    long fileSize,
+    DocumentStatus status,      // PENDING, PARSING, PARSED, CHUNKING, CHUNKED, EMBEDDING, INDEXED, FAILED
+    String rawContent,          // 解析后的原始文本
+    String cleanedContent,      // 清洗后的Markdown
+    List&lt;ChunkItem&gt; chunks,
+    String errorMessage,
+    Instant createdAt,
+    Instant updatedAt
+) {
+    public enum DocumentStatus {
+        PENDING, PARSING, PARSED, CHUNKING, CHUNKED, EMBEDDING, INDEXED, FAILED
+    }
+
+    public DocumentItem withParsedContent(String content) {
+        return new DocumentItem(
+            documentId, sourceUri, fileName, mimeType, fileSize,
+            DocumentStatus.PARSED, content, null, null, null, createdAt, Instant.now()
+        );
+    }
+
+    public DocumentItem withCleanedContent(String cleaned) {
+        return new DocumentItem(
+            documentId, sourceUri, fileName, mimeType, fileSize,
+            DocumentStatus.PARSED, rawContent, cleaned, null, null, createdAt, Instant.now()
+        );
+    }
+
+    public DocumentItem withChunks(List&lt;ChunkItem&gt; chunks) {
+        return new DocumentItem(
+            documentId, sourceUri, fileName, mimeType, fileSize,
+            DocumentStatus.CHUNKED, rawContent, cleanedContent, chunks, null, createdAt, Instant.now()
+        );
+    }
+
+    public DocumentItem withError(String error) {
+        return new DocumentItem(
+            documentId, sourceUri, fileName, mimeType, fileSize,
+            DocumentStatus.FAILED, rawContent, cleanedContent, chunks, error, createdAt, Instant.now()
+        );
+    }
+}
+
+public record ChunkItem(
+    UUID chunkId,
+    int chunkIndex,
+    String content,
+    int tokenCount,
+    float[] embedding,
+    String sectionPath,
+    ChunkStatus status     // PENDING, EMBEDDING, EMBEDDED, INDEXED, FAILED
+) {
+    public enum ChunkStatus {
+        PENDING, EMBEDDING, EMBEDDED, INDEXED, FAILED
+    }
+
+    public ChunkItem withEmbedding(float[] embedding) {
+        return new ChunkItem(
+            chunkId, chunkIndex, content, tokenCount, embedding, sectionPath, ChunkStatus.EMBEDDED
+        );
+    }
+}
+</code></pre></div>
+<hr>
+<h2>三、Step-by-Step 实现</h2>
+<h3>3.1 Job配置主类</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.batch.core.Job;
+import org.springframework.batch.core.Step;
+import org.springframework.batch.core.configuration.annotation.EnableBatchProcessing;
+import org.springframework.batch.core.job.builder.JobBuilder;
+import org.springframework.batch.core.repository.JobRepository;
+import org.springframework.batch.core.step.builder.StepBuilder;
+import org.springframework.batch.integration.async.AsyncItemProcessor;
+import org.springframework.batch.integration.async.AsyncItemWriter;
+import org.springframework.batch.item.ItemProcessor;
+import org.springframework.batch.item.ItemReader;
+import org.springframework.batch.item.ItemWriter;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.core.task.VirtualThreadTaskExecutor;
+import org.springframework.transaction.PlatformTransactionManager;
+
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadFactory;
+
+@Configuration
+@EnableBatchProcessing
+public class DocumentIngestionJobConfig {
+
+    private final JobRepository jobRepository;
+    private final PlatformTransactionManager transactionManager;
+    private final DocumentReader documentReader;
+    private final DocumentParserProcessor parserProcessor;
+    private final DocumentCleanerProcessor cleanerProcessor;
+    private final DocumentChunkingProcessor chunkingProcessor;
+    private final EmbeddingProcessor embeddingProcessor;
+    private final VectorIndexWriter indexWriter;
+
+    public DocumentIngestionJobConfig(
+            JobRepository jobRepository,
+            PlatformTransactionManager transactionManager) {
+        this.jobRepository = jobRepository;
+        this.transactionManager = transactionManager;
+        // 在实际项目中这些通过构造器注入
+        this.documentReader = new DocumentReader(null);
+        this.parserProcessor = new DocumentParserProcessor();
+        this.cleanerProcessor = new DocumentCleanerProcessor();
+        this.chunkingProcessor = new DocumentChunkingProcessor();
+        this.embeddingProcessor = new EmbeddingProcessor(null);
+        this.indexWriter = new VectorIndexWriter(null);
+    }
+
+    @Bean
+    public Job documentIngestionJob() {
+        return new JobBuilder(&quot;documentIngestionJob&quot;, jobRepository)
+            .start(parseStep())
+            .next(chunkStep())
+            .next(embedAndIndexStep())
+            .build();
+    }
+
+    /**
+     * Step 1+2+3 合并：读取 → 解析 → 清洗
+     * 使用 CompositeItemProcessor 串联处理
+     */
+    @Bean
+    public Step parseStep() {
+        return new StepBuilder(&quot;parseStep&quot;, jobRepository)
+            .&lt;DocumentItem, DocumentItem&gt;chunk(10, transactionManager) // chunk=10个文档一批事务
+            .reader(documentReader)
+            .processor(new org.springframework.batch.item.support.CompositeItemProcessor&lt;&gt;(
+                List.of(parserProcessor, cleanerProcessor)
+            ))
+            .writer(parsedDocumentWriter())
+            .faultTolerant()
+            .skip(DocumentParseException.class)
+            .skipLimit(100)          // 跳过最多100个解析失败的文档
+            .retryLimit(3)           // 重试3次
+            .retry(java.io.IOException.class)
+            .listener(new DocumentProcessListener())
+            .build();
+    }
+
+    /**
+     * Step 4: 切片
+     */
+    @Bean
+    public Step chunkStep() {
+        return new StepBuilder(&quot;chunkStep&quot;, jobRepository)
+            .&lt;DocumentItem, DocumentItem&gt;chunk(10, transactionManager)
+            .reader(parsedDocumentReader())
+            .processor(chunkingProcessor)
+            .writer(chunkedDocumentWriter())
+            .faultTolerant()
+            .skip(RuntimeException.class)
+            .skipLimit(50)
+            .build();
+    }
+
+    /**
+     * Step 5+6: Embedding + 索引写入
+     * 使用 AsyncItemProcessor 提高 Embedding API 调用的并发度
+     */
+    @Bean
+    public Step embedAndIndexStep() {
+        // 异步处理器：Embedding API 调用是 IO 密集型
+        var asyncProcessor = new AsyncItemProcessor&lt;ChunkItem, ChunkItem&gt;();
+        asyncProcessor.setDelegate(embeddingProcessor);
+        var taskExecutor = new VirtualThreadTaskExecutor(&quot;embedding-&quot;);
+        asyncProcessor.setTaskExecutor(taskExecutor);
+
+        // 异步写入器
+        var asyncWriter = new AsyncItemWriter&lt;ChunkItem&gt;();
+        asyncWriter.setDelegate(indexWriter);
+
+        return new StepBuilder(&quot;embedAndIndexStep&quot;, jobRepository)
+            .&lt;ChunkItem, Future&lt;ChunkItem&gt;&gt;chunk(50, transactionManager)
+            .reader(chunkReader())
+            .processor(asyncProcessor)
+            .writer(asyncWriter)
+            .faultTolerant()
+            .skip(EmbeddingException.class)
+            .skipLimit(200)
+            .retryLimit(5)
+            .retry(EmbeddingException.class)
+            .listener(new ChunkProcessListener())
+            .build();
+    }
+
+    // --- Reader/Writer 占位（在实际项目中从Bean容器注入）---
+    @Bean
+    public ItemWriter&lt;DocumentItem&gt; parsedDocumentWriter() {
+        return items -&gt; items.forEach(item -&gt;
+            System.out.println(&quot;Parsed: &quot; + item.fileName())
+        );
+    }
+
+    @Bean
+    public ItemReader&lt;DocumentItem&gt; parsedDocumentReader() {
+        return new ParsedDocumentReader(null);
+    }
+
+    @Bean
+    public ItemWriter&lt;DocumentItem&gt; chunkedDocumentWriter() {
+        return items -&gt; items.forEach(item -&gt;
+            System.out.println(&quot;Chunked: &quot; + item.fileName() + &quot; → &quot; + item.chunks().size() + &quot; chunks&quot;)
+        );
+    }
+
+    @Bean
+    public ItemReader&lt;ChunkItem&gt; chunkReader() {
+        return new ChunkReader(null);
+    }
+}
+</code></pre></div>
+<h3>3.2 DocumentReader — 从文件系统/S3读取</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.batch.item.ItemReader;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.stream.Stream;
+import java.util.Iterator;
+
+public class DocumentReader implements ItemReader&lt;DocumentItem&gt; {
+
+    private final Path documentRoot;
+    private Iterator&lt;Path&gt; fileIterator;
+    private boolean initialized = false;
+
+    public DocumentReader(Path documentRoot) {
+        this.documentRoot = documentRoot;
+    }
+
+    @Override
+    public DocumentItem read() throws Exception {
+        if (!initialized) {
+            try (var files = Files.walk(documentRoot)) {
+                var fileList = files
+                    .filter(Files::isRegularFile)
+                    .filter(this::isSupportedFormat)
+                    .toList();
+                fileIterator = fileList.iterator();
+            }
+            initialized = true;
+        }
+
+        if (!fileIterator.hasNext()) {
+            return null; // Spring Batch: null表示Reader已读完
+        }
+
+        var filePath = fileIterator.next();
+        try {
+            var mimeType = Files.probeContentType(filePath);
+            return new DocumentItem(
+                UUID.randomUUID(),
+                filePath.toUri().toString(),
+                filePath.getFileName().toString(),
+                mimeType != null ? mimeType : &quot;application/octet-stream&quot;,
+                Files.size(filePath),
+                DocumentItem.DocumentStatus.PENDING,
+                null, null, null, null,
+                java.time.Instant.now(), java.time.Instant.now()
+            );
+        } catch (Exception e) {
+            // 无法读取的文件跳过，记录日志
+            return read(); // 递归读下一个
+        }
+    }
+
+    private boolean isSupportedFormat(Path path) {
+        var name = path.getFileName().toString().toLowerCase();
+        return name.endsWith(&quot;.pdf&quot;) || name.endsWith(&quot;.docx&quot;) ||
+               name.endsWith(&quot;.xlsx&quot;) || name.endsWith(&quot;.pptx&quot;) ||
+               name.endsWith(&quot;.html&quot;) || name.endsWith(&quot;.htm&quot;) ||
+               name.endsWith(&quot;.txt&quot;) || name.endsWith(&quot;.md&quot;) ||
+               name.endsWith(&quot;.json&quot;) || name.endsWith(&quot;.csv&quot;);
+    }
+}
+</code></pre></div>
+<h3>3.3 DocumentParserProcessor — 文档解析</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.batch.item.ItemProcessor;
+import java.nio.file.Path;
+
+public class DocumentParserProcessor implements ItemProcessor&lt;DocumentItem, DocumentItem&gt; {
+
+    private final DocumentParserService parserService;
+
+    public DocumentParserProcessor() {
+        // 实际项目中注入
+        this.parserService = new DocumentParserService(null);
+    }
+
+    @Override
+    public DocumentItem process(DocumentItem item) throws Exception {
+        try {
+            var filePath = Path.of(java.net.URI.create(item.sourceUri()));
+            var result = parserService.parse(filePath);
+
+            // 将警告信息记录到元数据中
+            if (!result.warnings().isEmpty()) {
+                // log.warn(&quot;Parse warnings for {}: {}&quot;, item.fileName(), result.warnings());
+            }
+
+            return item.withParsedContent(result.markdownContent());
+
+        } catch (DocumentParseException e) {
+            // 解析失败：记录错误，让Spring Batch决定跳过还是重试
+            throw e;
+        }
+    }
+}
+
+class DocumentParseException extends RuntimeException {
+    public DocumentParseException(String message, Throwable cause) {
+        super(message, cause);
+    }
+}
+</code></pre></div>
+<h3>3.4 DocumentCleanerProcessor — 文本清洗</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.batch.item.ItemProcessor;
+import java.util.regex.Pattern;
+
+public class DocumentCleanerProcessor implements ItemProcessor&lt;DocumentItem, DocumentItem&gt; {
+
+    private final PiiDetector piiDetector = new PiiDetector();
+
+    // 清洗模式
+    private static final Pattern MULTIPLE_NEWLINES = Pattern.compile(&quot;\n{4,}&quot;);
+    private static final Pattern TRAILING_SPACES = Pattern.compile(&quot; +$&quot;, Pattern.MULTILINE);
+    private static final Pattern PAGE_NUMBERS = Pattern.compile(&quot;^\\s*\\d+\\s*$&quot;, Pattern.MULTILINE);
+
+    @Override
+    public DocumentItem process(DocumentItem item) {
+        if (item.rawContent() == null) {
+            throw new IllegalStateException(&quot;rawContent is null for &quot; + item.fileName());
+        }
+
+        var cleaned = item.rawContent();
+
+        // 1. 基础清洗
+        cleaned = normalizeNewlines(cleaned);
+        cleaned = removeExcessiveWhitespace(cleaned);
+        cleaned = removePageNumbers(cleaned);
+
+        // 2. 统一Unicode
+        cleaned = normalizeUnicode(cleaned);
+
+        // 3. Markdown标准化
+        cleaned = normalizeMarkdown(cleaned);
+
+        // 4. PII脱敏
+        cleaned = maskPii(cleaned);
+
+        return item.withCleanedContent(cleaned);
+    }
+
+    private String normalizeNewlines(String text) {
+        // Windows \r\n → \n，多余的连续换行合并
+        text = text.replace(&quot;\r\n&quot;, &quot;\n&quot;);
+        text = MULTIPLE_NEWLINES.matcher(text).replaceAll(&quot;\n\n\n&quot;);
+        return text;
+    }
+
+    private String removeExcessiveWhitespace(String text) {
+        text = TRAILING_SPACES.matcher(text).replaceAll(&quot;&quot;);
+        return text;
+    }
+
+    private String removePageNumbers(String text) {
+        return PAGE_NUMBERS.matcher(text).replaceAll(&quot;&quot;);
+    }
+
+    private String normalizeUnicode(String text) {
+        // 全角转半角、统一等号、统一引号等
+        return text
+            .replace(&#39;‘&#39;, &#39;\&#39;&#39;)  // 左单引号
+            .replace(&#39;’&#39;, &#39;\&#39;&#39;)  // 右单引号
+            .replace(&#39;“&#39;, &#39;&quot;&#39;)   // 左双引号
+            .replace(&#39;”&#39;, &#39;&quot;&#39;)   // 右双引号
+            .replace(&#39;–&#39;, &#39;-&#39;)   // en dash
+            .replace(&#39;—&#39;, &#39;-&#39;)   // em dash
+            .replace(&#39; &#39;, &#39; &#39;)   // non-breaking space
+            .replace(&quot;　&quot;, &quot; &quot;);       // 全角空格
+    }
+
+    private String normalizeMarkdown(String text) {
+        // 确保标题前后有空行
+        text = text.replaceAll(&quot;(?&lt;!\n\n)(#{1,6}\\s)&quot;, &quot;\n\n$1&quot;);
+        text = text.replaceAll(&quot;(#{1,6}\\s.+)(?!\n\n)&quot;, &quot;$1\n\n&quot;);
+        return text;
+    }
+
+    private String maskPii(String text) {
+        var matches = piiDetector.detect(text);
+        if (matches.isEmpty()) return text;
+
+        var result = new StringBuilder(text);
+        int offset = 0;
+        for (var match : matches) {
+            var start = match.start() + offset;
+            var end = match.end() + offset;
+            var masked = match.maskedValue();
+            result.replace(start, end, masked);
+            offset += masked.length() - (end - start);
+        }
+        return result.toString();
+    }
+}
+</code></pre></div>
+<h3>3.5 DocumentChunkingProcessor — 智能切片</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.batch.item.ItemProcessor;
+import java.util.ArrayList;
+import java.util.UUID;
+
+public class DocumentChunkingProcessor implements ItemProcessor&lt;DocumentItem, DocumentItem&gt; {
+
+    private final RecursiveCharacterChunker chunker = new RecursiveCharacterChunker();
+    private final int chunkSize = 1024;   // 字符数
+    private final int overlap = 200;       // 重叠字符数
+
+    @Override
+    public DocumentItem process(DocumentItem item) {
+        if (item.cleanedContent() == null || item.cleanedContent().isBlank()) {
+            return item.withChunks(java.util.List.of());
+        }
+
+        var rawChunks = chunker.splitText(item.cleanedContent(), chunkSize, overlap);
+
+        var chunks = new ArrayList&lt;ChunkItem&gt;();
+        for (int i = 0; i &lt; rawChunks.size(); i++) {
+            var rc = rawChunks.get(i);
+            var tokenCount = estimateTokens(rc.text());
+            chunks.add(new ChunkItem(
+                UUID.randomUUID(),
+                i,
+                rc.text(),
+                tokenCount,
+                null,           // embedding 后续步骤填充
+                null,           // sectionPath 可从结构感知切分获得
+                ChunkItem.ChunkStatus.PENDING
+            ));
+        }
+
+        return item.withChunks(chunks);
+    }
+
+    /**
+     * 简单Token估算：中文约0.6 token/字，英文约0.25 token/字
+     */
+    private int estimateTokens(String text) {
+        var chineseChars = text.codePoints()
+            .filter(cp -&gt; Character.UnicodeScript.of(cp) == Character.UnicodeScript.HAN)
+            .count();
+        var otherChars = text.length() - chineseChars;
+        return (int) (chineseChars * 0.6 + otherChars * 0.25);
+    }
+}
+</code></pre></div>
+<h3>3.6 EmbeddingProcessor — 带速率限制的Embedding调用</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.batch.item.ItemProcessor;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+
+public class EmbeddingProcessor implements ItemProcessor&lt;ChunkItem, ChunkItem&gt; {
+
+    private final String embeddingApiUrl;
+    private final String apiKey;
+    private final HttpClient httpClient;
+    private final RateLimiter rateLimiter;
+    private final int maxRetries = 3;
+
+    // 令牌桶速率限制器
+    private static class RateLimiter {
+        private final double permitsPerSecond;
+        private double tokens;
+        private long lastRefillTime;
+
+        RateLimiter(double permitsPerSecond) {
+            this.permitsPerSecond = permitsPerSecond;
+            this.tokens = permitsPerSecond;
+            this.lastRefillTime = System.nanoTime();
+        }
+
+        synchronized void acquire() throws InterruptedException {
+            refill();
+            if (tokens &lt; 1.0) {
+                var waitMs = (long) ((1.0 - tokens) / permitsPerSecond * 1000);
+                Thread.sleep(Math.max(waitMs, 10));
+                refill();
+            }
+            tokens -= 1.0;
+        }
+
+        private void refill() {
+            var now = System.nanoTime();
+            var elapsed = (now - lastRefillTime) / 1_000_000_000.0;
+            tokens = Math.min(tokens + elapsed * permitsPerSecond, permitsPerSecond);
+            lastRefillTime = now;
+        }
+    }
+
+    public EmbeddingProcessor(String embeddingApiUrl) {
+        this.embeddingApiUrl = embeddingApiUrl != null
+            ? embeddingApiUrl : &quot;http://localhost:11434/api/embeddings&quot;;
+        this.apiKey = System.getenv(&quot;EMBEDDING_API_KEY&quot;);
+        this.httpClient = HttpClient.newBuilder()
+            .connectTimeout(java.time.Duration.ofSeconds(30))
+            .build();
+        // 默认速率：每秒10个请求（根据API限制调整）
+        this.rateLimiter = new RateLimiter(10);
+    }
+
+    @Override
+    public ChunkItem process(ChunkItem item) throws Exception {
+        for (int attempt = 0; attempt &lt; maxRetries; attempt++) {
+            try {
+                // 速率限制
+                rateLimiter.acquire();
+
+                var embedding = callEmbeddingApi(item.content());
+
+                return item.withEmbedding(embedding);
+
+            } catch (RateLimitException e) {
+                // 429 Too Many Requests — 指数退避后重试
+                var backoffMs = (long) Math.pow(2, attempt) * 1000;
+                Thread.sleep(backoffMs);
+                if (attempt == maxRetries - 1) {
+                    throw new EmbeddingException(&quot;Max retries exceeded for chunk &quot; + item.chunkId(), e);
+                }
+            } catch (java.io.IOException e) {
+                if (attempt == maxRetries - 1) {
+                    throw new EmbeddingException(&quot;Network error, max retries exceeded&quot;, e);
+                }
+                Thread.sleep(2000);
+            }
+        }
+        throw new EmbeddingException(&quot;Unexpected: all retries exhausted&quot;);
+    }
+
+    private float[] callEmbeddingApi(String text) throws Exception {
+        var jsonBody = &quot;&quot;&quot;
+            {
+                &quot;model&quot;: &quot;bge-large-zh-v1.5&quot;,
+                &quot;input&quot;: &quot;%s&quot;
+            }
+            &quot;&quot;&quot;.formatted(escapeJson(text));
+
+        var request = HttpRequest.newBuilder()
+            .uri(URI.create(embeddingApiUrl))
+            .header(&quot;Content-Type&quot;, &quot;application/json&quot;)
+            .header(&quot;Authorization&quot;, &quot;Bearer &quot; + (apiKey != null ? apiKey : &quot;&quot;))
+            .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
+            .build();
+
+        var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+        if (response.statusCode() == 429) {
+            throw new RateLimitException(&quot;Rate limited&quot;);
+        }
+        if (response.statusCode() != 200) {
+            throw new EmbeddingException(&quot;API returned &quot; + response.statusCode());
+        }
+
+        // 解析响应（假设Ollama格式）
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        var root = mapper.readTree(response.body());
+        var embeddingNode = root.get(&quot;embedding&quot;);
+        var embedding = new float[embeddingNode.size()];
+        for (int i = 0; i &lt; embedding.length; i++) {
+            embedding[i] = embeddingNode.get(i).floatValue();
+        }
+        return embedding;
+    }
+
+    private String escapeJson(String text) {
+        return text.replace(&quot;\\&quot;, &quot;\\\\&quot;)
+                   .replace(&quot;\&quot;&quot;, &quot;\\\&quot;&quot;)
+                   .replace(&quot;\n&quot;, &quot;\\n&quot;)
+                   .replace(&quot;\r&quot;, &quot;\\r&quot;)
+                   .replace(&quot;\t&quot;, &quot;\\t&quot;);
+    }
+}
+
+class RateLimitException extends RuntimeException {
+    public RateLimitException(String msg) { super(msg); }
+}
+
+class EmbeddingException extends RuntimeException {
+    public EmbeddingException(String msg) { super(msg); }
+    public EmbeddingException(String msg, Throwable cause) { super(msg, cause); }
+}
+</code></pre></div>
+<h3>3.7 VectorIndexWriter — 写入pgvector + Elasticsearch</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.batch.item.Chunk;
+import org.springframework.batch.item.ItemWriter;
+import javax.sql.DataSource;
+import java.sql.PreparedStatement;
+import java.util.List;
+
+public class VectorIndexWriter implements ItemWriter&lt;ChunkItem&gt; {
+
+    private final DataSource dataSource;
+
+    public VectorIndexWriter(DataSource dataSource) {
+        this.dataSource = dataSource;
+    }
+
+    @Override
+    public void write(Chunk&lt;? extends ChunkItem&gt; chunk) throws Exception {
+        batchInsertPgVector(chunk.getItems());
+        // 可选：同步写入Elasticsearch用于BM25检索
+        // batchIndexElasticsearch(chunk.getItems());
+    }
+
+    private void batchInsertPgVector(List&lt;? extends ChunkItem&gt; items) {
+        var sql = &quot;&quot;&quot;
+            INSERT INTO chunk_embeddings (chunk_id, embedding, model_name, model_version)
+            VALUES (?::uuid, ?::vector, &#39;bge-large-zh-v1.5&#39;, &#39;1.5&#39;)
+            ON CONFLICT (chunk_id, model_name) DO UPDATE
+            SET embedding = EXCLUDED.embedding, model_version = EXCLUDED.model_version
+            &quot;&quot;&quot;;
+
+        try (var conn = dataSource.getConnection();
+             var stmt = conn.prepareStatement(sql)) {
+
+            for (var item : items) {
+                if (item.embedding() == null) continue;
+
+                stmt.setObject(1, item.chunkId());
+                // 将float[]转换为pgvector格式：&#39;[0.1, 0.2, ...]&#39;
+                var vectorStr = java.util.Arrays.stream(item.embedding())
+                    .mapToObj(f -&gt; String.format(&quot;%.6f&quot;, f))
+                    .collect(java.util.stream.Collectors.joining(&quot;,&quot;, &quot;[&quot;, &quot;]&quot;));
+                stmt.setString(2, vectorStr);
+                stmt.addBatch();
+            }
+
+            stmt.executeBatch();
+
+        } catch (java.sql.SQLException e) {
+            throw new RuntimeException(&quot;Failed to insert embeddings&quot;, e);
+        }
+    }
+}
+</code></pre></div>
+<hr>
+<h2>四、分区并行处理 (Partitioning)</h2>
+<p>当文档量达到数万级别时，单机处理太慢。Spring Batch支持按文档数量分区，多线程并行处理。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.batch.core.partition.support.Partitioner;
+import org.springframework.batch.item.ExecutionContext;
+import java.util.HashMap;
+import java.util.Map;
+
+/**
+ * 按文件数量分区
+ * 例如：10000个文档，分4个分区，每个分区2500个
+ */
+public class DocumentPartitioner implements Partitioner {
+
+    private final Path documentRoot;
+    private final int partitionSize; // 每个分区的文档数
+
+    public DocumentPartitioner(Path documentRoot, int partitionSize) {
+        this.documentRoot = documentRoot;
+        this.partitionSize = partitionSize;
+    }
+
+    @Override
+    public Map&lt;String, ExecutionContext&gt; partition(int gridSize) {
+        var files = listAllFiles(documentRoot);
+        var partitions = new HashMap&lt;String, ExecutionContext&gt;();
+        var totalFiles = files.size();
+        var numPartitions = (int) Math.ceil((double) totalFiles / partitionSize);
+
+        for (int i = 0; i &lt; numPartitions; i++) {
+            var ctx = new ExecutionContext();
+            var start = i * partitionSize;
+            var end = Math.min(start + partitionSize, totalFiles);
+            var partitionFiles = files.subList(start, end);
+
+            ctx.put(&quot;files&quot;, partitionFiles);
+            ctx.putInt(&quot;startIndex&quot;, start);
+            ctx.putInt(&quot;endIndex&quot;, end);
+            ctx.putInt(&quot;partitionNumber&quot;, i);
+
+            partitions.put(&quot;partition&quot; + i, ctx);
+        }
+
+        return partitions;
+    }
+
+    private List&lt;Path&gt; listAllFiles(Path root) {
+        try (var files = java.nio.file.Files.walk(root)) {
+            return files
+                .filter(java.nio.file.Files::isRegularFile)
+                .toList();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+}
+</code></pre></div>
+<p>分区Step配置：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Bean
+public Step partitionedParseStep() {
+    return new StepBuilder(&quot;partitionedParseStep&quot;, jobRepository)
+        .partitioner(&quot;parseStep&quot;, new DocumentPartitioner(documentRoot, 500))
+        .step(parseStep())   // 复用了之前定义的parseStep
+        .gridSize(4)          // 4个并发分区
+        .taskExecutor(new VirtualThreadTaskExecutor(&quot;partition-&quot;))
+        .build();
+}
+</code></pre></div>
+<hr>
+<h2>五、错误处理与容错</h2>
+<h3>5.1 Skip Policy</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.batch.core.SkipListener;
+
+public class DocumentProcessListener implements SkipListener&lt;DocumentItem, DocumentItem&gt; {
+
+    @Override
+    public void onSkipInRead(Throwable t) {
+        // 读取失败（如文件被删除）—— 记录并继续
+        // log.error(&quot;Skip reading: {}&quot;, t.getMessage());
+    }
+
+    @Override
+    public void onSkipInWrite(DocumentItem item, Throwable t) {
+        // 写入失败 —— 记录失败的文档ID，供人工处理
+        // log.error(&quot;Skip writing document {}: {}&quot;, item.documentId(), t.getMessage());
+        // failedDocumentRepository.save(item.documentId(), t.getMessage());
+    }
+
+    @Override
+    public void onSkipInProcess(DocumentItem item, Throwable t) {
+        // 处理失败 —— 记录错误详情
+        // log.error(&quot;Skip processing document {} ({}): {}&quot;,
+        //     item.fileName(), item.sourceUri(), t.getMessage());
+    }
+}
+</code></pre></div>
+<h3>5.2 重试策略</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 在Step配置中定义
+// .retryLimit(3)
+// .retry(IOException.class)            // 网络临时故障重试
+// .retry(RateLimitException.class)     // API限流重试
+// .noRetry(IllegalArgumentException.class)  // 参数错误不重试
+// .noRetry(DocumentParseException.class)    // 文档损坏不重试
+</code></pre></div>
+<h3>5.3 检查点 (Checkpoint)</h3>
+<p>Spring Batch的<code>Step Execution Context</code>自动持久化处理进度。重启时从上次成功的位置继续：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Job参数控制行为
+@Bean
+public JobParameters documentIngestionJobParameters() {
+    return new JobParametersBuilder()
+        .addString(&quot;documentRoot&quot;, &quot;/data/documents/&quot;)
+        .addString(&quot;runMode&quot;, &quot;INCREMENTAL&quot;)  // FULL / INCREMENTAL
+        .addString(&quot;tenantId&quot;, &quot;tenant_001&quot;)
+        .addLong(&quot;run.id&quot;, System.currentTimeMillis()) // 保证每次运行唯一
+        .toJobParameters();
+}
+</code></pre></div>
+<hr>
+<h2>六、性能优化</h2>
+<h3>6.1 Chunk Size调优</h3>
+<table>
+<thead>
+<tr>
+<th>文档平均大小</th>
+<th>推荐chunkSize</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>&lt;100KB</td>
+<td>50</td>
+<td>小文档，高并发</td>
+</tr>
+<tr>
+<td>100KB-1MB</td>
+<td>20</td>
+<td>中文档</td>
+</tr>
+<tr>
+<td>1MB-10MB</td>
+<td>10</td>
+<td>大文档，事务开销小</td>
+</tr>
+<tr>
+<td>&gt;10MB</td>
+<td>5</td>
+<td>超大文档，避免长事务</td>
+</tr>
+</tbody></table>
+<h3>6.2 Embedding批处理</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+ * 批量Embedding处理器 — 将多个chunk合并为一个API请求
+ * 将吞吐量提升5-10倍
+ */
+public class BatchEmbeddingProcessor implements ItemProcessor&lt;List&lt;ChunkItem&gt;, List&lt;ChunkItem&gt;&gt; {
+
+    private final int batchSize = 20; // 一次API请求最多20个文本
+
+    @Override
+    public List&lt;ChunkItem&gt; process(List&lt;ChunkItem&gt; items) throws Exception {
+        if (items.isEmpty()) return List.of();
+
+        // 提取所有文本
+        var texts = items.stream().map(ChunkItem::content).toList();
+
+        // 一次API调用获取所有Embedding
+        var embeddings = batchEmbed(texts);
+
+        // 将Embedding分配回对应的ChunkItem
+        var result = new ArrayList&lt;ChunkItem&gt;();
+        for (int i = 0; i &lt; items.size(); i++) {
+            result.add(items.get(i).withEmbedding(embeddings.get(i)));
+        }
+
+        return result;
+    }
+
+    private List&lt;float[]&gt; batchEmbed(List&lt;String&gt; texts) throws Exception {
+        // 调用支持batch的Embedding API
+        var jsonBody = &quot;&quot;&quot;
+            {
+                &quot;model&quot;: &quot;bge-large-zh-v1.5&quot;,
+                &quot;input&quot;: %s
+            }
+            &quot;&quot;&quot;.formatted(toJsonArray(texts));
+
+        // ... HTTP调用解析 ...
+        return List.of(); // 实际实现
+    }
+
+    private String toJsonArray(List&lt;String&gt; texts) {
+        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        try {
+            return mapper.writeValueAsString(texts);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+    }
+}
+</code></pre></div>
+<h3>6.3 连接池配置</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># application.yml
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: 20       # Embedding步骤IO密集，需要更多连接
+      minimum-idle: 5
+      connection-timeout: 30000
+      idle-timeout: 600000
+
+  batch:
+    jdbc:
+      initialize-schema: always   # 自动创建Spring Batch元数据表
+    job:
+      enabled: false              # 不要自动运行，等手动触发
+</code></pre></div>
+<hr>
+<h2>七、完整Job执行与监控</h2>
+<h3>7.1 启动Job</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.batch.core.Job;
+import org.springframework.batch.core.JobExecution;
+import org.springframework.batch.core.JobParametersBuilder;
+import org.springframework.batch.core.launch.JobLauncher;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping(&quot;/api/batch&quot;)
+public class BatchJobController {
+
+    private final JobLauncher jobLauncher;
+    private final Job documentIngestionJob;
+
+    public BatchJobController(JobLauncher jobLauncher, Job documentIngestionJob) {
+        this.jobLauncher = jobLauncher;
+        this.documentIngestionJob = documentIngestionJob;
+    }
+
+    @PostMapping(&quot;/ingest&quot;)
+    public String startIngestion(
+            @RequestParam String documentRoot,
+            @RequestParam(defaultValue = &quot;INCREMENTAL&quot;) String runMode,
+            @RequestParam String tenantId) {
+
+        var params = new JobParametersBuilder()
+            .addString(&quot;documentRoot&quot;, documentRoot)
+            .addString(&quot;runMode&quot;, runMode)
+            .addString(&quot;tenantId&quot;, tenantId)
+            .addLong(&quot;run.id&quot;, System.currentTimeMillis())
+            .toJobParameters();
+
+        try {
+            JobExecution execution = jobLauncher.run(documentIngestionJob, params);
+            return &quot;Job started: &quot; + execution.getJobId();
+        } catch (Exception e) {
+            return &quot;Job failed to start: &quot; + e.getMessage();
+        }
+    }
+}
+</code></pre></div>
+<h3>7.2 监控埋点</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.batch.core.JobExecutionListener;
+import org.springframework.batch.core.JobExecution;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
+import java.util.concurrent.TimeUnit;
+
+public class DocumentIngestionMetrics implements JobExecutionListener {
+
+    private final MeterRegistry meterRegistry;
+
+    public DocumentIngestionMetrics(MeterRegistry meterRegistry) {
+        this.meterRegistry = meterRegistry;
+    }
+
+    @Override
+    public void beforeJob(JobExecution jobExecution) {
+        jobExecution.getExecutionContext().putLong(&quot;startTime&quot;, System.nanoTime());
+    }
+
+    @Override
+    public void afterJob(JobExecution jobExecution) {
+        var startTime = jobExecution.getExecutionContext().getLong(&quot;startTime&quot;);
+        var duration = System.nanoTime() - startTime;
+
+        // 记录Job总耗时
+        Timer.builder(&quot;batch.ingestion.duration&quot;)
+            .description(&quot;Document ingestion job duration&quot;)
+            .register(meterRegistry)
+            .record(duration, TimeUnit.NANOSECONDS);
+
+        // 记录处理统计
+        meterRegistry.counter(&quot;batch.ingestion.documents.total&quot;,
+            &quot;status&quot;, jobExecution.getStatus().name())
+            .increment(jobExecution.getStepExecutions().stream()
+                .mapToInt(se -&gt; (int) se.getReadCount())
+                .sum());
+
+        meterRegistry.counter(&quot;batch.ingestion.documents.failed&quot;,
+            &quot;status&quot;, &quot;FAILED&quot;)
+            .increment(jobExecution.getStepExecutions().stream()
+                .mapToInt(se -&gt; (int) se.getSkipCount())
+                .sum());
+    }
+}
+</code></pre></div>
+<hr>
+<h2>八、最佳实践</h2>
+<ol>
+<li><strong>使用CompositeItemProcessor串联步骤</strong>：一个Step内完成多个处理阶段</li>
+<li><strong>Embedding步骤使用AsyncItemProcessor</strong>：IO密集操作获益最大</li>
+<li><strong>设置合理的chunkSize</strong>：平衡事务开销和内存占用</li>
+<li><strong>区分可重试异常和不可重试异常</strong>：网络故障重试，数据损坏跳过</li>
+<li><strong>Batch Embedding API</strong>：将吞吐量提升5-10倍</li>
+<li><strong>令牌桶限流器</strong>：简单有效的Embedding API速率控制</li>
+<li><strong>Job参数化</strong>：documentRoot、runMode、tenantId等通过参数传入</li>
+<li><strong>Virtual Threads分区</strong>：JDK 25的Virtual Threads适合IO密集型并行任务</li>
+</ol>
+<h2>九、反模式</h2>
+<ul>
+<li><strong>所有步骤一个Job</strong>：步骤之间无依赖时拆分为独立Job</li>
+<li><strong>无视chunk大小盲目调大</strong>：影响事务提交频率和重启粒度</li>
+<li><strong>同步调用Embedding API</strong>：不利用并发，处理几千个chunk需要数小时</li>
+<li><strong>硬编码速率限制值</strong>：应通过配置注入，不同API厂商限制不同</li>
+<li><strong>忽略Skip Listener</strong>：不记录跳过的文档=永久丢失数据</li>
+<li><strong>不使用Job参数区分运行</strong>：无法增量处理，每次都是全量</li>
+</ul>
+<h2>相关条目</h2>
+<ul>
+<li><a href="/10-AI数据工程/文档处理/10-Java文档解析全景" class="cross-ref" data-ref="10-Java文档解析全景">10-Java文档解析全景</a> — 批处理的解析阶段详解</li>
+<li><a href="/10-AI数据工程/文档处理/10-切片策略深度剖析" class="cross-ref" data-ref="10-切片策略深度剖析">10-切片策略深度剖析</a> — 批处理的切片阶段详解</li>
+<li><a href="/10-AI数据工程/数据治理/10-元数据管理与数据治理" class="cross-ref" data-ref="10-元数据管理与数据治理">10-元数据管理与数据治理</a> — 批处理的元数据和治理</li>
+<li><a href="/11-检索与RAG/RAG实现/11-完整RAG流水线实现" class="cross-ref" data-ref="11-完整RAG流水线实现">11-完整RAG流水线实现</a> — 从批处理到在线RAG的完整链路</li>
+</ul>
+</div>
+</article>

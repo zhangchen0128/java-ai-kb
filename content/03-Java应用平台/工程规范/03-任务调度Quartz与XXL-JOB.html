@@ -1,0 +1,614 @@
+
+<article class="kb-entry" data-path="/03-Java应用平台/工程规范/03-任务调度Quartz与XXL-JOB">
+  <div class="entry-meta">
+    <div class="entry-domain"><a href="/?d=03">03-Java应用平台</a></div>
+    <h1>任务调度Quartz与XXL-JOB</h1>
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#["quartz"</span><span class="badge badge-tag">#"xxl-job"</span><span class="badge badge-tag">#"cron"</span><span class="badge badge-tag">#"job-scheduling"</span></div>
+    
+  </div>
+  <div class="entry-body"><h1>任务调度：Quartz 与 XXL-JOB</h1>
+<h2>概述</h2>
+<p>任务调度是后端系统的基本能力，从简单的定时清理日志，到复杂的 AI 知识库 Embedding 批量更新，都离不开可靠的调度执行。Java 生态中，Quartz 是经典的单体/小集群调度框架，而 XXL-JOB 提供了带管理界面的分布式调度平台。</p>
+<p>本文覆盖 Quartz 的核心概念（Job/Trigger/Scheduler）、Spring Boot 集成、Cron 表达式详解、XXL-JOB 的调度中心与执行器架构、高级特性（分片广播、GLUE 模式），以及 AI 场景中的典型调度需求。</p>
+<hr>
+<h2>一、Quartz 核心</h2>
+<h3>1.1 核心概念</h3>
+<table>
+<thead>
+<tr>
+<th>概念</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>Job</strong></td>
+<td>需要执行的任务逻辑（实现 <code>Job</code> 接口）</td>
+</tr>
+<tr>
+<td><strong>JobDetail</strong></td>
+<td>Job 的定义（名称、分组、描述、JobDataMap）</td>
+</tr>
+<tr>
+<td><strong>Trigger</strong></td>
+<td>触发器，定义 Job 何时执行</td>
+</tr>
+<tr>
+<td><strong>CronTrigger</strong></td>
+<td>基于 Cron 表达式的触发器</td>
+</tr>
+<tr>
+<td><strong>SimpleTrigger</strong></td>
+<td>基于简单时间间隔的触发器（每隔 N 秒/分钟）</td>
+</tr>
+<tr>
+<td><strong>Scheduler</strong></td>
+<td>调度器，管理 JobDetail 和 Trigger</td>
+</tr>
+<tr>
+<td><strong>JobDataMap</strong></td>
+<td>向 Job 传递参数</td>
+</tr>
+<tr>
+<td><strong>JobStore</strong></td>
+<td>持久化 Job 和 Trigger 的状态（内存/RAM 或数据库/JDBC）</td>
+</tr>
+</tbody></table>
+<h3>1.2 Spring Boot 集成 Quartz</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 1. 定义 Job
+@DisallowConcurrentExecution // 禁止并发执行（同一 Job 的多个实例不能同时运行）
+@PersistJobDataAfterExecution // 执行后持久化 JobDataMap 的修改
+public class AiEmbeddingRefreshJob implements Job {
+
+    @Override
+    public void execute(JobExecutionContext context) throws JobExecutionException {
+        var jobDataMap = context.getMergedJobDataMap();
+        var kbId = jobDataMap.getLong(&quot;knowledgeBaseId&quot;);
+
+        // 通过 Spring 容器获取 Bean
+        var springContext = (ApplicationContext) context.getScheduler().getContext()
+            .get(&quot;applicationContext&quot;);
+        var embeddingService = springContext.getBean(EmbeddingService.class);
+
+        var count = embeddingService.refreshEmbeddings(kbId);
+        System.out.printf(&quot;[EmbeddingRefresh] KB %d refreshed %d embeddings%n&quot;,
+            kbId, count);
+    }
+}
+
+// 2. 配置 Quartz
+@Configuration
+public class QuartzConfig {
+
+    @Bean
+    public JobDetail embeddingRefreshJobDetail() {
+        return JobBuilder.newJob(AiEmbeddingRefreshJob.class)
+            .withIdentity(&quot;embeddingRefreshJob&quot;, &quot;ai-jobs&quot;)
+            .withDescription(&quot;Refresh embeddings for knowledge bases&quot;)
+            .storeDurably() // 即使没有 Trigger 也保留 JobDetail
+            .build();
+    }
+
+    @Bean
+    public Trigger embeddingRefreshTrigger() {
+        return TriggerBuilder.newTrigger()
+            .forJob(embeddingRefreshJobDetail())
+            .withIdentity(&quot;embeddingRefreshTrigger&quot;, &quot;ai-triggers&quot;)
+            .withDescription(&quot;Daily at 2:00 AM refresh&quot;)
+            .withSchedule(CronScheduleBuilder.cronSchedule(&quot;0 0 2 * * ?&quot;))
+            .build();
+    }
+}
+</code></pre></div>
+<h3>1.3 Cron 表达式详解</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code> ┌────── 秒 (0-59)
+ │ ┌────── 分 (0-59)
+ │ │ ┌────── 时 (0-23)
+ │ │ │ ┌────── 日 (1-31)
+ │ │ │ │ ┌────── 月 (1-12 或 JAN-DEC)
+ │ │ │ │ │ ┌────── 周 (0-6 或 SUN-SAT, 0=周日)
+ │ │ │ │ │ │ ┌────── 年 (可选，1970-2099)
+ │ │ │ │ │ │ │
+ * * * * * * *
+</code></pre></div>
+<p><strong>常用表达式：</strong></p>
+<table>
+<thead>
+<tr>
+<th>表达式</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>0 0 2 * * ?</code></td>
+<td>每天凌晨 2:00</td>
+</tr>
+<tr>
+<td><code>0 0/5 * * * ?</code></td>
+<td>每 5 分钟</td>
+</tr>
+<tr>
+<td><code>0 0 9-18 * * MON-FRI</code></td>
+<td>工作日 9:00-18:00 每小时</td>
+</tr>
+<tr>
+<td><code>0 30 10 1 * ?</code></td>
+<td>每月 1 号 10:30</td>
+</tr>
+<tr>
+<td><code>0 0 0 1 1 ?</code></td>
+<td>每年 1 月 1 日凌晨</td>
+</tr>
+</tbody></table>
+<h3>1.4 JobStore：RAM vs JDBC</h3>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th>RAMJobStore</th>
+<th>JDBCJobStore</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>持久化</td>
+<td>否（重启丢失）</td>
+<td>是（数据库持久化）</td>
+</tr>
+<tr>
+<td>集群支持</td>
+<td>否</td>
+<td>是（多节点共享数据库）</td>
+</tr>
+<tr>
+<td>性能</td>
+<td>高</td>
+<td>中</td>
+</tr>
+<tr>
+<td>适用场景</td>
+<td>开发/测试、可丢失的轻量任务</td>
+<td>生产环境、需要持久化的关键任务</td>
+</tr>
+</tbody></table>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># JDBC JobStore 配置
+spring:
+  quartz:
+    job-store-type: jdbc # 默认 memory
+    jdbc:
+      initialize-schema: always # 自动初始化 Quartz 表
+    properties:
+      org.quartz.jobStore.isClustered: true
+      org.quartz.jobStore.clusterCheckinInterval: 20000 # 集群心跳间隔
+      org.quartz.scheduler.instanceId: AUTO # 自动生成实例 ID
+</code></pre></div>
+<p><strong>Quartz 集群原理：</strong> 多个 Quartz 实例共享同一个数据库（Quartz 自带 11 张表），通过数据库行锁实现任务互斥执行——同一时刻只有一个节点执行某个 Trigger。</p>
+<h3>1.5 Spring 简化注解</h3>
+<p>Spring Boot 提供了更简洁的调度方式：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Component
+public class SimpleScheduledTasks {
+
+    @Scheduled(fixedRate = 60000) // 每 60 秒执行一次（从上一次开始计时）
+    public void refreshCache() {
+        System.out.println(&quot;Cache refreshed at &quot; + LocalDateTime.now());
+    }
+
+    @Scheduled(fixedDelay = 30000) // 上一次执行结束后 30 秒再执行
+    public void cleanTmpFiles() {
+        System.out.println(&quot;Tmp files cleaned&quot;);
+    }
+
+    @Scheduled(cron = &quot;0 0 3 * * ?&quot;) // 每天凌晨 3 点
+    public void dailyReport() {
+        System.out.println(&quot;Daily report generated&quot;);
+    }
+}
+
+// 启用
+@SpringBootApplication
+@EnableScheduling // 开启 @Scheduled 支持
+public class Application { /* ... */ }
+</code></pre></div>
+<p><strong>@Scheduled 的局限：</strong> 单机执行、不支持集群互斥、无管理界面、不可动态修改任务。适用于简单场景，复杂需求应升级到 Quartz 或 XXL-JOB。</p>
+<hr>
+<h2>二、XXL-JOB</h2>
+<h3>2.1 架构概览</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌──────────────────────────────────────────────────────┐
+│                   XXL-JOB 架构                        │
+├──────────────────────────────────────────────────────┤
+│                                                        │
+│  ┌──────────────┐         ┌─────────────────┐        │
+│  │  调度中心      │ ◄────► │   执行器集群      │        │
+│  │  (Admin)      │  HTTP   │   (Executor)     │        │
+│  │               │         │                  │        │
+│  │  任务管理      │         │  ┌───────────┐  │        │
+│  │  调度策略      │         │  │ 应用1      │  │        │
+│  │  日志报表      │         │  │ (内置执行)  │  │        │
+│  │  告警通知      │         │  ├───────────┤  │        │
+│  └──────────────┘         │  │ 应用2      │  │        │
+│                            │  │ (内置执行)  │  │        │
+│                            │  └───────────┘  │        │
+│                            └─────────────────┘        │
+│                                                        │
+│  ┌──────────────┐         ┌─────────────────┐        │
+│  │   数据库       │         │   应用服务集群    │        │
+│  │  (MySQL)     │         │   (Spring Boot)  │        │
+│  └──────────────┘         └─────────────────┘        │
+└──────────────────────────────────────────────────────┘
+</code></pre></div>
+<h3>2.2 Spring Boot 执行器配置</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;!-- pom.xml --&gt;
+&lt;dependency&gt;
+    &lt;groupId&gt;com.xuxueli&lt;/groupId&gt;
+    &lt;artifactId&gt;xxl-job-core&lt;/artifactId&gt;
+    &lt;version&gt;2.4.2&lt;/version&gt;
+&lt;/dependency&gt;
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 执行器配置
+@Configuration
+public class XxlJobConfig {
+
+    @Value(&quot;${xxl.job.admin.addresses}&quot;)
+    private String adminAddresses;
+
+    @Value(&quot;${xxl.job.executor.appname}&quot;)
+    private String appName;
+
+    @Value(&quot;${xxl.job.executor.port}&quot;)
+    private int port;
+
+    @Bean
+    public XxlJobSpringExecutor xxlJobExecutor() {
+        var executor = new XxlJobSpringExecutor();
+        executor.setAdminAddresses(adminAddresses);
+        executor.setAppname(appName);
+        executor.setPort(port);
+        executor.setAccessToken(&quot;default_token&quot;);
+        executor.setLogPath(&quot;/data/applogs/xxl-job/jobhandler&quot;);
+        executor.setLogRetentionDays(30);
+        return executor;
+    }
+}
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># application.yml
+xxl:
+  job:
+    admin:
+      addresses: http://xxl-job-admin:8080/xxl-job-admin
+    executor:
+      appname: ai-knowledge-executor
+      port: 9999
+</code></pre></div>
+<h3>2.3 定义 Job Handler</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Component
+public class AiKnowledgeJobs {
+
+    @Autowired
+    private EmbeddingService embeddingService;
+
+    @Autowired
+    private KnowledgeCleanupService cleanupService;
+
+    // BEAN 模式：JobHandler 名称 = @XxlJob 注解的 value
+    @XxlJob(&quot;embeddingBatchRefreshHandler&quot;)
+    public void embeddingBatchRefresh() {
+        var param = XxlJobHelper.getJobParam(); // 获取调度中心配置的任务参数
+        var kbId = Long.parseLong(param);
+
+        XxlJobHelper.log(&quot;Starting embedding refresh for KB: {}&quot;, kbId);
+        var result = embeddingService.refreshEmbeddings(kbId);
+
+        XxlJobHelper.handleSuccess(&quot;Refreshed &quot; + result + &quot; embeddings&quot;);
+    }
+
+    // 分片广播：每个分片处理不同的数据
+    @XxlJob(&quot;knowledgeCleanupHandler&quot;)
+    public void knowledgeCleanup() {
+        var shardIndex = XxlJobHelper.getShardIndex(); // 当前分片序号
+        var shardTotal = XxlJobHelper.getShardTotal(); // 总分片数
+
+        XxlJobHelper.log(&quot;Shard {}/{} started&quot;, shardIndex, shardTotal);
+
+        // 按分片处理不同的知识库
+        var kbIds = knowledgeBaseRepository.findAllIds();
+        var myKbIds = kbIds.stream()
+            .filter(id -&gt; id % shardTotal == shardIndex)
+            .toList();
+
+        for (var kbId : myKbIds) {
+            cleanupService.cleanExpiredDocuments(kbId);
+        }
+
+        XxlJobHelper.handleSuccess(&quot;Shard &quot; + shardIndex + &quot; completed&quot;);
+    }
+
+    // GLUE 模式（在线编辑，热部署）：继承 IJobHandler
+    // GLUE(Java) 模式允许在调度中心 Web 界面编辑代码并热部署
+}
+</code></pre></div>
+<h3>2.4 任务路由策略</h3>
+<table>
+<thead>
+<tr>
+<th>路由策略</th>
+<th>说明</th>
+<th>适用场景</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>FIRST</strong></td>
+<td>固定选择第一个执行器</td>
+<td>指定节点执行</td>
+</tr>
+<tr>
+<td><strong>LAST</strong></td>
+<td>固定选择最后一个执行器</td>
+<td>指定节点执行</td>
+</tr>
+<tr>
+<td><strong>ROUND</strong></td>
+<td>轮询</td>
+<td>负载均衡</td>
+</tr>
+<tr>
+<td><strong>RANDOM</strong></td>
+<td>随机</td>
+<td>负载均衡</td>
+</tr>
+<tr>
+<td><strong>CONSISTENT_HASH</strong></td>
+<td>一致性哈希</td>
+<td>相同参数路由到相同节点</td>
+</tr>
+<tr>
+<td><strong>LEAST_FREQUENTLY_USED</strong></td>
+<td>最不经常使用</td>
+<td>任务量不均匀场景</td>
+</tr>
+<tr>
+<td><strong>LEAST_RECENTLY_USED</strong></td>
+<td>最近最久未使用</td>
+<td>负载均衡</td>
+</tr>
+<tr>
+<td><strong>FAILOVER</strong></td>
+<td>故障转移</td>
+<td>高可用</td>
+</tr>
+<tr>
+<td><strong>BUSYOVER</strong></td>
+<td>忙碌转移（阻塞策略）</td>
+<td>避免任务堆积</td>
+</tr>
+<tr>
+<td><strong>SHARDING_BROADCAST</strong></td>
+<td>分片广播</td>
+<td>集群并行处理大数据量</td>
+</tr>
+</tbody></table>
+<h3>2.5 分片广播</h3>
+<p>分片广播是 XXL-JOB 最强大的特性之一。调度中心将任务广播到所有执行器节点，每个节点根据 <code>shardIndex</code> 和 <code>shardTotal</code> 处理自己那部分数据：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>总分片数 = 3
+┌──────────┐  ┌──────────┐  ┌──────────┐
+│ 执行器 0  │  │ 执行器 1  │  │ 执行器 2  │
+│ 处理 ID%3=0│  │ 处理 ID%3=1│  │ 处理 ID%3=2│
+└──────────┘  └──────────┘  └──────────┘
+</code></pre></div>
+<h3>2.6 失败重试与告警</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 执行器端：XXL-JOB 框架自动处理失败重试
+// 调度中心配置：失败重试次数、重试间隔
+// 邮箱/DingTalk 告警：任务连续失败 N 次时自动发送通知
+
+@XxlJob(&quot;criticalJobHandler&quot;)
+public void criticalJob() {
+    try {
+        // 业务逻辑
+        doSomething();
+    } catch (Exception e) {
+        // XXL-JOB 会捕获返回码并触发重试
+        XxlJobHelper.handleFail(&quot;Job failed: &quot; + e.getMessage());
+        // 不要吞掉异常！让 XXL-JOB 感知到失败
+    }
+}
+</code></pre></div>
+<hr>
+<h2>三、选型对比</h2>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>Quartz</th>
+<th>XXL-JOB</th>
+<th>@Scheduled</th>
+<th>K8s CronJob</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>管理界面</strong></td>
+<td>无（需自建）</td>
+<td>内置 Web 管理</td>
+<td>无</td>
+<td>kubectl</td>
+</tr>
+<tr>
+<td><strong>动态任务</strong></td>
+<td>API 编程</td>
+<td>Web 界面操作</td>
+<td>需重启应用</td>
+<td>需重新 apply</td>
+</tr>
+<tr>
+<td><strong>集群支持</strong></td>
+<td>JDBC JobStore</td>
+<td>调度中心 + 执行器</td>
+<td>不支持</td>
+<td>K8s 原生</td>
+</tr>
+<tr>
+<td><strong>分片并行</strong></td>
+<td>不原生支持</td>
+<td>分片广播</td>
+<td>不支持</td>
+<td>不支持</td>
+</tr>
+<tr>
+<td><strong>在线编辑</strong></td>
+<td>不支持</td>
+<td>GLUE 模式</td>
+<td>不支持</td>
+<td>不支持</td>
+</tr>
+<tr>
+<td><strong>失败重试</strong></td>
+<td>需编码</td>
+<td>内置</td>
+<td>需编码</td>
+<td>需编码</td>
+</tr>
+<tr>
+<td><strong>告警通知</strong></td>
+<td>需自建</td>
+<td>内置邮箱/DingTalk</td>
+<td>需编码</td>
+<td>需集成</td>
+</tr>
+<tr>
+<td><strong>持久化</strong></td>
+<td>JDBC 方案</td>
+<td>MySQL</td>
+<td>无</td>
+<td>Etcd</td>
+</tr>
+<tr>
+<td><strong>学习成本</strong></td>
+<td>中</td>
+<td>中（需部署调度中心）</td>
+<td>低</td>
+<td>中</td>
+</tr>
+<tr>
+<td><strong>适用场景</strong></td>
+<td>单体/小集群</td>
+<td>中大型分布式系统</td>
+<td>开发测试</td>
+<td>K8s 环境</td>
+</tr>
+</tbody></table>
+<p><strong>推荐策略：</strong></p>
+<ul>
+<li>简单定时任务 → <code>@Scheduled</code></li>
+<li>需要持久化和集群 → Quartz（已有 Quartz 生态）或 XXL-JOB（推荐，功能更全）</li>
+<li>K8s 环境无状态任务 → K8s CronJob</li>
+<li>分布式并行处理 → XXL-JOB 分片广播</li>
+</ul>
+<hr>
+<h2>四、AI 场景中的调度任务</h2>
+<h3>4.1 Embedding 批量更新</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Component
+public class EmbeddingScheduledJobs {
+
+    @Autowired
+    private EmbeddingService embeddingService;
+
+    @Autowired
+    private VectorStore vectorStore;
+
+    // 每日凌晨刷新所有知识库的 Embedding
+    @XxlJob(&quot;dailyEmbeddingRefreshHandler&quot;)
+    public void dailyEmbeddingRefresh() {
+        var shardIndex = XxlJobHelper.getShardIndex();
+        var shardTotal = XxlJobHelper.getShardTotal();
+        var totalRefreshed = new AtomicInteger(0);
+
+        // 使用 Virtual Threads 并行处理
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            var kbIds = knowledgeBaseRepository.findActiveIds();
+
+            for (var kbId : kbIds) {
+                if (kbId % shardTotal == shardIndex) { // 分片
+                    executor.submit(() -&gt; {
+                        var count = embeddingService.refreshEmbeddings(kbId);
+                        totalRefreshed.addAndGet(count);
+                        XxlJobHelper.log(&quot;KB {} refreshed: {}&quot;, kbId, count);
+                    });
+                }
+            }
+        }
+
+        XxlJobHelper.handleSuccess(&quot;Total refreshed: &quot; + totalRefreshed.get());
+    }
+}
+</code></pre></div>
+<h3>4.2 知识库过期清理</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Component
+public class KnowledgeCleanupJobs {
+
+    @Autowired
+    private KnowledgeRepository knowledgeRepo;
+
+    @Autowired
+    private VectorStoreRepository vectorStoreRepo;
+
+    // 每周日 4:00 清理已标记删除的知识条目及其向量
+    @XxlJob(&quot;weeklyKnowledgeCleanupHandler&quot;)
+    public void weeklyCleanup() {
+        var threshold = LocalDateTime.now().minusDays(30);
+        var expiredDocs = knowledgeRepo.findSoftDeletedBefore(threshold);
+
+        for (var doc : expiredDocs) {
+            // 1. 删除向量索引
+            vectorStoreRepo.deleteByDocumentId(doc.getId());
+            // 2. 物理删除文档记录
+            knowledgeRepo.physicalDelete(doc.getId());
+            XxlJobHelper.log(&quot;Permanently deleted: {}&quot;, doc.getId());
+        }
+
+        XxlJobHelper.handleSuccess(&quot;Cleaned up &quot; + expiredDocs.size() + &quot; documents&quot;);
+    }
+}
+</code></pre></div>
+<h3>4.3 模型配额重置</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Component
+public class QuotaResetJobs {
+
+    @Autowired
+    private QuotaService quotaService;
+
+    // 每月 1 号 0:00 重置所有用户/租户的 API 调用配额
+    @XxlJob(&quot;monthlyQuotaResetHandler&quot;)
+    public void monthlyQuotaReset() {
+        var tenantIds = quotaService.getAllTenantIds();
+        var resetCount = new AtomicInteger(0);
+
+        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
+            for (var tenantId : tenantIds) {
+                executor.submit(() -&gt; {
+                    quotaService.resetMonthlyQuota(tenantId);
+                    resetCount.incrementAndGet();
+                });
+            }
+        }
+
+        XxlJobHelper.handleSuccess(&quot;Quota reset for &quot; + resetCount.get() + &quot; tenants&quot;);
+    }
+}
+</code></pre></div>
+<hr>
+<h2>常见问题</h2>
+<p><strong>Q: Quartz 集群中，同一个 Job 会不会被多个节点同时执行？</strong>
+A: 不会。Quartz 通过数据库行锁确保同一个 Trigger 同一时刻只被一个节点获取并执行。但如果配置了多个相同 JobDetail 的 Trigger，可能导致并发执行——使用 <code>@DisallowConcurrentExecution</code> 防止。</p>
+<p><strong>Q: XXL-JOB 调度中心和执行器之间网络中断了怎么办？</strong>
+A: 执行器会定期心跳注册到调度中心。调度中心发现执行器心跳超时后会将其标记为离线，不再向该执行器分发任务。恢复后自动重新上线。已在执行的任务不受影响。</p>
+<p><strong>Q: Cron 表达式中的 ? 和 * 有什么区别？</strong>
+A: <code>*</code> 表示&quot;每&quot;，<code>?</code> 表示&quot;不指定&quot;（仅用于日和周字段）。日和周不能同时使用 <code>*</code>，必须有一个是 <code>?</code>。例如 <code>0 0 12 * * ?</code> 表示每天 12:00。</p>
+<p><strong>Q: 定时任务的幂等性如何保证？</strong>
+A: 1) 使用分布式锁（Redis/数据库乐观锁）；2) 任务执行前检查状态（如已处理标志位）；3) 数据库唯一约束防止重复写入。XXL-JOB 的失败重试可能导致重复执行——必须做好幂等设计。</p>
+<hr>
+<h2>相关条目</h2>
+<ul>
+<li><a href="/03-Java应用平台/Spring核心/03-SpringBoot4深度解析" class="cross-ref" data-ref="03-SpringBoot4深度解析">03-SpringBoot4深度解析</a>：Spring Boot 自动配置</li>
+<li><a href="/03-Java应用平台/工程规范/03-Maven多模块工程实践" class="cross-ref" data-ref="03-Maven多模块工程实践">03-Maven多模块工程实践</a>：依赖模块化配置</li>
+<li><a href="/?d=05" class="cross-ref domain-ref">05-分布式架构/分布式锁</a>：定时任务幂等性保障</li>
+<li><a href="/?d=04" class="cross-ref domain-ref">04-数据库与缓存</a>：Quartz JDBC JobStore 与 XXL-JOB 依赖的 MySQL</li>
+<li><a href="/?d=14" class="cross-ref domain-ref">14-AI平台与LLMOps</a>：模型配额管理</li>
+</ul>
+</div>
+</article>

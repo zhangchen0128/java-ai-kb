@@ -1,0 +1,1323 @@
+
+<article class="kb-entry" data-path="/05-分布式架构/微服务/05-微服务基础设施">
+  <div class="entry-meta">
+    <div class="entry-domain"><a href="/?d=05">05-分布式架构</a></div>
+    <h1>微服务基础设施</h1>
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#["microservices"</span><span class="badge badge-tag">#"nacos"</span><span class="badge badge-tag">#"spring-cloud-gateway"</span><span class="badge badge-tag">#"service-discovery"</span></div>
+    
+  </div>
+  <div class="entry-body"><h1>微服务基础设施</h1>
+<h2>概述</h2>
+<p>微服务基础设施是分布式系统稳定运行的基石。当单体应用拆分为数十甚至数百个独立服务后，三个根本问题随之而来：(1) 服务实例动态变化，调用方如何发现目标服务？(2) 配置散落在各服务中，如何集中管理和动态变更？(3) 请求跨多个服务，如何追踪完整的调用链路？服务注册与发现、配置中心、API 网关和分布式链路追踪构成了回答这三个问题的四大基础设施。</p>
+<p>本文以 Nacos + Spring Cloud Gateway + Micrometer Tracing 为技术主线，深入服务注册发现的 AP/CP 协议权衡、配置中心的灰度发布与动态刷新机制、网关的路由断言过滤器三大核心、以及分布式链路追踪的采样策略与跨线程传播，覆盖从原理到生产实践的全链路知识。</p>
+<hr>
+<h2>一、服务注册与发现</h2>
+<h3>1.1 Nacos 注册中心深度解析</h3>
+<p>Nacos（Dynamic Naming and Configuration Service）是阿里巴巴开源的集注册中心和配置中心于一体的基础设施组件，在 Spring Cloud Alibaba 生态中处于核心地位。</p>
+<p><strong>AP 模式 — Distro 协议（临时实例）：</strong></p>
+<p>Distro 协议是 Nacos 自研的 AP 一致性协议，专为临时实例设计。其工作原理：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌─────────────────────────────────────────────────────┐
+│                 Distro 协议工作流程                    │
+│                                                      │
+│   Client A  ──心跳──►  Node 1 ◄──同步──►  Node 2     │
+│     │                    │                  │        │
+│     │                DistroTask              │        │
+│     │              (异步批量同步)             │        │
+│     │                    │                  │        │
+│     ▼                    ▼                  ▼        │
+│   注册临时实例      本地数据存储          本地数据存储   │
+│  (ephemeral=true)   + 异步同步到          + 接收同步    │
+│                     其他节点              数据          │
+└─────────────────────────────────────────────────────┘
+</code></pre></div>
+<p>关键行为：</p>
+<ul>
+<li>临时实例通过 HTTP/UDP 心跳维持租约，默认心跳间隔 5 秒</li>
+<li>连续 3 次心跳丢失（15 秒）后，Nacos 自动剔除该实例</li>
+<li>数据同步采用异步批量方式（DistroTask），不阻塞注册请求</li>
+<li>各节点独立判断实例健康状态，无中心化决策</li>
+</ul>
+<p><strong>CP 模式 — Raft 协议（持久实例）：</strong></p>
+<p>持久实例适用于期望即使服务下线也保留注册信息的场景（如数据库、中间件地址）：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 注册持久实例
+var instance = new Instance();
+instance.setIp(&quot;192.168.1.100&quot;);
+instance.setPort(8080);
+instance.setEphemeral(false);  // 持久实例 → 走 Raft 协议
+instance.setClusterName(&quot;DEFAULT&quot;);
+
+// NacosNamingService 内部根据 ephemeral 字段分流：
+// ephemeral=true  → Distro 协议 → 临时节点
+// ephemeral=false → Raft 协议   → 持久节点
+</code></pre></div>
+<p>CP 模式下的特性：</p>
+<ul>
+<li>注册数据通过 Raft 一致性协议在集群中达成共识</li>
+<li>实例下线后信息保留，不会自动剔除</li>
+<li>适合注册数据库、消息队列等基础设施地址</li>
+<li>写操作需要 Leader 节点处理，读操作可负载均衡</li>
+</ul>
+<p><strong>Naming Service 三级隔离模型：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Namespace (命名空间)         ← 租户/环境级隔离
+  └─ Group (分组)            ← 业务/应用级隔离
+       └─ Service (服务)      ← 具体微服务
+            └─ Cluster (集群)  ← 同城/异地/灰度
+                 └─ Instance (实例)
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># 服务发现配置示例
+spring:
+  cloud:
+    nacos:
+      discovery:
+        server-addr: 127.0.0.1:8848
+        namespace: dev           # dev/test/prod 环境隔离
+        group: order-service     # 业务分组
+        cluster-name: BJ         # 北京集群
+        ephemeral: true          # 临时实例（AP）
+</code></pre></div>
+<p><strong>健康检查机制：</strong></p>
+<table>
+<thead>
+<tr>
+<th>检查类型</th>
+<th>协议</th>
+<th>适用场景</th>
+<th>关键参数</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>TCP</td>
+<td>TCP 连接</td>
+<td>通用服务</td>
+<td>端口可达即健康</td>
+</tr>
+<tr>
+<td>HTTP</td>
+<td>GET 请求</td>
+<td>Web 服务</td>
+<td>自定义路径、期望状态码 200</td>
+</tr>
+<tr>
+<td>MySQL</td>
+<td>SQL 查询</td>
+<td>数据库</td>
+<td>SELECT 1 探测</td>
+</tr>
+</tbody></table>
+<p><strong>源码关键类：</strong></p>
+<table>
+<thead>
+<tr>
+<th>类名</th>
+<th>职责</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>NacosServiceRegistry</code></td>
+<td>实现 Spring Cloud <code>ServiceRegistry</code> 接口，封装注册/注销逻辑</td>
+</tr>
+<tr>
+<td><code>NacosRegistration</code></td>
+<td>持有注册元数据：服务名、IP、端口、权重、元数据 Map</td>
+</tr>
+<tr>
+<td><code>NacosDiscoveryClient</code></td>
+<td>实现 <code>DiscoveryClient</code>，提供 <code>getInstances(serviceId)</code></td>
+</tr>
+<tr>
+<td><code>NacosWatch</code></td>
+<td>定时心跳任务，维护与 Nacos Server 的连接和实例续约</td>
+</tr>
+</tbody></table>
+<h3>1.2 Eureka — AP 模式与自我保护</h3>
+<p>Eureka 的自我保护机制是面试和故障排查中的高频话题：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>自我保护触发条件：
+  15 分钟内，实际心跳数 &lt; 期望心跳数 × 85%
+
+触发后行为：
+  - 不再剔除任何实例（即使心跳超时）
+  - 日志输出 &quot;EMERGENCY! EUREKA MAY BE INCORRECTLY CLAIMING INSTANCES ARE UP&quot;
+  - 新注册和续约请求正常处理
+
+风险：自我保护期间，调用方可能拿到已宕机的实例 → 必须配合重试+熔断
+</code></pre></div>
+<p>Eureka 的多层缓存架构：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>服务实例变更
+    │
+    ▼
+responseCache (ConcurrentHashMap, 180s TTL)
+    │
+    ▼
+readWriteCacheMap (LoadingCache, 180s expire)
+    │
+    ▼
+readOnlyCacheMap (ConcurrentHashMap, 30s 定时同步)
+    │
+    ▼
+客户端拉取（默认 30s 间隔）
+</code></pre></div>
+<p>这导致 Eureka 的&quot;最大不可用时间窗口&quot;可达 30s（只读缓存同步间隔）+ 30s（客户端拉取间隔）= 60s，远超 Nacos 的 15s（3 次心跳间隔）。</p>
+<h3>1.3 Consul — CP 模式与 Service Mesh 就绪</h3>
+<p>Consul 基于 Raft 协议实现强一致性，内置健康检查丰富度超过 Nacos 和 Eureka：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>健康检查类型：
+  - Script:    执行自定义脚本，退出码 0 = 健康
+  - HTTP:      GET /health 端点，2xx = 健康
+  - TCP:       TCP 连接成功 = 健康
+  - TTL:       应用主动上报，TTL 内上报即健康
+  - gRPC:      gRPC Health Checking Protocol
+  - Alias:     关联其他检查结果
+</code></pre></div>
+<p>Consul 在 Service Mesh 时代具备天然优势：</p>
+<ul>
+<li>内置 Connect 功能，支持 mTLS 认证和 ACL 授权</li>
+<li>原生 Sidecar Proxy（envoy）集成</li>
+<li>支持 L7 流量策略（路由、分流、重试）</li>
+</ul>
+<h3>1.4 注册中心对比选型</h3>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>Nacos</th>
+<th>Eureka</th>
+<th>Consul</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>CAP 模型</td>
+<td>AP + CP 双模式</td>
+<td>AP</td>
+<td>CP</td>
+</tr>
+<tr>
+<td>一致性协议</td>
+<td>Distro (AP) / Raft (CP)</td>
+<td>Peer to Peer (最终一致)</td>
+<td>Raft</td>
+</tr>
+<tr>
+<td>健康检查</td>
+<td>TCP/HTTP/MySQL</td>
+<td>HTTP (默认)</td>
+<td>Script/HTTP/TCP/TTL/gRPC</td>
+</tr>
+<tr>
+<td>配置中心</td>
+<td>内置，功能完整</td>
+<td>无（需配合 Spring Cloud Config）</td>
+<td>内置 KV Store</td>
+</tr>
+<tr>
+<td>控制台</td>
+<td>完善（服务列表/详情/权重/保护阈值）</td>
+<td>基础</td>
+<td>完善</td>
+</tr>
+<tr>
+<td>自我保护</td>
+<td>可配置</td>
+<td>内置且不可关闭</td>
+<td>无</td>
+</tr>
+<tr>
+<td>Spring Cloud 集成</td>
+<td>spring-cloud-starter-alibaba-nacos-discovery</td>
+<td>spring-cloud-starter-netflix-eureka-client</td>
+<td>spring-cloud-starter-consul-discovery</td>
+</tr>
+<tr>
+<td>社区活跃度</td>
+<td>高（阿里维护，中文社区活跃）</td>
+<td>中（Netflix 已归档维护模式）</td>
+<td>高（HashiCorp 维护）</td>
+</tr>
+<tr>
+<td>推荐场景</td>
+<td>首选，功能最全面</td>
+<td>存量系统维护</td>
+<td>Service Mesh、强一致性需求</td>
+</tr>
+</tbody></table>
+<h3>1.5 Spring Cloud LoadBalancer</h3>
+<p>Spring Cloud 2020.0 版本后，官方的 Spring Cloud LoadBalancer 正式替代了进入维护模式的 Netflix Ribbon。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Configuration
+public class LoadBalancerConfig {
+
+    // 方式一：按 serviceId 配置负载均衡策略
+    @Bean
+    @LoadBalanced
+    public RestClient.Builder restClientBuilder() {
+        return RestClient.builder();
+    }
+
+    // 方式二：自定义负载均衡策略
+    @Bean
+    public ReactorLoadBalancer&lt;ServiceInstance&gt; customLoadBalancer(
+            Environment env,
+            LoadBalancerClientFactory factory) {
+
+        var serviceId = env.getProperty(LoadBalancerClientFactory.PROPERTY_NAME);
+
+        // 加权随机策略
+        return new RandomLoadBalancer(
+                factory.getLazyProvider(serviceId, ServiceInstanceListSupplier.class),
+                serviceId
+        );
+    }
+}
+
+// 使用 Virtual Threads + LoadBalanced RestClient
+@Service
+public class OrderServiceClient {
+
+    private final RestClient restClient;
+
+    public OrderServiceClient(@LoadBalanced RestClient.Builder builder) {
+        this.restClient = builder.baseUrl(&quot;http://order-service&quot;).build();
+    }
+
+    public OrderDto getOrder(Long orderId) {
+        // 底层通过 ServiceInstanceListSupplier 从注册中心获取实例列表
+        // LoadBalancer 选择具体实例后发起 HTTP 调用
+        return restClient.get()
+                .uri(&quot;/api/orders/{id}&quot;, orderId)
+                .retrieve()
+                .body(OrderDto.class);
+    }
+}
+</code></pre></div>
+<p><code>ServiceInstanceListSupplier</code> 是实例获取的核心接口，Spring Cloud 提供了多个实现：</p>
+<table>
+<thead>
+<tr>
+<th>实现类</th>
+<th>功能</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>DiscoveryClientServiceInstanceListSupplier</code></td>
+<td>从注册中心获取实例列表</td>
+</tr>
+<tr>
+<td><code>CachingServiceInstanceListSupplier</code></td>
+<td>缓存实例列表，减少注册中心查询</td>
+</tr>
+<tr>
+<td><code>HealthCheckServiceInstanceListSupplier</code></td>
+<td>过滤掉不健康的实例</td>
+</tr>
+<tr>
+<td><code>ZonePreferenceServiceInstanceListSupplier</code></td>
+<td>优先同区域实例</td>
+</tr>
+<tr>
+<td><code>SameInstancePreferenceServiceInstanceListSupplier</code></td>
+<td>粘性会话（sticky session）</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>二、配置中心</h2>
+<h3>2.1 Nacos Config 深度配置</h3>
+<p><strong>dataId 命名规范：</strong></p>
+<p>Nacos 中配置的唯一标识由 dataId + group 共同组成。Spring Cloud Alibaba 中 dataId 的默认拼接规则：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>${spring.application.name}-${spring.profiles.active}.${spring.cloud.nacos.config.file-extension}
+
+示例：
+  order-service-dev.yml
+  order-service-prod.yml
+  order-service.yml              ← 不指定 profile 时
+</code></pre></div>
+<p><strong>命名空间与分组的多层隔离策略：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>                                    Nacos Config
+                                         │
+         ┌───────────────────────────────┼───────────────────────────────┐
+         │                               │                               │
+    namespace:dev                   namespace:test                 namespace:prod
+         │                               │                               │
+    ┌────┴────┐                   ┌────┴────┐                   ┌────┴────┐
+    │         │                   │         │                   │         │
+  group:    group:              group:    group:              group:    group:
+  ORDER    PAYMENT             ORDER    PAYMENT             ORDER    PAYMENT
+    │         │                   │         │                   │         │
+  dataId:   dataId:            dataId:   dataId:            dataId:   dataId:
+  order-   payment-           order-    payment-           order-    payment-
+  service  service            service   service            service   service
+</code></pre></div>
+<p><strong>配置灰度发布（Beta IP）：</strong></p>
+<p>Nacos 支持按 IP 维度进行配置灰度，即指定 IP 的实例拉取 Beta 版配置：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># 操作流程（通过控制台或 API）：
+# 1. 创建正式配置：order-service-dev.yml（version: 1）
+# 2. 创建 Beta 配置：选择目标 IP 列表 [&quot;192.168.1.10&quot;, &quot;192.168.1.11&quot;]
+# 3. 灰度验证通过后，发布 Beta 配置为正式配置
+</code></pre></div>
+<p>配置拉取逻辑：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Client 请求配置 → Server 检查请求 IP
+  ├─ IP 在 Beta 白名单中 → 返回 Beta 版本配置
+  └─ IP 不在白名单中   → 返回正式版本配置
+</code></pre></div>
+<p><strong>配置监听 — Long Polling（长轮询）机制：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌─────────┐                    ┌──────────┐
+│  Client  │                    │  Server  │
+└────┬────┘                    └────┬─────┘
+     │                              │
+     │  GET /config?dataId=xxx      │
+     │  + MD5=abc123               │
+     │─────────────────────────────►│
+     │                              │ 对比当前 MD5
+     │                              │ MD5 未变 → hold 29.5s
+     │                              │
+     │  ... (最长 hold 30s) ...     │
+     │                              │
+     │  304 Not Modified (MD5相同)  │
+     │◄─────────────────────────────│
+     │                              │
+     │  立即发起下一次 GET (重新hold)│
+     │─────────────────────────────►│
+     │                              │
+     │  这次 MD5 不同               │
+     │  200 OK + 新配置内容          │
+     │◄─────────────────────────────│
+     │                              │
+     │  Client 更新本地配置           │
+     │  触发 RefreshEvent           │
+     │                              │
+</code></pre></div>
+<p>MD5 检测是 Long Polling 的核心：服务端在 hold 期间不断检查配置的 MD5 值是否变化，变化时立即返回新内容，未变化则等到超时（约 30 秒）返回 304。</p>
+<p><strong>敏感配置加密：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># 加密配置值（Nacos 控制台操作或 API）
+# 明文: spring.datasource.password=MyP@ssw0rd
+# 加密后: spring.datasource.password={cipher}U2FsdGVkX1+...
+
+# Java 端解密插件
+@Component
+public class AesEncryptionPlugin implements EncryptionPlugin {
+
+    private static final String AES_KEY = System.getenv(&quot;NACOS_AES_KEY&quot;);
+
+    @Override
+    public String encrypt(String plainText) {
+        // AES 对称加密
+        return AESUtils.encrypt(plainText, AES_KEY);
+    }
+
+    @Override
+    public String decrypt(String cipherText) {
+        // AES 对称解密
+        return AESUtils.decrypt(cipherText, AES_KEY);
+    }
+}
+</code></pre></div>
+<h3>2.2 Spring Cloud Config</h3>
+<p>Spring Cloud Config 采用 Git 作为配置后端，天然享有版本控制和审计能力。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">spring:
+  cloud:
+    config:
+      server:
+        git:
+          uri: https://git.example.com/config-repo
+          search-paths: &#39;{application}&#39;  # 按应用名搜索子目录
+          default-label: main
+          # 复合仓库：不同应用从不同仓库拉取
+          composite:
+            - type: git
+              uri: https://git.example.com/common-config  # 公共配置
+            - type: git
+              uri: https://git.example.com/biz-config      # 业务配置
+</code></pre></div>
+<p><strong>Git 后端文件匹配规则：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>{application}-{profile}.yml    ← 最精确匹配
+{application}.yml              ← 无 profile 时
+application.yml                ← 全局兜底
+
+示例请求: /order-service/dev
+  匹配顺序: order-service-dev.yml → order-service.yml → application.yml
+</code></pre></div>
+<p><strong>配置加密 — {cipher} 前缀：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># 加密配置值
+spring:
+  datasource:
+    password: &#39;{cipher}AQA...encrypted_value...&#39;
+
+# 服务端配置密钥
+encrypt:
+  key: ${ENCRYPT_KEY}          # 对称密钥
+  # 或 key-store 非对称加密
+  key-store:
+    location: classpath:server.jks
+    password: ${KEYSTORE_PASSWORD}
+    alias: config-server
+</code></pre></div>
+<h3>2.3 动态刷新机制</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 方式一：@RefreshScope — 延迟重建 Bean
+@RestController
+@RefreshScope  // 收到 RefreshScopeRefreshedEvent 后，下次访问时重新初始化
+public class FeatureController {
+
+    @Value(&quot;${feature.new-checkout.enabled:false}&quot;)
+    private boolean newCheckoutEnabled;
+
+    @GetMapping(&quot;/feature/checkout-v2&quot;)
+    public String checkout() {
+        return newCheckoutEnabled ? &quot;V2&quot; : &quot;V1&quot;;
+    }
+}
+
+// 方式二：@ConfigurationProperties — 自动绑定刷新
+@ConfigurationProperties(prefix = &quot;app&quot;)
+@Component
+public class AppProperties {
+    private int timeout;
+    private int maxRetries;
+    // getters/setters...
+    // 属性变更时 EnvironmentChangeEvent 触发 → 自动重新绑定
+}
+
+// 方式三：监听 EnvironmentChangeEvent
+@Component
+public class ConfigChangeListener {
+
+    @EventListener
+    public void onEnvironmentChange(EnvironmentChangeEvent event) {
+        // event.getKeys() 返回变更的 key 列表
+        // 执行自定义清理逻辑：如清空本地缓存、重建连接池
+        for (String key : event.getKeys()) {
+            log.info(&quot;配置变更: {}&quot;, key);
+        }
+    }
+}
+</code></pre></div>
+<p><strong>Spring Cloud Bus 批量刷新：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>POST /actuator/busrefresh?destination=order-service:**
+  → 通过消息总线 (Kafka/RabbitMQ) 广播 RefreshRemoteApplicationEvent
+  → 所有匹配 destination 的节点收到事件后刷新配置
+</code></pre></div>
+<h3>2.4 配置中心对比</h3>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>Nacos Config</th>
+<th>Spring Cloud Config</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>配置存储</td>
+<td>内置数据库 (Derby/MySQL)</td>
+<td>Git / SVN / Vault / JDBC</td>
+</tr>
+<tr>
+<td>版本管理</td>
+<td>内置历史版本（保留 30 天）</td>
+<td>依赖 Git 历史</td>
+</tr>
+<tr>
+<td>灰度发布</td>
+<td>Beta IP 白名单</td>
+<td>较难实现</td>
+</tr>
+<tr>
+<td>管理 UI</td>
+<td>完善（配置编辑/历史/监听查询）</td>
+<td>无（依赖 Git 平台）</td>
+</tr>
+<tr>
+<td>动态刷新</td>
+<td>Long Polling</td>
+<td>需配合 Bus</td>
+</tr>
+<tr>
+<td>敏感配置加密</td>
+<td>自定义加密插件</td>
+<td>{cipher} + encrypt.key</td>
+</tr>
+<tr>
+<td>推荐场景</td>
+<td>功能更全，首选</td>
+<td>GitOps 工作流、简单场景</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>三、API 网关 — Spring Cloud Gateway</h2>
+<h3>3.1 核心三要素</h3>
+<p>Spring Cloud Gateway 基于 Spring WebFlux（Netty）构建，三大核心概念：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Route（路由）= Route ID + 目标 URI + Predicates 集合 + Filters 集合
+
+请求 → Predicates（断言匹配）
+         ├─ 匹配 → Filters（过滤器链处理）→ 目标 URI
+         └─ 不匹配 → 尝试下一条路由 → 最终 404
+</code></pre></div>
+<p>路由匹配优先级：按 <code>order</code> 值从小到大排序，第一个匹配的路由生效。order 默认 0，相同时按加载顺序。</p>
+<h3>3.2 Route Predicates（路由断言）</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">spring:
+  cloud:
+    gateway:
+      routes:
+        # 路径匹配 — 最常用
+        - id: user-service
+          uri: lb://user-service
+          predicates:
+            - Path=/api/v1/users/**
+          filters:
+            - StripPrefix=1           # 剥离 /api 前缀后转发
+
+        # Host 匹配 — 多域名路由
+        - id: api-v2
+          uri: lb://api-v2
+          predicates:
+            - Host=api-v2.example.com
+
+        # 组合匹配
+        - id: order-read
+          uri: lb://order-service
+          predicates:
+            - Path=/api/orders/**
+            - Method=GET                # 仅 GET 请求
+            - Header=X-Version, v2      # 指定 Header
+            - Query=includeDetails, true # 指定 Query 参数
+
+        # 基于时间的路由（A/B 测试、定时上线）
+        - id: promotion-route
+          uri: lb://promotion-v2
+          predicates:
+            - Path=/api/promotions/**
+            - After=2026-07-20T00:00:00+08:00
+            - Before=2026-07-27T23:59:59+08:00
+
+        # 权重路由 — 灰度发布
+        - id: order-v1
+          uri: lb://order-service-v1
+          predicates:
+            - Path=/api/orders/**
+            - Weight=order-group, 80   # 80% 流量到 v1
+        - id: order-v2
+          uri: lb://order-service-v2
+          predicates:
+            - Path=/api/orders/**
+            - Weight=order-group, 20   # 20% 流量到 v2
+</code></pre></div>
+<h3>3.3 GatewayFilter 与 GlobalFilter</h3>
+<p><strong>GatewayFilter（路由级）：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">spring:
+  cloud:
+    gateway:
+      routes:
+        - id: llm-service
+          uri: lb://llm-service
+          predicates:
+            - Path=/api/llm/**
+          filters:
+            # 限流 — Redis 令牌桶
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter:
+                  replenishRate: 100       # 每秒补充 100 令牌
+                  burstCapacity: 200       # 最大突发 200
+                  requestedTokens: 1
+                key-resolver: &quot;#{@apiKeyResolver}&quot;
+
+            # 熔断 — Resilience4j 集成
+            - name: CircuitBreaker
+              args:
+                name: llmCircuitBreaker
+                fallbackUri: forward:/fallback/llm
+
+            # 重试
+            - name: Retry
+              args:
+                retries: 3
+                statuses: BAD_GATEWAY, SERVICE_UNAVAILABLE
+                methods: GET, POST
+                backoff:
+                  firstBackoff: 500ms
+                  maxBackoff: 5000ms
+                  factor: 2
+
+            # 前缀剥离
+            - StripPrefix=1
+            # 添加 Header 向下游传递
+            - AddRequestHeader=X-Gateway-Time, %{now}
+</code></pre></div>
+<p><strong>GlobalFilter（全局级）— JWT 鉴权实现：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Component
+@Order(-1) // 高优先级，确保最先执行
+public class JwtAuthGlobalFilter implements GlobalFilter {
+
+    // 白名单路径，跳过鉴权
+    private static final List&lt;String&gt; WHITELIST = List.of(
+            &quot;/api/auth/login&quot;,
+            &quot;/api/auth/register&quot;,
+            &quot;/api/public/**&quot;
+    );
+
+    private static final AntPathMatcher pathMatcher = new AntPathMatcher();
+
+    @Override
+    public Mono&lt;Void&gt; filter(ServerWebExchange exchange, GatewayFilterChain chain) {
+        var path = exchange.getRequest().getURI().getPath();
+
+        // 白名单放行
+        if (WHITELIST.stream().anyMatch(p -&gt; pathMatcher.match(p, path))) {
+            return chain.filter(exchange);
+        }
+
+        var authHeader = exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
+        if (authHeader == null || !authHeader.startsWith(&quot;Bearer &quot;)) {
+            exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
+            return exchange.getResponse().setComplete();
+        }
+
+        try {
+            var token = authHeader.substring(7);
+            var claims = JwtUtils.parseToken(token);
+
+            // 将用户信息注入 Header 向下游传递，下游服务无需再次解析 JWT
+            exchange = exchange.mutate()
+                    .request(r -&gt; r.header(&quot;X-User-Id&quot;, claims.getSubject())
+                                   .header(&quot;X-User-Name&quot;, claims.get(&quot;name&quot;, String.class))
+                                   .header(&quot;X-Tenant-Id&quot;, claims.get(&quot;tenantId&quot;, String.class)))
+                    .build();
+
+            return chain.filter(exchange);
+        } catch (JwtException e) {
+            exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
+            return exchange.getResponse().setComplete();
+        }
+    }
+}
+</code></pre></div>
+<p><strong>自定义过滤器工厂：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Component
+public class RequestLogGatewayFilterFactory
+        extends AbstractGatewayFilterFactory&lt;RequestLogGatewayFilterFactory.Config&gt; {
+
+    public RequestLogGatewayFilterFactory() {
+        super(Config.class);
+    }
+
+    @Override
+    public GatewayFilter apply(Config config) {
+        return (exchange, chain) -&gt; {
+            var start = System.currentTimeMillis();
+            var path = exchange.getRequest().getURI().getPath();
+
+            return chain.filter(exchange)
+                    .then(Mono.fromRunnable(() -&gt; {
+                        var duration = System.currentTimeMillis() - start;
+                        var status = exchange.getResponse().getStatusCode();
+                        log.info(&quot;Gateway {} {} {} in {}ms&quot;, config.getPrefix(),
+                                path, status, duration);
+                    }));
+        };
+    }
+
+    public record Config(String prefix, boolean logHeaders) {}
+}
+
+// 使用（在 application.yml 中通过 - RequestLog=API,true 引用）
+</code></pre></div>
+<h3>3.4 性能优化</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">spring:
+  cloud:
+    gateway:
+      # Netty 线程配置
+      httpclient:
+        connect-timeout: 2000
+        response-timeout: 30s
+        pool:
+          type: elastic           # fixed / elastic / disabled
+          max-idle-time: 30s
+          max-life-time: 60s
+          max-connections: 500    # 最大连接数
+          acquire-timeout: 5000   # 获取连接超时
+
+      # 路由缓存
+      redis-rate-limiter:
+        include-headers: false    # 不返回限流头，减少响应体积
+</code></pre></div>
+<hr>
+<h2>四、分布式链路追踪</h2>
+<h3>4.1 Micrometer Tracing + Brave</h3>
+<p>Micrometer Tracing 是 Spring 生态的统一可观测性抽象层，Brave 是 Zipkin 的 Java 实现，负责 Trace/Span 的生成、采样和上报。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;!-- Maven 依赖 --&gt;
+&lt;dependency&gt;
+    &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-boot-starter-actuator&lt;/artifactId&gt;
+&lt;/dependency&gt;
+&lt;dependency&gt;
+    &lt;groupId&gt;io.micrometer&lt;/groupId&gt;
+    &lt;artifactId&gt;micrometer-tracing-bridge-brave&lt;/artifactId&gt;
+&lt;/dependency&gt;
+&lt;dependency&gt;
+    &lt;groupId&gt;io.micrometer&lt;/groupId&gt;
+    &lt;artifactId&gt;micrometer-tracing&lt;/artifactId&gt;
+&lt;/dependency&gt;
+&lt;!-- 导出到 Zipkin --&gt;
+&lt;dependency&gt;
+    &lt;groupId&gt;io.zipkin.reporter2&lt;/groupId&gt;
+    &lt;artifactId&gt;zipkin-reporter-brave&lt;/artifactId&gt;
+&lt;/dependency&gt;
+</code></pre></div>
+<p><strong>Micrometer Observation API：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Component
+public class OrderService {
+
+    private final ObservationRegistry observationRegistry;
+
+    // Observation API: 统一的可观测性抽象
+    public Order createOrder(OrderRequest request) {
+        return Observation.createNotStarted(&quot;order.create&quot;, observationRegistry)
+                .lowCardinalityKeyValue(&quot;order.amount&quot;, String.valueOf(request.amount()))
+                .highCardinalityKeyValue(&quot;order.userId&quot;, request.userId())
+                .observe(() -&gt; {
+                    // 业务逻辑
+                    // 框架自动在此 Span 下创建子 Span（数据库查询、HTTP 调用等）
+                    return doCreateOrder(request);
+                });
+    }
+}
+</code></pre></div>
+<p>Observation API 的优势：一次埋点同时产出 Metrics（计时器/计数器）、Tracing（Span）和 Logging（自动注入 TraceId）。</p>
+<h3>4.2 SkyWalking</h3>
+<p>SkyWalking 采用 Java Agent 字节码增强技术，无需修改任何业务代码即可实现自动埋点。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>SkyWalking 核心概念：
+
+Service（服务）           → 集群化的应用（如 order-service）
+  └─ ServiceInstance（实例） → 应用的单个节点（如 order-service 10.0.1.5:8080）
+       └─ Endpoint（端点）    → HTTP 接口/方法（如 GET:/api/orders/{id}）
+</code></pre></div>
+<p><strong>Agent 配置（agent/config/agent.config）：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">properties</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-properties"># 服务名
+agent.service_name=order-service
+
+# 采集器后端地址（SkyWalking OAP）
+collector.backend_service=127.0.0.1:11800
+
+# 采样率：-1=全部, 0=不采集, N=每N条采1条
+agent.sample_n_per_3_secs=-1
+
+# 忽略特定端点
+agent.trace.ignore_path=/actuator/**,/health,/metrics
+
+# JDBC 插件：是否记录 SQL 参数
+plugin.jdbc.trace_sql_parameters=true
+</code></pre></div>
+<h3>4.3 TraceId/SpanId 传播机制</h3>
+<p><strong>HTTP 头传播格式：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>B3 格式（Zipkin 标准）：
+  X-B3-TraceId: 463ac35c9f6413ad48485a3953bb6124
+  X-B3-SpanId:  a2fb4a1d1a96d312
+  X-B3-ParentSpanId: 0020000000000001
+  X-B3-Sampled: 1
+
+W3C TraceContext 格式（OpenTelemetry 标准）：
+  traceparent: 00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01
+  tracestate: vendor=value
+</code></pre></div>
+<p><strong>MQ 中传递 Trace 上下文：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Kafka 生产者注入 Trace 上下文
+@Service
+public class OrderEventPublisher {
+
+    private final KafkaTemplate&lt;String, OrderEvent&gt; kafkaTemplate;
+    private final Tracer tracer; // Brave Tracer
+
+    public void publish(OrderEvent event) {
+        var span = tracer.currentSpan();
+        if (span != null) {
+            var context = span.context();
+            // 注入到 Kafka Headers
+            var producerRecord = new ProducerRecord&lt;&gt;(&quot;order-events&quot;, event);
+            producerRecord.headers()
+                    .add(&quot;X-B3-TraceId&quot;, context.traceId().getBytes())
+                    .add(&quot;X-B3-SpanId&quot;, context.spanId().getBytes());
+            kafkaTemplate.send(producerRecord);
+        }
+    }
+}
+
+// Kafka 消费者提取 Trace 上下文
+@KafkaListener(topics = &quot;order-events&quot;)
+public void handleOrderEvent(ConsumerRecord&lt;String, OrderEvent&gt; record) {
+    // 从 Headers 提取 TraceId → 创建 Span → 链路自动串起来
+    // Micrometer + Brave 自动完成此过程
+}
+</code></pre></div>
+<p><strong>跨线程传播 — Virtual Threads 时代的解决方案：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// JDK 25: Scoped Values 替代 ThreadLocal，天然支持 Virtual Thread 上下文传播
+// Micrometer Tracing 已适配 Scoped Values
+
+// 方式一：Observation API 自动传播（推荐）
+// @Async 方法中，框架自动通过 Scoped Values 传递 Observation 上下文
+
+// 方式二：手动包装（JDK 25 的 StructuredTaskScope）
+public List&lt;Order&gt; fetchOrdersInParallel(List&lt;Long&gt; orderIds) {
+    var observation = Observation.createNotStarted(&quot;order.batch-fetch&quot;, registry)
+            .start();
+
+    try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+        var tasks = orderIds.stream()
+                .map(id -&gt; scope.fork(() -&gt; fetchOrder(id)))
+                .toList();
+        scope.join();
+        return tasks.stream().map(Future::resultNow).toList();
+    } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        throw new RuntimeException(e);
+    } finally {
+        observation.stop();
+    }
+}
+</code></pre></div>
+<p>Scoped Values 相比 ThreadLocal 的根本优势：Scoped Value 绑定到&quot;值的生命周期&quot;而非&quot;线程的生命周期&quot;，Virtual Thread 被调度到不同 Carrier Thread 时上下文不会丢失。</p>
+<h3>4.4 采样策略</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># 固定概率采样
+spring:
+  sleuth:
+    sampler:
+      probability: 0.1  # 10% 采样率
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 自定义采样策略 — 错误全采 + 正常按比例采
+@Configuration
+public class TracingConfig {
+
+    @Bean
+    public SamplerFunction&lt;HttpServerRequest&gt; httpSampler() {
+        return request -&gt; {
+            // 错误路径全量采样
+            if (request.path().startsWith(&quot;/api/error-report&quot;)) {
+                return true;
+            }
+            // 健康检查不采样
+            if (request.path().startsWith(&quot;/actuator&quot;)) {
+                return false;
+            }
+            // 统计类接口低采样率
+            if (request.path().startsWith(&quot;/api/stats&quot;)) {
+                return Math.random() &lt; 0.01;
+            }
+            return Math.random() &lt; 0.1;
+        };
+    }
+
+    // 基于响应状态的采样
+    @Bean
+    public SamplerFunction&lt;HttpServerResponse&gt; httpResponseSampler() {
+        return response -&gt; {
+            var status = response.statusCode();
+            // 5xx 错误 100% 采样
+            if (status &gt;= 500) return true;
+            // 2xx/3xx 按正常比例
+            return Math.random() &lt; 0.1;
+        };
+    }
+}
+
+// 自适应采样 — 基于 QPS 动态调整
+@Component
+public class AdaptiveSampler {
+
+    private final AtomicLong requestCount = new AtomicLong(0);
+    private volatile double samplingRate = 0.1; // 初始 10%
+
+    @Scheduled(fixedRate = 10_000)
+    public void adjustRate() {
+        var qps = requestCount.getAndSet(0) / 10.0;
+        if (qps &gt; 1000) {
+            samplingRate = 0.01;  // 高 QPS 时降低采样率
+        } else if (qps &gt; 100) {
+            samplingRate = 0.05;
+        } else {
+            samplingRate = 0.1;   // 低 QPS 时提高采样率
+        }
+    }
+
+    public boolean shouldSample() {
+        requestCount.incrementAndGet();
+        return Math.random() &lt; samplingRate;
+    }
+}
+</code></pre></div>
+<hr>
+<h2>五、服务治理全景图</h2>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>                        外部请求
+                           │
+                           ▼
+                   ┌───────────────┐
+                   │   Gateway     │  ← 限流(RequestRateLimiter)
+                   │               │  ← 鉴权(GlobalFilter + JWT)
+                   │  lb://svc-a   │  ← 路由(Predicates + Filters)
+                   │  lb://svc-b   │  ← 熔断(CircuitBreaker + Resilience4j)
+                   └───┬───────┬───┘
+                       │       │
+              ┌────────┘       └────────┐
+              ▼                         ▼
+     ┌────────────────┐       ┌────────────────┐
+     │   Service A    │       │   Service B    │
+     │                │       │                │
+     │ RestClient +   │       │ RestClient +   │
+     │ LoadBalancer   │       │ LoadBalancer   │
+     │                │       │                │
+     │ @Retry         │       │ @TimeLimiter   │
+     │ @CircuitBreaker│       │ @Bulkhead      │
+     └───┬────┬───┬───┘       └───┬────┬───┬───┘
+         │    │   │               │    │   │
+    ┌────┘    │   └────┐    ┌────┘    │   └────┐
+    ▼         ▼        ▼    ▼         ▼        ▼
+┌───────┐┌───────┐┌────────┐┌───────┐┌───────┐┌────────┐
+│Nacos  ││Nacos  ││Skywalk-││Nacos  ││Nacos  ││Skywalk-│
+│注册   ││配置   ││ing     ││注册   ││配置   ││ing     │
+└───┬───┘└───┬───┘│Agent   │└───┬───┘└───┬───┘│Agent   │
+    │        │    └────┬───┘    │        │    └────┬───┘
+    │        │         │        │        │         │
+    └────────┴─────────┼────────┴────────┴─────────┘
+                       │
+            ┌──────────┼──────────┐
+            ▼          ▼          ▼
+       ┌─────────┐┌──────┐┌──────────┐
+       │Prometheus││ Loki ││  Tempo   │
+       │(Metrics)││(Logs)││(Traces) │
+       └─────────┘└──────┘└──────────┘
+</code></pre></div>
+<p><strong>各环节技术栈串联链路：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>客户端请求
+  → Gateway（限流+鉴权+路由+负载均衡）
+  → Service A 收到请求
+  → RestClient + LoadBalancer 从 Nacos 发现 Service B 实例
+  → RestClient 发起 HTTP 调用（自动携带 TraceId Header）
+  → 调用链上每个节点注入 MDC(contextKey=TraceId)
+  → 日志自动关联 TraceId → Loki 日志聚合
+  → Span 上报 Zipkin/SkyWalking → Tempo 追踪分析
+  → Metrics(Micrometer) 暴露给 Prometheus 抓取 → Grafana 可视化
+</code></pre></div>
+<hr>
+<h2>六、代码示例</h2>
+<h3>示例 1：Nacos + Spring Cloud Gateway 完整配置</h3>
+<p><strong>pom.xml 关键依赖：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;!-- Nacos Discovery --&gt;
+&lt;dependency&gt;
+    &lt;groupId&gt;com.alibaba.cloud&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-cloud-starter-alibaba-nacos-discovery&lt;/artifactId&gt;
+&lt;/dependency&gt;
+&lt;!-- Nacos Config --&gt;
+&lt;dependency&gt;
+    &lt;groupId&gt;com.alibaba.cloud&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-cloud-starter-alibaba-nacos-config&lt;/artifactId&gt;
+&lt;/dependency&gt;
+&lt;!-- Spring Cloud Gateway --&gt;
+&lt;dependency&gt;
+    &lt;groupId&gt;org.springframework.cloud&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-cloud-starter-gateway&lt;/artifactId&gt;
+&lt;/dependency&gt;
+&lt;!-- Spring Cloud LoadBalancer --&gt;
+&lt;dependency&gt;
+    &lt;groupId&gt;org.springframework.cloud&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-cloud-starter-loadbalancer&lt;/artifactId&gt;
+&lt;/dependency&gt;
+&lt;!-- Resilience4j Circuit Breaker --&gt;
+&lt;dependency&gt;
+    &lt;groupId&gt;org.springframework.cloud&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-cloud-starter-circuitbreaker-reactor-resilience4j&lt;/artifactId&gt;
+&lt;/dependency&gt;
+&lt;!-- Data Redis (限流) --&gt;
+&lt;dependency&gt;
+    &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-boot-starter-data-redis-reactive&lt;/artifactId&gt;
+&lt;/dependency&gt;
+</code></pre></div>
+<p><strong>bootstrap.yml（配置中心的引导配置）：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">spring:
+  application:
+    name: api-gateway
+  profiles:
+    active: dev
+  cloud:
+    nacos:
+      config:
+        server-addr: 127.0.0.1:8848
+        namespace: ${NACOS_NAMESPACE:dev}
+        file-extension: yml
+        shared-configs:
+          - data-id: common-config.yml
+            group: DEFAULT_GROUP
+            refresh: true
+      discovery:
+        server-addr: 127.0.0.1:8848
+        namespace: ${NACOS_NAMESPACE:dev}
+</code></pre></div>
+<p><strong>application.yml（网关路由完整配置）：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">spring:
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: true                # 自动从注册中心创建路由
+          lower-case-service-id: true
+      default-filters:
+        - AddRequestHeader=X-Gateway-Generated, true
+      routes:
+        # 用户服务
+        - id: user-service
+          uri: lb://user-service
+          order: 0
+          predicates:
+            - Path=/api/v1/users/**
+          filters:
+            - StripPrefix=1
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter:
+                  replenishRate: 200
+                  burstCapacity: 400
+                key-resolver: &quot;#{@userKeyResolver}&quot;
+            - name: CircuitBreaker
+              args:
+                name: userServiceCB
+                fallbackUri: forward:/fallback/user
+
+        # AI 服务 — 更高的超时和较低的限流
+        - id: llm-service
+          uri: lb://llm-service
+          order: 0
+          predicates:
+            - Path=/api/v1/llm/**
+          filters:
+            - StripPrefix=1
+            - name: RequestRateLimiter
+              args:
+                redis-rate-limiter:
+                  replenishRate: 50
+                  burstCapacity: 100
+                key-resolver: &quot;#{@userKeyResolver}&quot;
+            - name: CircuitBreaker
+              args:
+                name: llmServiceCB
+                fallbackUri: forward:/fallback/llm
+            - name: Retry
+              args:
+                retries: 2
+                statuses: BAD_GATEWAY, SERVICE_UNAVAILABLE, GATEWAY_TIMEOUT
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: 6379
+      password: ${REDIS_PASSWORD:}
+
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        sliding-window-type: TIME_BASED
+        sliding-window-size: 60
+        failure-rate-threshold: 50
+        wait-duration-in-open-state: 30s
+    instances:
+      userServiceCB:
+        base-config: default
+      llmServiceCB:
+        base-config: default
+        failure-rate-threshold: 30
+        slow-call-rate-threshold: 50
+        slow-call-duration-threshold: 10s
+</code></pre></div>
+<h3>示例 2：Micrometer Tracing 自定义采样策略</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Configuration
+public class CustomTracingSamplingConfig {
+
+    /**
+     * 分层采样策略：
+     * - /api/health/** → 不采样
+     * - /api/statistics/** → 1% 采样
+     * - 5xx 错误 → 100% 采样
+     * - 4xx 错误 → 20% 采样
+     * - 正常请求 → 10% 采样
+     */
+    @Bean
+    public HttpSampler httpSampler(ObservationRegistry registry) {
+        return new HttpSampler() {
+
+            private final AntPathMatcher matcher = new AntPathMatcher();
+
+            @Override
+            public boolean shouldSample(HttpServerRequest request) {
+                var path = request.path();
+
+                // 健康检查和 actuator 端点不采样
+                if (matcher.match(&quot;/actuator/**&quot;, path)
+                        || matcher.match(&quot;/api/health/**&quot;, path)) {
+                    return false;
+                }
+
+                // 统计接口低采样
+                if (matcher.match(&quot;/api/statistics/**&quot;, path)) {
+                    return ThreadLocalRandom.current().nextDouble() &lt; 0.01;
+                }
+
+                return ThreadLocalRandom.current().nextDouble() &lt; 0.1;
+            }
+
+            @Override
+            public boolean shouldSample(HttpServerResponse response) {
+                var status = response.statusCode();
+
+                // 5xx 全采：故障排查不能丢失任何一条
+                if (status &gt;= 500) return true;
+
+                // 4xx 提高采样率：排查客户端错误模式
+                if (status &gt;= 400) {
+                    return ThreadLocalRandom.current().nextDouble() &lt; 0.2;
+                }
+
+                return ThreadLocalRandom.current().nextDouble() &lt; 0.1;
+            }
+        };
+    }
+}
+</code></pre></div>
+<h3>示例 3：Spring Cloud LoadBalancer + Virtual Threads 服务调用</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Configuration
+public class ServiceClientConfig {
+
+    // RestClient 配置 — JDK 25 Virtual Threads 时代的标准 HTTP 客户端
+    @Bean
+    @LoadBalanced
+    public RestClient.Builder restClientBuilder() {
+        return RestClient.builder()
+                .requestFactory(new JdkClientHttpRequestFactory())
+                .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE);
+    }
+
+    // 自定义负载均衡策略：加权服务实例选择
+    @Bean
+    public ReactorLoadBalancer&lt;ServiceInstance&gt; weightedLoadBalancer(
+            Environment env,
+            LoadBalancerClientFactory factory) {
+
+        var serviceId = env.getProperty(LoadBalancerClientFactory.PROPERTY_NAME);
+        return new WeightedRandomLoadBalancer(
+                factory.getLazyProvider(serviceId, ServiceInstanceListSupplier.class),
+                serviceId
+        );
+    }
+}
+
+// 加权随机负载均衡器
+class WeightedRandomLoadBalancer extends RandomLoadBalancer {
+
+    WeightedRandomLoadBalancer(ObjectProvider&lt;ServiceInstanceListSupplier&gt; supplier,
+                               String serviceId) {
+        super(supplier, serviceId);
+    }
+
+    @Override
+    protected Mono&lt;Response&lt;ServiceInstance&gt;&gt; choose(Request request, String serviceId) {
+        return getServiceInstances(serviceId)
+                .map(instances -&gt; {
+                    if (instances.isEmpty()) return new EmptyResponse();
+
+                    // 按权重分配概率区间
+                    var totalWeight = instances.stream()
+                            .mapToDouble(i -&gt; {
+                                var meta = i.getMetadata();
+                                return meta.containsKey(&quot;nacos.weight&quot;)
+                                        ? Double.parseDouble(meta.get(&quot;nacos.weight&quot;))
+                                        : 1.0;
+                            })
+                            .sum();
+
+                    var random = ThreadLocalRandom.current().nextDouble() * totalWeight;
+                    double cumulative = 0.0;
+                    for (var instance : instances) {
+                        var weight = Double.parseDouble(
+                                instance.getMetadata().getOrDefault(&quot;nacos.weight&quot;, &quot;1.0&quot;));
+                        cumulative += weight;
+                        if (random &lt;= cumulative) {
+                            return new DefaultResponse(instance);
+                        }
+                    }
+                    return new DefaultResponse(instances.getFirst());
+                });
+    }
+}
+
+// 使用示例 — 基于 Virtual Threads 的高并发服务调用
+@Service
+public class ProductAggregationService {
+
+    private final RestClient orderClient;
+    private final RestClient inventoryClient;
+    private final RestClient userClient;
+
+    public ProductAggregationService(@LoadBalanced RestClient.Builder builder) {
+        this.orderClient = builder.baseUrl(&quot;http://order-service&quot;).build();
+        this.inventoryClient = builder.baseUrl(&quot;http://inventory-service&quot;).build();
+        this.userClient = builder.baseUrl(&quot;http://user-service&quot;).build();
+    }
+
+    /**
+     * 并行调用三个下游服务聚合数据
+     * Virtual Threads 使数千并发阻塞调用无压力
+     */
+    public ProductDetailDto aggregate(String productId, String userId) {
+        try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+
+            var orderTask = scope.fork(() -&gt;
+                    orderClient.get()
+                            .uri(&quot;/api/orders/product/{id}&quot;, productId)
+                            .retrieve()
+                            .body(OrderSummaryList.class)
+            );
+
+            var inventoryTask = scope.fork(() -&gt;
+                    inventoryClient.get()
+                            .uri(&quot;/api/inventory/{id}&quot;, productId)
+                            .retrieve()
+                            .body(InventoryDto.class)
+            );
+
+            var userTask = scope.fork(() -&gt;
+                    userClient.get()
+                            .uri(&quot;/api/users/{id}&quot;, userId)
+                            .retrieve()
+                            .body(UserDto.class)
+            );
+
+            scope.join();       // 等待所有任务完成
+            scope.throwIfFailed(); // 任一失败则抛出异常
+
+            return new ProductDetailDto(
+                    inventoryTask.resultNow(),
+                    orderTask.resultNow().orders(),
+                    userTask.resultNow()
+            );
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException(&quot;聚合查询被中断&quot;, e);
+        }
+    }
+}
+</code></pre></div>
+<hr>
+<h2>常见问题</h2>
+<p><strong>Q: Nacos 1.x 升级 2.x 有哪些注意事项？</strong></p>
+<p>A: Nacos 2.x 的 gRPC 通信协议是最大的变化，1.x 使用 HTTP + UDP，2.x 引入了 gRPC 长连接。升级要点：(1) 客户端必须升级到 2.x 对应的 SDK；(2) 2.x 新增了两个 gRPC 端口（默认 9848/9849），需在防火墙放行；(3) 2.x 中临时实例的心跳走 gRPC 长连接而非 HTTP 心跳，更高效但需确认网络可达；(4) 建议先在测试环境验证 gRPC 通道是否正常连通。</p>
+<p><strong>Q: Gateway 路由冲突怎么排查？</strong></p>
+<p>A: Gateway 路由匹配是&quot;先到先得&quot;模式。排查步骤：(1) 开启 Gateway 调试日志 <code>logging.level.reactor.netty=TRACE</code>；(2) 确认 <code>spring.cloud.gateway.discovery.locator.enabled=true</code> 时是否自动生成了与自定义路由冲突的规则；(3) 检查路由的 <code>order</code> 值（越小越优先），确保关键路由 order 设得更小；(4) Path 断言注意 <code>/api/**</code> 和 <code>/api/v1/**</code> 的包含关系，范围大的放后面。</p>
+<p><strong>Q: 配置中心灰度发布如何实践？</strong></p>
+<p>A: Nacos 支持 Beta IP 灰度，也可以借助命名空间实现更严格的环境隔离：(1) 创建 <code>dev-gray</code> 命名空间作为灰度环境；(2) 灰度实例注册时指定 <code>spring.cloud.nacos.discovery.namespace=dev-gray</code>；(3) 在 Gateway 中通过 Header（如 <code>X-Gray: true</code>）将灰度流量路由到灰度实例；(4) 灰度验证通过后将 <code>dev-gray</code> 的配置同步到正式 <code>dev</code> 命名空间，发布上线。</p>
+<p><strong>Q: 链路追踪采样率如何调优？</strong></p>
+<p>A: 采样本质是成本与可观测性的权衡。建议：(1) 正常流量 5%-10% 采样；(2) 错误请求（5xx/异常）100% 采样；(3) 核心业务接口提高采样率到 20%-30%；(4) 健康检查、静态资源类路径 0% 采样；(5) 监控存储成本：假设 1000 QPS，10% 采样率 = 每日约 864 万 Span（按每个请求 10 个 Span 计），评估 Tempo/SkyWalking 后端是否能承受。</p>
+<p><strong>Q: 服务发现缓存与实时性如何权衡？</strong></p>
+<p>A: 服务发现本质是一个&quot;弱一致 + 最终一致&quot;的系统。Nacos 临时实例 15 秒心跳超时后剔除，客户端拉取间隔默认可达数秒，加上 LoadBalancer 的 <code>CachingServiceInstanceListSupplier</code> 缓存（默认 35 秒），总延迟最多可能达到 50 秒以上。生产建议：(1) 缩短 <code>spring.cloud.loadbalancer.cache.ttl</code> 到 10-15 秒；(2) Nacos 客户端配置 <code>nacos.discovery.watch-delay</code> 减小监听间隔；(3) 必须配合重试机制，容忍短暂的实例列表滞后。</p>
+<p><strong>Q: Spring Cloud Gateway 和 Nginx/Kong 怎么分工？</strong></p>
+<p>A: 典型分层架构中，Nginx/Kong 作为&quot;入口网关&quot;（Edge Gateway），Spring Cloud Gateway 作为&quot;微服务网关&quot;（Internal Gateway）。Nginx 负责 SSL 终结、WAF、全局 IP 限流、静态资源；Spring Cloud Gateway 负责 JWT 鉴权、服务路由、业务限流、灰度发布。两者不是替代关系，而是互补分层。</p>
+<hr>
+<h2>相关条目</h2>
+<ul>
+<li><a href="/05-分布式架构/弹性设计/05-熔断限流与弹性设计" class="cross-ref" data-ref="05-熔断限流与弹性设计">05-熔断限流与弹性设计</a> — Gateway 中的 Resilience4j 集成、限流算法深入</li>
+<li><a href="/05-分布式架构/事务与一致性/05-缓存策略与多级缓存架构" class="cross-ref" data-ref="05-缓存策略与多级缓存架构">05-缓存策略与多级缓存架构</a> — 服务实例缓存与配置缓存策略</li>
+<li><a href="/05-分布式架构/事务与一致性/05-分布式一致性与事务方案" class="cross-ref" data-ref="05-分布式一致性与事务方案">05-分布式一致性与事务方案</a> — 分布式系统数据一致性问题</li>
+<li><a href="/?d=06" class="cross-ref domain-ref">06-可观测性与CI</a> — Prometheus + Grafana + Tempo + Loki 完整可观测性栈</li>
+</ul>
+</div>
+</article>

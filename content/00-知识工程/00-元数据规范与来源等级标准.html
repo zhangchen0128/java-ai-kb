@@ -1,0 +1,497 @@
+
+<article class="kb-entry" data-path="/00-知识工程/00-元数据规范与来源等级标准">
+  <div class="entry-meta">
+    <div class="entry-domain"><a href="/?d=00">00-知识工程</a></div>
+    <h1>知识条目元数据规范与来源等级标准</h1>
+    <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🟢 入门</span><span class="badge badge-tag">#["metadata"</span><span class="badge badge-tag">#"source-standards"</span><span class="badge badge-tag">#"knowledge-engineering"</span><span class="badge badge-tag">#"taxonomy"]</span></div>
+    
+  </div>
+  <div class="entry-body"><h1>知识条目元数据规范与来源等级标准</h1>
+<h2>概述</h2>
+<p>每一个知识条目文件在创建时，必须包含一份 YAML frontmatter 作为结构化元数据。这份元数据承担了三个核心职责：(1) 使知识条目可被程序化检索和聚合；(2) 标注知识来源的可信度等级，为读者提供信息可靠性判断依据；(3) 通过关系字段建立知识图谱的边，使知识库从平面文件集合升级为可遍历的知识网络。</p>
+<p>本文件定义了所有元数据字段的语义、约束和用法，以及七级来源等级标准（L0-L6），供知识条目作者和审核人使用。</p>
+<hr>
+<h2>核心内容</h2>
+<h3>一、YAML Frontmatter 字段详解</h3>
+<h4>1.1 <code>domain</code>（必填）</h4>
+<p>知识条目所属的知识域编号与名称，格式为 <code>&quot;XX-domain-name&quot;</code>。该字段用于将知识条目归属到 <code>KNOWLEDGE_TAXONOMY.md</code> 中定义的 19 个知识域之一。</p>
+<p><strong>约束：</strong></p>
+<ul>
+<li>必须与目录路径一致。例如，放在 <code>knowledge/01-计算机基础/</code> 目录下的文件，<code>domain</code> 必须为 <code>&quot;01-计算机基础&quot;</code>。</li>
+<li>编号使用两位数字，与知识域总览表对齐。</li>
+</ul>
+<p><strong>示例：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">domain: &quot;01-计算机基础&quot;
+domain: &quot;02-Java平台&quot;
+domain: &quot;12-Agent工程&quot;
+</code></pre></div>
+<h4>1.2 <code>title</code>（必填）</h4>
+<p>知识条目的中文标题。应简洁、准确、完整，通常控制在 20 字以内。标题定义了本条目最主要的讨论对象，也是构建知识关系时的主要引用标识。</p>
+<p><strong>最佳实践：</strong></p>
+<ul>
+<li>使用名词短语而非句子</li>
+<li>尽量避免过于宽泛的词（如&quot;知识&quot;、&quot;技术&quot;）</li>
+<li>优先级：准确性 &gt; 简洁性 &gt; 吸引力</li>
+</ul>
+<p><strong>反例：</strong> <code>&quot;一些关于Java的东西&quot;</code>（不准确）  →  <strong>正例：</strong> <code>&quot;JVM 内存模型与 G1 GC 原理&quot;</code></p>
+<h4>1.3 <code>status</code>（必填）</h4>
+<p>知识条目的生产就绪状态。四个可选值：</p>
+<table>
+<thead>
+<tr>
+<th>值</th>
+<th>含义</th>
+<th>触发条件</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>draft</code></td>
+<td>草稿，内容不完整或未经验证</td>
+<td>新建条目默认值；L6 来源自动设为 draft</td>
+</tr>
+<tr>
+<td><code>verified</code></td>
+<td>已审核，内容可靠</td>
+<td>通过质量检查清单的全部项目</td>
+</tr>
+<tr>
+<td><code>outdated</code></td>
+<td>已过时，但保留供历史参考</td>
+<td>技术版本更新导致原内容不再适用</td>
+</tr>
+<tr>
+<td><code>archived</code></td>
+<td>已归档，不再维护</td>
+<td>知识域被重构或知识点被合并到其他条目</td>
+</tr>
+</tbody></table>
+<p><strong>状态转换规则：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>draft ──（通过质量检查清单）──&gt; verified
+verified ──（技术升级/版本落后）──&gt; outdated
+outdated ──（完成更新）──&gt; verified
+draft/outdated/verified ──（合并/重构）──&gt; archived
+</code></pre></div>
+<p>每次修改状态需同步更新 <code>updated</code> 字段。</p>
+<h4>1.4 <code>level</code>（必填）</h4>
+<p>知识条目的难度级别，与目标读者（具备 Java 后端经验的工程师）的预期理解水平对齐。</p>
+<table>
+<thead>
+<tr>
+<th>级别</th>
+<th>含义</th>
+<th>判断标准</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>beginner</code></td>
+<td>入门级</td>
+<td>只需域外前置知识即可理解；无本域经验也可阅读</td>
+</tr>
+<tr>
+<td><code>intermediate</code></td>
+<td>中级</td>
+<td>需要本域的基础概念；适合有 1-2 年相关经验的读者</td>
+</tr>
+<tr>
+<td><code>advanced</code></td>
+<td>高级</td>
+<td>涉及深层原理、源码分析、性能调优；需要扎实的域内基础</td>
+</tr>
+<tr>
+<td><code>reference</code></td>
+<td>参考级</td>
+<td>速查表、命令清单、配置模板等；内容侧重索引而非讲解</td>
+</tr>
+</tbody></table>
+<p><strong>示例：</strong></p>
+<ul>
+<li><code>Java 基础语法</code> → <code>beginner</code></li>
+<li><code>HashMap 源码分析</code> → <code>advanced</code></li>
+<li><code>Docker 常用命令速查</code> → <code>reference</code></li>
+</ul>
+<h4>1.5 <code>sources</code>（必填）</h4>
+<p>来源列表，每条来源包含三个字段：<code>level</code>（L0-L6）、<code>url</code>（可选）、<code>description</code>（必填）。</p>
+<p><strong>Array of objects 结构：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">sources:
+  - level: &quot;L1&quot;
+    url: &quot;https://docs.oracle.com/en/java/javase/25/&quot;
+    description: &quot;Oracle JDK 25 官方文档&quot;
+  - level: &quot;L2&quot;
+    url: &quot;https://github.com/openjdk/jdk/tree/jdk-25&quot;
+    description: &quot;OpenJDK 25 源码仓库 — HashMap 实现分析&quot;
+  - level: &quot;L3&quot;
+    description: &quot;《Java并发编程实战》第5章 — 同步容器与并发容器&quot;
+</code></pre></div>
+<p><strong>约束规则：</strong></p>
+<ol>
+<li>至少包含一个 L0-L3 级别的来源（<code>verified</code> 条目的硬性要求）。</li>
+<li>L6 来源强制 <code>status: draft</code>。</li>
+<li>URL 若有，应为可公开访问的标准 URL；内部 Wiki 或无法公开访问的链接应只保留描述。</li>
+<li>来源按可信度从高到低排列。</li>
+</ol>
+<h4>1.6 <code>relations</code>（必填）</h4>
+<p>知识条目与其他条目的关系。六种关系类型（详见 <code>00-知识关系类型详解.md</code>）：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">relations:
+  prerequisite: [&quot;01-数据结构与算法&quot;]   # 前置知识
+  related: [&quot;02-garbage-collection-in-depth&quot;]            # 相关知识
+  derived: []                                            # 派生关系
+  contrast: []                                           # 对比关系
+  version-of: []                                         # 版本关系
+  replaces: []                                           # 替代关系
+</code></pre></div>
+<p><strong>取值规则：</strong></p>
+<ul>
+<li>值为该知识域内的文件名（不含 <code>.md</code> 扩展名）。跨域引用加域前缀，如 <code>02-Java平台/02-virtual-threads-in-depth</code>。</li>
+<li>空数组表示该关系类型无关联条目，不可省略该字段。</li>
+<li>建议在创建条目时先填写 <code>prerequisite</code> 和 <code>related</code>，其他关系在后续整理中补充。</li>
+</ul>
+<h4>1.7 <code>tags</code>（必填）</h4>
+<p>扁平的关键词标签数组，用于跨域搜索和语义归类。标签应是 <strong>小写英文</strong> 单词或短语（连字符连接），避免使用中文标签（保留给未来 i18n 支持）。</p>
+<p><strong>标签命名规则：</strong></p>
+<ul>
+<li>使用单数形式（<code>thread</code> 而非 <code>threads</code>）</li>
+<li>使用全称而非缩写（<code>garbage-collection</code> 而非 <code>gc</code>，除非缩写是业界通用标准如 <code>jvm</code>、<code>jdk</code>）</li>
+<li>每个条目建议 3-8 个标签</li>
+<li>标签体现：技术栈名、概念领域、应用场景</li>
+</ul>
+<p><strong>示例：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">tags: [&quot;jvm&quot;, &quot;garbage-collection&quot;, &quot;g1&quot;, &quot;memory-management&quot;, &quot;performance-tuning&quot;]
+</code></pre></div>
+<p>标签体系会随着知识库增长而演进；新增标签时应检查是否已有同义标签存在。</p>
+<h4>1.8 <code>created</code> 和 <code>updated</code>（必填）</h4>
+<p>日期格式统一为 <code>YYYY-MM-DD</code>（ISO 8601 日期格式）。</p>
+<ul>
+<li><code>created</code>：条目首次创建的日期，不可修改。</li>
+<li><code>updated</code>：最近一次内容实质性修改的日期。修正拼写错误不视为实质性修改；更新代码示例、补充新章节、修改结论视为实质性修改。</li>
+</ul>
+<p><strong>版本矩阵检查：</strong> 当 <code>updated</code> 距当前日期超过 90 天时，应触发时效性复核。</p>
+<hr>
+<h3>二、来源等级标准 (L0-L6)</h3>
+<p>来源等级是知识可信度的尺度。同一知识点的多级来源存在冲突时，优先采信高等级来源。</p>
+<h4>2.1 L0 — 官方规范与标准</h4>
+<p>最高可信度。包括但不限于：</p>
+<table>
+<thead>
+<tr>
+<th>类型</th>
+<th>示例</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Java 语言规范</td>
+<td>JLS (Java Language Specification)</td>
+</tr>
+<tr>
+<td>JDK Enhancement Proposals</td>
+<td>JEP 444 (Virtual Threads)</td>
+</tr>
+<tr>
+<td>IETF 标准</td>
+<td>RFC 7230 (HTTP/1.1)、RFC 8446 (TLS 1.3)</td>
+</tr>
+<tr>
+<td>国际/行业标准</td>
+<td>OWASP Top 10、ISO 27001</td>
+</tr>
+<tr>
+<td>W3C 规范</td>
+<td>HTML、CSS、Web API 标准</td>
+</tr>
+<tr>
+<td>数据库 SQL 标准</td>
+<td>SQL:2016</td>
+</tr>
+</tbody></table>
+<p><strong>判断标准：</strong> 内容由正式的标准委员会或权威组织发布，具有规范性质的约束力，实现者必须遵循。</p>
+<p><strong>使用指南：</strong> L0 来源用于确认&quot;标准怎么说&quot;。例如，HashMap 的 <code>hash()</code> 方法行为应以 JLS 和 JEP 为准，而不是某篇博客的解读。</p>
+<h4>2.2 L1 — 官方文档</h4>
+<p>由技术开发方或维护方撰写的正式文档，是日常开发中最常用的权威来源。</p>
+<table>
+<thead>
+<tr>
+<th>类型</th>
+<th>示例</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>语言/平台文档</td>
+<td>Oracle JDK 文档、Go 语言规范</td>
+</tr>
+<tr>
+<td>框架官方手册</td>
+<td>Spring Framework Reference、Spring AI 文档</td>
+</tr>
+<tr>
+<td>数据库官方文档</td>
+<td>PostgreSQL Manual、Redis Documentation</td>
+</tr>
+<tr>
+<td>云服务文档</td>
+<td>AWS 官方文档、Kubernetes 官方文档</td>
+</tr>
+<tr>
+<td>API Reference</td>
+<td>OpenAI API Reference、Anthropic API Docs</td>
+</tr>
+</tbody></table>
+<p><strong>判断标准：</strong> 文档发布方 = 技术开发方；内容为官方维护而非社区贡献。</p>
+<p><strong>边界情况：</strong></p>
+<ul>
+<li>GitHub 仓库中的 <code>README.md</code> 若为主要文档入口，视为 L1。</li>
+<li>GitHub 仓库中的 Wiki（社区可编辑），应降级为 L4。</li>
+<li>Stack Overflow 上的官方团队回答（有&quot;Staff&quot;标签），可视情况升级为 L1。</li>
+</ul>
+<h4>2.3 L2 — 源码</h4>
+<p>直接阅读和解析源代码获得的理解。这是验证 L1 文档准确性、理解未文档化行为的终极手段。</p>
+<table>
+<thead>
+<tr>
+<th>类型</th>
+<th>示例</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>OpenJDK 源码</td>
+<td><code>java.util.HashMap</code> 实现</td>
+</tr>
+<tr>
+<td>Spring Framework 源码</td>
+<td><code>@Transactional</code> AOP 拦截逻辑</td>
+</tr>
+<tr>
+<td>Linux 内核源码</td>
+<td>epoll 实现</td>
+</tr>
+<tr>
+<td>PostgreSQL 源码</td>
+<td>MVCC 实现</td>
+</tr>
+</tbody></table>
+<p><strong>判断标准：</strong> 内容来自对源代码的直接解读分析，而非第三方转述。</p>
+<p><strong>使用指南：</strong> L2 来源通常配合代码引用（指定文件路径和行号或关键方法名）。源码分析时务必标注分析的版本（commit hash 或 tag），因为源码行为可能随版本变化。</p>
+<p><strong>标记示例：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">- level: &quot;L2&quot;
+  url: &quot;https://github.com/openjdk/jdk/blob/jdk-25-ga/src/java.base/share/classes/java/util/HashMap.java&quot;
+  description: &quot;OpenJDK 25 HashMap 源码 — resize() 方法 L668-L740&quot;
+</code></pre></div>
+<h4>2.4 L3 — 权威书籍</h4>
+<p>由领域专家撰写、出版社正式出版的书籍，经过同行评审和编辑审核。</p>
+<table>
+<thead>
+<tr>
+<th>类型</th>
+<th>示例</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>并发编程</td>
+<td>《Java并发编程实战》(Brian Goetz)</td>
+</tr>
+<tr>
+<td>分布式系统</td>
+<td>《Designing Data-Intensive Applications》(Martin Kleppmann)</td>
+</tr>
+<tr>
+<td>JVM</td>
+<td>《深入理解Java虚拟机》(周志明)</td>
+</tr>
+<tr>
+<td>算法</td>
+<td>《算法导论》(CLRS)</td>
+</tr>
+</tbody></table>
+<p><strong>判断标准：</strong></p>
+<ol>
+<li>正式出版（ISBN 存在）。</li>
+<li>作者是该领域公认的专家。</li>
+<li>内容经过编辑或同行评审。</li>
+</ol>
+<p><strong>排除项：</strong></p>
+<ul>
+<li>自出版电子书（除非作者是该技术的核心贡献者）。</li>
+<li>仅在线发布的文档（除非满足 L1 条件）。</li>
+<li>翻译版以其原版的权威性为准。</li>
+</ul>
+<h4>2.5 L4 — 技术博客与学术论文</h4>
+<table>
+<thead>
+<tr>
+<th>类型</th>
+<th>示例</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>官方技术博客</td>
+<td>Spring Blog、Netflix Tech Blog、AWS Architecture Blog</td>
+</tr>
+<tr>
+<td>学术界论文</td>
+<td>经同行评审的会议/期刊论文（如 SIGMOD、VLDB、OSDI）</td>
+</tr>
+<tr>
+<td>知名技术博客</td>
+<td>美团技术团队、阿里中间件博客</td>
+</tr>
+<tr>
+<td>个人技术博客</td>
+<td>经多方交叉验证的深度技术文章</td>
+</tr>
+</tbody></table>
+<p><strong>判断标准：</strong></p>
+<ul>
+<li>博客：作者可追踪、内容有数据或实验支撑、非纯观点。</li>
+<li>论文：经同行评审（arXiv 预印本降低一个可信度子级）。</li>
+<li>博客无官方背书 → 不能升级为 L1。</li>
+</ul>
+<h4>2.6 L5 — 社区与经验</h4>
+<table>
+<thead>
+<tr>
+<th>类型</th>
+<th>示例</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Stack Overflow</td>
+<td>高票答案（score &gt; 50）</td>
+</tr>
+<tr>
+<td>GitHub Issues/Discussions</td>
+<td>官方仓库的讨论</td>
+</tr>
+<tr>
+<td>技术论坛</td>
+<td>Reddit r/java、V2EX</td>
+</tr>
+<tr>
+<td>个人实践经验</td>
+<td>经多项目验证的经验总结</td>
+</tr>
+</tbody></table>
+<p><strong>判断标准：</strong> 社区共识或经过多人验证的个体经验。单个 L5 来源不足以支撑核心结论，建议至少 2-3 个独立 L5 来源交叉验证。</p>
+<h4>2.7 L6 — AI 生成</h4>
+<p>由大语言模型（Claude、GPT 等）生成的知识总结。</p>
+<p><strong>强制约束：</strong></p>
+<ol>
+<li>任何以 L6 为主要来源的条目，<code>status</code> 必须为 <code>draft</code>。</li>
+<li>必须在 <code>description</code> 中显式标注：<code>&quot;AI 生成，未经人工验证&quot;</code>。</li>
+<li>人工审核验证后，移除 L6 来源标记，添加对应的 L0-L5 来源。</li>
+<li>L6 可作为补充来源（次要来源）存在于 <code>verified</code> 条目中，但不能是唯一来源。</li>
+</ol>
+<p><strong>典型用法：</strong> L6 用于知识条目的初稿生成（提升效率），后续由人类专家对照 L0-L3 来源进行事实核查和改写。</p>
+<hr>
+<h3>三、版本矩阵维护流程</h3>
+<p><code>KNOWLEDGE_TAXONOMY.md</code> 第五节定义了版本矩阵，记录所有关键技术的当前版本。维护流程如下：</p>
+<h4>3.1 定期复核（每季度）</h4>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>复核触发条件：
+- 到达季度复核日期（1月、4月、7月、10月第一个工作日）
+- JDK/Spring/Spring AI 大版本发布
+- PostgreSQL/Redis/Kafka 等核心基础设施大版本发布
+
+复核步骤：
+1. 逐项检查版本矩阵中的&quot;当前版本&quot;列
+2. 对每个技术，访问其官方网站确认最新稳定版本
+3. 更新&quot;当前版本&quot;和&quot;备注&quot;列
+4. 在 TECHNLOGY_RADAR.md 中评估是否需要调整象限
+5. 在维护日志中记录变更
+</code></pre></div>
+<h4>3.2 事件驱动更新</h4>
+<table>
+<thead>
+<tr>
+<th>事件</th>
+<th>行动</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>JDK 新 LTS 发布</td>
+<td>一周内更新版本矩阵，评估是否需要创建新的知识条目</td>
+</tr>
+<tr>
+<td>Spring Boot 大版本</td>
+<td>三天内更新，检查所有代码示例的兼容性</td>
+</tr>
+<tr>
+<td>Spring AI 大版本</td>
+<td>三天内更新，优先核查 API 变更</td>
+</tr>
+<tr>
+<td>技术雷达象限变动</td>
+<td>同步更新版本矩阵&quot;备注&quot;</td>
+</tr>
+</tbody></table>
+<h4>3.3 知识条目版本同步</h4>
+<p>当版本矩阵中的技术版本更新后，需要扫描所有引用该技术的知识条目：</p>
+<ul>
+<li>如果新版本导致代码示例无法编译 → 更新代码且将 <code>status</code> 改为 <code>verified</code>（如需大幅改写则先改为 <code>draft</code>）</li>
+<li>如果新版本只增加特性，不影响现有内容 → 在条目中添加新版本说明，保持 <code>status: verified</code></li>
+</ul>
+<hr>
+<h3>四、完整示例</h3>
+<p>以下是一个符合所有规范的知识条目 frontmatter 完整示例：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">---
+domain: &quot;02-Java平台&quot;
+title: &quot;Virtual Threads 深度解析&quot;
+status: &quot;verified&quot;
+level: &quot;advanced&quot;
+sources:
+  - level: &quot;L0&quot;
+    url: &quot;https://openjdk.org/jeps/444&quot;
+    description: &quot;JEP 444: Virtual Threads 正式规范&quot;
+  - level: &quot;L1&quot;
+    url: &quot;https://docs.oracle.com/en/java/javase/25/core/virtual-threads.html&quot;
+    description: &quot;Oracle JDK 25 Virtual Threads 官方文档&quot;
+  - level: &quot;L2&quot;
+    url: &quot;https://github.com/openjdk/jdk/tree/jdk-25-ga/src/java.base/share/classes/java/lang&quot;
+    description: &quot;OpenJDK 25 源码 — VirtualThread、Continuation 实现&quot;
+  - level: &quot;L3&quot;
+    description: &quot;《Java并发编程实战》第3版 第9章 — Project Loom与Virtual Threads&quot;
+  - level: &quot;L4&quot;
+    url: &quot;https://inside.java/2023/11/15/virtual-threads-deep-dive/&quot;
+    description: &quot;Oracle 内部博客 — Virtual Threads 调度与性能分析&quot;
+relations:
+  prerequisite:
+    - &quot;02-java-thread-model&quot;
+    - &quot;02-jmm-basics&quot;
+  related:
+    - &quot;02-structured-concurrency&quot;
+    - &quot;02-scoped-values&quot;
+    - &quot;02-reactor-vs-virtual-threads&quot;
+  derived: []
+  contrast:
+    - &quot;02-reactor-vs-virtual-threads&quot;
+  version-of: []
+  replaces:
+    - &quot;02-reactor-fundamentals&quot;
+tags:
+  - &quot;virtual-threads&quot;
+  - &quot;project-loom&quot;
+  - &quot;concurrency&quot;
+  - &quot;jdk25&quot;
+  - &quot;jep444&quot;
+  - &quot;continuation&quot;
+created: &quot;2026-07-17&quot;
+updated: &quot;2026-07-17&quot;
+---
+</code></pre></div>
+<hr>
+<h2>常见问题</h2>
+<p><strong>Q1: 如果一本书同时有中英文版本，来源等级如何标注？</strong></p>
+<p>以原版（通常是英文版）的权威性为准。翻译版可能在技术术语上存在偏差，建议引用的同时标注原版信息。</p>
+<p><strong>Q2: 官方团队博客（如 Spring Blog）属于 L1 还是 L4？</strong></p>
+<p>正式的框架参考文档（Reference Documentation）属于 L1。官方团队博客中带有&quot;engineering deep dive&quot;性质的文章属于 L4——它们通常解释实现细节而非定义 API 契约。</p>
+<p><strong>Q3: 一个知识点在 L1 文档中描述模糊但在 L2 源码中有明确行为，应该标注什么？</strong></p>
+<p>L1 + L2 同时标注。在正文中明确指出：&quot;官方文档（L1）对 X 行为的描述为……，但源码（L2, commit abc123）中实际实现为……&quot;。</p>
+<p><strong>Q4: 版本矩阵中的技术版本与本地环境不一致怎么办？</strong></p>
+<p>版本矩阵记录的是知识库的&quot;规范版本&quot;（即代码示例和技术论述的基准版本）。如果本地环境版本不同，应在理解兼容性的前提下，以矩阵版本为准编写示例。</p>
+<p><strong>Q5: <code>status: draft</code> 的条目可以被引用为 <code>prerequisite</code> 吗？</strong></p>
+<p>可以，但不推荐。如果一个 draft 条目作为其他条目的前置知识，应当在依赖条目中明确指出这一风险，并说明读者可以暂时跳过该前置条件或寻找替代学习资源。</p>
+<hr>
+<h2>相关条目</h2>
+<ul>
+<li><a href="/00-知识工程/00-知识关系类型详解" class="cross-ref" data-ref="00-知识关系类型详解">00-知识关系类型详解</a> — 六种知识关系类型的定义与使用</li>
+<li><span class="broken-ref" title="未找到: KNOWLEDGE_TAXONOMY">KNOWLEDGE_TAXONOMY</span> — 知识域分类体系总览</li>
+<li><span class="broken-ref" title="未找到: TECHNOLOGY_RADAR">TECHNOLOGY_RADAR</span> — 技术选型雷达</li>
+</ul>
+</div>
+</article>

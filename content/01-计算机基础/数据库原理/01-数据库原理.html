@@ -1,0 +1,500 @@
+
+<article class="kb-entry" data-path="/01-计算机基础/数据库原理/01-数据库原理">
+  <div class="entry-meta">
+    <div class="entry-domain"><a href="/?d=01">01-计算机基础</a></div>
+    <h1>数据库原理 — 关系模型、索引、事务与MVCC</h1>
+    <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#["database"</span><span class="badge badge-tag">#"b-tree"</span><span class="badge badge-tag">#"mvcc"</span><span class="badge badge-tag">#"transaction"</span></div>
+    
+  </div>
+  <div class="entry-body"><h1>数据库原理</h1>
+<h2>概述</h2>
+<p>数据库是后端系统的核心——绝大多数业务系统的状态最终都持久化在数据库中。深入理解数据库原理（而非仅仅会写 SQL）是区分&quot;会用&quot;和&quot;懂原理&quot;的工程师的关键分界线。本文覆盖关系模型、索引原理、事务 ACID、MVCC 机制、查询优化、范式理论和锁机制，在关键知识点上对比 PostgreSQL 和 MySQL InnoDB 的不同实现选择，帮助理解两个主流数据库的设计哲学差异。</p>
+<hr>
+<h2>核心内容</h2>
+<h3>一、关系模型</h3>
+<p>关系模型由 Edgar Codd 在 1970 年提出，核心概念：</p>
+<ul>
+<li><strong>关系（Relation）：</strong> 一张二维表，由行（Tuple/元组）和列（Attribute/属性）组成</li>
+<li><strong>域（Domain）：</strong> 每列的取值范围（数据类型 + 约束）</li>
+<li><strong>键（Key）：</strong> 超键（唯一标识）、候选键、主键、外键</li>
+<li><strong>关系代数：</strong> 选择（σ）、投影（π）、笛卡尔积（×）、连接（⨝）、并（∪）、差（−）</li>
+</ul>
+<p><strong>关系代数的基础运算与 SQL 的对应：</strong></p>
+<table>
+<thead>
+<tr>
+<th>关系代数</th>
+<th>SQL 关键字</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>σ(选择)</td>
+<td>WHERE</td>
+</tr>
+<tr>
+<td>π(投影)</td>
+<td>SELECT 列列表</td>
+</tr>
+<tr>
+<td>⨝(连接)</td>
+<td>JOIN ... ON</td>
+</tr>
+<tr>
+<td>∪(并)</td>
+<td>UNION</td>
+</tr>
+<tr>
+<td>−(差)</td>
+<td>EXCEPT / NOT IN</td>
+</tr>
+</tbody></table>
+<p>理解关系代数对于读懂查询计划和优化 SQL 至关重要——本质上，SQL 优化器是在对关系代数表达式做等价变换，找到代价最小的执行计划。</p>
+<hr>
+<h3>二、索引原理</h3>
+<h4>2.1 B+Tree 索引</h4>
+<p>B+Tree 是数据库索引的主力。与红黑树不同，B+Tree 每个节点可以容纳大量 key（数百到数千），整棵树的高度通常为 2-4 层。</p>
+<p><strong>B+Tree 的结构特点：</strong></p>
+<ul>
+<li><strong>非叶子节点（内节点）：</strong> 存储 key 和指向下一层节点的指针，用于导航</li>
+<li><strong>叶子节点：</strong> 存储 key 和对应的数据（或数据指针），叶子节点间通过双向链表连接</li>
+<li><strong>扇出（Fanout）：</strong> 每个内节点可容纳的 key 数量。扇出越大，树高度越低</li>
+</ul>
+<p><strong>PostgreSQL B-Tree（PG 内部称 B-Tree，行为类似 B+Tree）：</strong> 索引叶子节点存储 key + TID（Tuple ID，指向堆中行的物理位置）。这意味着通过索引查询需要两次 I/O——先读索引页找到 TID，再读数据页拿到完整行。但这也使得同一行可以有多个索引指向它。</p>
+<p><strong>MySQL InnoDB 聚簇索引：</strong> 主键索引的叶子节点直接存储整行数据（聚簇/Clustered）。这意味着通过主键查询只需一次 I/O 到达叶子节点。但辅助索引（Secondary Index）的叶子节点存储的是主键值而非 TID，查询需要回表（回到聚簇索引查完整行）。</p>
+<p><strong>两者的设计权衡：</strong></p>
+<ul>
+<li>PostgreSQL 方案：更新主键代价低（只改 TID 引用），但索引查询多一次 I/O</li>
+<li>InnoDB 方案：主键查询更快，但更新主键代价高（需要移动整行），辅助索引更紧凑</li>
+</ul>
+<h4>2.2 其他索引类型</h4>
+<table>
+<thead>
+<tr>
+<th>索引类型</th>
+<th>适用场景</th>
+<th>PostgreSQL</th>
+<th>MySQL InnoDB</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Hash 索引</td>
+<td>等值查询</td>
+<td>支持（<code>USING hash</code>）</td>
+<td>有限支持（自适应哈希索引 AHI）</td>
+</tr>
+<tr>
+<td>GiST</td>
+<td>几何数据、全文检索</td>
+<td>支持</td>
+<td>不支持</td>
+</tr>
+<tr>
+<td>GIN</td>
+<td>数组、JSONB、全文检索</td>
+<td>支持</td>
+<td>不支持（用 FULLTEXT）</td>
+</tr>
+<tr>
+<td>BRIN</td>
+<td>与物理顺序相关的大表</td>
+<td>支持</td>
+<td>不支持</td>
+</tr>
+<tr>
+<td>FULLTEXT</td>
+<td>全文检索</td>
+<td>支持</td>
+<td>支持</td>
+</tr>
+</tbody></table>
+<h4>2.3 索引优化关键概念</h4>
+<ul>
+<li><strong>覆盖索引（Covering Index）：</strong> 查询所需的所有列都在索引中，不需要回表。PostgreSQL 通过 <code>INCLUDE</code> 子句支持；InnoDB 的辅助索引天然可以覆盖（因为存了主键值）。</li>
+<li><strong>索引选择性（Selectivity）：</strong> 索引列的不同值数量/总行数。选择性越高，索引越有效。<code>gender</code> 的选择性约为 0.5（低），不适合建索引；<code>user_id</code> 选择性接近 1（高），适合建索引。</li>
+<li><strong>联合索引与最左前缀法则：</strong> <code>INDEX(a, b, c)</code> 支持 <code>WHERE a=?</code>、<code>WHERE a=? AND b=?</code>、<code>WHERE a=? AND b=? AND c=?</code>，但不支持只查 <code>b</code> 或只查 <code>c</code>。</li>
+</ul>
+<p><strong>索引字段顺序原则：</strong></p>
+<ol>
+<li>等值条件列放前，范围条件列放后</li>
+<li>选择性高的列放前（但需要结合查询模式综合考量）</li>
+<li>频繁作为查询条件的列放前</li>
+</ol>
+<hr>
+<h3>三、事务与 ACID</h3>
+<h4>3.1 ACID 详解</h4>
+<table>
+<thead>
+<tr>
+<th>属性</th>
+<th>含义</th>
+<th>实现机制</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>原子性 (Atomicity)</strong></td>
+<td>事务全部执行或全部不执行</td>
+<td>Undo Log（回滚日志）</td>
+</tr>
+<tr>
+<td><strong>一致性 (Consistency)</strong></td>
+<td>事务前后数据库保持一致状态</td>
+<td>约束（PK/FK/Check）+ 应用逻辑</td>
+</tr>
+<tr>
+<td><strong>隔离性 (Isolation)</strong></td>
+<td>并发事务互不干扰</td>
+<td>MVCC + 锁</td>
+</tr>
+<tr>
+<td><strong>持久性 (Durability)</strong></td>
+<td>提交后数据不丢失</td>
+<td>Redo Log / WAL（Write-Ahead Log）</td>
+</tr>
+</tbody></table>
+<p><strong>注意：</strong> C（一致性）是 ACID 中最模糊的概念。在数据库原理中，C 更多是 A + I + D 的结果——如果原子性、隔离性和持久性都满足，一致性在大多数情况下自然也满足。约束（Check/Foreign Key）和触发器是数据库层面保证一致性的额外手段。</p>
+<h4>3.2 隔离级别</h4>
+<p>SQL 标准定义了四种隔离级别，按隔离强度递增：</p>
+<table>
+<thead>
+<tr>
+<th>隔离级别</th>
+<th>脏读</th>
+<th>不可重复读</th>
+<th>幻读</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Read Uncommitted</td>
+<td>可能</td>
+<td>可能</td>
+<td>可能</td>
+</tr>
+<tr>
+<td>Read Committed</td>
+<td>不可能</td>
+<td>可能</td>
+<td>可能</td>
+</tr>
+<tr>
+<td>Repeatable Read</td>
+<td>不可能</td>
+<td>不可能</td>
+<td>可能</td>
+</tr>
+<tr>
+<td>Serializable</td>
+<td>不可能</td>
+<td>不可能</td>
+<td>不可能</td>
+</tr>
+</tbody></table>
+<ul>
+<li><strong>脏读（Dirty Read）：</strong> 读到未提交事务的修改</li>
+<li><strong>不可重复读（Non-Repeatable Read）：</strong> 同一事务内两次读取同一行，结果不同（被其他事务UPDATE）</li>
+<li><strong>幻读（Phantom Read）：</strong> 同一事务内两次查询同一范围，结果集行数不同（被其他事务INSERT/DELETE）</li>
+</ul>
+<p><strong>MySQL InnoDB 默认级别：</strong> Repeatable Read
+<strong>PostgreSQL 默认级别：</strong> Read Committed</p>
+<p><strong>关键差异：</strong> InnoDB 的 Repeatable Read 通过 Next-Key Lock 解决了部分幻读问题（范围查询时锁住间隙），使其接近 Serializable 的行为。PostgreSQL 选择 Read Committed 作为默认，鼓励开发者显式选择更高的隔离级别。</p>
+<h4>3.3 快照隔离（Snapshot Isolation）</h4>
+<p>快照隔离是一个比 SQL 标准隔离级别更实用的概念。在快照隔离下，每个事务看到的是数据库的一个一致性快照（版本），在事务开始时刻确定。它是 MVCC 的自然体现。</p>
+<p>PostgreSQL 的 Repeatable Read 和 InnoDB 的 Repeatable Read 都基于快照隔离，但在实现细节上有差异。</p>
+<hr>
+<h3>四、MVCC — PostgreSQL vs MySQL InnoDB 实现对比</h3>
+<p>MVCC（Multi-Version Concurrency Control）是多版本并发控制的简称。核心思想：写操作不阻塞读操作，读操作不阻塞写操作——通过保存数据的多个版本来实现。</p>
+<h4>4.1 PostgreSQL MVCC</h4>
+<p>PostgreSQL 在堆表的每一行存储 4 个系统列（对用户不可见）：</p>
+<ul>
+<li><code>xmin</code>：插入此行的事务 ID</li>
+<li><code>xmax</code>：删除此行的事务 ID（0 表示未删除）</li>
+<li><code>cmin</code>/<code>cmax</code>：同一事务内的命令序号</li>
+</ul>
+<p><strong>可见性判断（简化）：</strong> 对于事务 T，行 R 是可见的当且仅当：</p>
+<ul>
+<li><code>R.xmin</code> 在 T 的快照中（已提交且在 T 开始前提交，或由 T 自己创建）</li>
+<li><code>R.xmax</code> 无效（为 0 或对应的删除事务对 T 不可见）</li>
+</ul>
+<p><strong>版本链：</strong> PostgreSQL 不做 undo log，旧版本就留在堆表中。这意味着 UPDATE 实际上是一次 DELETE（设旧行的 xmax）+ 一次 INSERT 新行。随着时间推移，旧版本累积导致表膨胀（Table Bloat），需要 VACUUM 清理。</p>
+<p><strong>VACUUM 机制：</strong></p>
+<ul>
+<li>标记不再需要的旧版本为可重用空间</li>
+<li>防止事务 ID 回卷（Transaction ID Wraparound，32 位 XID 耗尽）</li>
+<li>更新可见性地图（Visibility Map）和空闲空间地图（Free Space Map）</li>
+<li>自动 VACUUM（autovacuum）默认启用</li>
+</ul>
+<h4>4.2 MySQL InnoDB MVCC</h4>
+<p>InnoDB 的 MVCC 基于 Undo Log 实现。每行有三个隐藏字段：</p>
+<ul>
+<li><code>DB_TRX_ID</code>：最后修改此行的事务 ID（6 字节）</li>
+<li><code>DB_ROLL_PTR</code>：指向 undo log 中上一版本的指针（7 字节）</li>
+<li><code>DB_ROW_ID</code>：如果没有主键，用作隐式行 ID</li>
+</ul>
+<p><strong>版本链：</strong> InnoDB 的 Undo Log 形成一个版本链。新版本在聚簇索引的数据页中，旧版本通过 <code>DB_ROLL_PTR</code> 串联在 undo log 中。读操作沿着版本链找到对当前事务可见的版本。</p>
+<p><strong>ReadView（一致性视图）：</strong> InnoDB 在事务开始或第一次查询时创建 ReadView，包含：</p>
+<ul>
+<li>当前活跃的事务 ID 列表（<code>m_ids</code>）</li>
+<li>最小活跃事务 ID（<code>min_trx_id</code>）</li>
+<li>下一个待分配的事务 ID（<code>max_trx_id</code>）</li>
+</ul>
+<p>可见性规则：对于行版本 <code>trx_id</code>：</p>
+<ul>
+<li><code>trx_id == 当前事务ID</code> → 可见（自己的修改）</li>
+<li><code>trx_id &lt; min_trx_id</code> → 可见（创建此版本的事务已提交）</li>
+<li><code>trx_id &gt;= max_trx_id</code> → 不可见（此版本由&quot;未来&quot;事务创建）</li>
+<li><code>min_trx_id &lt;= trx_id &lt; max_trx_id</code> → 检查是否在活跃列表中</li>
+</ul>
+<h4>4.3 对比总结</h4>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>PostgreSQL</th>
+<th>MySQL InnoDB</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>旧版本存储</td>
+<td>堆表中（导致表膨胀）</td>
+<td>Undo Log 中（独立空间）</td>
+</tr>
+<tr>
+<td>版本清理</td>
+<td>VACUUM（需管理）</td>
+<td>Purge 线程（后台自动）</td>
+</tr>
+<tr>
+<td>UPDATE 开销</td>
+<td>整行替换（Delete+Insert）</td>
+<td>就地更新 + Undo Log</td>
+</tr>
+<tr>
+<td>事务 ID 回卷风险</td>
+<td>有（32 位 XID）</td>
+<td>低（有 Undo Log 保护）</td>
+</tr>
+<tr>
+<td>获取快照时机</td>
+<td>事务第一条语句</td>
+<td>Read Committed：每条语句；Repeatable Read：事务第一条查询</td>
+</tr>
+</tbody></table>
+<hr>
+<h3>五、查询优化</h3>
+<h4>5.1 逻辑优化 vs 物理优化</h4>
+<p><strong>逻辑优化（基于规则的优化/RBO）：</strong></p>
+<ul>
+<li>谓词下推（Predicate Pushdown）：<code>WHERE</code> 条件下推到扫描层</li>
+<li>列裁剪（Column Pruning）：只扫描查询所需列</li>
+<li>子查询展开（Subquery Unnesting）：子查询转为 JOIN</li>
+<li>常量折叠（Constant Folding）：编译时计算常量表达式</li>
+</ul>
+<p><strong>物理优化（基于代价的优化/CBO）：</strong></p>
+<ul>
+<li>统计信息收集（表的行数、列的不同值数量/直方图）</li>
+<li>估算各种执行计划的代价（I/O 次数 + CPU 时间）</li>
+<li>选择代价最小的计划</li>
+</ul>
+<h4>5.2 JOIN 算法</h4>
+<table>
+<thead>
+<tr>
+<th>算法</th>
+<th>原理</th>
+<th>适用场景</th>
+<th>时间复杂度</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Nested Loop Join</td>
+<td>外层表每行扫描内层表</td>
+<td>小表 JOIN 大表（内层有索引）</td>
+<td>O(N*M)</td>
+</tr>
+<tr>
+<td>Hash Join</td>
+<td>为小表建 Hash Table，大表探测</td>
+<td>两个大表等值 JOIN</td>
+<td>O(N+M)</td>
+</tr>
+<tr>
+<td>Merge Join</td>
+<td>两表排序后按序归并</td>
+<td>两表已有序</td>
+<td>O(N+M)</td>
+</tr>
+<tr>
+<td>Index Nested Loop</td>
+<td>Nested Loop 但内层走索引</td>
+<td>外层小，内层有索引</td>
+<td>O(N*log M)</td>
+</tr>
+</tbody></table>
+<p>PostgreSQL 和 MySQL 8.0+ 都支持上述所有 JOIN 算法。MySQL 5.7 不支持 Hash Join（这是升级 8.0 的重要理由之一）。</p>
+<hr>
+<h3>六、范式与反范式</h3>
+<h4>6.1 范式层级</h4>
+<table>
+<thead>
+<tr>
+<th>范式</th>
+<th>核心约束</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1NF</td>
+<td>列不可再分（原子性）</td>
+</tr>
+<tr>
+<td>2NF</td>
+<td>满足 1NF，且每个非主键列完全依赖于主键（消除部分依赖）</td>
+</tr>
+<tr>
+<td>3NF</td>
+<td>满足 2NF，且每个非主键列直接依赖于主键（消除传递依赖）</td>
+</tr>
+<tr>
+<td>BCNF</td>
+<td>满足 3NF，且每个决定性因素都是候选键</td>
+</tr>
+</tbody></table>
+<p><strong>3NF 的判断口诀：</strong> &quot;每个非主键列必须直接依赖于主键，不能依赖于另一个非主键列。&quot;</p>
+<p><strong>反例：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>学生表（学号, 姓名, 系编号, 系名称, 系地址）
+  主键：学号
+  传递依赖：学号 → 系编号 → 系名称/系地址
+  违反 3NF → 分解为学生表 + 系表
+</code></pre></div>
+<h4>6.2 反范式的实际考量</h4>
+<p>完全遵守 3NF 的系统在查询时需要大量 JOIN，性能下降。实践中需要在范式化和反范式化之间做权衡：</p>
+<ul>
+<li><strong>读多写少的表</strong> 可以适度反范式化（冗余部分字段减少 JOIN）</li>
+<li><strong>写多读少的表</strong> 保持范式化（减少更新异常）</li>
+<li><strong>数据仓库</strong> 通常使用星型模型（事实表 + 维度表），维度表可以反范式化</li>
+</ul>
+<hr>
+<h3>七、锁机制</h3>
+<h4>7.1 InnoDB 锁类型</h4>
+<table>
+<thead>
+<tr>
+<th>锁类型</th>
+<th>锁定范围</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Record Lock</td>
+<td>单行索引记录</td>
+<td>行级锁</td>
+</tr>
+<tr>
+<td>Gap Lock</td>
+<td>索引记录之间的间隙</td>
+<td>防止在间隙中插入（幻读）</td>
+</tr>
+<tr>
+<td>Next-Key Lock</td>
+<td>Record Lock + Gap Lock</td>
+<td>Repeatable Read 下默认的加锁方式</td>
+</tr>
+<tr>
+<td>Insert Intention Lock</td>
+<td>特殊间隙锁</td>
+<td>INSERT 时设置，表示要在间隙中插入</td>
+</tr>
+<tr>
+<td>意向锁（IS/IX）</td>
+<td>表级</td>
+<td>表锁和行锁的协调</td>
+</tr>
+</tbody></table>
+<p><strong>Next-Key Lock 示例：</strong> 如果索引有值 10、20、30，Next-Key Lock 的锁区间为：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>(-∞, 10], (10, 20], (20, 30], (30, +∞)
+</code></pre></div>
+<p><code>SELECT ... WHERE id = 20 FOR UPDATE</code> 会锁住 <code>(10, 20]</code>（Next-Key Lock on 20）。</p>
+<h4>7.2 死锁检测</h4>
+<p>InnoDB 使用等待图（Wait-for Graph）检测死锁。当检测到环时，选择代价最小的事务（undo log 最少）进行回滚。</p>
+<p><strong>常见死锁模式：</strong></p>
+<ul>
+<li>两个事务以不同顺序更新相同的行</li>
+<li>一个事务持有 S 锁想升级为 X 锁，另一个事务持有 S 锁</li>
+<li>Gap Lock 导致的插入死锁</li>
+</ul>
+<p><strong>Java 应用程序中的死锁预防：</strong></p>
+<ol>
+<li>始终以相同顺序访问资源</li>
+<li>缩短事务时间（只在事务中做必要的事）</li>
+<li>对于高并发场景，使用乐观锁（版本号）替代悲观锁</li>
+<li>设置 <code>innodb_lock_wait_timeout</code>（默认 50 秒太长）</li>
+</ol>
+<hr>
+<h2>代码示例 — Java JDBC 事务与隔离级别</h2>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">void transactionWithIsolation() {
+    var dataSource = new HikariDataSource();
+    dataSource.setJdbcUrl(&quot;jdbc:postgresql://localhost:5432/mydb&quot;);
+    dataSource.setUsername(&quot;user&quot;);
+    dataSource.setPassword(&quot;pass&quot;);
+
+    try (var conn = dataSource.getConnection()) {
+        conn.setAutoCommit(false);
+        // 设置为 Repeatable Read
+        conn.setTransactionIsolation(
+            Connection.TRANSACTION_REPEATABLE_READ);
+
+        try (var stmt = conn.prepareStatement(
+                &quot;UPDATE accounts SET balance = balance - ? WHERE id = ?&quot;)) {
+            stmt.setBigDecimal(1, new BigDecimal(&quot;100.00&quot;));
+            stmt.setLong(2, 1L);
+            stmt.executeUpdate();
+        }
+
+        try (var stmt = conn.prepareStatement(
+                &quot;UPDATE accounts SET balance = balance + ? WHERE id = ?&quot;)) {
+            stmt.setBigDecimal(1, new BigDecimal(&quot;100.00&quot;));
+            stmt.setLong(2, 2L);
+            stmt.executeUpdate();
+        }
+
+        conn.commit();
+    } catch (SQLException e) {
+        // conn.rollback() 由 auto-commit=false 的关闭自动触发
+        throw new RuntimeException(&quot;Transfer failed&quot;, e);
+    }
+}
+</code></pre></div>
+<p><strong>使用 Spring <code>@Transactional</code> 管理隔离级别：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Transactional(isolation = Isolation.REPEATABLE_READ,
+               propagation = Propagation.REQUIRED,
+               timeout = 30)
+public void transfer(Long fromId, Long toId, BigDecimal amount) {
+    accountRepo.debit(fromId, amount);
+    accountRepo.credit(toId, amount);
+}
+</code></pre></div>
+<hr>
+<h2>常见问题 / 面试题</h2>
+<p><strong>Q1: 为什么 InnoDB 推荐用自增主键？而 PostgreSQL 不这么强调？</strong>
+InnoDB 数据按主键顺序存储（聚簇索引）。自增主键保证了插入按顺序追加，不需要页分裂和随机 I/O 的页内移动。如果使用随机 UUID 主键，每次插入可能发生在 B+Tree 的任意位置，导致大量页分裂和碎片。PostgreSQL 使用堆表（非聚簇），主键和数据物理存储分离，所以主键的选择不影响写入性能。</p>
+<p><strong>Q2: PostgreSQL 的 autovacuum 触发条件是什么？</strong>
+默认：<code>autovacuum_vacuum_scale_factor = 0.2</code>（表 20% 的行被标记为 dead）或 <code>autovacuum_vacuum_threshold = 50</code>（至少 50 行）。对大表（10 亿行），20% = 2 亿条 dead tuple 才触发 VACUUM，这太晚了。建议对大表单独设置更积极的 scale factor（如 0.01）。</p>
+<p><strong>Q3: 什么情况下索引不会被使用？</strong></p>
+<ul>
+<li>对索引列使用函数或表达式：<code>WHERE UPPER(name) = &#39;JOHN&#39;</code>（函数索引可解决）</li>
+<li>LIKE 以通配符开头：<code>WHERE name LIKE &#39;%john&#39;</code></li>
+<li>索引列参与了计算：<code>WHERE age + 10 &gt; 30</code></li>
+<li>查询优化器认为全表扫描更快（小表、低选择性列）</li>
+</ul>
+<p><strong>Q4: Phantom Read 在 MySQL InnoDB Repeatable Read 下真的不会发生吗？</strong>
+Next-Key Lock 在锁定读（<code>SELECT ... FOR UPDATE</code>）时阻止了其他事务在锁定范围内插入新行，因此在锁定读下确实解决了幻读。但对于一致性读（普通的 <code>SELECT</code>），快照隔离保证了只看到事务开始时的版本，也不会有幻读。不过，如果事务 A 做了一次快照读，事务 B 插入并提交，事务 A 再做 <code>UPDATE</code>（而非 <code>SELECT</code>），可能会&quot;找到&quot;并更新到 B 插入的行，产生类似幻读的效果。这是 MVCC 和锁定读的语义差异。</p>
+<p><strong>Q5: 为什么 COUNT(*) 在大表上慢？</strong>
+InnoDB 不维护表的总行数计数器（因为 MVCC 需要返回对当前事务可见的行数，计数器无法区分版本）。<code>SELECT COUNT(*)</code> 走最小索引做全扫描。如果需要频繁获取近似行数，可以使用 <code>SHOW TABLE STATUS</code> 或 <code>EXPLAIN SELECT COUNT(*)</code> 的估计值。PostgreSQL 同样做全表/全索引扫描，但 VACUUM 更新了统计信息后，<code>pg_class.reltuples</code> 可以是近似行数的合理估计（注意是估计，非精确）。</p>
+<hr>
+<h2>相关条目</h2>
+<ul>
+<li><a href="/01-计算机基础/数据结构与算法/01-数据结构与算法" class="cross-ref" data-ref="01-数据结构与算法">01-数据结构与算法</a> — 数据结构与算法（B+Tree、哈希、跳表原理）</li>
+<li><a href="/01-计算机基础/操作系统/01-操作系统基础" class="cross-ref" data-ref="01-操作系统基础">01-操作系统基础</a> — 操作系统基础（文件系统、I/O、磁盘）</li>
+<li><a href="/01-计算机基础/分布式理论/01-分布式系统理论" class="cross-ref" data-ref="01-分布式系统理论">01-分布式系统理论</a> — 分布式理论（分布式事务、一致性、共识算法）</li>
+<li><a href="/01-计算机基础/计算机网络/01-计算机网络" class="cross-ref" data-ref="01-计算机网络">01-计算机网络</a> — 计算机网络</li>
+</ul>
+</div>
+</article>

@@ -1,0 +1,611 @@
+
+<article class="kb-entry" data-path="/05-分布式架构/弹性设计/05-幂等设计与分布式锁">
+  <div class="entry-meta">
+    <div class="entry-domain"><a href="/?d=05">05-分布式架构</a></div>
+    <h1>幂等设计与分布式锁</h1>
+    <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#["idempotency"</span><span class="badge badge-tag">#"distributed-lock"</span><span class="badge badge-tag">#"redisson"</span><span class="badge badge-tag">#"redis"</span></div>
+    
+  </div>
+  <div class="entry-body"><h1>幂等设计与分布式锁</h1>
+<h2>概述</h2>
+<p>在分布式系统中，网络重试、消息重复投递、用户重复点击都会导致同一操作被执行多次。幂等设计确保重复执行的结果与单次执行一致。分布式锁则提供跨节点的互斥访问能力。两者是构建可靠分布式系统的基石。</p>
+<p>本文覆盖幂等性的五种实现策略、三种分布式锁方案的深度对比、Redisson 源码级分析，以及支付、消息消费、定时任务三个实际案例。</p>
+<hr>
+<h2>一、幂等设计</h2>
+<h3>1.1 什么是幂等</h3>
+<p>数学定义：<code>f(f(x)) = f(x)</code>。在分布式系统中：<strong>同一操作的任意次执行，产生的结果与执行一次相同。</strong></p>
+<p>幂等分两类：</p>
+<ul>
+<li><strong>天然幂等：</strong> <code>UPDATE account SET balance = 100 WHERE id = 1</code>（设置绝对值）</li>
+<li><strong>需设计幂等：</strong> <code>UPDATE account SET balance = balance - 10 WHERE id = 1</code>（相对操作）</li>
+</ul>
+<h3>1.2 策略一：Token 机制</h3>
+<p><strong>流程：</strong></p>
+<ol>
+<li>客户端请求 Token → 服务端生成唯一 Token 返回 → 同时存入 Redis（TTL 5 分钟）</li>
+<li>客户端提交请求时携带 Token</li>
+<li>服务端检查 Token 是否存在</li>
+<li>存在 → 删除 Token + 执行业务（原子操作）</li>
+<li>不存在 → 拒绝（重复请求）</li>
+</ol>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@RestController
+@RequestMapping(&quot;/api/orders&quot;)
+public class OrderController {
+
+    private final StringRedisTemplate redis;
+
+    // 1. 获取 Token
+    @PostMapping(&quot;/token&quot;)
+    public Map&lt;String, String&gt; getToken(@RequestParam String userId) {
+        var token = UUID.randomUUID().toString();
+        redis.opsForValue().set(&quot;idempotent:token:&quot; + token, userId,
+                Duration.ofMinutes(5));
+        return Map.of(&quot;token&quot;, token);
+    }
+
+    // 2. 带 Token 提交
+    @PostMapping
+    public ResponseEntity&lt;?&gt; createOrder(@RequestHeader(&quot;X-Idempotent-Token&quot;) String token,
+                                         @RequestBody CreateOrderRequest request) {
+        // 原子删除 Token（Lua 脚本）
+        var script = &quot;&quot;&quot;
+            if redis.call(&#39;get&#39;, KEYS[1]) == ARGV[1] then
+                return redis.call(&#39;del&#39;, KEYS[1])
+            else
+                return 0
+            end
+            &quot;&quot;&quot;;
+
+        var deleted = redis.execute(
+                new DefaultRedisScript&lt;&gt;(script, Long.class),
+                List.of(&quot;idempotent:token:&quot; + token),
+                request.userId());
+
+        if (deleted == null || deleted == 0) {
+            return ResponseEntity.status(409).body(Map.of(&quot;error&quot;, &quot;重复请求&quot;));
+        }
+
+        // 执行业务逻辑
+        var order = orderService.create(request);
+        return ResponseEntity.ok(order);
+    }
+}
+</code></pre></div>
+<p><strong>优点：</strong> 通用性强，不依赖业务数据。
+<strong>缺点：</strong> 需要额外一次 Token 获取请求；Token 删了但业务失败需要补偿机制。</p>
+<h3>1.3 策略二：唯一索引</h3>
+<p>利用数据库唯一约束 + 业务键：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">CREATE TABLE orders (
+    id BIGSERIAL PRIMARY KEY,
+    order_no VARCHAR(32) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT &#39;CREATED&#39;,
+    -- ...
+    CONSTRAINT uk_order_no UNIQUE (order_no)
+);
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
+@Transactional
+public class OrderService {
+
+    public Order createOrder(OrderRequest request) {
+        try {
+            var order = new Order(request.getOrderNo(), &quot;CREATED&quot;, ...);
+            return orderRepo.save(order);
+        } catch (DataIntegrityViolationException e) {
+            // 唯一键冲突 → 返回已有订单（幂等）
+            return orderRepo.findByOrderNo(request.getOrderNo())
+                    .orElseThrow(() -&gt; new IllegalStateException(&quot;订单已存在但无法查询&quot;));
+        }
+    }
+}
+</code></pre></div>
+<p><strong>适用条件：</strong></p>
+<ul>
+<li>业务键天然唯一（如订单号、流水号）</li>
+<li>请求携带的业务键全局唯一（客户端生成或雪花ID）</li>
+</ul>
+<p><strong>状态机 + 唯一索引：</strong> 更复杂的幂等需要结合状态机。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
+@Transactional
+public class PaymentService {
+
+    public Payment processPayment(String transactionId, PaymentRequest req) {
+        var existing = paymentRepo.findById(transactionId);
+        if (existing.isPresent()) {
+            var payment = existing.get();
+            if (payment.getStatus() == PaymentStatus.SUCCESS) {
+                return payment; // 幂等：已完成
+            }
+            if (payment.getStatus() == PaymentStatus.PROCESSING) {
+                // 当前正在处理 → 等待或返回处理中
+                return payment;
+            }
+        }
+        // 插入初始状态 + 处理
+        var payment = paymentRepo.save(new Payment(transactionId, PaymentStatus.PROCESSING));
+        executePayment(payment, req);
+        payment.setStatus(PaymentStatus.SUCCESS);
+        return paymentRepo.save(payment);
+    }
+}
+</code></pre></div>
+<h3>1.4 策略三：乐观锁（版本号/CAS）</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Entity
+public class Inventory {
+    @Id
+    private Long productId;
+    private int quantity;
+    @Version
+    private Long version; // JPA 乐观锁
+}
+
+// 或手动版本号
+@Modifying
+@Query(&quot;UPDATE Inventory i SET i.quantity = i.quantity - :qty, i.version = i.version + 1 &quot; +
+       &quot;WHERE i.productId = :productId AND i.quantity &gt;= :qty AND i.version = :version&quot;)
+int deductWithVersion(Long productId, int qty, Long version);
+// 返回值 = 0 表示版本冲突（其他线程已修改），需要重试
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// CAS 重试循环
+@Retryable(retryFor = OptimisticLockingFailureException.class, maxAttempts = 3)
+@Transactional
+public void deductInventory(Long productId, int qty) {
+    int updated = inventoryRepo.deductQuantity(productId, qty);
+    if (updated == 0) {
+        throw new OptimisticLockingFailureException(&quot;库存扣减冲突&quot;);
+    }
+}
+</code></pre></div>
+<h3>1.5 策略四：数据库去重表</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">CREATE TABLE request_dedup (
+    request_id VARCHAR(64) PRIMARY KEY,
+    handler_class VARCHAR(200),
+    result JSONB,
+    status VARCHAR(20) DEFAULT &#39;PROCESSING&#39;,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    completed_at TIMESTAMPTZ
+);
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
+public class DedupService {
+
+    private final JdbcTemplate jdbc;
+
+    public &lt;T&gt; T executeOnce(String requestId, Supplier&lt;T&gt; handler) {
+        // 1. 尝试插入去重记录
+        try {
+            jdbc.update(
+                &quot;INSERT INTO request_dedup (request_id, status) VALUES (?, &#39;PROCESSING&#39;)&quot;,
+                requestId);
+        } catch (DuplicateKeyException e) {
+            // 2. 已存在 → 等待结果
+            return waitForResult(requestId);
+        }
+
+        // 3. 执行业务
+        try {
+            var result = handler.get();
+            jdbc.update(
+                &quot;UPDATE request_dedup SET result = ?::jsonb, status = &#39;COMPLETED&#39;, completed_at = NOW() WHERE request_id = ?&quot;,
+                toJson(result), requestId);
+            return result;
+        } catch (Exception e) {
+            jdbc.update(
+                &quot;UPDATE request_dedup SET status = &#39;FAILED&#39; WHERE request_id = ?&quot;,
+                requestId);
+            throw e;
+        }
+    }
+
+    private &lt;T&gt; T waitForResult(String requestId) {
+        // 轮询等待处理完成（生产环境建议用 Redis pub/sub 通知）
+        for (int i = 0; i &lt; 30; i++) {
+            var row = jdbc.queryForMap(
+                &quot;SELECT result, status FROM request_dedup WHERE request_id = ?&quot;,
+                requestId);
+            if (&quot;COMPLETED&quot;.equals(row.get(&quot;status&quot;))) {
+                return fromJson((String) row.get(&quot;result&quot;));
+            }
+            Thread.sleep(100);
+        }
+        throw new ProcessingTimeoutException(&quot;处理超时: &quot; + requestId);
+    }
+}
+</code></pre></div>
+<h3>1.6 策略五：Redis 计数器 + TTL</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public boolean isDuplicate(String idempotentKey, Duration window) {
+    var key = &quot;dedup:&quot; + idempotentKey;
+    var count = redis.opsForValue().increment(key);
+    if (count == 1) {
+        redis.expire(key, window); // 仅首次设置过期
+        return false;
+    }
+    return true; // count &gt; 1 → 重复请求
+}
+</code></pre></div>
+<p><strong>策略选择对比：</strong></p>
+<table>
+<thead>
+<tr>
+<th>策略</th>
+<th>可靠性</th>
+<th>复杂度</th>
+<th>适用场景</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Token</td>
+<td>高</td>
+<td>中</td>
+<td>前端提交、API 接口</td>
+</tr>
+<tr>
+<td>唯一索引</td>
+<td>最高</td>
+<td>低</td>
+<td>有业务唯一键的场景</td>
+</tr>
+<tr>
+<td>乐观锁</td>
+<td>高</td>
+<td>低</td>
+<td>并发更新</td>
+</tr>
+<tr>
+<td>去重表</td>
+<td>最高</td>
+<td>高</td>
+<td>支付、复杂业务流程</td>
+</tr>
+<tr>
+<td>Redis 计数器</td>
+<td>中</td>
+<td>低</td>
+<td>短期防重</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>二、分布式锁</h2>
+<h3>2.1 Redis 实现</h3>
+<p><strong>基础 SET NX PX + Lua 释放：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class RedisDistributedLock {
+
+    private final StringRedisTemplate redis;
+    private static final String LOCK_PREFIX = &quot;distributed_lock:&quot;;
+    private static final String RELEASE_SCRIPT = &quot;&quot;&quot;
+        if redis.call(&#39;get&#39;, KEYS[1]) == ARGV[1] then
+            return redis.call(&#39;del&#39;, KEYS[1])
+        else
+            return 0
+        end
+        &quot;&quot;&quot;;
+
+    public boolean tryLock(String key, String value, long expireMs) {
+        return Boolean.TRUE.equals(
+                redis.opsForValue().setIfAbsent(LOCK_PREFIX + key, value,
+                        Duration.ofMillis(expireMs)));
+    }
+
+    public boolean release(String key, String value) {
+        var result = redis.execute(
+                new DefaultRedisScript&lt;&gt;(RELEASE_SCRIPT, Long.class),
+                List.of(LOCK_PREFIX + key), value);
+        return result != null &amp;&amp; result == 1;
+    }
+}
+</code></pre></div>
+<p><strong>Redisson 看门狗深入：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Redisson RLock 自动续期
+var config = new Config();
+config.useSingleServer().setAddress(&quot;redis://localhost:6379&quot;);
+var redisson = (RedissonClient) Redisson.create(config);
+
+var lock = redisson.getLock(&quot;order:123&quot;);
+
+// lock() 看门狗行为：
+// - 默认 leaseTime = 30s（internalLockLeaseTime）
+// - 每 internalLockLeaseTime/3 = 10s 续期一次
+// - 看门狗在当前线程存活期间持续续期
+// - 调用 unlock() 时取消看门狗
+lock.lock();
+
+try {
+    // 可能执行 &gt;30s 的业务逻辑，看门狗自动续期
+    doLongRunningTask();
+} finally {
+    lock.unlock();
+}
+
+// 也可指定 leaseTime（不使用看门狗，到时自动释放）
+lock.lock(10, TimeUnit.SECONDS);
+</code></pre></div>
+<p><strong>红锁（RedLock）争议讨论：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>RedLock 算法（Antirez 提出）：
+1. 获取当前时间
+2. 依次向 N 个 Redis 实例获取锁（SET NX PX）
+3. 如果获取到多数锁（N/2+1）且总耗时 &lt; 锁有效期 → 成功
+4. 失败则释放所有已获取的锁
+
+Kleppmann 的质疑：
+1. 锁用于&quot;互斥&quot;和&quot;正确性&quot;两种不同目的
+2. 如果只用于&quot;效率&quot;（避免重复工作），单实例 + 看门狗足够
+3. 如果用于&quot;正确性&quot;（只能有一个写入者），RedLock 依赖时钟同步，不可靠
+4. 正确性场景应使用 Fencing Token 或支持一致性的系统（ZooKeeper/etcd）
+</code></pre></div>
+<p><strong>生产建议：</strong></p>
+<table>
+<thead>
+<tr>
+<th>目的</th>
+<th>推荐方案</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>效率（避免并发重复执行）</td>
+<td>单 Redis + Redisson 看门狗</td>
+</tr>
+<tr>
+<td>简单互斥（可容忍极低概率出错）</td>
+<td>单 Redis + Redisson + 短 TTL</td>
+</tr>
+<tr>
+<td>正确性（严格互斥，如金融）</td>
+<td>ZooKeeper / etcd / DB 锁</td>
+</tr>
+<tr>
+<td>正确性 + 高可用</td>
+<td>Fencing Token + Consensus 锁</td>
+</tr>
+</tbody></table>
+<h3>2.2 ZooKeeper 实现</h3>
+<p><strong>临时顺序节点 + Watch 机制：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class ZkDistributedLock {
+
+    private final CuratorFramework client;
+    private final String lockPath;
+    private String currentNodePath;
+
+    public ZkDistributedLock(CuratorFramework client, String lockName) {
+        this.client = client;
+        this.lockPath = &quot;/locks/&quot; + lockName;
+    }
+
+    public void lock() throws Exception {
+        // 1. 创建临时顺序节点
+        currentNodePath = client.create()
+                .creatingParentsIfNeeded()
+                .withMode(CreateMode.EPHEMERAL_SEQUENTIAL)
+                .forPath(lockPath + &quot;/lock-&quot;);
+
+        while (true) {
+            // 2. 获取所有子节点，按序号排序
+            var children = client.getChildren().forPath(lockPath)
+                    .stream().sorted().toList();
+
+            var currentNodeName = currentNodePath.substring(lockPath.length() + 1);
+            var index = children.indexOf(currentNodeName);
+
+            if (index == 0) {
+                // 3. 最小序号 → 获取锁
+                return;
+            } else {
+                // 4. Watch 前一个节点
+                var prevNodePath = lockPath + &quot;/&quot; + children.get(index - 1);
+                var latch = new CountDownLatch(1);
+
+                if (client.checkExists().forPath(prevNodePath) != null) {
+                    client.getData().usingWatcher((Watcher) event -&gt; {
+                        if (event.getType() == Watcher.Event.EventType.NodeDeleted) {
+                            latch.countDown();
+                        }
+                    }).forPath(prevNodePath);
+                } else {
+                    continue; // 前一个节点已删除，重新检查
+                }
+
+                latch.await();
+            }
+        }
+    }
+
+    public void unlock() throws Exception {
+        if (currentNodePath != null) {
+            client.delete().forPath(currentNodePath);
+        }
+    }
+}
+</code></pre></div>
+<p><strong>ZK 锁机制优势：</strong></p>
+<ul>
+<li>客户端断开 → 临时节点自动删除 → 锁自动释放</li>
+<li>Watch 机制 → 准实时通知，无轮询</li>
+<li>顺序节点 → 公平锁（先到先得）</li>
+</ul>
+<h3>2.3 数据库实现</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 悲观锁：SELECT FOR UPDATE
+@Transactional
+public void processWithDbLock(Long resourceId) {
+    var resource = jdbc.queryForObject(
+            &quot;SELECT * FROM shared_resource WHERE id = ? FOR UPDATE&quot;,
+            new BeanPropertyRowMapper&lt;&gt;(SharedResource.class), resourceId);
+    // 其他事务的 SELECT FOR UPDATE 会阻塞在此
+    process(resource);
+    // 事务提交时释放锁
+}
+
+// 乐观锁：版本号
+// 见 1.4 节
+</code></pre></div>
+<h3>2.4 三种方案对比</h3>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>Redis</th>
+<th>ZooKeeper</th>
+<th>数据库</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>性能</td>
+<td>最高（内存）</td>
+<td>中（内存+日志）</td>
+<td>最低（磁盘）</td>
+</tr>
+<tr>
+<td>可靠性</td>
+<td>中（cluster 有数据丢失风险）</td>
+<td>高（过半写入才确认）</td>
+<td>高（ACID）</td>
+</tr>
+<tr>
+<td>自动释放</td>
+<td>需设置 TTL 或看门狗</td>
+<td>自动（临时节点+心跳）</td>
+<td>自动（事务提交/回滚）</td>
+</tr>
+<tr>
+<td>实现复杂度</td>
+<td>低（Redisson 封装好）</td>
+<td>中（Curator 封装）</td>
+<td>低</td>
+</tr>
+<tr>
+<td>公平锁</td>
+<td>需额外实现</td>
+<td>天然支持（顺序节点）</td>
+<td>依赖数据库锁顺序</td>
+</tr>
+<tr>
+<td>运维</td>
+<td>需 Redis Cluster</td>
+<td>需 ZK Ensemble</td>
+<td>已有 DB</td>
+</tr>
+<tr>
+<td>适用场景</td>
+<td>通用；性能敏感</td>
+<td>严格互斥；分布式协调</td>
+<td>已有数据库的简单场景</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>三、实际案例</h2>
+<h3>3.1 支付防重</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
+public class PaymentDedupService {
+
+    private final PaymentRepo paymentRepo;
+    private final RedissonClient redisson;
+
+    @Transactional
+    public PaymentResult pay(String transactionId, PayRequest request) {
+        // 1. 分布式锁（按交易ID）
+        var lock = redisson.getLock(&quot;pay:&quot; + transactionId);
+        try {
+            if (!lock.tryLock(5, 30, TimeUnit.SECONDS)) {
+                throw new ConcurrentPaymentException(&quot;支付处理中&quot;);
+            }
+
+            // 2. 检查是否已支付（唯一索引 + 状态机）
+            var existing = paymentRepo.findByTransactionId(transactionId);
+            if (existing.isPresent()) {
+                var payment = existing.get();
+                if (payment.getStatus() == PaymentStatus.SUCCESS) {
+                    return new PaymentResult(true, payment, &quot;已支付&quot;);
+                }
+                if (payment.getStatus() == PaymentStatus.PROCESSING) {
+                    return new PaymentResult(false, payment, &quot;处理中&quot;);
+                }
+            }
+
+            // 3. 创建支付单 + 处理
+            var payment = paymentRepo.save(
+                    new Payment(transactionId, PaymentStatus.PROCESSING));
+
+            return doPay(payment, request);
+        } finally {
+            lock.unlock();
+        }
+    }
+}
+</code></pre></div>
+<h3>3.2 消息重复消费</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Component
+public class IdempotentMessageConsumer {
+
+    private final StringRedisTemplate redis;
+
+    @KafkaListener(topics = &quot;orders&quot;)
+    public void onMessage(ConsumerRecord&lt;String, OrderEvent&gt; record, Acknowledgment ack) {
+        var msgKey = record.key();
+        var msgOffset = record.offset();
+
+        // Kafka offset + partition 作为幂等键
+        var idempotentKey = STR.&quot;msg:\{record.topic()}:\{record.partition()}:\{msgOffset}&quot;;
+
+        // Redis SET NX + TTL 去重
+        var success = redis.opsForValue()
+                .setIfAbsent(idempotentKey, &quot;processed&quot;, Duration.ofHours(24));
+
+        if (Boolean.FALSE.equals(success)) {
+            // 已处理过，直接 ACK
+            ack.acknowledge();
+            return;
+        }
+
+        try {
+            processOrder(record.value());
+            ack.acknowledge();
+        } catch (Exception e) {
+            // 处理失败，删除标记允许重试
+            redis.delete(idempotentKey);
+            throw e;
+        }
+    }
+}
+</code></pre></div>
+<h3>3.3 定时任务防重</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Component
+public class DistributedScheduledTask {
+
+    private final RedissonClient redisson;
+
+    @Scheduled(cron = &quot;0 0 2 * * ?&quot;) // 每天凌晨2点
+    public void nightlyReindex() {
+        var lock = redisson.getLock(&quot;scheduled:nightly-reindex&quot;);
+        if (!lock.tryLock()) {
+            log.info(&quot;Reindex already running on another instance, skipping&quot;);
+            return;
+        }
+
+        try {
+            log.info(&quot;Starting nightly reindex...&quot;);
+            // 可能运行很长时间，看门狗自动续期
+            reindexAllDocuments();
+            log.info(&quot;Nightly reindex completed&quot;);
+        } finally {
+            lock.unlock();
+        }
+    }
+}
+</code></pre></div>
+<hr>
+<h2>常见问题</h2>
+<p><strong>Q: 幂等 key 应该包含哪些信息？</strong>
+A: 业务唯一标识（订单号/流水号）+ 操作类型。例如 <code>pay:order:12345:alipay</code> 和 <code>pay:order:12345:wechat</code> 是不同的幂等键。</p>
+<p><strong>Q: Redisson 看门狗适合所有场景吗？</strong>
+A: 不。如果业务逻辑可能死锁或无限循环，看门狗会导致锁永不释放。此时应使用固定 TTL 而非看门狗。</p>
+<p><strong>Q: 分布式锁超时了但业务还没执行完怎么办？</strong>
+A: 使用看门狗（自动续期）或设计分阶段锁（子任务各自加锁，减少单次持锁时间）。</p>
+<p><strong>Q: ZK 锁和 Redis 锁的性能差距有多大？</strong>
+A: Redis（微秒级）比 ZK（毫秒级）快约 10-100 倍。但在多数业务场景这个差距可忽略，选型应以可靠性需求为主。</p>
+<hr>
+<h2>相关条目</h2>
+<ul>
+<li><a href="/05-分布式架构/事务与一致性/05-分布式一致性与事务方案" class="cross-ref" data-ref="05-分布式一致性与事务方案">05-分布式一致性与事务方案</a> — 分布式事务（幂等是事务的基础）</li>
+<li><a href="/04-数据与中间件/数据库与缓存/04-Redis深度解析" class="cross-ref" data-ref="04-Redis深度解析">04-Redis深度解析</a> — Redis 数据结构与 Redisson</li>
+<li><a href="/05-分布式架构/事务与一致性/05-缓存策略与多级缓存架构" class="cross-ref" data-ref="05-缓存策略与多级缓存架构">05-缓存策略与多级缓存架构</a> — 缓存与锁的联合使用</li>
+</ul>
+</div>
+</article>

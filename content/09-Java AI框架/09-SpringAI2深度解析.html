@@ -1,0 +1,1161 @@
+
+<article class="kb-entry" data-path="/09-Java AI框架/09-SpringAI2深度解析">
+  <div class="entry-meta">
+    <div class="entry-domain"><a href="/?d=09">09-Java AI框架</a></div>
+    <h1>Spring AI 2.x In Depth</h1>
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#["spring-ai"</span><span class="badge badge-tag">#"chat-client"</span><span class="badge badge-tag">#"advisors"</span><span class="badge badge-tag">#"tool-calling"</span></div>
+    
+  </div>
+  <div class="entry-body"><h1>Spring AI 2.x In Depth</h1>
+<h2>概述</h2>
+<p>Spring AI 2.x 是 Spring 生态的官方 AI 框架，为 Java 开发者提供了覆盖 Chat、Embedding、Image、Audio、Moderation 等多模态能力的统一抽象层。它深度集成 Spring Boot 4.x 的自动配置、Micrometer 可观测性、Spring Security 安全等能力，是 Java AI 应用开发的主栈框架。</p>
+<blockquote>
+<p>技术雷达：Adopt — Java AI 框架主栈</p>
+</blockquote>
+<h2>核心架构</h2>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Spring AI 2.x 核心架构：
+
+┌──────────────────────────────────────────────────────────────┐
+│                      应用层 (Your App)                        │
+├──────────────────────────────────────────────────────────────┤
+│  ChatClient   │  Structured Output  │  Advisors  │  Eval    │
+├──────────────────────────────────────────────────────────────┤
+│          Spring AI Core Abstractions                          │
+│  ChatModel │ EmbeddingModel │ ImageModel │ AudioModel        │
+│  VectorStore │ ChatMemory │ ToolCallback │ Document          │
+├──────────────────────────────────────────────────────────────┤
+│                    Provider Implementations                    │
+│  OpenAI │ Anthropic │ Ollama │ Bedrock │ Gemini │ Azure      │
+│  Pgvector │ Redis │ Elasticsearch │ Milvus │ Qdrant         │
+├──────────────────────────────────────────────────────────────┤
+│                   Spring Boot Auto-Configuration               │
+│  spring-ai-openai-spring-boot-starter                          │
+│  spring-ai-ollama-spring-boot-starter                          │
+│  spring-ai-pgvector-spring-boot-starter                        │
+│  ...                                                           │
+└──────────────────────────────────────────────────────────────┘
+</code></pre></div>
+<p><strong>关键抽象层：</strong></p>
+<table>
+<thead>
+<tr>
+<th>接口</th>
+<th>用途</th>
+<th>核心方法</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>ChatModel</td>
+<td>聊天/对话模型</td>
+<td><code>call(Prompt)</code>, <code>stream(Prompt)</code></td>
+</tr>
+<tr>
+<td>EmbeddingModel</td>
+<td>文本向量化</td>
+<td><code>embed(String/Document)</code>, <code>embed(List)</code></td>
+</tr>
+<tr>
+<td>ImageModel</td>
+<td>图片生成</td>
+<td><code>call(ImagePrompt)</code></td>
+</tr>
+<tr>
+<td>AudioModel</td>
+<td>语音转文字/文字转语音</td>
+<td><code>call(SpeechPrompt)</code></td>
+</tr>
+<tr>
+<td>ModerationModel</td>
+<td>内容审核</td>
+<td><code>call(ModerationPrompt)</code></td>
+</tr>
+<tr>
+<td>VectorStore</td>
+<td>向量存储</td>
+<td><code>add(List&lt;Document&gt;)</code>, <code>similaritySearch(String)</code></td>
+</tr>
+<tr>
+<td>ChatMemory</td>
+<td>对话记忆</td>
+<td><code>add(String, List&lt;Message&gt;)</code>, <code>get(String, int)</code></td>
+</tr>
+</tbody></table>
+<h2>ChatClient</h2>
+<p>ChatClient 是 Spring AI 2.x 的核心入口类，提供构建式（Fluent）API。</p>
+<h3>基础用法</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@SpringBootApplication
+public class ChatClientDemo {
+
+    public static void main(String[] args) {
+        SpringApplication.run(ChatClientDemo.class, args);
+    }
+
+    @Bean
+    CommandLineRunner demo(ChatClient.Builder builder) {
+        return args -&gt; {
+            var chatClient = builder.build();
+
+            // 1. 最简单的调用
+            String answer = chatClient.prompt()
+                .user(&quot;用一句话解释什么是Spring AI&quot;)
+                .call()
+                .content();
+            System.out.println(answer);
+
+            // 2. 带 system prompt
+            String answer2 = chatClient.prompt()
+                .system(&quot;你是Java专家，回答必须包含代码示例&quot;)
+                .user(&quot;如何在Spring Boot中配置虚拟线程？&quot;)
+                .call()
+                .content();
+            System.out.println(answer2);
+
+            // 3. 携带历史消息（多轮对话）
+            String answer3 = chatClient.prompt()
+                .messages(
+                    new UserMessage(&quot;什么是Virtual Threads?&quot;),
+                    new AssistantMessage(&quot;Virtual Threads是JDK 21引入的轻量级线程...&quot;),
+                    new UserMessage(&quot;它和平台线程有什么区别？&quot;)
+                )
+                .call()
+                .content();
+            System.out.println(answer3);
+        };
+    }
+}
+</code></pre></div>
+<h3>构建式 API 详解</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class ChatClientFluentApi {
+
+    private final ChatClient chatClient;
+
+    public ChatClientFluentApi(ChatClient.Builder builder) {
+        this.chatClient = builder
+            .defaultSystem(&quot;你是Java AI开发助手&quot;)
+            .defaultAdvisors(new SimpleLoggerAdvisor())
+            .build();
+    }
+
+    /**
+     * 完整 API 展示
+     */
+    public String complexCall(String userQuestion) {
+        return chatClient.prompt()
+            // System Prompt（可覆盖 defaultSystem）
+            .system(s -&gt; s.text(&quot;回答要简洁，控制在200字以内&quot;))
+
+            // 用户消息（支持多种构建方式）
+            .user(u -&gt; u.text(&quot;问题：&quot;).text(userQuestion))
+
+            // 函数/工具注册
+            .tools(new DateTimeTool())
+            .toolContext(Map.of(&quot;userId&quot;, &quot;user123&quot;))
+
+            // Advisors（Spring AI 的拦截器链）
+            .advisors(a -&gt; a
+                .param(&quot;chat_memory_conversation_id&quot;, &quot;conv-001&quot;)
+                .param(&quot;chat_memory_retrieve_size&quot;, 100))
+
+            // 模型参数覆盖
+            .options(ChatOptionsBuilder.builder()
+                .withTemperature(0.7d)
+                .withTopP(0.9d)
+                .withMaxTokens(500)
+                .build())
+
+            // 执行
+            .call()
+            .content();
+    }
+
+    /**
+     * 流式调用
+     */
+    public Flux&lt;String&gt; streamCall(String question) {
+        return chatClient.prompt()
+            .user(question)
+            .stream()
+            .content();  // 返回 Flux&lt;String&gt;
+    }
+}
+</code></pre></div>
+<h3>流式处理</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class StreamHandling {
+
+    private final ChatClient chatClient;
+
+    public StreamHandling(ChatClient.Builder builder) {
+        this.chatClient = builder.build();
+    }
+
+    /**
+     * 基本流式调用
+     */
+    public void basicStream() {
+        chatClient.prompt()
+            .user(&quot;写一首关于Java的5行短诗&quot;)
+            .stream()
+            .content()
+            .doOnNext(token -&gt; System.out.print(token))
+            .doOnComplete(() -&gt; System.out.println(&quot;\n[完成]&quot;))
+            .blockLast();  // 等待流结束
+    }
+
+    /**
+     * 流式调用 — 获取完整 ChatResponse（含metadata）
+     */
+    public void streamWithMetadata() {
+        chatClient.prompt()
+            .user(&quot;解释Java中的Record类型&quot;)
+            .stream()
+            .chatResponse()
+            .doOnNext(response -&gt; {
+                // 每个 chunk 是一个 ChatResponse
+                System.out.print(response.getResult().getOutput().getContent());
+                // 最后一个 chunk 包含 metadata
+                if (response.getMetadata() != null) {
+                    System.out.println(&quot;\nToken用量: &quot; +
+                        response.getMetadata().getUsage());
+                }
+            })
+            .blockLast();
+    }
+
+    /**
+     * SSE 端点 — 向前端推送流式内容
+     */
+    @GetMapping(value = &quot;/api/chat/stream&quot;, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux&lt;ServerSentEvent&lt;String&gt;&gt; sseStream(@RequestParam String question) {
+        return chatClient.prompt()
+            .user(question)
+            .stream()
+            .content()
+            .map(token -&gt; ServerSentEvent.&lt;String&gt;builder()
+                .data(token)
+                .build())
+            .concatWith(Mono.just(ServerSentEvent.&lt;String&gt;builder()
+                .event(&quot;done&quot;)
+                .data(&quot;[DONE]&quot;)
+                .build()));
+    }
+}
+</code></pre></div>
+<h2>Advisors 机制</h2>
+<p>Advisors 是 Spring AI 2.x 的拦截器链机制，类似于 Spring MVC 的 Interceptor 或 Servlet Filter。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>请求处理管道：
+
+ChatClient.prompt()
+    → Advisor Chain 前置处理
+        → 注入历史消息 (ChatMemory Advisor)
+        → Query 改写 (QuestionAnswer Advisor)
+        → RAG 检索 (RetrievalAugmentation Advisor)
+    → 模型调用 (ChatModel.call/stream)
+    → Advisor Chain 后置处理
+        → 保存到记忆
+        → 日志记录
+    → 返回给调用方
+</code></pre></div>
+<h3>内置 Advisors</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class BuiltInAdvisors {
+
+    private final ChatClient chatClient;
+    private final VectorStore vectorStore;
+    private final ChatMemory chatMemory;
+
+    public BuiltInAdvisors(ChatClient.Builder builder,
+            VectorStore vectorStore, ChatMemory chatMemory) {
+        this.chatClient = builder.build();
+        this.vectorStore = vectorStore;
+        this.chatMemory = chatMemory;
+    }
+
+    /**
+     * SimpleLoggerAdvisor — 记录请求/响应日志
+     */
+    public void loggerAdvisor() {
+        chatClient.prompt()
+            .user(&quot;Hello&quot;)
+            .advisors(new SimpleLoggerAdvisor())
+            .call()
+            .content();
+        // 日志输出：
+        // [REQUEST]  user=Hello  model=gpt-4o  ...
+        // [RESPONSE] content=Hi there!...  tokens=50
+    }
+
+    /**
+     * QuestionAnswerAdvisor — 基于用户上下文的问答增强
+     */
+    public void questionAnswerAdvisor() {
+        chatClient.prompt()
+            .user(&quot;Virtual Threads的优势是什么？&quot;)
+            .advisors(new QuestionAnswerAdvisor(vectorStore))
+            .call()
+            .content();
+        // Advisor 会：
+        // 1. 将 user question 在 vectorStore 中搜索
+        // 2. 将检索到的文档注入 context
+    }
+
+    /**
+     * RetrievalAugmentationAdvisor — 完整的 RAG Advisor
+     */
+    public void ragAdvisor() {
+        chatClient.prompt()
+            .user(&quot;什么是Spring AI的Advisor机制？&quot;)
+            .advisors(RetrievalAugmentationAdvisor.builder()
+                .vectorStore(vectorStore)
+                .topK(5)
+                .similarityThreshold(0.7d)
+                .build())
+            .call()
+            .content();
+    }
+
+    /**
+     * ChatMemory Advisor — 对话记忆管理
+     */
+    public void chatMemoryAdvisor() {
+        chatClient.prompt()
+            .user(&quot;我叫张三&quot;)
+            .advisors(a -&gt; a.param(&quot;chat_memory_conversation_id&quot;, &quot;user-123&quot;))
+            .call()
+            .content();
+
+        chatClient.prompt()
+            .user(&quot;我叫什么名字？&quot;)
+            .advisors(a -&gt; a.param(&quot;chat_memory_conversation_id&quot;, &quot;user-123&quot;))
+            .call()
+            .content();
+        // 回答：&quot;你叫张三&quot;（从记忆中检索）
+    }
+
+    /**
+     * SafeGuard Advisor — 安全护栏
+     */
+    public void safeguardAdvisor() {
+        chatClient.prompt()
+            .user(&quot;请正常回答问题&quot;)
+            .advisors(new SafeGuardAdvisor(List.of(
+                &quot;暴力&quot;, &quot;色情&quot;, &quot;政治敏感&quot;  // 敏感词列表
+            )))
+            .call()
+            .content();
+    }
+}
+</code></pre></div>
+<h3>自定义 Advisor</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.ai.chat.client.advisor.api.*;
+import reactor.core.publisher.Flux;
+
+/**
+ * 自定义 Advisor：Token 用量追踪和告警
+ */
+public class TokenUsageAdvisor implements CallAroundAdvisor, StreamAroundAdvisor {
+
+    private static final int WARNING_THRESHOLD = 10000;
+
+    @Override
+    public String getName() {
+        return &quot;token-usage-tracker&quot;;
+    }
+
+    @Override
+    public int getOrder() {
+        return 100;
+    }
+
+    /**
+     * 非流式调用的环绕处理
+     */
+    @Override
+    public AdvisedResponse aroundCall(
+            AdvisedRequest advisedRequest,
+            CallAroundAdvisorChain chain) {
+
+        var startTime = System.currentTimeMillis();
+
+        // 前置处理：检查历史 token 使用量
+        var messages = advisedRequest.messages();
+        System.out.println(&quot;[TokenTracker] 请求消息数: &quot; + messages.size());
+
+        // 执行后续链
+        AdvisedResponse response = chain.nextAroundCall(advisedRequest);
+
+        // 后置处理：记录 token 使用
+        var metadata = response.response().getMetadata();
+        if (metadata != null &amp;&amp; metadata.getUsage() != null) {
+            var usage = metadata.getUsage();
+            var elapsed = System.currentTimeMillis() - startTime;
+
+            System.out.printf(
+                &quot;[TokenTracker] 输入:%d 输出:%d 总计:%d 耗时:%dms%n&quot;,
+                usage.getPromptTokens(),
+                usage.getGenerationTokens(),
+                usage.getTotalTokens(),
+                elapsed
+            );
+
+            if (usage.getTotalTokens() &gt; WARNING_THRESHOLD) {
+                System.out.println(&quot;[TokenTracker] 警告：Token使用超过阈值!&quot;);
+                // 可以发送告警、记录metric等
+            }
+        }
+
+        return response;
+    }
+
+    /**
+     * 流式调用的环绕处理
+     */
+    @Override
+    public Flux&lt;AdvisedResponse&gt; aroundStream(
+            AdvisedRequest advisedRequest,
+            StreamAroundAdvisorChain chain) {
+
+        var startTime = System.currentTimeMillis();
+
+        return chain.nextAroundStream(advisedRequest)
+            .doOnComplete(() -&gt; {
+                var elapsed = System.currentTimeMillis() - startTime;
+                System.out.println(&quot;[TokenTracker] 流式响应完成，耗时:&quot; + elapsed + &quot;ms&quot;);
+            });
+    }
+}
+
+/**
+ * 自定义 Advisor：自动重试
+ */
+public class RetryAdvisor implements CallAroundAdvisor {
+
+    private final int maxRetries;
+    private final Duration initialBackoff;
+
+    public RetryAdvisor(int maxRetries, Duration initialBackoff) {
+        this.maxRetries = maxRetries;
+        this.initialBackoff = initialBackoff;
+    }
+
+    @Override
+    public String getName() {
+        return &quot;retry-advisor&quot;;
+    }
+
+    @Override
+    public int getOrder() {
+        return 0;  // 最外层，第一个执行
+    }
+
+    @Override
+    public AdvisedResponse aroundCall(
+            AdvisedRequest advisedRequest,
+            CallAroundAdvisorChain chain) {
+
+        Exception lastException = null;
+
+        for (int attempt = 1; attempt &lt;= maxRetries; attempt++) {
+            try {
+                return chain.nextAroundCall(advisedRequest);
+            } catch (Exception e) {
+                lastException = e;
+                if (attempt &lt; maxRetries &amp;&amp; isRetryable(e)) {
+                    long backoffMs = initialBackoff.toMillis() * (1L &lt;&lt; (attempt - 1));
+                    System.out.printf(&quot;[Retry] 第%d次重试，等待%dms%n&quot;, attempt, backoffMs);
+                    try {
+                        Thread.sleep(backoffMs);
+                    } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw new RuntimeException(ie);
+                    }
+                }
+            }
+        }
+
+        throw new RuntimeException(&quot;重试&quot; + maxRetries + &quot;次后仍失败&quot;, lastException);
+    }
+
+    private boolean isRetryable(Exception e) {
+        return e.getMessage() != null &amp;&amp;
+            (e.getMessage().contains(&quot;429&quot;) ||
+             e.getMessage().contains(&quot;503&quot;) ||
+             e.getMessage().contains(&quot;timeout&quot;));
+    }
+
+    @Override
+    public Flux&lt;AdvisedResponse&gt; aroundStream(
+            AdvisedRequest advisedRequest,
+            StreamAroundAdvisorChain chain) {
+        // 流式调用不支持重试（因为已经有部分数据发送给客户端）
+        return chain.nextAroundStream(advisedRequest);
+    }
+}
+</code></pre></div>
+<h3>Advisor 链编排</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+ * Advisor 链编排示例
+ * 注意顺序：先 ChatMemory（注入上下文），
+ * 再 RAG（检索知识），最后 Logger（记录完整请求）
+ */
+public class AdvisorChainDemo {
+
+    private final ChatClient chatClient;
+
+    public AdvisorChainDemo(ChatClient.Builder builder,
+            VectorStore vectorStore, ChatMemory chatMemory) {
+        this.chatClient = builder
+            .defaultAdvisors(
+                new ChatMemoryAdvisor(chatMemory, &quot;default&quot;, 50),
+                RetrievalAugmentationAdvisor.builder()
+                    .vectorStore(vectorStore)
+                    .topK(3)
+                    .build(),
+                new TokenUsageAdvisor(),
+                new SimpleLoggerAdvisor()
+            )
+            .build();
+    }
+
+    public String chat(String conversationId, String message) {
+        return chatClient.prompt()
+            .user(message)
+            .advisors(a -&gt; a
+                .param(&quot;chat_memory_conversation_id&quot;, conversationId))
+            .call()
+            .content();
+    }
+}
+</code></pre></div>
+<h2>Structured Output</h2>
+<p>Spring AI 2.x 支持将模型输出直接映射为 Java 对象。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.ai.chat.client.advisor.api.Structured;
+
+/**
+ * 使用 @Structured 注解定义输出格式
+ */
+public class StructuredOutputDemo {
+
+    private final ChatClient chatClient;
+
+    public StructuredOutputDemo(ChatClient.Builder builder) {
+        this.chatClient = builder.build();
+    }
+
+    // 定义输出实体
+    public record BookRecommendation(
+        String title,
+        String author,
+        int publicationYear,
+        List&lt;String&gt; keyTopics,
+        String suitableFor,
+        int rating  // 1-10
+    ) {}
+
+    /**
+     * 单个结构化输出
+     */
+    public BookRecommendation recommendBook(String requirement) {
+        return chatClient.prompt()
+            .user(u -&gt; u.text(&quot;根据以下需求推荐一本Java书籍：&quot;).text(requirement))
+            .call()
+            .entity(BookRecommendation.class);  // 自动映射
+    }
+
+    /**
+     * 列表结构化输出
+     */
+    public record JavaVersion(
+        String version,
+        int releaseYear,
+        boolean isLts,
+        List&lt;String&gt; keyFeatures
+    ) {}
+
+    public List&lt;JavaVersion&gt; listJavaVersions() {
+        // 使用 ParameterizedTypeReference 处理泛型
+        return chatClient.prompt()
+            .user(&quot;列出JDK 17, 21, 25的主要特性&quot;)
+            .call()
+            .entity(new ParameterizedTypeReference&lt;List&lt;JavaVersion&gt;&gt;() {});
+    }
+
+    /**
+     * 自定义 Schema 的结构化输出
+     */
+    @Structured(name = &quot;code_review&quot;, description = &quot;代码审查结果&quot;)
+    public record CodeReview(
+        @Structured.Prop(description = &quot;总体评分 1-10&quot;)
+        int overallScore,
+
+        @Structured.Prop(description = &quot;代码的优点&quot;)
+        List&lt;String&gt; strengths,
+
+        @Structured.Prop(description = &quot;需要改进的地方&quot;)
+        List&lt;String&gt; improvements,
+
+        @Structured.Prop(description = &quot;安全风险（如有）&quot;)
+        List&lt;String&gt; securityIssues,
+
+        @Structured.Prop(description = &quot;性能建议&quot;)
+        List&lt;String&gt; performanceHints
+    ) {}
+
+    public CodeReview reviewCode(String code) {
+        return chatClient.prompt()
+            .system(&quot;你是资深代码审查专家。仔细审查以下代码。&quot;)
+            .user(code)
+            .call()
+            .entity(CodeReview.class);
+    }
+
+    /**
+     * 演示使用示例
+     */
+    public static void demo(StructuredOutputDemo demo) {
+        var book = demo.recommendBook(&quot;想深入学习JVM和并发&quot;);
+        System.out.printf(&quot;推荐: 《%s》 by %s (%d)%n&quot;,
+            book.title(), book.author(), book.publicationYear());
+        System.out.println(&quot;核心主题: &quot; + String.join(&quot;, &quot;, book.keyTopics()));
+        System.out.println(&quot;评分: &quot; + book.rating() + &quot;/10&quot;);
+
+        var review = demo.reviewCode(&quot;&quot;&quot;
+            public class UserService {
+                public User findById(Long id) {
+                    String sql = &quot;SELECT * FROM users WHERE id = &quot; + id;
+                    return jdbcTemplate.queryForObject(sql, User.class);
+                }
+            }
+            &quot;&quot;&quot;);
+        System.out.println(&quot;代码审查 - 评分: &quot; + review.overallScore() + &quot;/10&quot;);
+        System.out.println(&quot;安全问题: &quot; + review.securityIssues());
+    }
+}
+</code></pre></div>
+<h2>Tool Calling</h2>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.ai.tool.annotation.Tool;
+import org.springframework.ai.tool.annotation.ToolParam;
+import org.springframework.stereotype.Component;
+
+/**
+ * 工具定义 — 使用 @Tool 注解
+ */
+@Component
+public class WeatherTools {
+
+    @Tool(description = &quot;获取指定城市的当前天气信息&quot;)
+    public WeatherInfo getWeather(
+            @ToolParam(description = &quot;城市名称，如 &#39;Beijing&#39;&quot;) String city) {
+        // 实际调用天气 API
+        return new WeatherInfo(city, 25.0, &quot;晴&quot;, 60);
+    }
+
+    @Tool(description = &quot;获取指定城市的未来天气预报&quot;)
+    public List&lt;WeatherForecast&gt; getForecast(
+            @ToolParam(description = &quot;城市名称&quot;) String city,
+            @ToolParam(description = &quot;预报天数 (1-7)&quot;) int days) {
+        return List.of(
+            new WeatherForecast(&quot;今天&quot;, 25, &quot;晴&quot;),
+            new WeatherForecast(&quot;明天&quot;, 22, &quot;多云&quot;),
+            new WeatherForecast(&quot;后天&quot;, 20, &quot;小雨&quot;)
+        );
+    }
+
+    public record WeatherInfo(String city, double temperature,
+            String condition, int humidity) {}
+
+    public record WeatherForecast(String day, double temperature,
+            String condition) {}
+}
+
+@Component
+public class DatabaseTools {
+
+    @Tool(description = &quot;查询用户信息&quot;)
+    public UserInfo queryUser(
+            @ToolParam(description = &quot;用户ID&quot;) String userId) {
+        return new UserInfo(userId, &quot;张三&quot;, &quot;zhang@example.com&quot;, &quot;VIP&quot;);
+    }
+
+    @Tool(description = &quot;查询用户的订单列表&quot;)
+    public List&lt;OrderInfo&gt; queryOrders(
+            @ToolParam(description = &quot;用户ID&quot;) String userId,
+            @ToolParam(description = &quot;订单状态过滤 (可选): all/pending/done&quot;)
+            @Nullable String status) {
+        return List.of(
+            new OrderInfo(&quot;ORD-001&quot;, &quot;已完成&quot;, 99.90),
+            new OrderInfo(&quot;ORD-002&quot;, &quot;处理中&quot;, 199.00)
+        );
+    }
+
+    public record UserInfo(String userId, String name,
+            String email, String level) {}
+
+    public record OrderInfo(String orderId, String status, double amount) {}
+}
+
+/**
+ * 使用工具进行对话
+ */
+@Component
+public class ToolCallingService {
+
+    private final ChatClient chatClient;
+
+    public ToolCallingService(ChatClient.Builder builder,
+            WeatherTools weatherTools, DatabaseTools dbTools) {
+        this.chatClient = builder
+            .defaultTools(weatherTools, dbTools)  // 注册工具
+            .build();
+    }
+
+    public String chatWithTools(String message) {
+        return chatClient.prompt()
+            .user(message)
+            .tools(&quot;getWeather&quot;, &quot;queryUser&quot;, &quot;queryOrders&quot;)  // 指定可用工具
+            .call()
+            .content();
+    }
+
+    /**
+     * 工具调用 + 结构化输出结合
+     */
+    public String agentWorkflow(String userRequest) {
+        return chatClient.prompt()
+            .system(&quot;&quot;&quot;
+                你是智能助手，可以：
+                1. 查询天气
+                2. 查询用户信息
+                3. 查询订单
+                请按步骤完成用户请求，如果需要多步操作，自动串联调用。
+                &quot;&quot;&quot;)
+            .user(userRequest)
+            .tools(new WeatherTools(), new DatabaseTools())
+            .call()
+            .content();
+    }
+
+    public static void main(String[] args) {
+        // 示例：
+        // &quot;查询用户U001的信息和他的所有订单，并告诉他北京的天气&quot;
+        // → 自动调用 queryUser → queryOrders → getWeather
+        // → 整合回答
+    }
+}
+</code></pre></div>
+<h2>Chat Memory</h2>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.memory.InMemoryChatMemory;
+import org.springframework.ai.chat.memory.JdbcChatMemory;
+import javax.sql.DataSource;
+
+/**
+ * Chat Memory 配置和使用
+ */
+@Configuration
+public class ChatMemoryConfig {
+
+    /**
+     * InMemoryChatMemory — 适用于开发和测试
+     */
+    @Bean
+    @ConditionalOnMissingBean
+    ChatMemory inMemoryChatMemory() {
+        return new InMemoryChatMemory();
+    }
+
+    /**
+     * JdbcChatMemory — 适用于生产环境
+     * 需要创建表：chat_memory (conversation_id, content, metadata, created_at)
+     */
+    @Bean
+    @ConditionalOnProperty(name = &quot;app.chat-memory.type&quot;, havingValue = &quot;jdbc&quot;)
+    ChatMemory jdbcChatMemory(DataSource dataSource) {
+        return JdbcChatMemory.builder()
+            .dataSource(dataSource)
+            .maxMessagesPerConversation(100)
+            .build();
+    }
+
+    /**
+     * 使用 ChatMemory 的示例
+     */
+    @Service
+    public static class MemoryAwareChatService {
+
+        private final ChatClient chatClient;
+
+        public MemoryAwareChatService(ChatClient.Builder builder) {
+            this.chatClient = builder
+                .defaultAdvisors(new ChatMemoryAdvisor(
+                    new InMemoryChatMemory(), &quot;default&quot;, 50))
+                .build();
+        }
+
+        public String chat(String conversationId, String message) {
+            return chatClient.prompt()
+                .user(message)
+                .advisors(a -&gt; a
+                    .param(&quot;chat_memory_conversation_id&quot;, conversationId))
+                .call()
+                .content();
+        }
+    }
+
+    /**
+     * 自定义消息截断策略
+     */
+    public static class TruncationConfig {
+        /**
+         * 当对话历史超出上下文窗口时：
+         * 1. 保留最近 N 条消息
+         * 2. 或使用摘要压缩早期消息
+         */
+        public static final int MAX_RECENT_MESSAGES = 20;
+        public static final int MAX_SUMMARY_SIZE = 500;
+    }
+}
+</code></pre></div>
+<h2>Vector Store 抽象</h2>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Configuration
+public class VectorStoreConfig {
+
+    /**
+     * Pgvector 向量存储
+     */
+    @Bean
+    @ConditionalOnClass(name = &quot;org.postgresql.ds.PGSimpleDataSource&quot;)
+    VectorStore pgvectorVectorStore(JdbcTemplate jdbcTemplate) {
+        return PgvectorVectorStore.builder()
+            .jdbcTemplate(jdbcTemplate)
+            .dimensions(1024)  // embedding 维度
+            .indexType(PgvectorVectorStore.PgIndexType.HNSW)
+            .distanceType(PgvectorVectorStore.PgDistanceType.COSINE_DISTANCE)
+            .build();
+    }
+
+    /**
+     * Redis 向量存储
+     */
+    @Bean
+    @ConditionalOnClass(name = &quot;redis.clients.jedis.JedisPooled&quot;)
+    VectorStore redisVectorStore(RedisConnectionFactory factory) {
+        return RedisVectorStore.builder()
+            .connectionFactory(factory)
+            .indexName(&quot;ai-documents&quot;)
+            .prefix(&quot;doc:&quot;)
+            .build();
+    }
+}
+
+@Service
+public class VectorStoreService {
+
+    private final VectorStore vectorStore;
+    private final EmbeddingModel embeddingModel;
+
+    public VectorStoreService(VectorStore vectorStore,
+            EmbeddingModel embeddingModel) {
+        this.vectorStore = vectorStore;
+        this.embeddingModel = embeddingModel;
+    }
+
+    /**
+     * 文档入库
+     */
+    public void indexDocuments(List&lt;String&gt; texts, Map&lt;String, Object&gt; metadata) {
+        var documents = texts.stream()
+            .map(text -&gt; Document.builder()
+                .text(text)
+                .metadata(metadata)
+                .embedding(embeddingModel.embed(text))
+                .build())
+            .toList();
+        vectorStore.add(documents);
+    }
+
+    /**
+     * 语义搜索
+     */
+    public List&lt;Document&gt; search(String query, int topK) {
+        return vectorStore.similaritySearch(
+            SearchRequest.builder()
+                .query(query)
+                .topK(topK)
+                .similarityThreshold(0.7d)
+                .build()
+        );
+    }
+}
+</code></pre></div>
+<h2>MCP 集成</h2>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.ai.mcp.client.McpSyncClient;
+
+/**
+ * MCP (Model Context Protocol) 集成
+ * Spring AI 2.x 提供了 MCP Client 来连接 MCP Server 获取工具
+ */
+@Configuration
+public class McpIntegration {
+
+    /**
+     * 通过 stdio 连接 MCP Server
+     */
+    @Bean
+    McpSyncClient stdioMcpClient() {
+        return McpSyncClient.usingStdio(
+            new StdioServerParameters(
+                &quot;python&quot;, List.of(&quot;-m&quot;, &quot;mcp_server_weather&quot;))
+        );
+    }
+
+    /**
+     * 通过 Streamable HTTP 连接 MCP Server
+     */
+    @Bean
+    McpSyncClient httpMcpClient() {
+        return McpSyncClient.usingHttp(
+            &quot;http://localhost:8080/mcp&quot;
+        );
+    }
+
+    /**
+     * 使用 MCP 工具进行对话
+     */
+    @Service
+    public static class McpChatService {
+
+        private final ChatClient chatClient;
+        private final McpSyncClient mcpClient;
+
+        public McpChatService(ChatClient.Builder builder,
+                McpSyncClient mcpClient) {
+            this.mcpClient = mcpClient;
+            this.chatClient = builder
+                .defaultTools(mcpClient.getTools())  // 将所有 MCP 工具注册
+                .build();
+        }
+
+        public String chat(String message) {
+            return chatClient.prompt()
+                .user(message)
+                .call()
+                .content();
+        }
+    }
+}
+</code></pre></div>
+<h2>Evaluation</h2>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.ai.evaluation.EvaluationRequest;
+import org.springframework.ai.evaluation.EvaluationResponse;
+import org.springframework.ai.evaluation.RelevancyEvaluator;
+import org.springframework.ai.evaluation.FactCheckingEvaluator;
+
+/**
+ * AI 质量评估
+ */
+@Service
+public class AiEvaluationService {
+
+    private final ChatClient chatClient;
+    private final RelevancyEvaluator relevancyEvaluator;
+    private final FactCheckingEvaluator factEvaluator;
+
+    public AiEvaluationService(ChatClient.Builder builder) {
+        this.chatClient = builder.build();
+        this.relevancyEvaluator = new RelevancyEvaluator(chatClient);
+        this.factEvaluator = new FactCheckingEvaluator(chatClient);
+    }
+
+    /**
+     * 评估回答的相关性
+     */
+    public void evaluateRelevancy() {
+        var request = EvaluationRequest.builder()
+            .userQuestion(&quot;Spring AI支持哪些向量数据库？&quot;)
+            .aiResponse(&quot;Spring AI支持Pgvector、Redis、Elasticsearch、Milvus、Qdrant等向量数据库。&quot;)
+            .context(List.of(&quot;Spring AI VectorStore抽象支持多种实现...&quot;))
+            .build();
+
+        EvaluationResponse result = relevancyEvaluator.evaluate(request);
+        System.out.println(&quot;相关性评分: &quot; + result.score());
+        System.out.println(&quot;评语: &quot; + result.feedback());
+    }
+
+    /**
+     * 评估事实准确性
+     */
+    public void evaluateFactuality() {
+        var request = EvaluationRequest.builder()
+            .userQuestion(&quot;JDK 25有哪些新特性？&quot;)
+            .aiResponse(&quot;JDK 25引入了Scoped Values、String Templates等特性...&quot;)
+            .referenceFacts(&quot;&quot;&quot;
+                JDK 25主要特性：
+                - Virtual Threads (JEP 444)
+                - Scoped Values (JEP 481)
+                - Structured Concurrency (JEP 480)
+                ...
+                &quot;&quot;&quot;)
+            .build();
+
+        EvaluationResponse result = factEvaluator.evaluate(request);
+        System.out.println(&quot;事实准确性评分: &quot; + result.score());
+        if (result.score() &lt; 0.8) {
+            System.out.println(&quot;警告：回答可能包含错误信息！&quot;);
+        }
+    }
+}
+</code></pre></div>
+<h2>完整示例：智能客服</h2>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@SpringBootApplication
+public class IntelligentCustomerService {
+
+    public static void main(String[] args) {
+        SpringApplication.run(IntelligentCustomerService.class, args);
+    }
+
+    /**
+     * 构建完整的智能客服：
+     * RAG + Tool Calling + Conversation Memory
+     */
+    @RestController
+    @RequestMapping(&quot;/api/cs&quot;)
+    public static class CustomerServiceController {
+
+        private final ChatClient chatClient;
+
+        public CustomerServiceController(ChatClient.Builder builder,
+                VectorStore knowledgeBase,
+                ChatMemory chatMemory,
+                DatabaseTools dbTools) {
+
+            this.chatClient = builder
+                .defaultSystem(&quot;&quot;&quot;
+                    你是保险智能客服助手。
+                    
+                    职责：
+                    1. 回答保险产品相关问题（通过知识库检索）
+                    2. 查询用户保单和理赔信息（通过工具调用）
+                    3. 协助用户完成投保、理赔等操作
+                    
+                    原则：
+                    - 回答要准确，基于知识库而非猜测
+                    - 涉及用户信息查询时，主动调用工具
+                    - 保持友好、专业
+                    &quot;&quot;&quot;)
+                .defaultAdvisors(
+                    // 1. 对话记忆：记住对话历史
+                    new ChatMemoryAdvisor(chatMemory, &quot;insurance-default&quot;, 50),
+
+                    // 2. RAG：从知识库检索相关知识
+                    RetrievalAugmentationAdvisor.builder()
+                        .vectorStore(knowledgeBase)
+                        .topK(5)
+                        .similarityThreshold(0.7d)
+                        .build(),
+
+                    // 3. Token 追踪和日志
+                    new TokenUsageAdvisor(),
+                    new SimpleLoggerAdvisor()
+                )
+                .defaultTools(dbTools)
+                .build();
+        }
+
+        @PostMapping(&quot;/chat&quot;)
+        public ChatResponse chat(
+                @RequestBody ChatRequest request) {
+            return chatClient.prompt()
+                .user(request.message())
+                .advisors(a -&gt; a
+                    .param(&quot;chat_memory_conversation_id&quot;,
+                        request.conversationId()))
+                .call()
+                .chatResponse();
+        }
+
+        @GetMapping(value = &quot;/chat/stream&quot;, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+        public Flux&lt;ServerSentEvent&lt;String&gt;&gt; streamChat(
+                @RequestParam String conversationId,
+                @RequestParam String message) {
+            return chatClient.prompt()
+                .user(message)
+                .advisors(a -&gt; a
+                    .param(&quot;chat_memory_conversation_id&quot;, conversationId))
+                .stream()
+                .content()
+                .map(token -&gt; ServerSentEvent.&lt;String&gt;builder()
+                    .data(token)
+                    .build())
+                .concatWith(Mono.just(ServerSentEvent.&lt;String&gt;builder()
+                    .event(&quot;done&quot;)
+                    .data(&quot;[DONE]&quot;)
+                    .build()));
+        }
+
+        record ChatRequest(String conversationId, String message) {}
+    }
+}
+</code></pre></div>
+<h2>Observability</h2>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+ * Spring AI 2.x 自动集成 Micrometer + OpenTelemetry
+ * 只需添加依赖，自动埋点：
+ *
+ * &lt;dependency&gt;
+ *   &lt;groupId&gt;org.springframework.ai&lt;/groupId&gt;
+ *   &lt;artifactId&gt;spring-ai-micrometer-spring-boot-starter&lt;/artifactId&gt;
+ * &lt;/dependency&gt;
+ *
+ * 自动记录的指标：
+ * - spring.ai.chat.client.requests (Counter)
+ * - spring.ai.chat.client.responses (Counter)
+ * - spring.ai.chat.client.duration (Timer)
+ * - spring.ai.chat.client.token.usage (DistributionSummary)
+ * - spring.ai.vector.store.requests (Counter)
+ * - spring.ai.vector.store.duration (Timer)
+ */
+
+@Configuration
+public class ObservabilityConfig {
+
+    /**
+     * 自定义指标
+     */
+    @Bean
+    MeterRegistryCustomizer&lt;MeterRegistry&gt; aiMetrics() {
+        return registry -&gt; {
+            // 可以在此添加自定义指标
+            registry.gauge(&quot;ai.model.availability&quot;,
+                List.of(Tags.of(&quot;model&quot;, &quot;gpt-4o&quot;)), 1.0);
+        };
+    }
+}
+</code></pre></div>
+<h2>最佳实践</h2>
+<ol>
+<li><strong>ChatClient.Builder 全局配置 defaultSystem 和 defaultAdvisors</strong>：避免每次调用都重复配置</li>
+<li><strong>Advisor 链顺序很重要</strong>：ChatMemory 应该在最前（注入上下文），RAG 在中间（检索知识），Logger/TokenTracker 在最后（记录完整请求）</li>
+<li><strong>生产环境使用 JdbcChatMemory 而非 InMemory</strong>：持久化 + 支持多实例共享（通过共享数据库）</li>
+<li><strong>工具调用必须设置超时</strong>：长时间运行的工具会阻塞对话流</li>
+<li><strong>Structured Output 是免费的类型安全</strong>：能用 entity() 就不用手动解析 JSON</li>
+<li><strong>始终使用 stream=true 用于 UX 场景</strong>：非流式用于批处理或 ETL</li>
+<li><strong>启用 Micrometer 埋点</strong>：开箱即用的可观测性，几乎没有性能开销</li>
+</ol>
+<h2>常见问题</h2>
+<p><strong>Q: Spring AI 和直接调用 OpenAI SDK 有什么区别？</strong></p>
+<p>A: Spring AI 提供了更高层的抽象和 Spring 生态集成。核心价值：(1) 统一的 API 抽象（换模型只改配置不改代码），(2) Advisors 拦截链，(3) Structured Output 自动映射，(4) Micrometer/Actuator 集成，(5) Vector Store 抽象。</p>
+<p><strong>Q: Advisor 和 Spring AOP 有什么区别？</strong></p>
+<p>A: Advisor 是 Spring AI 自己的拦截器概念，专为 LLM 调用设计。它工作在 Prompt 级别（可修改 System Prompt、注入消息、执行 RAG 等），而 Spring AOP 工作在方法调用级别。</p>
+<p><strong>Q: 如何在 Spring AI 中切换到不同的模型提供商？</strong></p>
+<p>A: 仅需改配置。例如从 OpenAI 切到 Ollama：从 <code>spring-ai-openai-spring-boot-starter</code> 改为 <code>spring-ai-ollama-spring-boot-starter</code>，修改 <code>application.yml</code> 中的 provider 配置，业务代码零改动。</p>
+<h2>相关条目</h2>
+<ul>
+<li><a href="/09-Java AI框架/09-架构抽象层设计" class="cross-ref" data-ref="09-架构抽象层设计">09-架构抽象层设计</a> — 在 Spring AI 上构建抽象层</li>
+<li><a href="/09-Java AI框架/09-LangChain4j对比与选型" class="cross-ref" data-ref="09-LangChain4j对比与选型">09-LangChain4j对比与选型</a> — 与 LangChain4j 的对比</li>
+<li><a href="/08-模型接入与推理/模型API/08-云模型API与SDK使用" class="cross-ref" data-ref="08-云模型API与SDK使用">08-云模型API与SDK使用</a> — 各 Provider SDK 使用</li>
+<li><a href="/08-模型接入与推理/推理部署/08-本地推理与Ollama" class="cross-ref" data-ref="08-本地推理与Ollama">08-本地推理与Ollama</a> — Ollama 与 Spring AI Ollama Starter</li>
+<li><a href="/?d=11" class="cross-ref domain-ref">11-检索与RAG/README</a> — RAG 实现（VectorStore + RetrieverAdvisor）</li>
+<li><a href="/?d=12" class="cross-ref domain-ref">12-Agent工程/README</a> — Agent 开发（Tool Calling + Memory）</li>
+<li><a href="/?d=13" class="cross-ref domain-ref">13-AI协议/README</a> — MCP 协议集成</li>
+</ul>
+</div>
+</article>

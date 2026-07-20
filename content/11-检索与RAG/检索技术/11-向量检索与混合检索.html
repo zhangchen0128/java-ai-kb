@@ -1,0 +1,806 @@
+
+<article class="kb-entry" data-path="/11-检索与RAG/检索技术/11-向量检索与混合检索">
+  <div class="entry-meta">
+    <div class="entry-domain"><a href="/?d=11">11-检索与RAG</a></div>
+    <h1>向量检索与混合检索：从HNSW到RRF融合</h1>
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#["vector-search"</span><span class="badge badge-tag">#"hnsw"</span><span class="badge badge-tag">#"ivfflat"</span><span class="badge badge-tag">#"bm25"</span></div>
+    
+  </div>
+  <div class="entry-body"><h1>向量检索与混合检索：从HNSW到RRF融合</h1>
+<h2>概述</h2>
+<p>检索是RAG系统的核心环节。现代检索系统通常结合两种范式：稠密向量检索（语义匹配）和稀疏关键词检索（精确匹配）。本文从向量检索的底层索引结构（HNSW、IVFFlat）出发，推导BM25的数学原理，最终构建完整的混合检索+RRF融合方案，并提供在PostgreSQL pgvector和Elasticsearch上的完整Java实现。</p>
+<hr>
+<h2>一、向量检索原理</h2>
+<h3>1.1 ANN vs KNN</h3>
+<p><strong>KNN (K-Nearest Neighbors)</strong>：</p>
+<ul>
+<li>精确检索：扫描所有向量，计算距离，返回Top-K</li>
+<li>复杂度：O(N×D)，N为向量数量，D为维度</li>
+<li>百万级向量 → 秒级延迟 → 不可接受</li>
+</ul>
+<p><strong>ANN (Approximate Nearest Neighbors)</strong>：</p>
+<ul>
+<li>近似检索：牺牲少量精度换取数量级的速度提升</li>
+<li>典型精度损失：&lt;1%（召回率99%+）</li>
+<li>百万级向量 → 毫秒级延迟</li>
+</ul>
+<h3>1.2 pgvector支持的索引类型对比</h3>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th>IVFFlat</th>
+<th>HNSW</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>构建时间</td>
+<td>快</td>
+<td>较慢</td>
+</tr>
+<tr>
+<td>查询速度</td>
+<td>较慢</td>
+<td>快</td>
+</tr>
+<tr>
+<td>内存占用</td>
+<td>低</td>
+<td>高（需要存储图结构）</td>
+</tr>
+<tr>
+<td>召回率</td>
+<td>95-99%</td>
+<td>99%+</td>
+</tr>
+<tr>
+<td>构建参数</td>
+<td>lists</td>
+<td>m, ef_construction</td>
+</tr>
+<tr>
+<td>查询参数</td>
+<td>probes</td>
+<td>ef_search</td>
+</tr>
+<tr>
+<td>增量更新</td>
+<td>需要重建</td>
+<td>支持</td>
+</tr>
+<tr>
+<td>适用规模</td>
+<td>100K-10M</td>
+<td>10K-100M</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>二、HNSW索引深入</h2>
+<h3>2.1 图结构</h3>
+<p>HNSW (Hierarchical Navigable Small World) 构建一个多层图：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Layer 2:  ●──────●        （最顶层，节点最少，长距离连接）
+         /        \
+Layer 1: ●──●──●──●──●    （中间层）
+        / \/ \/ \/ \/ \
+Layer 0: ●─●─●─●─●─●─●─●  （底层，所有节点，短距离连接）
+</code></pre></div>
+<p><strong>关键参数</strong>：</p>
+<ul>
+<li><strong>M (max_connections)</strong>：每个节点每层的最大连接数。典型值16-64。更大的M → 更高召回率 + 更多内存。</li>
+<li><strong>ef_construction</strong>：构建索引时的动态候选列表大小。典型值128-512。更大的值 → 更高质量的图 + 更长的构建时间。</li>
+<li><strong>ef_search</strong>：搜索时的动态候选列表大小。典型值64-256。更大的值 → 更高召回率 + 更多搜索延迟。</li>
+</ul>
+<h3>2.2 插入算法</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>function INSERT(new_element, HNSW_graph):
+    L = random_level()  // 随机选择层级（指数衰减分布）
+    entry_point = get_entry_point()
+    
+    for lc from max_level down to L+1:
+        // 在高层找到最近的入口点
+        entry_point = greedy_search(new_element, entry_point, 1, lc)
+    
+    for lc from min(L, max_level) down to 0:
+        // 在当前层搜索ef_construction个最近邻
+        candidates = search_layer(new_element, entry_point, ef_construction, lc)
+        // 启发式邻居选择：挑选多样化的邻居
+        neighbors = select_neighbors_heuristic(new_element, candidates, M, lc)
+        // 添加双向连接
+        for neighbor in neighbors:
+            connect(new_element, neighbor)
+            // 裁剪：如果neighbor的连接数超过M，剪掉最远的
+            if |neighbor.connections(lc)| &gt; M:
+                prune_neighbors(neighbor, lc)
+</code></pre></div>
+<h3>2.3 搜索算法</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>function SEARCH(query, k, ef_search):
+    entry_point = get_entry_point()
+    
+    // 从顶层开始，逐层下降
+    for lc from max_level down to 1:
+        entry_point = greedy_search(query, entry_point, 1, lc)
+    
+    // 在底层做精细搜索
+    candidates = search_layer(query, entry_point, ef_search, 0)
+    
+    // 从candidates中取前k个作为结果
+    return top_k(candidates, k)
+</code></pre></div>
+<h3>2.4 pgvector中的HNSW配置</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- 创建HNSW索引
+CREATE INDEX ON chunk_embeddings
+    USING hnsw (embedding vector_cosine_ops)
+    WITH (
+        m = 16,                  -- 每个节点最大连接数（典型值16-64）
+        ef_construction = 200    -- 构建时候选列表大小（典型值128-512）
+    );
+
+-- 查询时设置ef_search（会话级别）
+SET hnsw.ef_search = 100;       -- 典型值64-256
+
+-- 向量相似度检索
+SELECT c.chunk_id, c.content,
+       1 - (e.embedding &lt;=&gt; &#39;[0.1, 0.2, ...]&#39;::vector) AS similarity
+FROM chunk_embeddings e
+JOIN chunks c ON e.chunk_id = c.chunk_id
+ORDER BY e.embedding &lt;=&gt; &#39;[0.1, 0.2, ...]&#39;::vector
+LIMIT 10;
+</code></pre></div>
+<p><strong>推荐的初始化SQL（Spring Boot自动配置）</strong>：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.event.EventListener;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import javax.sql.DataSource;
+
+@Configuration
+public class PgVectorInitializer {
+
+    private final DataSource dataSource;
+
+    public PgVectorInitializer(DataSource dataSource) {
+        this.dataSource = dataSource;
+    }
+
+    @EventListener(ApplicationReadyEvent.class)
+    public void initializePgVector() {
+        try (var conn = dataSource.getConnection();
+             var stmt = conn.createStatement()) {
+
+            // 启用pgvector扩展
+            stmt.execute(&quot;CREATE EXTENSION IF NOT EXISTS vector&quot;);
+
+            // 创建表
+            stmt.execute(&quot;&quot;&quot;
+                CREATE TABLE IF NOT EXISTS chunk_embeddings (
+                    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+                    chunk_id UUID NOT NULL,
+                    embedding vector(1024),
+                    model_name VARCHAR(128),
+                    created_at TIMESTAMPTZ DEFAULT now()
+                )
+                &quot;&quot;&quot;);
+
+            // 创建HNSW索引（如果不存在）
+            stmt.execute(&quot;&quot;&quot;
+                CREATE INDEX IF NOT EXISTS idx_chunk_embeddings_hnsw
+                ON chunk_embeddings
+                USING hnsw (embedding vector_cosine_ops)
+                WITH (m = 16, ef_construction = 200)
+                &quot;&quot;&quot;);
+
+        } catch (Exception e) {
+            // 初始化失败不阻止应用启动
+        }
+    }
+}
+</code></pre></div>
+<hr>
+<h2>三、IVFFlat索引</h2>
+<h3>3.1 工作原理</h3>
+<p>IVFFlat (Inverted File with Flat compression) 将向量空间划分为K个聚类区域：</p>
+<ol>
+<li><strong>训练阶段</strong>：对数据集的子集运行K-means聚类，得到K个聚类中心</li>
+<li><strong>索引阶段</strong>：将每个向量分配到最近的聚类中心，构建倒排列表</li>
+<li><strong>查询阶段</strong>：找到距离查询向量最近的<code>nprobe</code>个聚类中心，只在这些聚类中搜索</li>
+</ol>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>向量空间划分：
+    Cluster 1: [v11, v12, v13, ...]  ← 倒排列表 1
+    Cluster 2: [v21, v22, ...]       ← 倒排列表 2
+    ...
+    Cluster K: [vK1, vK2, ...]       ← 倒排列表 K
+
+查询过程：
+    query → 计算与K个聚类中心的距离
+         → 选最近的nprobe个聚类
+         → 在这nprobe个聚类的所有向量中精确搜索
+</code></pre></div>
+<h3>3.2 pgvector IVFFlat配置</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- 创建IVFFlat索引（需要先有数据用于训练）
+CREATE INDEX ON chunk_embeddings
+    USING ivfflat (embedding vector_cosine_ops)
+    WITH (lists = 100);  -- 聚类数K，典型值：rows/1000
+
+-- 查询时设置探测数
+SET ivfflat.probes = 10; -- 探测最近的nprobe个聚类，典型值：sqrt(lists)
+</code></pre></div>
+<p><strong>IVFFlat vs HNSW选择建议</strong>：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>数据量 &lt; 100K + 需要频繁增量更新 → HNSW
+数据量 &gt; 10M + 内存受限 → IVFFlat
+召回率要求 &gt; 99% → HNSW
+构建时间敏感 → IVFFlat
+</code></pre></div>
+<hr>
+<h2>四、BM25稀疏检索</h2>
+<h3>4.1 从TF-IDF到BM25的演变</h3>
+<p><strong>TF-IDF的缺陷</strong>：</p>
+<ol>
+<li>词频线性增长：一个词出现10次的文档权重是出现1次的10倍，不符合实际</li>
+<li>无文档长度归一化：长文档天然有更高的匹配机会</li>
+<li>参数不可调：无法针对场景优化</li>
+</ol>
+<p><strong>BM25的改进</strong>：引入词频饱和函数和文档长度归一化参数。</p>
+<h3>4.2 BM25公式分解</h3>
+<p>$$BM25(D, Q) = \sum_{i=1}^{n} IDF(q_i) \times \frac{f(q_i, D) \times (k_1 + 1)}{f(q_i, D) + k_1 \times (1 - b + b \times \frac{|D|}{avgdl})}$$</p>
+<p>其中：</p>
+<ul>
+<li>$IDF(q_i)$：逆文档频率，衡量词$q_i$的稀有度</li>
+<li>$f(q_i, D)$：词$q_i$在文档$D$中的频率</li>
+<li>$|D|$：文档长度</li>
+<li>$avgdl$：所有文档的平均长度</li>
+<li>$k_1$：词频饱和参数（典型值1.2-2.0）。$k_1=0$时退化为二值（出现/不出现）</li>
+<li>$b$：文档长度归一化参数（典型值0.75）。$b=0$时不归一化，$b=1$时完全归一化</li>
+</ul>
+<p><strong>IDF的具体公式（Lucene/ES使用）</strong>：
+$$IDF(q_i) = \ln\left(1 + \frac{N - n(q_i) + 0.5}{n(q_i) + 0.5}\right)$$</p>
+<p>其中$N$为文档总数，$n(q_i)$为包含词$q_i$的文档数。</p>
+<h3>4.3 Elasticsearch BM25实现</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import co.elastic.clients.elasticsearch.ElasticsearchClient;
+import co.elastic.clients.elasticsearch.core.SearchResponse;
+import co.elastic.clients.elasticsearch.core.search.Hit;
+import co.elastic.clients.json.jackson.JacksonJsonpMapper;
+import co.elastic.clients.transport.rest_client.RestClientTransport;
+import org.elasticsearch.client.RestClient;
+
+public class ElasticsearchBm25Search {
+
+    private final ElasticsearchClient esClient;
+
+    public ElasticsearchBm25Search(String esUrl) {
+        var restClient = RestClient.builder(
+            java.net.http.HttpClient.newHttpClient()  // 简化示例
+        );
+        // 实际项目中使用RestClient.builder(HttpHost.create(esUrl)).build()
+        this.esClient = null; // 实际初始化
+    }
+
+    /**
+     * BM25检索
+     */
+    public record SearchResult(String chunkId, String content,
+                                double score, Map&lt;String, Object&gt; highlights) {}
+
+    public List&lt;SearchResult&gt; bm25Search(String query, String indexName, int size) throws Exception {
+        var response = esClient.search(s -&gt; s
+            .index(indexName)
+            .query(q -&gt; q
+                .match(m -&gt; m
+                    .field(&quot;content&quot;)
+                    .query(query)
+                )
+            )
+            .size(size)
+            .highlight(h -&gt; h
+                .fields(&quot;content&quot;, hf -&gt; hf
+                    .fragmentSize(150)
+                    .numberOfFragments(3)
+                )
+            )
+            .explain(true), // 开启explain查看BM25计算细节
+            Map.class
+        );
+
+        return response.hits().hits().stream()
+            .map(hit -&gt; new SearchResult(
+                (String) hit.source().get(&quot;chunk_id&quot;),
+                (String) hit.source().get(&quot;content&quot;),
+                hit.score() != null ? hit.score() : 0.0,
+                hit.highlight() != null ? hit.highlight() : Map.of()
+            ))
+            .toList();
+    }
+
+    /**
+     * 使用explain API查看BM25打分细节（调试用）
+     */
+    public String explainScore(String query, String documentId, String indexName) throws Exception {
+        var response = esClient.explain(e -&gt; e
+            .index(indexName)
+            .id(documentId)
+            .query(q -&gt; q.match(m -&gt; m.field(&quot;content&quot;).query(query)))
+        );
+        return response.explanation().toString();
+    }
+}
+</code></pre></div>
+<h3>4.4 PostgreSQL BM25 (ts_rank)</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- PostgreSQL全文搜索示例
+SELECT c.chunk_id, c.content,
+       ts_rank(to_tsvector(&#39;chinese&#39;, c.content),
+               to_tsquery(&#39;chinese&#39;, &#39;向量 &amp; 检索 &amp; 混合&#39;)) AS rank
+FROM chunks c
+WHERE to_tsvector(&#39;chinese&#39;, c.content) @@ to_tsquery(&#39;chinese&#39;, &#39;向量 &amp; 检索 &amp; 混合&#39;)
+ORDER BY rank DESC
+LIMIT 10;
+</code></pre></div>
+<p>注意：PostgreSQL的全文搜索默认使用<code>ts_rank</code>，不是严格意义上的BM25，但效果接近。</p>
+<hr>
+<h2>五、混合检索与RRF融合</h2>
+<h3>5.1 稠密+稀疏的互补性</h3>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th>稠密检索（向量）</th>
+<th>稀疏检索（BM25）</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>匹配方式</td>
+<td>语义相似度</td>
+<td>关键词精确匹配</td>
+</tr>
+<tr>
+<td>优势</td>
+<td>同义词、改写、语义理解</td>
+<td>专有名词、代码、术语精确匹配</td>
+</tr>
+<tr>
+<td>劣势</td>
+<td>对罕见词不敏感</td>
+<td>对语义改写不敏感</td>
+</tr>
+<tr>
+<td>适合Query类型</td>
+<td>自然语言问句</td>
+<td>关键词搜索、实体查询</td>
+</tr>
+</tbody></table>
+<p><strong>核心洞察</strong>：两种检索方式的错误模式不同，融合后可以互补。</p>
+<h3>5.2 RRF (Reciprocal Rank Fusion)</h3>
+<p>RRF是当前最常用的融合策略，不依赖分数的绝对值（向量相似度与BM25分数的量纲不同）。</p>
+<p>$$RRF(d) = \sum_{r \in R} \frac{1}{k + rank_r(d)}$$</p>
+<p>其中：</p>
+<ul>
+<li>$R$：参与融合的排序列表集合</li>
+<li>$rank_r(d)$：文档$d$在排序列表$r$中的排名（从1开始）</li>
+<li>$k$：平滑参数，经典默认值60。$k \to 0$时排名差距越大权重差异越大</li>
+</ul>
+<p><strong>RRF计算示例</strong>：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>文档A: 向量检索排名1, BM25排名3
+  RRF(A) = 1/(60+1) + 1/(60+3) = 0.01639 + 0.01587 = 0.03226
+
+文档B: 向量检索排名2, BM25排名1
+  RRF(B) = 1/(60+2) + 1/(60+1) = 0.01613 + 0.01639 = 0.03252
+
+B排在A前面，虽然A的向量排名更高
+</code></pre></div>
+<h3>5.3 Java实现 — RRF融合算法</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.util.*;
+import java.util.stream.Collectors;
+
+public class HybridSearchService {
+
+    /**
+     * 混合检索结果
+     */
+    public record HybridSearchResult(
+        String chunkId,
+        String content,
+        double rrfScore,
+        double vectorScore,    // 原始向量相似度
+        double bm25Score,      // 原始BM25分数
+        int vectorRank,
+        int bm25Rank,
+        Map&lt;String, Object&gt; metadata
+    ) {}
+
+    /**
+     * 执行混合检索 + RRF融合
+     */
+    public List&lt;HybridSearchResult&gt; hybridSearch(
+            String query, float[] queryEmbedding,
+            String tenantId, List&lt;String&gt; accessLevels,
+            int topK) {
+
+        // 1. 向量检索（pgvector）
+        var vectorResults = vectorSearch(queryEmbedding, tenantId, accessLevels, topK * 2);
+
+        // 2. BM25检索（Elasticsearch或PostgreSQL ts_rank）
+        var bm25Results = bm25Search(query, tenantId, accessLevels, topK * 2);
+
+        // 3. RRF融合
+        return rrfFusion(vectorResults, bm25Results, 60, topK);
+    }
+
+    /**
+     * RRF融合核心算法
+     * @param k RRF平滑参数，默认60
+     */
+    public List&lt;HybridSearchResult&gt; rrfFusion(
+            List&lt;RankedResult&gt; vectorResults,
+            List&lt;RankedResult&gt; bm25Results,
+            int k, int topK) {
+
+        // 构建 chunkId → RRF累积分数 的映射
+        var rrfScores = new HashMap&lt;String, RrfAccumulator&gt;();
+
+        // 处理向量检索结果
+        for (int i = 0; i &lt; vectorResults.size(); i++) {
+            var r = vectorResults.get(i);
+            var acc = rrfScores.computeIfAbsent(r.chunkId(), id -&gt; new RrfAccumulator());
+            acc.addVectorScore(r.score(), i + 1, k);
+        }
+
+        // 处理BM25检索结果
+        for (int i = 0; i &lt; bm25Results.size(); i++) {
+            var r = bm25Results.get(i);
+            var acc = rrfScores.computeIfAbsent(r.chunkId(), id -&gt; new RrfAccumulator());
+            acc.addBm25Score(r.score(), i + 1, k);
+        }
+
+        // 按RRF分数排序，取Top-K
+        return rrfScores.entrySet().stream()
+            .map(e -&gt; {
+                var acc = e.getValue();
+                return new HybridSearchResult(
+                    e.getKey(),
+                    getContent(e.getKey()),
+                    acc.getRrfScore(),
+                    acc.vectorScore,
+                    acc.bm25Score,
+                    acc.vectorRank,
+                    acc.bm25Rank,
+                    getMetadata(e.getKey())
+                );
+            })
+            .sorted((a, b) -&gt; Double.compare(b.rrfScore(), a.rrfScore()))
+            .limit(topK)
+            .toList();
+    }
+
+    /**
+     * 加权分数融合（Weighted Sum）— RRF的替代方案
+     * 需要对向量相似度和BM25分数做归一化（Min-Max或Softmax）
+     */
+    public List&lt;HybridSearchResult&gt; weightedFusion(
+            List&lt;RankedResult&gt; vectorResults,
+            List&lt;RankedResult&gt; bm25Results,
+            double vectorWeight, // 典型值0.7
+            double bm25Weight,   // 典型值0.3
+            int topK) {
+
+        // Min-Max归一化
+        if (vectorResults.isEmpty() || bm25Results.isEmpty()) {
+            return List.of();
+        }
+
+        var vMax = vectorResults.getFirst().score();
+        var vMin = vectorResults.getLast().score();
+        var bMax = bm25Results.getFirst().score();
+        var bMin = bm25Results.getLast().score();
+
+        var scores = new HashMap&lt;String, Double&gt;();
+
+        for (var r : vectorResults) {
+            var normalized = vMax == vMin ? 1.0
+                : (r.score() - vMin) / (vMax - vMin);
+            scores.merge(r.chunkId(), normalized * vectorWeight, Double::sum);
+        }
+
+        for (var r : bm25Results) {
+            var normalized = bMax == bMin ? 1.0
+                : (r.score() - bMin) / (bMax - bMin);
+            scores.merge(r.chunkId(), normalized * bm25Weight, Double::sum);
+        }
+
+        return scores.entrySet().stream()
+            .sorted(Map.Entry.&lt;String, Double&gt;comparingByValue().reversed())
+            .limit(topK)
+            .map(e -&gt; new HybridSearchResult(
+                e.getKey(), getContent(e.getKey()),
+                e.getValue(), 0, 0, 0, 0, getMetadata(e.getKey())
+            ))
+            .toList();
+    }
+
+    // --- 辅助类型 ---
+    public record RankedResult(String chunkId, double score) {}
+
+    private static class RrfAccumulator {
+        double vectorScore = 0;
+        double bm25Score = 0;
+        int vectorRank = -1;
+        int bm25Rank = -1;
+
+        void addVectorScore(double score, int rank, int k) {
+            this.vectorScore = score;
+            this.vectorRank = rank;
+        }
+
+        void addBm25Score(double score, int rank, int k) {
+            this.bm25Score = score;
+            this.bm25Rank = rank;
+        }
+
+        double getRrfScore() {
+            double sum = 0;
+            if (vectorRank &gt; 0) sum += 1.0 / (60 + vectorRank);
+            if (bm25Rank &gt; 0) sum += 1.0 / (60 + bm25Rank);
+            return sum;
+        }
+    }
+
+    // --- 占位方法 ---
+    private List&lt;RankedResult&gt; vectorSearch(float[] embedding, String tenantId,
+                                             List&lt;String&gt; accessLevels, int limit) {
+        // 调用pgvector进行向量检索
+        return List.of();
+    }
+
+    private List&lt;RankedResult&gt; bm25Search(String query, String tenantId,
+                                           List&lt;String&gt; accessLevels, int limit) {
+        // 调用Elasticsearch进行BM25检索
+        return List.of();
+    }
+
+    private String getContent(String chunkId) { return &quot;&quot;; }
+    private Map&lt;String, Object&gt; getMetadata(String chunkId) { return Map.of(); }
+}
+</code></pre></div>
+<h3>5.4 Elasticsearch混合检索（BM25 + kNN + RRF）</h3>
+<p>Elasticsearch 8.12+原生支持混合检索：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+ * Elasticsearch原生混合检索 — BM25 + kNN + RRF
+ */
+public List&lt;SearchResult&gt; esHybridSearch(
+        ElasticsearchClient esClient,
+        String query, float[] queryEmbedding,
+        String indexName, int topK) throws Exception {
+
+    var response = esClient.search(s -&gt; s
+        .index(indexName)
+        .size(topK)
+        // BM25子查询
+        .query(q -&gt; q.bool(b -&gt; b
+            .should(sq -&gt; sq.match(m -&gt; m
+                .field(&quot;content&quot;)
+                .query(query)
+                .boost(1.0f)
+            ))
+        ))
+        // kNN子查询
+        .knn(k -&gt; k
+            .field(&quot;embedding&quot;)
+            .queryVector(Arrays.stream(queryEmbedding)
+                .boxed().toList())
+            .k(topK * 2)
+            .numCandidates(topK * 4)
+        )
+        // RRF融合
+        .rank(r -&gt; r.rrf(rrf -&gt; rrf
+            .windowSize(topK * 2)
+            .rankConstant(60)
+        )),
+        Map.class
+    );
+
+    return response.hits().hits().stream()
+        .map(hit -&gt; new SearchResult(
+            (String) hit.source().get(&quot;chunk_id&quot;),
+            (String) hit.source().get(&quot;content&quot;),
+            hit.score() != null ? hit.score() : 0.0,
+            Map.of()
+        ))
+        .toList();
+}
+</code></pre></div>
+<h3>5.5 PostgreSQL混合检索（ts_rank + pgvector + RRF）</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- PostgreSQL混合检索完整SQL
+WITH vector_results AS (
+    SELECT c.chunk_id, c.content,
+           1 - (e.embedding &lt;=&gt; :query_vector::vector) AS vector_score,
+           ROW_NUMBER() OVER (ORDER BY e.embedding &lt;=&gt; :query_vector::vector) AS vector_rank
+    FROM chunk_embeddings e
+    JOIN chunks c ON e.chunk_id = c.chunk_id
+    WHERE c.status = &#39;active&#39;
+      AND c.tenant_id = :tenant_id
+    ORDER BY e.embedding &lt;=&gt; :query_vector::vector
+    LIMIT :limit
+),
+bm25_results AS (
+    SELECT c.chunk_id, c.content,
+           ts_rank(to_tsvector(&#39;chinese&#39;, c.content),
+                   plainto_tsquery(&#39;chinese&#39;, :query_text)) AS bm25_score,
+           ROW_NUMBER() OVER (ORDER BY
+               ts_rank(to_tsvector(&#39;chinese&#39;, c.content),
+                       plainto_tsquery(&#39;chinese&#39;, :query_text)) DESC
+           ) AS bm25_rank
+    FROM chunks c
+    WHERE to_tsvector(&#39;chinese&#39;, c.content) @@ plainto_tsquery(&#39;chinese&#39;, :query_text)
+      AND c.status = &#39;active&#39;
+      AND c.tenant_id = :tenant_id
+    ORDER BY bm25_score DESC
+    LIMIT :limit
+),
+combined AS (
+    SELECT
+        COALESCE(v.chunk_id, b.chunk_id) AS chunk_id,
+        COALESCE(v.content, b.content) AS content,
+        COALESCE(v.vector_score, 0) AS vector_score,
+        COALESCE(b.bm25_score, 0) AS bm25_score,
+        COALESCE(v.vector_rank, :fallback_rank) AS vector_rank,
+        COALESCE(b.bm25_rank, :fallback_rank) AS bm25_rank
+    FROM vector_results v
+    FULL OUTER JOIN bm25_results b ON v.chunk_id = b.chunk_id
+)
+SELECT chunk_id, content, vector_score, bm25_score,
+       (1.0 / (60 + vector_rank) + 1.0 / (60 + bm25_rank)) AS rrf_score
+FROM combined
+ORDER BY rrf_score DESC
+LIMIT :top_k;
+</code></pre></div>
+<hr>
+<h2>六、元数据过滤策略</h2>
+<h3>6.1 Pre-filtering vs Post-filtering</h3>
+<p><strong>Pre-filtering（先过滤再检索）</strong>：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- pgvector: WHERE子句在ORDER BY之前执行
+SELECT c.chunk_id, c.content,
+       1 - (e.embedding &lt;=&gt; :query_vector) AS similarity
+FROM chunk_embeddings e
+JOIN chunks c ON e.chunk_id = c.chunk_id
+WHERE c.tenant_id = :tenant_id           -- 过滤
+  AND c.access_level IN (:access_levels)  -- 过滤
+  AND c.created_at &gt; :since               -- 过滤
+ORDER BY e.embedding &lt;=&gt; :query_vector
+LIMIT 10;
+</code></pre></div>
+<ul>
+<li><strong>优点</strong>：精确控制返回数量</li>
+<li><strong>缺点</strong>：可能排除了语义相关但不满足过滤条件的文档（更安全的选择）</li>
+</ul>
+<p><strong>Post-filtering（先检索再过滤）</strong>：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- 先检索更多，再在应用层过滤
+SELECT ... LIMIT 50  -- 取更多
+-- 然后在Java代码中过滤
+</code></pre></div>
+<ul>
+<li><strong>优点</strong>：不会因过滤条件漏掉潜在相关文档</li>
+<li><strong>缺点</strong>：返回数量不可控</li>
+</ul>
+<p><strong>最佳实践</strong>：Pre-filtering + 适当扩大检索范围（<code>limit * 1.5 ~ 2</code>）。</p>
+<h3>6.2 Java实现</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class FilteredSearchService {
+
+    /**
+     * Pre-filtering策略：在SQL/ES层面完成过滤
+     */
+    public List&lt;HybridSearchResult&gt; searchWithFilters(
+            float[] queryEmbedding, String query,
+            FilterCriteria criteria, int topK) {
+
+        var expandedLimit = (int) (topK * 2.0); // 扩大检索范围
+
+        var vectorResults = vectorSearchWithFilters(
+            queryEmbedding, criteria, expandedLimit
+        );
+        var bm25Results = bm25SearchWithFilters(
+            query, criteria, expandedLimit
+        );
+
+        var fused = rrfFusion(vectorResults, bm25Results, 60, topK);
+
+        // 后置检查（双保险）
+        return fused.stream()
+            .filter(r -&gt; criteria.matches(r.metadata()))
+            .limit(topK)
+            .toList();
+    }
+
+    public record FilterCriteria(
+        String tenantId,
+        List&lt;String&gt; accessLevels,
+        String category,
+        List&lt;String&gt; tags,
+        java.time.Instant since,
+        java.time.Instant until
+    ) {
+        public boolean matches(Map&lt;String, Object&gt; metadata) {
+            if (tenantId != null &amp;&amp; !tenantId.equals(metadata.get(&quot;tenant_id&quot;))) return false;
+            if (!accessLevels.isEmpty() &amp;&amp; !accessLevels.contains(metadata.get(&quot;access_level&quot;))) return false;
+            // ... 更多条件
+            return true;
+        }
+    }
+}
+</code></pre></div>
+<hr>
+<h2>七、性能数据</h2>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>索引类型</th>
+<th>向量数</th>
+<th>检索耗时</th>
+<th>召回率@10</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>pgvector HNSW</td>
+<td>cosine</td>
+<td>100K</td>
+<td>5ms</td>
+<td>99.2%</td>
+</tr>
+<tr>
+<td>pgvector HNSW</td>
+<td>cosine</td>
+<td>1M</td>
+<td>12ms</td>
+<td>99.0%</td>
+</tr>
+<tr>
+<td>pgvector HNSW</td>
+<td>cosine</td>
+<td>10M</td>
+<td>35ms</td>
+<td>98.5%</td>
+</tr>
+<tr>
+<td>pgvector IVFFlat</td>
+<td>cosine</td>
+<td>1M</td>
+<td>25ms</td>
+<td>97.0%</td>
+</tr>
+<tr>
+<td>ES BM25</td>
+<td>-</td>
+<td>1M docs</td>
+<td>8ms</td>
+<td>N/A</td>
+</tr>
+<tr>
+<td>ES Hybrid (BM25+kNN+RRF)</td>
+<td>-</td>
+<td>1M docs</td>
+<td>30ms</td>
+<td>99.5%</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>八、最佳实践</h2>
+<ol>
+<li><strong>默认使用HNSW</strong>：召回率和速度综合最优</li>
+<li><strong>混合检索作为标配</strong>：BM25 + 向量 + RRF</li>
+<li><strong>平滑参数k=60</strong>：经典默认值，大多数场景无需调整</li>
+<li><strong>扩大检索范围 + Pre-filtering</strong>：先取limit×2，数据库层过滤</li>
+<li><strong>Metadat过滤下推到数据库</strong>：SQL WHERE / ES filter context</li>
+<li><strong>定期ANALYZE向量索引</strong>：索引膨胀后需要维护</li>
+</ol>
+<h2>九、反模式</h2>
+<ul>
+<li><strong>仅用向量检索</strong>：丢失精确匹配能力</li>
+<li><strong>混合检索不融合直接拼接</strong>：向量Top-10 + BM25 Top-10 = 20个结果缺乏统一排序</li>
+<li><strong>在应用层做元数据过滤</strong>：检索后只剩3条，用户看不到完整结果</li>
+<li><strong>盲目增大ef_search追求召回率</strong>：ef_search=500时延迟可能是100的5倍</li>
+</ul>
+<h2>相关条目</h2>
+<ul>
+<li><a href="/11-检索与RAG/检索技术/11-重排与上下文处理" class="cross-ref" data-ref="11-重排与上下文处理">11-重排与上下文处理</a> — 检索后的重排优化</li>
+<li><a href="/11-检索与RAG/RAG实现/11-高级RAG模式" class="cross-ref" data-ref="11-高级RAG模式">11-高级RAG模式</a> — 基于混合检索的高级RAG模式</li>
+<li><a href="/11-检索与RAG/RAG实现/11-完整RAG流水线实现" class="cross-ref" data-ref="11-完整RAG流水线实现">11-完整RAG流水线实现</a> — 完整RAG流水线</li>
+<li><a href="/04-数据与中间件/数据库与缓存/04-PostgreSQL与pgvector深度解析" class="cross-ref" data-ref="04-PostgreSQL与pgvector深度解析">04-PostgreSQL与pgvector深度解析</a> — pgvector深入</li>
+</ul>
+</div>
+</article>

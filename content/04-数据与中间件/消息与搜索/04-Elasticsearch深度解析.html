@@ -1,0 +1,863 @@
+
+<article class="kb-entry" data-path="/04-数据与中间件/消息与搜索/04-Elasticsearch深度解析">
+  <div class="entry-meta">
+    <div class="entry-domain"><a href="/?d=04">04-数据与中间件</a></div>
+    <h1>Elasticsearch 深度解析</h1>
+    <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#["elasticsearch"</span><span class="badge badge-tag">#"inverted-index"</span><span class="badge badge-tag">#"bm25"</span><span class="badge badge-tag">#"aggregation"</span></div>
+    
+  </div>
+  <div class="entry-body"><h1>Elasticsearch 深度解析</h1>
+<h2>概述</h2>
+<p>Elasticsearch 是基于 Apache Lucene 的分布式搜索和分析引擎，在 AI 应用中承担全文检索、向量检索、混合搜索和语义重排等核心角色。RAG 系统典型的检索流水线中，ES 作为多阶段检索的执行引擎：BM25 关键词检索 → kNN 向量检索 → 语义重排。</p>
+<p>本文深入倒排索引原理、分析器链、查询 DSL、相关性评分机制、向量检索能力、集群管理和性能优化。</p>
+<hr>
+<h2>一、基础概念</h2>
+<h3>1.1 核心抽象</h3>
+<table>
+<thead>
+<tr>
+<th>概念</th>
+<th>Elasticsearch</th>
+<th>关系数据库类比</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Index</td>
+<td>索引</td>
+<td>Table</td>
+</tr>
+<tr>
+<td>Document</td>
+<td>文档</td>
+<td>Row</td>
+</tr>
+<tr>
+<td>Field</td>
+<td>字段</td>
+<td>Column</td>
+</tr>
+<tr>
+<td>Mapping</td>
+<td>映射</td>
+<td>Schema</td>
+</tr>
+<tr>
+<td>Shard</td>
+<td>分片</td>
+<td>Partition</td>
+</tr>
+<tr>
+<td>Replica</td>
+<td>副本</td>
+<td>Replica</td>
+</tr>
+</tbody></table>
+<h3>1.2 索引架构</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Index (逻辑)
+├── Primary Shard 0 ────── Replica Shard 0 (在另一个节点)
+├── Primary Shard 1 ────── Replica Shard 1
+└── Primary Shard 2 ────── Replica Shard 2
+
+每个 Shard 是一个独立的 Lucene Index
+</code></pre></div>
+<h3>1.3 倒排索引原理</h3>
+<p>倒排索引是 Elasticsearch 高效全文检索的基础。</p>
+<p><strong>数据结构：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>倒排索引 = Term Dictionary + Posting List
+
+Term Dictionary (FST/Finite State Transducer, 内存映射):
+  &quot;elasticsearch&quot; → term_id: 3
+  &quot;kafka&quot;         → term_id: 7
+  &quot;redis&quot;         → term_id: 12
+
+Posting List (倒排表 + 跳表/Skip List):
+  term_id: 3 → [doc_id: [1(tf=2), 5(tf=1), 9(tf=3)]]
+               └─ skip: doc_id 1 → doc_id 5 → doc_id 9
+</code></pre></div>
+<p><strong>跳表（Skip List）加速交集运算：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Query: &quot;elasticsearch AND kafka&quot;
+doc_ids(elasticsearch): [1, 5, 9, 15, 20, ...]
+doc_ids(kafka):         [3, 5, 8, 20, ...]
+
+使用跳表快速定位：
+1. elasticsearch[0]=1 &lt; kafka[0]=3 → 移动 elasticsearch
+2. 都定位到 5 → 匹配！都移动
+3. elasticsearch[2]=9 &gt; kafka[2]=8 → 移动 kafka
+4. 都定位到 20 → 匹配！
+</code></pre></div>
+<p><strong>字段存储方式：</strong></p>
+<table>
+<thead>
+<tr>
+<th>存储方式</th>
+<th>用途</th>
+<th>查询类型</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>inverted index</code></td>
+<td>全文检索</td>
+<td>match, match_phrase</td>
+</tr>
+<tr>
+<td><code>doc_values</code></td>
+<td>聚合、排序</td>
+<td>terms aggregation, sort</td>
+</tr>
+<tr>
+<td><code>fielddata</code></td>
+<td>聚合、排序（text 类型，已废弃）</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>_source</code></td>
+<td>原始 JSON 文档</td>
+<td>返回搜索结果</td>
+</tr>
+<tr>
+<td><code>stored fields</code></td>
+<td>特定字段原始值</td>
+<td>stored_fields 参数</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>二、分析器（Analyzer）</h2>
+<h3>2.1 分析器链</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>&quot;Hello, Elasticsearch 2026!&quot;
+        │
+        ▼
+┌────────────────────┐
+│ Character Filter   │ ← HTML 剥离、特殊字符映射
+│ → &quot;Hello, Elasticsearch 2026!&quot;
+└────────┬───────────┘
+         ▼
+┌────────────────────┐
+│ Tokenizer          │ ← 按规则切分 Token
+│ → [Hello, Elasticsearch, 2026]
+└────────┬───────────┘
+         ▼
+┌────────────────────┐
+│ Token Filters      │ ← 小写化、停用词、同义词、N-gram
+│ → [hello, elasticsearch, 2026]
+└────────────────────┘
+</code></pre></div>
+<h3>2.2 自定义分析器</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-json">PUT /my_index
+{
+  &quot;settings&quot;: {
+    &quot;analysis&quot;: {
+      &quot;char_filter&quot;: {
+        &quot;my_char_filter&quot;: {
+          &quot;type&quot;: &quot;mapping&quot;,
+          &quot;mappings&quot;: [&quot;&amp;=&gt; and&quot;, &quot;=&gt;=&gt; greater_than&quot;]
+        }
+      },
+      &quot;filter&quot;: {
+        &quot;my_stop&quot;: {
+          &quot;type&quot;: &quot;stop&quot;,
+          &quot;stopwords&quot;: [&quot;_english_&quot;, &quot;the&quot;, &quot;a&quot;]
+        },
+        &quot;my_synonym&quot;: {
+          &quot;type&quot;: &quot;synonym&quot;,
+          &quot;synonyms&quot;: [&quot;AI, artificial intelligence, 人工智能&quot;]
+        }
+      },
+      &quot;analyzer&quot;: {
+        &quot;my_analyzer&quot;: {
+          &quot;type&quot;: &quot;custom&quot;,
+          &quot;char_filter&quot;: [&quot;html_strip&quot;, &quot;my_char_filter&quot;],
+          &quot;tokenizer&quot;: &quot;standard&quot;,
+          &quot;filter&quot;: [&quot;lowercase&quot;, &quot;my_stop&quot;, &quot;my_synonym&quot;]
+        }
+      }
+    }
+  }
+}
+</code></pre></div>
+<h3>2.3 ik 分词器</h3>
+<p>中文分词首选插件 <code>elasticsearch-analysis-ik</code>。</p>
+<table>
+<thead>
+<tr>
+<th>模式</th>
+<th>粒度</th>
+<th>示例</th>
+<th>适用场景</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>ik_smart</code></td>
+<td>最粗</td>
+<td>&quot;中华人民共和国&quot; → [&quot;中华人民共和国&quot;]</td>
+<td>短语匹配</td>
+</tr>
+<tr>
+<td><code>ik_max_word</code></td>
+<td>最细</td>
+<td>&quot;中华人民共和国&quot; → [&quot;中华人民共和国&quot;, &quot;中华人民&quot;, &quot;中华&quot;, &quot;华人&quot;, &quot;人民共和国&quot;, &quot;人民&quot;, &quot;共和国&quot;, &quot;共和&quot;, &quot;国&quot;]</td>
+<td>索引阶段（提高召回率）</td>
+</tr>
+</tbody></table>
+<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-json">PUT /docs
+{
+  &quot;settings&quot;: {
+    &quot;analysis&quot;: {
+      &quot;analyzer&quot;: {
+        &quot;ik_index_analyzer&quot;: {
+          &quot;type&quot;: &quot;custom&quot;,
+          &quot;tokenizer&quot;: &quot;ik_max_word&quot;,
+          &quot;filter&quot;: [&quot;lowercase&quot;]
+        },
+        &quot;ik_search_analyzer&quot;: {
+          &quot;type&quot;: &quot;custom&quot;,
+          &quot;tokenizer&quot;: &quot;ik_smart&quot;,
+          &quot;filter&quot;: [&quot;lowercase&quot;]
+        }
+      }
+    }
+  },
+  &quot;mappings&quot;: {
+    &quot;properties&quot;: {
+      &quot;title&quot;: {
+        &quot;type&quot;: &quot;text&quot;,
+        &quot;analyzer&quot;: &quot;ik_index_analyzer&quot;,
+        &quot;search_analyzer&quot;: &quot;ik_search_analyzer&quot;
+      }
+    }
+  }
+}
+</code></pre></div>
+<p><strong>索引时细粒度 + 搜索时粗粒度</strong> 是最佳实践：提高召回率同时保证精度。</p>
+<hr>
+<h2>三、查询 DSL</h2>
+<h3>3.1 Bool Query</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-json">{
+  &quot;query&quot;: {
+    &quot;bool&quot;: {
+      &quot;must&quot;: [
+        { &quot;match&quot;: { &quot;title&quot;: &quot;spring ai&quot; } }
+      ],
+      &quot;filter&quot;: [
+        { &quot;term&quot;: { &quot;status&quot;: &quot;published&quot; } },
+        { &quot;range&quot;: { &quot;created_at&quot;: { &quot;gte&quot;: &quot;2026-01-01&quot; } } }
+      ],
+      &quot;should&quot;: [
+        { &quot;term&quot;: { &quot;tags&quot;: &quot;ai&quot; } },
+        { &quot;term&quot;: { &quot;tags&quot;: &quot;machine-learning&quot; } }
+      ],
+      &quot;must_not&quot;: [
+        { &quot;term&quot;: { &quot;status&quot;: &quot;deleted&quot; } }
+      ],
+      &quot;minimum_should_match&quot;: 1
+    }
+  }
+}
+</code></pre></div>
+<table>
+<thead>
+<tr>
+<th>子句</th>
+<th>用途</th>
+<th>对评分的影响</th>
+<th>缓存</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>must</code></td>
+<td>AND 逻辑，必须匹配</td>
+<td>参与计分</td>
+<td>不缓存</td>
+</tr>
+<tr>
+<td><code>filter</code></td>
+<td>精确过滤</td>
+<td>不计分</td>
+<td>自动缓存</td>
+</tr>
+<tr>
+<td><code>should</code></td>
+<td>OR 逻辑</td>
+<td>参与计分</td>
+<td>不缓存</td>
+</tr>
+<tr>
+<td><code>must_not</code></td>
+<td>NOT 逻辑</td>
+<td>不计分</td>
+<td>自动缓存</td>
+</tr>
+</tbody></table>
+<h3>3.2 核心查询类型</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-json">// Term 查询（不分词，精确匹配keyword类型）
+{ &quot;term&quot;: { &quot;user_id&quot;: &quot;12345&quot; } }
+
+// Terms 查询（多值精确匹配）
+{ &quot;terms&quot;: { &quot;tags&quot;: [&quot;java&quot;, &quot;spring&quot;, &quot;ai&quot;] } }
+
+// Match 查询（分词后匹配）
+{ &quot;match&quot;: { &quot;content&quot;: &quot;分布式事务实现&quot; } }
+
+// Match Phrase 查询（分词+顺序匹配）
+{ &quot;match_phrase&quot;: { &quot;content&quot;: &quot;分布式事务&quot;, &quot;slop&quot;: 2 } }
+
+// Multi-Match 查询（多字段搜索）
+{
+  &quot;multi_match&quot;: {
+    &quot;query&quot;: &quot;spring ai pgvector&quot;,
+    &quot;fields&quot;: [&quot;title^3&quot;, &quot;content&quot;, &quot;tags^2&quot;]
+  }
+}
+
+// Range 查询
+{
+  &quot;range&quot;: {
+    &quot;price&quot;: { &quot;gte&quot;: 100, &quot;lte&quot;: 500 }
+  }
+}
+
+// Wildcard 查询（性能差，避免前导通配符）
+{ &quot;wildcard&quot;: { &quot;email&quot;: &quot;*@example.com&quot; } }
+</code></pre></div>
+<h3>3.3 聚合（Aggregation）</h3>
+<p><strong>Bucket 聚合（分桶）：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-json">{
+  &quot;size&quot;: 0,
+  &quot;aggs&quot;: {
+    &quot;status_distribution&quot;: {
+      &quot;terms&quot;: { &quot;field&quot;: &quot;status&quot;, &quot;size&quot;: 10 }
+    },
+    &quot;date_histogram&quot;: {
+      &quot;date_histogram&quot;: {
+        &quot;field&quot;: &quot;created_at&quot;,
+        &quot;calendar_interval&quot;: &quot;1d&quot;
+      }
+    }
+  }
+}
+</code></pre></div>
+<p><strong>Metrics 聚合（计算）：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-json">{
+  &quot;size&quot;: 0,
+  &quot;aggs&quot;: {
+    &quot;avg_response_time&quot;: { &quot;avg&quot;: { &quot;field&quot;: &quot;response_time_ms&quot; } },
+    &quot;max_response_time&quot;: { &quot;max&quot;: { &quot;field&quot;: &quot;response_time_ms&quot; } },
+    &quot;p95_response_time&quot;: {
+      &quot;percentiles&quot;: { &quot;field&quot;: &quot;response_time_ms&quot;, &quot;percents&quot;: [50, 95, 99] }
+    }
+  }
+}
+</code></pre></div>
+<p><strong>Pipeline 聚合（对聚合结果的二次计算）：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-json">{
+  &quot;size&quot;: 0,
+  &quot;aggs&quot;: {
+    &quot;daily_orders&quot;: {
+      &quot;date_histogram&quot;: { &quot;field&quot;: &quot;created_at&quot;, &quot;calendar_interval&quot;: &quot;day&quot; },
+      &quot;aggs&quot;: {
+        &quot;order_count&quot;: { &quot;value_count&quot;: { &quot;field&quot;: &quot;id&quot; } }
+      }
+    },
+    &quot;avg_daily_orders&quot;: {
+      &quot;avg_bucket&quot;: {
+        &quot;buckets_path&quot;: &quot;daily_orders&gt;order_count&quot;
+      }
+    }
+  }
+}
+</code></pre></div>
+<hr>
+<h2>四、相关性评分</h2>
+<h3>4.1 BM25 公式</h3>
+<p>Elasticsearch 默认使用 BM25（Best Matching 25）评分：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>score(doc, query) = sum(
+  IDF(qi) * (f(qi, doc) * (k1 + 1)) / (f(qi, doc) + k1 * (1 - b + b * |doc| / avg_doc_len))
+)
+where:
+- IDF(qi) = log(1 + (docCount - f(qi) + 0.5) / (f(qi) + 0.5))
+- f(qi, doc) = 词项 qi 在文档 doc 中的频率
+- |doc| = 文档长度
+- avg_doc_len = 平均文档长度
+- k1 = 1.2 (词频饱和参数)
+- b = 0.75 (长度归一化参数)
+</code></pre></div>
+<h3>4.2 Explain API</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-json">GET /my_index/_explain/doc_id
+{
+  &quot;query&quot;: { &quot;match&quot;: { &quot;title&quot;: &quot;elasticsearch&quot; } }
+}
+
+// 返回：
+{
+  &quot;value&quot;: 3.14,
+  &quot;description&quot;: &quot;weight(title:elasticsearch in 42) [PerFieldSimilarity], result of:&quot;,
+  &quot;details&quot;: [
+    {
+      &quot;value&quot;: 3.14,
+      &quot;description&quot;: &quot;score(freq=3.0), computed as boost * idf * tf from:&quot;,
+      &quot;details&quot;: [
+        { &quot;value&quot;: 2.2, &quot;description&quot;: &quot;idf, computed as ...&quot; },
+        { &quot;value&quot;: 1.43, &quot;description&quot;: &quot;tf, computed as ...&quot; }
+      ]
+    }
+  ]
+}
+</code></pre></div>
+<h3>4.3 Function Score</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-json">{
+  &quot;query&quot;: {
+    &quot;function_score&quot;: {
+      &quot;query&quot;: { &quot;match&quot;: { &quot;title&quot;: &quot;elasticsearch&quot; } },
+      &quot;boost_mode&quot;: &quot;multiply&quot;,
+      &quot;functions&quot;: [
+        {
+          &quot;filter&quot;: { &quot;term&quot;: { &quot;is_verified&quot;: true } },
+          &quot;weight&quot;: 2
+        },
+        {
+          &quot;field_value_factor&quot;: {
+            &quot;field&quot;: &quot;popularity&quot;,
+            &quot;modifier&quot;: &quot;log1p&quot;,
+            &quot;factor&quot;: 0.1
+          }
+        },
+        {
+          &quot;gauss&quot;: {
+            &quot;publish_date&quot;: {
+              &quot;origin&quot;: &quot;2026-07-17&quot;,
+              &quot;scale&quot;: &quot;30d&quot;,
+              &quot;decay&quot;: 0.5
+            }
+          }
+        }
+      ]
+    }
+  }
+}
+</code></pre></div>
+<hr>
+<h2>五、向量检索</h2>
+<h3>5.1 dense_vector 类型</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-json">PUT /docs
+{
+  &quot;mappings&quot;: {
+    &quot;properties&quot;: {
+      &quot;title&quot;: { &quot;type&quot;: &quot;text&quot; },
+      &quot;content&quot;: { &quot;type&quot;: &quot;text&quot; },
+      &quot;title_vector&quot;: {
+        &quot;type&quot;: &quot;dense_vector&quot;,
+        &quot;dims&quot;: 1536,
+        &quot;index&quot;: true,
+        &quot;similarity&quot;: &quot;cosine&quot;
+      },
+      &quot;content_vector&quot;: {
+        &quot;type&quot;: &quot;dense_vector&quot;,
+        &quot;dims&quot;: 1536,
+        &quot;index&quot;: true,
+        &quot;similarity&quot;: &quot;dot_product&quot;
+      }
+    }
+  }
+}
+</code></pre></div>
+<h3>5.2 kNN 查询</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-json">GET /docs/_search
+{
+  &quot;knn&quot;: {
+    &quot;field&quot;: &quot;content_vector&quot;,
+    &quot;query_vector&quot;: [0.12, -0.34, 0.56, ...],
+    &quot;k&quot;: 10,
+    &quot;num_candidates&quot;: 100
+  }
+}
+</code></pre></div>
+<h3>5.3 混合检索（RRF 融合）</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-json">GET /docs/_search
+{
+  &quot;sub_searches&quot;: [
+    {
+      &quot;query&quot;: {
+        &quot;match&quot;: {
+          &quot;content&quot;: {
+            &quot;query&quot;: &quot;分布式事务实现方案&quot;,
+            &quot;boost&quot;: 1.0
+          }
+        }
+      }
+    },
+    {
+      &quot;knn&quot;: {
+        &quot;field&quot;: &quot;content_vector&quot;,
+        &quot;query_vector&quot;: [0.12, -0.34, ...],
+        &quot;k&quot;: 10,
+        &quot;num_candidates&quot;: 50
+      }
+    }
+  ],
+  &quot;rank&quot;: {
+    &quot;rrf&quot;: {
+      &quot;window_size&quot;: 50,
+      &quot;rank_constant&quot;: 60
+    }
+  }
+}
+</code></pre></div>
+<h3>5.4 语义重排</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-json">// 使用 text_similarity_reranker（ES 8.15+ 支持 Cross-Encoder 重排）
+GET /docs/_search
+{
+  &quot;retriever&quot;: {
+    &quot;standard&quot;: {
+      &quot;query&quot;: {
+        &quot;match&quot;: { &quot;content&quot;: &quot;如何实现分布式事务&quot; }
+      }
+    }
+  },
+  &quot;rank&quot;: {
+    &quot;rrf&quot;: { /* ... */ }
+  },
+  &quot;retrievers&quot;: {
+    &quot;rrf_reranker&quot;: {
+      &quot;text_similarity_reranker&quot;: {
+        &quot;retriever&quot;: {
+          &quot;standard&quot;: { /* ... */ }
+        },
+        &quot;field&quot;: &quot;content&quot;,
+        &quot;inference_id&quot;: &quot;my-cross-encoder&quot;,
+        &quot;inference_text&quot;: &quot;如何实现分布式事务&quot;,
+        &quot;min_score&quot;: 0.5
+      }
+    }
+  }
+}
+</code></pre></div>
+<hr>
+<h2>六、索引优化</h2>
+<h3>6.1 Mapping 设计</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-json">PUT /optimized_docs
+{
+  &quot;settings&quot;: {
+    &quot;number_of_shards&quot;: 3,
+    &quot;number_of_replicas&quot;: 1,
+    &quot;refresh_interval&quot;: &quot;30s&quot;,      // 降低刷新频率提高写入性能
+    &quot;index&quot;: {
+      &quot;sort.field&quot;: &quot;created_at&quot;,   // 索引排序（提升范围查询）
+      &quot;sort.order&quot;: &quot;desc&quot;
+    }
+  },
+  &quot;mappings&quot;: {
+    &quot;dynamic&quot;: &quot;strict&quot;,            // 禁止动态映射，防止字段爆炸
+    &quot;_source&quot;: { &quot;enabled&quot;: true },
+    &quot;properties&quot;: {
+      &quot;id&quot;: { &quot;type&quot;: &quot;keyword&quot; },
+      &quot;title&quot;: {
+        &quot;type&quot;: &quot;text&quot;,
+        &quot;analyzer&quot;: &quot;ik_max_word&quot;,
+        &quot;search_analyzer&quot;: &quot;ik_smart&quot;,
+        &quot;fields&quot;: {
+          &quot;keyword&quot;: { &quot;type&quot;: &quot;keyword&quot; }  // 多字段映射
+        }
+      },
+      &quot;status&quot;: { &quot;type&quot;: &quot;keyword&quot;, &quot;doc_values&quot;: true },
+      &quot;created_at&quot;: { &quot;type&quot;: &quot;date&quot;, &quot;doc_values&quot;: true },
+      &quot;content_vector&quot;: {
+        &quot;type&quot;: &quot;dense_vector&quot;,
+        &quot;dims&quot;: 1536,
+        &quot;index&quot;: true,
+        &quot;similarity&quot;: &quot;cosine&quot;
+      }
+    }
+  }
+}
+</code></pre></div>
+<h3>6.2 Refresh / Flush / Merge</h3>
+<table>
+<thead>
+<tr>
+<th>操作</th>
+<th>触发条件</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Refresh</td>
+<td>默认 1s</td>
+<td>将内存中的文档写入 Segment（可搜索）</td>
+</tr>
+<tr>
+<td>Flush</td>
+<td>30m 或 translog 满</td>
+<td>将 Segment 持久化到磁盘 + 清空 translog</td>
+</tr>
+<tr>
+<td>Merge</td>
+<td>自动后台</td>
+<td>合并小 Segment 为大 Segment</td>
+</tr>
+</tbody></table>
+<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-json">PUT /my_index/_settings
+{
+  &quot;refresh_interval&quot;: &quot;30s&quot;,
+  &quot;translog&quot;: {
+    &quot;durability&quot;: &quot;async&quot;,
+    &quot;sync_interval&quot;: &quot;5s&quot;
+  }
+}
+</code></pre></div>
+<h3>6.3 Force Merge</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-json">// 索引不再写入后，强制合并减少 Segment 数量
+POST /my_index/_forcemerge?max_num_segments=1&amp;only_expunge_deletes=true
+
+// 批量重建索引后执行
+POST /rebuild_target/_forcemerge?max_num_segments=5
+</code></pre></div>
+<p><strong>注意：</strong> Force merge 是 I/O 密集型操作，仅在索引写入停止后执行，生产环境使用 <code>max_num_segments=5-10</code> 而非 1。</p>
+<h3>6.4 段合并策略</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-json">PUT /my_index/_settings
+{
+  &quot;index.merge.policy.max_merged_segment&quot;: &quot;5gb&quot;,
+  &quot;index.merge.policy.segments_per_tier&quot;: 10,
+  &quot;index.merge.policy.max_merge_at_once&quot;: 10
+}
+</code></pre></div>
+<hr>
+<h2>七、集群管理</h2>
+<h3>7.1 集群健康状态</h3>
+<table>
+<thead>
+<tr>
+<th>状态</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Green</td>
+<td>所有主分片和副本已分配</td>
+</tr>
+<tr>
+<td>Yellow</td>
+<td>所有主分片已分配，部分副本未分配</td>
+</tr>
+<tr>
+<td>Red</td>
+<td>部分主分片未分配（数据丢失/不可用）</td>
+</tr>
+</tbody></table>
+<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-json">GET /_cluster/health
+GET /_cat/shards?v
+GET /_cat/indices?v
+</code></pre></div>
+<h3>7.2 Master 选举</h3>
+<p>Master 节点负责集群元数据管理（索引创建/删除、分片分配、节点增删）。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Zen Discovery (ES 7.x-) → 基于 Bully 算法的单轮选举
+ES 8.x+ → 改进的选举协议，使用基于 term 的共识
+
+候选 Master 节点配置：
+node.roles: [master, data_content]  # 默认
+node.roles: [master]                # 专用 Master（推荐大型集群）
+</code></pre></div>
+<h3>7.3 Hot-Warm-Cold 架构</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>              写入
+ ┌─────────────────────────────────┐
+ │   Hot Nodes (SSD, 高性能)        │  ← 近期数据 (0-7 天)
+ │   CPU/Memory optimized          │
+ └───────────────┬─────────────────┘
+                 │ ILM 迁移 (7 天)
+ ┌───────────────▼─────────────────┐
+ │   Warm Nodes (HDD, 中等性能)     │  ← 历史数据 (7-30 天)
+ │   less replicas, merged segments│
+ └───────────────┬─────────────────┘
+                 │ ILM 迁移 (30 天)
+ ┌───────────────▼─────────────────┐
+ │   Cold Nodes (HDD, 高密度)      │  ← 归档数据 (30+ 天)
+ │   force merged, searchable snap │
+ └─────────────────────────────────┘
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-json">PUT _ilm/policy/logs_policy
+{
+  &quot;phases&quot;: {
+    &quot;hot&quot;: {
+      &quot;actions&quot;: { &quot;rollover&quot;: { &quot;max_size&quot;: &quot;50GB&quot;, &quot;max_age&quot;: &quot;1d&quot; } }
+    },
+    &quot;warm&quot;: {
+      &quot;min_age&quot;: &quot;7d&quot;,
+      &quot;actions&quot;: {
+        &quot;forcemerge&quot;: { &quot;max_num_segments&quot;: 1 },
+        &quot;shrink&quot;: { &quot;number_of_shards&quot;: 1 },
+        &quot;allocate&quot;: { &quot;require&quot;: { &quot;data&quot;: &quot;warm&quot; } }
+      }
+    },
+    &quot;delete&quot;: {
+      &quot;min_age&quot;: &quot;90d&quot;,
+      &quot;actions&quot;: { &quot;delete&quot;: {} }
+    }
+  }
+}
+</code></pre></div>
+<hr>
+<h2>八、性能优化</h2>
+<h3>8.1 查询缓存</h3>
+<table>
+<thead>
+<tr>
+<th>缓存类型</th>
+<th>作用域</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Node Query Cache</td>
+<td>节点级</td>
+<td>Filter 子句的 bitset 结果</td>
+</tr>
+<tr>
+<td>Shard Request Cache</td>
+<td>分片级</td>
+<td>整个查询的序列化结果</td>
+</tr>
+<tr>
+<td>Fielddata Cache</td>
+<td>分片级</td>
+<td>text 字段聚合（已基本不用）</td>
+</tr>
+</tbody></table>
+<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-json">GET /_nodes/stats/indices/query_cache
+GET /_nodes/stats/indices/request_cache
+</code></pre></div>
+<h3>8.2 doc_values</h3>
+<p>默认所有 keyword、date、numeric、geo_point 类型字段开启 <code>doc_values</code>（列式存储），用于聚合和排序。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-json">// 始终不需要聚合排序的字段关闭 doc_values 节省磁盘
+{
+  &quot;mappings&quot;: {
+    &quot;properties&quot;: {
+      &quot;raw_content&quot;: {
+        &quot;type&quot;: &quot;keyword&quot;,
+        &quot;doc_values&quot;: false
+      }
+    }
+  }
+}
+</code></pre></div>
+<h3>8.3 性能诊断</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-json">// Profile API（分析各组件耗时）
+GET /docs/_search
+{
+  &quot;profile&quot;: true,
+  &quot;query&quot;: { &quot;match&quot;: { &quot;content&quot;: &quot;elasticsearch&quot; } }
+}
+
+// Hot Threads（查看繁忙线程）
+GET /_nodes/hot_threads
+
+// Nodes Stats（节点统计）
+GET /_nodes/stats/indices,os,jvm,thread_pool
+</code></pre></div>
+<hr>
+<h2>九、Java 客户端</h2>
+<h3>9.1 Elasticsearch Java Client</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Configuration
+public class ElasticsearchConfig {
+
+    @Bean
+    public ElasticsearchClient elasticsearchClient() {
+        var restClient = RestClient.builder(
+                HttpHost.create(&quot;http://localhost:9200&quot;))
+                .setHttpClientConfigCallback(httpClientBuilder -&gt;
+                        httpClientBuilder.setDefaultCredentialsProvider(() -&gt;
+                                new UsernamePasswordCredentials(&quot;user&quot;, &quot;pass&quot;)))
+                .build();
+        var transport = new RestClientTransport(restClient, new JacksonJsonpMapper());
+        return new ElasticsearchClient(transport);
+    }
+}
+
+@Service
+public class DocumentSearchService {
+
+    private final ElasticsearchClient client;
+
+    public List&lt;Doc&gt; hybridSearch(String query, float[] queryVector, int topK) throws IOException {
+        var response = client.search(s -&gt; s
+                .index(&quot;docs&quot;)
+                .subSearches(ss -&gt; ss
+                        .subSearch(sub -&gt; sub
+                                .query(q -&gt; q.match(m -&gt; m.field(&quot;content&quot;).query(query))))
+                        .subSearch(sub -&gt; sub
+                                .knn(k -&gt; k.field(&quot;content_vector&quot;)
+                                        .queryVector(queryVector).k(topK).numCandidates(100))))
+                .rank(r -&gt; r.rrf(rrf -&gt; rrf.windowSize(50).rankConstant(60))),
+                Doc.class);
+
+        return response.hits().hits().stream()
+                .map(hit -&gt; hit.source())
+                .toList();
+    }
+}
+</code></pre></div>
+<h3>9.2 Spring Data Elasticsearch</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Document(indexName = &quot;docs&quot;)
+public record Doc(
+        @Id String id,
+        @Field(type = FieldType.Text, analyzer = &quot;ik_max_word&quot;) String title,
+        @Field(type = FieldType.Text, analyzer = &quot;ik_max_word&quot;) String content,
+        @Field(type = FieldType.Dense_Vector, dims = 1536) float[] contentVector,
+        @Field(type = FieldType.Date) Instant createdAt
+) {}
+
+@Repository
+public interface DocRepository extends ElasticsearchRepository&lt;Doc, String&gt; {
+
+    // 全文搜索
+    @Query(&quot;{\&quot;match\&quot;: {\&quot;content\&quot;: \&quot;?0\&quot;}}&quot;)
+    List&lt;Doc&gt; searchByContent(String query);
+
+    // 混合搜索（全文 + 向量）需要在 Service 层组合实现
+}
+</code></pre></div>
+<hr>
+<h2>十、AI 场景：RAG 检索流水线</h2>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>RAG 三阶段检索流水线：
+
+Query: &quot;Spring AI pgvector混合检索的实现&quot;
+          │
+          ▼
+┌──────────────────────────┐
+│ Stage 1: BM25 关键词检索   │  ← Elasticsearch match query
+│ 召回 top-100              │
+└──────────┬───────────────┘
+           ▼
+┌──────────────────────────┐
+│ Stage 2: kNN 向量检索     │  ← Elasticsearch kNN query
+│ 召回 top-100              │
+└──────────┬───────────────┘
+           ▼
+┌──────────────────────────┐
+│ RRF 融合                  │  ← Rank Fusion: BM25 + Vector
+│ 产生 top-50 候选集        │
+└──────────┬───────────────┘
+           ▼
+┌──────────────────────────┐
+│ Stage 3: Cross-Encoder   │  ← text_similarity_reranker
+│ 语义重排 top-50 → top-10  │
+└──────────┬───────────────┘
+           ▼
+         返回 top-10 到 RAG 上下文
+</code></pre></div>
+<hr>
+<h2>常见问题</h2>
+<p><strong>Q: ES 内存应该设多大？</strong>
+A: JVM heap 不超过 32GB（压缩指针优势），不超过机器内存的 50%。剩下给 OS Page Cache（Lucene 使用）。</p>
+<p><strong>Q: 分片数怎么定？</strong>
+A: 单分片 10-50GB 为宜。太小浪费资源，太大恢复慢。公式：<code>shards = ceil(data_size / 30GB)</code>。</p>
+<p><strong>Q: 什么时候用索引排序（index sorting）？</strong>
+A: 主要为 range 聚合加速（如时序数据按时间排序）。</p>
+<p><strong>Q: ES 和 pgvector 怎么分工？</strong>
+A: pgvector 适合&quot;与业务数据紧耦合的向量检索&quot;；ES 适合&quot;大规模多维度检索（全文+向量+聚合+过滤）&quot;。</p>
+<hr>
+<h2>相关条目</h2>
+<ul>
+<li><a href="/04-数据与中间件/数据库与缓存/04-PostgreSQL与pgvector深度解析" class="cross-ref" data-ref="04-PostgreSQL与pgvector深度解析">04-PostgreSQL与pgvector深度解析</a> — pgvector 与 ES 向量检索对比</li>
+<li><a href="/04-数据与中间件/消息与搜索/04-Kafka深度解析" class="cross-ref" data-ref="04-Kafka深度解析">04-Kafka深度解析</a> — CDC → Kafka → ES 索引更新管道</li>
+<li><a href="/11-检索与RAG/检索技术/11-向量检索与混合检索" class="cross-ref" data-ref="11-向量检索与混合检索">11-向量检索与混合检索</a> — 混合检索 RRF 融合原理</li>
+</ul>
+</div>
+</article>

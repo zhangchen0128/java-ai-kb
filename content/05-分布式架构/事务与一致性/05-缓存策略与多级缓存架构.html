@@ -1,0 +1,637 @@
+
+<article class="kb-entry" data-path="/05-分布式架构/事务与一致性/05-缓存策略与多级缓存架构">
+  <div class="entry-meta">
+    <div class="entry-domain"><a href="/?d=05">05-分布式架构</a></div>
+    <h1>缓存策略与多级缓存架构</h1>
+    <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#["cache-aside"</span><span class="badge badge-tag">#"read-through"</span><span class="badge badge-tag">#"write-behind"</span><span class="badge badge-tag">#"multi-level-cache"</span></div>
+    
+  </div>
+  <div class="entry-body"><h1>缓存策略与多级缓存架构</h1>
+<h2>概述</h2>
+<p>缓存是提升分布式系统性能的核心手段。合理的缓存策略可以降低数据库负载、减少响应延迟、提高系统吞吐量。在 AI 应用中，语义缓存（Semantic Cache）作为新兴模式，通过相似度匹配复用 LLM 响应，显著降低 API 调用成本。</p>
+<p>本文深入四大缓存模式原理、五大缓存问题的系统性解决方案、Caffeine + Redis 多级缓存架构、缓存一致性方案，以及 AI 语义缓存的实现。</p>
+<hr>
+<h2>一、缓存模式</h2>
+<h3>1.1 Cache-Aside（旁路缓存）</h3>
+<p>最常用的缓存模式，应用代码直接控制缓存和数据库的读写。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>读操作：
+┌─────────┐  (1) GET    ┌──────────┐
+│ 应用代码  │ ──────────▶ │  Cache    │
+│         │ ◀── miss ── │          │
+│         │             └──────────┘
+│         │  (2) query   ┌──────────┐
+│         │ ──────────▶ │  DB       │
+│         │ ◀── data ── │          │
+│         │             └──────────┘
+│         │  (3) SET    ┌──────────┐
+│         │ ──────────▶ │  Cache    │
+└─────────┘             └──────────┘
+
+写操作：
+┌─────────┐  (1) UPDATE ┌──────────┐
+│ 应用代码  │ ──────────▶ │  DB       │
+│         │             └──────────┘
+│         │  (2) DELETE ┌──────────┐
+│         │ ──────────▶ │  Cache    │
+└─────────┘             └──────────┘
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
+public class CacheAsideUserService {
+
+    private final UserRepository userRepo;
+    private final StringRedisTemplate redis;
+
+    public User getUser(Long userId) {
+        // 1. 查缓存
+        var cached = redis.opsForValue().get(&quot;user:&quot; + userId);
+        if (cached != null) {
+            return JsonUtils.fromJson(cached, User.class);
+        }
+
+        // 2. 查数据库
+        var user = userRepo.findById(userId)
+                .orElseThrow(() -&gt; new NotFoundException(&quot;用户不存在&quot;));
+
+        // 3. 写缓存（设置随机 TTL 防止雪崩）
+        var ttl = Duration.ofMinutes(30 + ThreadLocalRandom.current().nextInt(10));
+        redis.opsForValue().set(&quot;user:&quot; + userId,
+                JsonUtils.toJson(user), ttl);
+
+        return user;
+    }
+
+    public void updateUser(Long userId, UserDto dto) {
+        // 1. 更新数据库
+        userRepo.update(userId, dto);
+
+        // 2. 删除缓存（而非更新，避免并发时序问题）
+        redis.delete(&quot;user:&quot; + userId);
+    }
+}
+</code></pre></div>
+<h3>1.2 Read/Write Through</h3>
+<p>缓存层充当数据库的代理，应用代码只与缓存交互。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Spring Cache 抽象实现 Read/Write Through
+// 应用代码只操作缓存，缓存层负责和 DB 同步
+
+@Service
+public class ReadThroughUserService {
+
+    @Cacheable(value = &quot;users&quot;, key = &quot;#userId&quot;,
+               unless = &quot;#result == null&quot;)
+    public User getUser(Long userId) {
+        // 缓存未命中时此方法被调用，结果自动写入缓存
+        return userRepo.findById(userId).orElse(null);
+    }
+
+    @CachePut(value = &quot;users&quot;, key = &quot;#user.id&quot;)
+    public User updateUser(User user) {
+        userRepo.save(user);
+        return user;
+    }
+
+    @CacheEvict(value = &quot;users&quot;, key = &quot;#userId&quot;)
+    public void deleteUser(Long userId) {
+        userRepo.deleteById(userId);
+    }
+}
+</code></pre></div>
+<h3>1.3 Write Behind（异步写回）</h3>
+<p>写入先记到缓存，异步批量写入数据库。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
+public class WriteBehindService {
+
+    private final StringRedisTemplate redis;
+    private final UserRepository userRepo;
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+
+    private final ConcurrentHashMap&lt;Long, User&gt; writeBuffer = new ConcurrentHashMap&lt;&gt;();
+
+    public WriteBehindService() {
+        // 每 5 秒批量刷入数据库
+        scheduler.scheduleAtFixedRate(this::flushToDb, 5, 5, TimeUnit.SECONDS);
+    }
+
+    public void updateUser(User user) {
+        // 1. 立即更新缓存
+        redis.opsForValue().set(&quot;user:&quot; + user.getId(),
+                JsonUtils.toJson(user), Duration.ofHours(1));
+
+        // 2. 加入写缓冲（异步批量刷 DB）
+        writeBuffer.put(user.getId(), user);
+    }
+
+    private void flushToDb() {
+        if (writeBuffer.isEmpty()) return;
+
+        var batch = new HashMap&lt;&gt;(writeBuffer);
+        writeBuffer.clear();
+
+        // 批量更新数据库
+        try {
+            userRepo.batchUpdate(batch.values());
+        } catch (Exception e) {
+            // 失败回写入缓冲区等待重试
+            writeBuffer.putAll(batch);
+        }
+    }
+}
+</code></pre></div>
+<p><strong>风险提示：</strong> Write Behind 在缓存掉电/崩溃时会丢失未刷入数据库的数据。仅在数据可丢失（如统计数据、日志计数）时使用，或配合持久化消息队列。</p>
+<h3>1.4 Refresh Ahead（提前刷新）</h3>
+<p>热点 Key 在过期前自动异步刷新，避免缓存击穿。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Configuration
+public class RefreshAheadCacheConfig {
+
+    @Bean
+    public CacheManager cacheManager() {
+        var caffeine = Caffeine.newBuilder()
+                .maximumSize(10_000)
+                .expireAfterWrite(30, TimeUnit.MINUTES)
+                .refreshAfterWrite(25, TimeUnit.MINUTES) // TTL 前 5 分钟异步刷新
+                .scheduler(Scheduler.systemScheduler())
+                .build();
+
+        var cacheManager = new CaffeineCacheManager();
+        cacheManager.setCaffeine(caffeine);
+        return cacheManager;
+    }
+}
+
+@Service
+public class HotDataService {
+
+    @Cacheable(value = &quot;hot-products&quot;, key = &quot;#productId&quot;)
+    public Product getHotProduct(Long productId) {
+        return productRepo.findById(productId).orElse(null);
+    }
+
+    // 结合 @Cacheable + CacheLoader 实现自动刷新
+    public Product getWithAutoRefresh(Long productId) {
+        var cache = Caffeine.newBuilder()
+                .expireAfterWrite(30, TimeUnit.MINUTES)
+                .refreshAfterWrite(25, TimeUnit.MINUTES)
+                .build(productIdKey -&gt; {
+                    log.info(&quot;Async refreshing product: {}&quot;, productIdKey);
+                    return productRepo.findById((Long) productIdKey).orElse(null);
+                });
+
+        return cache.get(productId);
+    }
+}
+</code></pre></div>
+<hr>
+<h2>二、缓存问题与解决方案</h2>
+<h3>2.1 缓存穿透（Cache Penetration）</h3>
+<p><strong>问题：</strong> 查询不存在的数据，缓存无记录，每次请求直达数据库。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>解决方案矩阵：
+┌──────────────────┬──────────┬──────────┬───────────────┐
+│ 方案              │ 复杂度   │ 可靠性   │ 适用场景       │
+├──────────────────┼──────────┼──────────┼───────────────┤
+│ 布隆过滤器         │ 中       │ 高       │ 大量不存在的Key │
+│ 空对象缓存         │ 低       │ 中       │ 少数不存在的Key │
+│ 参数校验           │ 低       │ 高       │ 格式固定的Key   │
+│ 黑名单             │ 低       │ 中       │ 恶意攻击       │
+└──────────────────┴──────────┴──────────┴───────────────┘
+</code></pre></div>
+<p><strong>布隆过滤器实现：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
+public class BloomFilterGuard {
+
+    private final BloomFilter&lt;String&gt; bloomFilter;
+    private final StringRedisTemplate redis;
+
+    // 使用 Redis 布隆过滤器模块（redisson 也有实现）
+    public User getUser(String userId) {
+        // 1. 布隆过滤器快速判断（不存在则 100% 确定不存在）
+        var exists = redis.opsForValue()
+                .getOperations().execute((RedisCallback&lt;Boolean&gt;) conn -&gt;
+                        conn.execute(&quot;BF.EXISTS&quot;,
+                                &quot;user:bloom&quot;.getBytes(), userId.getBytes()));
+
+        if (Boolean.FALSE.equals(exists)) {
+            return null; // 一定不存在
+        }
+
+        // 2. 走正常缓存+数据库查询
+        return queryWithCache(userId);
+    }
+
+    // 数据写入时更新布隆过滤器
+    public void onUserCreated(User user) {
+        userRepo.save(user);
+        redis.opsForValue()
+                .getOperations().execute((RedisCallback&lt;Void&gt;) conn -&gt; {
+                    conn.execute(&quot;BF.ADD&quot;,
+                            &quot;user:bloom&quot;.getBytes(),
+                            String.valueOf(user.getId()).getBytes());
+                    return null;
+                });
+    }
+}
+</code></pre></div>
+<p><strong>空对象缓存（简单方案）：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public User getUserWithNullCache(Long userId) {
+    var key = &quot;user:&quot; + userId;
+    var cached = redis.opsForValue().get(key);
+    if (cached != null) {
+        return &quot;NULL&quot;.equals(cached) ? null : JsonUtils.fromJson(cached, User.class);
+    }
+
+    var user = userRepo.findById(userId).orElse(null);
+
+    if (user == null) {
+        // 缓存空对象（短 TTL）
+        redis.opsForValue().set(key, &quot;NULL&quot;, Duration.ofMinutes(5));
+        return null;
+    }
+
+    redis.opsForValue().set(key, JsonUtils.toJson(user), Duration.ofMinutes(30));
+    return user;
+}
+</code></pre></div>
+<h3>2.2 缓存击穿（Hotspot Invalid）</h3>
+<p><strong>问题：</strong> 热点 Key 在过期瞬间，大量请求穿透到数据库。</p>
+<p><strong>方案一：互斥锁</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public User getHotUserWithMutex(Long userId) {
+    var key = &quot;user:&quot; + userId;
+    var cached = redis.opsForValue().get(key);
+    if (cached != null) return JsonUtils.fromJson(cached, User.class);
+
+    var lockKey = &quot;lock:user:&quot; + userId;
+    try {
+        // 尝试获取锁（SET NX PX）
+        if (redis.opsForValue().setIfAbsent(lockKey, &quot;1&quot;, Duration.ofSeconds(10))) {
+            // Double Check
+            cached = redis.opsForValue().get(key);
+            if (cached != null) return JsonUtils.fromJson(cached, User.class);
+
+            // 查 DB 并写缓存
+            var user = userRepo.findById(userId)
+                    .orElseThrow(() -&gt; new NotFoundException(&quot;用户不存在&quot;));
+            redis.opsForValue().set(key, JsonUtils.toJson(user), Duration.ofMinutes(30));
+            return user;
+        } else {
+            // 获取锁失败 → 等待 + 重试
+            Thread.sleep(50);
+            return getHotUserWithMutex(userId); // 递归重试
+        }
+    } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        throw new RuntimeException(e);
+    } finally {
+        redis.delete(lockKey);
+    }
+}
+</code></pre></div>
+<p><strong>方案二：逻辑过期（永不过期 + 异步更新）</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public record CachedValue&lt;T&gt;(T data, LocalDateTime expireAt) {}
+
+public User getHotUserWithLogicalExpire(Long userId) {
+    var key = &quot;user:&quot; + userId;
+    var cached = redis.opsForValue().get(key);
+    if (cached == null) {
+        return queryAndCache(userId);
+    }
+
+    var cachedValue = JsonUtils.fromJson(cached, CachedValue.class);
+    if (cachedValue.expireAt().isAfter(LocalDateTime.now())) {
+        // 未过期，直接返回
+        return (User) cachedValue.data();
+    }
+
+    // 已逻辑过期 → 获取互斥锁，异步更新
+    var lockKey = &quot;lock:user:&quot; + userId;
+    if (redis.opsForValue().setIfAbsent(lockKey, &quot;1&quot;, Duration.ofSeconds(10))) {
+        try {
+            Thread.startVirtualThread(() -&gt; { // Virtual Thread 异步更新
+                var user = userRepo.findById(userId).orElse(null);
+                if (user != null) {
+                    var newCached = new CachedValue&lt;&gt;(user,
+                            LocalDateTime.now().plusMinutes(30));
+                    redis.opsForValue().set(key, JsonUtils.toJson(newCached));
+                }
+                redis.delete(lockKey);
+            });
+        } catch (Exception e) {
+            redis.delete(lockKey);
+        }
+    }
+
+    // 返回旧数据（小幅过期可以接受）
+    return (User) cachedValue.data();
+}
+</code></pre></div>
+<h3>2.3 缓存雪崩（Cache Avalanche）</h3>
+<p><strong>问题：</strong> 大量缓存 Key 在同一时间段过期，导致数据库压力激增。</p>
+<p><strong>解决方案：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public String cacheWithRandomTTL(String key, Object value, Duration baseTTL) {
+    // 1. 随机 TTL（基础 TTL ± 10%）
+    var randomDelta = (long) (baseTTL.toSeconds() * ThreadLocalRandom.current().nextDouble(0.1));
+    var ttl = baseTTL.plusSeconds(randomDelta);
+
+    redis.opsForValue().set(key, JsonUtils.toJson(value), ttl);
+    return key;
+}
+
+// 2. 多级缓存（L1: Caffeine, L2: Redis）——见第三章
+
+// 3. 熔断降级（配合 Resilience4j）——见熔断笔记
+
+// 4. 缓存预热
+@Component
+public class CacheWarmer implements ApplicationRunner {
+
+    @Override
+    public void run(ApplicationArguments args) {
+        // 启动时预加载热点数据
+        var hotUsers = userRepo.findHotUsers(1000);
+        for (var user : hotUsers) {
+            redis.opsForValue().set(&quot;user:&quot; + user.getId(),
+                    JsonUtils.toJson(user),
+                    Duration.ofMinutes(30 + ThreadLocalRandom.current().nextInt(5)));
+        }
+        log.info(&quot;Cache warmup: loaded {} hot users&quot;, hotUsers.size());
+    }
+}
+</code></pre></div>
+<h3>2.4 热点 Key 发现</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Component
+public class HotKeyDetector {
+
+    private final ConcurrentHashMap&lt;String, AtomicLong&gt; keyCounters = new ConcurrentHashMap&lt;&gt;();
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+
+    public HotKeyDetector() {
+        // 每秒统计 TOP-N 热点 Key
+        scheduler.scheduleAtFixedRate(this::detect, 1, 1, TimeUnit.SECONDS);
+    }
+
+    public void recordAccess(String key) {
+        keyCounters.computeIfAbsent(key, k -&gt; new AtomicLong()).incrementAndGet();
+    }
+
+    private void detect() {
+        var snapshot = new HashMap&lt;&gt;(keyCounters);
+        keyCounters.clear();
+
+        var topN = snapshot.entrySet().stream()
+                .sorted(Map.Entry.&lt;String, AtomicLong&gt;comparingByValue().reversed())
+                .limit(10)
+                .toList();
+
+        for (var entry : topN) {
+            if (entry.getValue().get() &gt; 1000) { // 阈值 1000 QPS
+                log.warn(&quot;Hot key detected: {}, QPS: {}&quot;, entry.getKey(), entry.getValue());
+                // 触发自动降级：本地缓存副本 + 异步更新
+                promoteToLocalCache(entry.getKey());
+            }
+        }
+    }
+
+    private void promoteToLocalCache(String key) {
+        // 将热点 Key 提升为 Caffeine 本地缓存 + 假名分片
+        // ...
+    }
+}
+</code></pre></div>
+<h3>2.5 BigKey 处理</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># 发现 BigKey
+redis-cli --bigkeys
+redis-cli --memkeys
+
+# 查看 Key 的内存占用
+redis-cli MEMORY USAGE big:hash:key
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// BigKey 拆分策略
+// 1. Hash 拆分：按 field 哈希分片
+// user:profile:12345 → user:profile:12345:0, user:profile:12345:1
+
+// 2. List 拆分：按日期分片
+// timeline:user:123 → timeline:user:123:2026-07
+
+// 3. 异步删除（UNLINK）
+public void deleteBigKey(String key) {
+    redis.unlink(key); // Redis 4.0+，非阻塞
+}
+</code></pre></div>
+<hr>
+<h2>三、多级缓存架构</h2>
+<h3>3.1 Caffeine(L1) + Redis(L2) + DB(L3)</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>请求流程：
+         ┌──────────────┐
+         │   请求        │
+         └──────┬───────┘
+                ▼
+         ┌──────────────┐
+         │ L1: Caffeine  │ ← 命中 → 直接返回 (&lt; 1µs)
+         │ (JVM 本地)    │
+         └──┬───────┬───┘
+            miss    ▼
+         ┌──────────────┐
+         │ L2: Redis     │ ← 命中 → 返回 + 回写 L1
+         │ (分布式缓存)   │
+         └──┬───────┬───┘
+            miss    ▼
+         ┌──────────────┐
+         │ L3: PostgreSQL│ ← 查询 → 写 L2 → 写 L1 → 返回
+         └──────────────┘
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Configuration
+public class MultiLevelCacheConfig {
+
+    @Bean
+    public CacheManager cacheManager() {
+        // Caffeine L1 配置
+        var caffeine = Caffeine.newBuilder()
+                .maximumSize(10_000)
+                .expireAfterWrite(5, TimeUnit.MINUTES)
+                .recordStats()
+                .build();
+
+        var cacheManager = new SimpleCacheManager();
+        cacheManager.setCaches(List.of(
+                new CaffeineCache(&quot;products&quot;, caffeine)
+        ));
+        return cacheManager;
+    }
+}
+
+@Service
+public class MultiLevelCacheService {
+
+    private final CacheManager cacheManager;
+    private final StringRedisTemplate redis;
+    private final ProductRepository productRepo;
+
+    public Product getProduct(Long productId) {
+        var cacheName = &quot;products&quot;;
+
+        // L1: Caffeine
+        var l1Cache = cacheManager.getCache(cacheName);
+        if (l1Cache != null) {
+            var cached = l1Cache.get(productId, Product.class);
+            if (cached != null) return cached;
+        }
+
+        // L2: Redis
+        var redisKey = &quot;product:&quot; + productId;
+        var redisValue = redis.opsForValue().get(redisKey);
+        if (redisValue != null) {
+            var product = JsonUtils.fromJson(redisValue, Product.class);
+            // 回写 L1
+            if (l1Cache != null) l1Cache.put(productId, product);
+            return product;
+        }
+
+        // L3: PostgreSQL + 互斥锁防击穿
+        var lockKey = &quot;lock:product:&quot; + productId;
+        try {
+            if (redis.opsForValue().setIfAbsent(lockKey, &quot;1&quot;, Duration.ofSeconds(10))) {
+                var product = productRepo.findById(productId)
+                        .orElseThrow(() -&gt; new NotFoundException(&quot;商品不存在&quot;));
+
+                // 写 L2 + L1
+                redis.opsForValue().set(redisKey,
+                        JsonUtils.toJson(product),
+                        Duration.ofMinutes(30 + ThreadLocalRandom.current().nextInt(5)));
+                if (l1Cache != null) l1Cache.put(productId, product);
+
+                return product;
+            } else {
+                Thread.sleep(50);
+                return getProduct(productId); // 重试
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new RuntimeException(e);
+        } finally {
+            redis.delete(lockKey);
+        }
+    }
+}
+</code></pre></div>
+<h3>3.2 缓存更新广播（多实例同步）</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Component
+public class CacheSyncListener {
+
+    private final CacheManager cacheManager;
+
+    // Redis Pub/Sub 广播本地缓存失效消息
+    @EventListener
+    public void onCacheEvict(CacheEvictEvent event) {
+        var cache = cacheManager.getCache(event.cacheName());
+        if (cache != null) {
+            cache.evict(event.key());
+        }
+    }
+
+    // 发布失效消息
+    public void broadcastEvict(String cacheName, Object key) {
+        var message = JsonUtils.toJson(new CacheEvictEvent(cacheName, key));
+        redis.convertAndSend(&quot;cache-sync&quot;, message);
+    }
+}
+</code></pre></div>
+<hr>
+<h2>四、缓存一致性方案</h2>
+<h3>4.1 Canal + Binlog 异步更新</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>MySQL Binlog → Canal Server → Kafka → 缓存更新消费者
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Component
+public class CanalCacheSync {
+
+    private final StringRedisTemplate redis;
+    private final CacheManager localCache;
+
+    @KafkaListener(topics = &quot;canal-product-changes&quot;, groupId = &quot;cache-sync&quot;)
+    public void onProductChanged(CanalMessage msg) {
+        var productId = extractProductId(msg);
+        var operation = msg.getType();
+
+        switch (operation) {
+            case &quot;INSERT&quot;, &quot;UPDATE&quot; -&gt; {
+                // 更新 Redis
+                redis.opsForValue().set(&quot;product:&quot; + productId,
+                        JsonUtils.toJson(msg.getAfter()),
+                        Duration.ofMinutes(30));
+                // 失效本地缓存
+                var cache = localCache.getCache(&quot;products&quot;);
+                if (cache != null) cache.evict(productId);
+            }
+            case &quot;DELETE&quot; -&gt; {
+                redis.delete(&quot;product:&quot; + productId);
+                var cache = localCache.getCache(&quot;products&quot;);
+                if (cache != null) cache.evict(productId);
+            }
+        }
+    }
+}
+</code></pre></div>
+<h3>4.2 最终一致性窗口</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>缓存与数据库允许的最大不一致时间窗口：
+- 金融交易：&lt; 1s（建议不使用缓存或使用强一致方案）
+- 商品信息：&lt; 5s
+- 用户配置：&lt; 30s
+- 统计计数：&lt; 5min
+</code></pre></div>
+<hr>
+<h2>五、AI 语义缓存（Semantic Cache）</h2>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
+public class SemanticCacheService {
+
+    private final EmbeddingModel embeddingModel;
+    private final StringRedisTemplate redis;
+    private static final double SIMILARITY_THRESHOLD = 0.92;
+
+    public Optional&lt;String&gt; findSimilarQuery(String userQuery) {
+        var embedding = embeddingModel.embed(userQuery);
+        var vectorBytes = toBytes(embedding);
+
+        // Redis 向量搜索查找语义相似的已缓存查询
+        var results = redis.opsForValue()
+                .getOperations().execute((RedisCallback&lt;List&lt;byte[]&gt;&gt;) conn -&gt; {
+                    // FT.SEARCH idx:semantic-cache &quot;*=&gt;[KNN 5 @embedding $vec AS dist]&quot;
+                    //   SORTBY dist RETURN 2 response dist PARAMS 2 vec &lt;bytes&gt; DIALECT 2
+                    // ...
+                    return null;
+                });
+
+        if (results != null &amp;&amp; !results.isEmpty()) {
+            var similarity = 1 - extractDistance(results.getFirst());
+            if (similarity &gt;= SIMILARITY_THRESHOLD) {
+                return Optional.of(extractResponse(results.getFirst()));
+            }
+        }
+        return Optional.empty();
+    }
+
+    public void cacheQueryResponse(String query, String response) {
+        var embedding = embeddingModel.embed(query);
+        // HSET semantic:cache:{id} query &quot;...&quot; response &quot;...&quot; embedding &lt;bytes&gt;
+        // ...
+    }
+}
+</code></pre></div>
+<hr>
+<h2>常见问题</h2>
+<p><strong>Q: 数据更新后，删缓存还是更新缓存？</strong>
+A: 删除缓存。更新缓存可能导致并发时序问题，惰性加载（下次查询再写）更安全。</p>
+<p><strong>Q: 缓存和数据不一致怎么办？</strong>
+A: 设计阶段就接受&quot;最终一致性窗口&quot;。通过 TTL 限制不一致持续时间。金融关键数据不依赖缓存。</p>
+<p><strong>Q: Caffeine 和 Guava Cache 选哪个？</strong>
+A: Caffeine 是 Guava Cache 的后继者，使用 W-TinyLFU 淘汰策略，命中率更高。推荐 Caffeine。</p>
+<p><strong>Q: 多级缓存的管理复杂度值得吗？</strong>
+A: 对于 QPS &lt; 1000 的服务，单级 Redis 缓存足够。QPS &gt; 10000 时，Caffeine L1 缓存可显著减少 Redis 网络开销。</p>
+<p><strong>Q: 语义缓存的成本收益比？</strong>
+A: 如果模型 API 调用成本高（如 GPT-4），语义缓存可节省 20-40% 的调用。需要权衡 Embedding 计算成本 + Redis 向量存储成本。</p>
+<hr>
+<h2>相关条目</h2>
+<ul>
+<li><a href="/04-数据与中间件/数据库与缓存/04-Redis深度解析" class="cross-ref" data-ref="04-Redis深度解析">04-Redis深度解析</a> — Redis 数据结构与持久化</li>
+<li><a href="/05-分布式架构/弹性设计/05-熔断限流与弹性设计" class="cross-ref" data-ref="05-熔断限流与弹性设计">05-熔断限流与弹性设计</a> — 熔断降级保护缓存</li>
+<li><a href="/05-分布式架构/弹性设计/05-幂等设计与分布式锁" class="cross-ref" data-ref="05-幂等设计与分布式锁">05-幂等设计与分布式锁</a> — 缓存击穿的互斥锁方案</li>
+<li><a href="/04-数据与中间件/数据库与缓存/04-PostgreSQL与pgvector深度解析" class="cross-ref" data-ref="04-PostgreSQL与pgvector深度解析">04-PostgreSQL与pgvector深度解析</a> — pgvector 向量检索</li>
+</ul>
+</div>
+</article>

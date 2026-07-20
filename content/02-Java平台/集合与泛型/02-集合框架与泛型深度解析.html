@@ -1,0 +1,360 @@
+
+<article class="kb-entry" data-path="/02-Java平台/集合与泛型/02-集合框架与泛型深度解析">
+  <div class="entry-meta">
+    <div class="entry-domain"><a href="/?d=02">02-Java平台</a></div>
+    <h1>集合框架与泛型深度解析</h1>
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#["collections"</span><span class="badge badge-tag">#"generics"</span><span class="badge badge-tag">#"type-erasure"</span><span class="badge badge-tag">#"wildcards"</span></div>
+    
+  </div>
+  <div class="entry-body"><h1>集合框架与泛型深度解析</h1>
+<h2>概述</h2>
+<p>Java 集合框架是日常编程使用频率最高的 API 之一，但大多数开发者对其理解停留在&quot;会用 ArrayList 和 HashMap&quot;的层面。泛型是集合框架的类型安全基石，但其类型擦除机制和通配符系统常常让人困惑。</p>
+<p>本篇从 Collection/Map 层级体系出发，深入到关键类的源码实现（ArrayList 扩容、HashMap 的 put/resize/treeify），系统讲解泛型的类型擦除、通配符（PECS 原则）、Bridge Method 等核心机制，并使用 JDK 25 的最新特性进行示例讲解。</p>
+<hr>
+<h2>一、集合框架全景</h2>
+<h3>1.1 Collection 层级体系</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Iterable
+ └─ Collection
+     ├─ List（有序、可重复）
+     │   ├─ ArrayList：数组实现，O(1) 随机访问
+     │   ├─ LinkedList：双向链表，O(1) 头尾操作
+     │   └─ Vector（遗留类）→ Stack
+     ├─ Set（无序、不可重复）
+     │   ├─ HashSet：HashMap 实现，O(1) 增删查
+     │   ├─ LinkedHashSet：维护插入顺序
+     │   └─ TreeSet：红黑树，O(log n)，有序
+     └─ Queue/Deque
+         ├─ PriorityQueue：二叉堆实现
+         ├─ ArrayDeque：循环数组双端队列
+         └─ LinkedList（也实现了 Deque）
+</code></pre></div>
+<h3>1.2 Map 层级体系</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Map
+ ├─ HashMap：数组+链表+红黑树，O(1) 平均
+ ├─ LinkedHashMap：维护插入/访问顺序，LRU 场景
+ ├─ TreeMap：红黑树，O(log n)，按键排序
+ ├─ ConcurrentHashMap：线程安全，分段锁（JDK 8+ 改为 CAS + synchronized）
+ ├─ IdentityHashMap：用 == 而非 equals 比较键
+ └─ EnumMap：键为枚举，性能最优
+</code></pre></div>
+<h3>1.3 选型决策树</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>需要键值对存储？
+├── 是 → Map
+│   ├── 需要排序？ → TreeMap
+│   ├── 需要 LRU 缓存？ → LinkedHashMap（accessOrder=true）
+│   ├── 线程安全？ → ConcurrentHashMap
+│   └── 一般场景 → HashMap
+└── 否 → Collection
+    ├── 需要去重？ → Set
+    │   ├── 需要排序？ → TreeSet
+    │   └── 否 → HashSet
+    ├── 需要队列？ → Queue/Deque
+    │   ├── FIFO → ArrayDeque（优于 LinkedList）
+    │   ├── LIFO → ArrayDeque（push/pop）
+    │   └── 优先级 → PriorityQueue
+    └── 需要列表？ → ArrayList（默认，优于 LinkedList）
+</code></pre></div>
+<p><strong>关键结论：</strong> 现代 Java 中，ArrayDeque 几乎在所有场景优于 LinkedList（更少的内存开销、更好的缓存局部性），ArrayList 在随机访问场景优于 LinkedList。</p>
+<hr>
+<h2>二、泛型深入</h2>
+<h3>2.1 类型擦除机制</h3>
+<p>Java 泛型通过类型擦除（Type Erasure）实现——编译器在编译时将泛型类型擦除为原始类型（Raw Type），并插入必要的类型转换指令。这是为了保持与 JDK 1.4 及之前的二进制兼容性。</p>
+<p><strong>字节码层面的真相：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 源代码
+List&lt;String&gt; list = new ArrayList&lt;&gt;();
+list.add(&quot;hello&quot;);
+String s = list.get(0);
+
+// 编译后等价于（反编译可见）
+List list = new ArrayList();        // 泛型信息被擦除
+list.add(&quot;hello&quot;);
+String s = (String) list.get(0);    // 编译器插入强制类型转换
+</code></pre></div>
+<p><strong>泛型类的擦除规则：</strong></p>
+<ul>
+<li>无界类型参数 <code>&lt;T&gt;</code> → 擦除为 <code>Object</code></li>
+<li>有界类型参数 <code>&lt;T extends Comparable&lt;T&gt;&gt;</code> → 擦除为 <code>Comparable</code></li>
+<li>方法签名中的泛型也会被擦除</li>
+</ul>
+<h3>2.2 Bridge Method（桥接方法）</h3>
+<p>当子类泛型化或覆盖泛型方法时，编译器会生成桥接方法来保持多态性：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">class Node&lt;T&gt; {
+    private T data;
+    public void setData(T data) { this.data = data; }
+}
+
+class MyNode extends Node&lt;Integer&gt; {
+    @Override
+    public void setData(Integer data) { super.setData(data); }
+}
+
+// 编译器为 MyNode 生成两个方法：
+// 1. public void setData(Integer data)  ← 实际重写的方法
+// 2. public void setData(Object data)   ← Bridge Method（桥接方法）
+//    内部调用 setData((Integer) data)
+</code></pre></div>
+<p>这是为什么通过反射查看方法时会看到两个同名方法——可以用 <code>Method.isBridge()</code> 来区分。</p>
+<h3>2.3 通配符与 PECS 原则</h3>
+<p><strong>三种通配符形式：</strong></p>
+<table>
+<thead>
+<tr>
+<th>形式</th>
+<th>含义</th>
+<th>读写能力</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>List&lt;?&gt;</code></td>
+<td>未知类型</td>
+<td>只能读（Object），不能写</td>
+</tr>
+<tr>
+<td><code>List&lt;? extends T&gt;</code></td>
+<td>T 的某个子类型</td>
+<td>可以读 T，不能写</td>
+</tr>
+<tr>
+<td><code>List&lt;? super T&gt;</code></td>
+<td>T 的某个父类型</td>
+<td>可以写 T，读出来是 Object</td>
+</tr>
+</tbody></table>
+<p><strong>PECS 原则（Producer Extends, Consumer Super）：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Producer：从集合中读取数据 → 用 extends
+public double sumOfAreas(List&lt;? extends Shape&gt; shapes) {
+    return shapes.stream()
+        .mapToDouble(Shape::area) // 可以安全地读取 Shape
+        .sum();
+    // shapes.add(new Circle()); // 编译错误！不能写入
+}
+
+// Consumer：向集合中写入数据 → 用 super
+public void addCircles(List&lt;? super Circle&gt; list) {
+    list.add(new Circle());   // 可以安全写入 Circle
+    list.add(new SubCircle()); // 也可以写入子类
+    // Circle c = list.get(0); // 编译错误！只能读 Object
+}
+
+// 既读又写 → 不要用通配符，用具体类型
+public void process(List&lt;Shape&gt; shapes) {
+    shapes.add(new Circle());
+    Shape s = shapes.get(0); // 都可以
+}
+</code></pre></div>
+<h3>2.4 协变、逆变、不变</h3>
+<p>Java 中的泛型是<strong>不变的</strong>（Invariant）：<code>List&lt;String&gt;</code> 不是 <code>List&lt;Object&gt;</code> 的子类型。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">List&lt;String&gt; strings = List.of(&quot;a&quot;, &quot;b&quot;);
+// List&lt;Object&gt; objects = strings; // 编译错误！
+
+// 但数组是协变的（Covariant）—— 这是 Java 的历史遗留设计缺陷
+Object[] objects = new String[]{&quot;a&quot;, &quot;b&quot;}; // 编译通过
+objects[0] = 42; // 运行时抛出 ArrayStoreException
+</code></pre></div>
+<p><strong>协变模拟</strong>：使用 <code>? extends T</code>（上界通配符）
+<strong>逆变模拟</strong>：使用 <code>? super T</code>（下界通配符）</p>
+<h3>2.5 泛型边界与递归类型参数</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 递归类型参数：确保 T 可以和自己比较
+public class SortedList&lt;T extends Comparable&lt;T&gt;&gt; {
+    public T max(List&lt;T&gt; items) {
+        return items.stream()
+            .max(Comparable::compareTo)
+            .orElseThrow();
+    }
+}
+
+// 更宽松的形式
+public class SortedList2&lt;T extends Comparable&lt;? super T&gt;&gt; {
+    // 允许 T 的父类实现了 Comparable
+}
+</code></pre></div>
+<h3>2.6 常见泛型陷阱</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 1. 不能 new 泛型数组
+// T[] array = new T[10];           // 编译错误！
+// List&lt;String&gt;[] array = new List&lt;String&gt;[10]; // 编译错误！
+
+// 变通方案：
+@SuppressWarnings(&quot;unchecked&quot;)
+T[] array = (T[]) new Object[10];
+
+// 2. 不能 instanceof 泛型
+// if (obj instanceof List&lt;String&gt;) {} // 编译错误！
+if (obj instanceof List&lt;?&gt;) {}         // 只能用无界通配符
+
+// 3. 不能 catch 泛型异常
+// try {} catch (MyException&lt;T&gt; e) {}  // 编译错误！
+
+// 4. 静态上下文中不能使用泛型类型参数
+class MyClass&lt;T&gt; {
+    // static T value;                 // 编译错误！
+    static &lt;U&gt; U create() { return null; } // 可以，因为 U 是方法级泛型
+}
+</code></pre></div>
+<hr>
+<h2>三、关键源码分析</h2>
+<h3>3.1 ArrayList 扩容机制</h3>
+<p>ArrayList 内部使用 <code>Object[] elementData</code> 存储元素。核心扩容方法 <code>grow()</code>：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// JDK 25 ArrayList.grow() 简化版
+private Object[] grow(int minCapacity) {
+    int oldCapacity = elementData.length;
+    if (oldCapacity &gt; 0 || elementData != DEFAULTCAPACITY_EMPTY_ELEMENTDATA) {
+        int newCapacity = ArraysSupport.newLength(
+            oldCapacity,
+            minCapacity - oldCapacity,     // 最小增长量
+            oldCapacity &gt;&gt; 1               // 优先增长 50%
+        );
+        return elementData = Arrays.copyOf(elementData, newCapacity);
+    } else {
+        return elementData = new Object[Math.max(DEFAULT_CAPACITY, minCapacity)];
+    }
+}
+</code></pre></div>
+<p><strong>扩容规则：</strong> 新容量 = max(旧容量 * 1.5, minCapacity)。当添加大量元素时，使用 <code>ensureCapacity()</code> 避免多次扩容。</p>
+<h3>3.2 HashMap put 与 resize 机制</h3>
+<p>HashMap 是面试高频考点。基于 JDK 25 的源码分析：</p>
+<p><strong>put() 方法流程：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>1. 计算 hash：key.hashCode() ^ (key.hashCode() &gt;&gt;&gt; 16)
+   目的：高位参与低位计算，减少碰撞
+2. 如果 table 为 null 或长度为 0 → resize()
+3. 计算索引：i = (table.length - 1) &amp; hash
+4. 如果 table[i] == null → 直接插入新 Node
+5. 如果 table[i] 有值：
+   a) 如果第一个节点的 hash 和 key 都相等 → 替换 value
+   b) 如果是 TreeNode → 调用 putTreeVal()
+   c) 否则遍历链表：
+      - 如果找到相等节点 → 替换 value
+      - 如果遍历到末尾 → 尾插法新增节点
+      - 检查是否需要树化（binCount &gt;= TREEIFY_THRESHOLD - 1 = 7）
+6. size++ 后检查是否需要扩容（size &gt; threshold）
+</code></pre></div>
+<p><strong>resize() 方法核心逻辑：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 简化版 resize()
+final Node&lt;K,V&gt;[] resize() {
+    var oldTab = table;
+    int oldCap = (oldTab == null) ? 0 : oldTab.length;
+    int newCap = oldCap &lt;&lt; 1;           // 容量翻倍
+    threshold = (int)(newCap * loadFactor); // 新阈值 = 容量 * 0.75
+
+    var newTab = (Node&lt;K,V&gt;[]) new Node[newCap];
+    for (var e : oldTab) {
+        if (e.next == null) {
+            newTab[e.hash &amp; (newCap - 1)] = e; // 单节点：直接重新哈希
+        } else if (e instanceof TreeNode) {
+            ((TreeNode&lt;K,V&gt;) e).split(this, newTab, j, oldCap); // 红黑树拆分
+        } else {
+            // 链表拆分：利用哈希位特性，分为 lo 和 hi 两个链表
+            Node&lt;K,V&gt; loHead = null, loTail = null;
+            Node&lt;K,V&gt; hiHead = null, hiTail = null;
+            for (var node = e; node != null; node = node.next) {
+                if ((node.hash &amp; oldCap) == 0) {
+                    // 低位链表：保持原索引
+                    if (loTail == null) loHead = node;
+                    else loTail.next = node;
+                    loTail = node;
+                } else {
+                    // 高位链表：原索引 + oldCap
+                    if (hiTail == null) hiHead = node;
+                    else hiTail.next = node;
+                    hiTail = node;
+                }
+            }
+            newTab[j] = loHead;
+            newTab[j + oldCap] = hiHead;
+        }
+    }
+    return newTab;
+}
+</code></pre></div>
+<p><strong>树化条件：</strong> 链表长度 &gt;= 8 且 table 容量 &gt;= 64（否则优先扩容而非树化）。</p>
+<p><strong>为什么使用尾插法？</strong> JDK 7 使用头插法，在并发扩容时可能产生循环链表导致死循环。JDK 8+ 改为尾插法彻底解决了这个问题。</p>
+<h3>3.3 TreeMap 红黑树</h3>
+<p>TreeMap 底层是红黑树（平衡二叉搜索树），保证 O(log n) 的操作复杂度。关键特性：</p>
+<ul>
+<li>每个节点是红色或黑色</li>
+<li>根节点始终是黑色</li>
+<li>不允许连续两个红色节点</li>
+<li>从任意节点到其所有叶子节点的路径上，黑色节点数相同</li>
+</ul>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// TreeMap 按 Key 排序
+var treeMap = new TreeMap&lt;String, Integer&gt;();
+treeMap.put(&quot;banana&quot;, 2);
+treeMap.put(&quot;apple&quot;, 1);
+treeMap.put(&quot;cherry&quot;, 3);
+
+// 遍历输出：apple=1, banana=2, cherry=3（按字典序）
+
+// 自定义排序
+var reverseMap = new TreeMap&lt;String, Integer&gt;(Comparator.reverseOrder());
+
+// 范围查询
+var subMap = treeMap.subMap(&quot;apple&quot;, true, &quot;cherry&quot;, false); // 左闭右开
+</code></pre></div>
+<h3>3.4 LinkedHashMap LRU 实现</h3>
+<p>LinkedHashMap 维护双向链表来保持插入顺序或访问顺序。启用 LRU 模式：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 实现一个固定大小的 LRU 缓存
+public class LruCache&lt;K, V&gt; extends LinkedHashMap&lt;K, V&gt; {
+    private final int maxSize;
+
+    public LruCache(int maxSize) {
+        super(maxSize, 0.75f, true); // accessOrder=true 启用 LRU
+        this.maxSize = maxSize;
+    }
+
+    @Override
+    protected boolean removeEldestEntry(Map.Entry&lt;K, V&gt; eldest) {
+        return size() &gt; maxSize; // 超出容量时自动删除最久未访问元素
+    }
+}
+
+// 使用
+var cache = new LruCache&lt;String, String&gt;(100);
+cache.put(&quot;key1&quot;, &quot;value1&quot;);
+cache.get(&quot;key1&quot;); // 访问后移到链表尾部
+// 当 size &gt; 100 时，链表头部元素自动被删除
+</code></pre></div>
+<hr>
+<h2>四、JDK 25 集合与泛型改进</h2>
+<h3>4.1 泛型推断增强</h3>
+<p>JDK 25 进一步增强了 <code>var</code> 的泛型推断能力：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 推断为 List&lt;String&gt;
+var list = List.of(&quot;a&quot;, &quot;b&quot;, &quot;c&quot;);
+
+// 推断为 Map&lt;String, Integer&gt;
+var map = Map.of(&quot;a&quot;, 1, &quot;b&quot;, 2);
+
+// Stream 中的类型推断
+var result = list.stream()
+    .filter(s -&gt; s.length() &gt; 1)
+    .collect(Collectors.toUnmodifiableList()); // 推断为 List&lt;String&gt;
+</code></pre></div>
+<h3>4.2 SequencedCollection（JDK 21+）</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 序列化集合接口：提供统一的首尾操作
+SequencedCollection&lt;String&gt; seq = new ArrayList&lt;&gt;();
+seq.addFirst(&quot;first&quot;);   // 加到头部
+seq.addLast(&quot;last&quot;);     // 加到尾部
+var first = seq.getFirst();
+var last = seq.getLast();
+var reversed = seq.reversed(); // 反转视图
+</code></pre></div>
+<hr>
+<h2>常见问题</h2>
+<p><strong>Q: HashMap 的默认初始容量为什么是 16？负载因子为什么是 0.75？</strong>
+A: 16 的容量（2^4）利用了位运算索引（<code>hash &amp; (capacity-1)</code>）实现高效取模。0.75 的负载因子是空间和时间的最佳折中——统计学上的泊松分布表明，在此负载因子下链表长度达到 8 的概率极低（约 0.00000006）。</p>
+<p><strong>Q: 为什么 HashMap 线程不安全？</strong>
+A: 主要因为 resize 期间的竞态条件。多线程 put 可能导致数据丢失甚至 CPU 100%（JDK 7 的循环链表问题）。使用 ConcurrentHashMap 或 Collections.synchronizedMap()。</p>
+<p><strong>Q: 为什么说数组是协变的而泛型是不变的？</strong>
+A: 数组协变是 JDK 1.0 的设计遗留问题，使得 <code>String[]</code> 可以赋值给 <code>Object[]</code>，但运行时写检查带来 ArrayStoreException。泛型不变（<code>List&lt;String&gt;</code> 不是 <code>List&lt;Object&gt;</code> 的子类）提供了编译期类型安全，避免了这类运行时错误。</p>
+<p><strong>Q: 泛型类型擦除后，如何获取泛型类型信息？</strong>
+A: 通过反射使用 <code>ParameterizedType</code>。例如 <code>TypeToken</code> 模式（Gson/Jackson 常用），利用匿名子类保留父类的泛型信息：<code>new TypeToken&lt;List&lt;String&gt;&gt;() {}</code>。</p>
+<p><strong>Q: ArrayList vs LinkedList 如何选择？</strong>
+A: 99% 的情况用 ArrayList。LinkedList 仅在频繁在列表头部插入/删除时才考虑，但其缓存不友好导致遍历极慢。现代 Java 中 ArrayDeque 取代了 LinkedList 的队列/栈场景。</p>
+<hr>
+<h2>相关条目</h2>
+<ul>
+<li><a href="/02-Java平台/语言特性/02-现代Java25深度解析" class="cross-ref" data-ref="02-现代Java25深度解析">02-现代Java25深度解析</a>：JDK 25 新特性全解</li>
+<li><a href="/02-Java平台/反射与模块化/02-反射与模块化系统" class="cross-ref" data-ref="02-反射与模块化系统">02-反射与模块化系统</a>：反射中的泛型处理</li>
+<li><a href="/02-Java平台/并发/02-Java并发深度解析" class="cross-ref" data-ref="02-Java并发深度解析">02-Java并发深度解析</a>：ConcurrentHashMap 源码分析</li>
+<li><a href="/?d=01" class="cross-ref domain-ref">01-数据结构（树与哈希表）</a>：前置数据结构基础</li>
+</ul>
+</div>
+</article>

@@ -1,0 +1,490 @@
+
+<article class="kb-entry" data-path="/00-知识工程/00-知识关系类型详解">
+  <div class="entry-meta">
+    <div class="entry-domain"><a href="/?d=00">00-知识工程</a></div>
+    <h1>知识关系类型详解</h1>
+    <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🟢 入门</span><span class="badge badge-tag">#["knowledge-engineering"</span><span class="badge badge-tag">#"relationship-types"</span><span class="badge badge-tag">#"knowledge-graph"</span><span class="badge badge-tag">#"taxonomy"</span></div>
+    
+  </div>
+  <div class="entry-body"><h1>知识关系类型详解</h1>
+<h2>概述</h2>
+<p>知识条目之间的关系是知识库从&quot;文件集合&quot;升级为&quot;知识网络&quot;的关键。通过在 frontmatter 的 <code>relations</code> 字段中建立结构化的条目间引用，我们构建了一个可遍历的有向知识依赖图。这个图让读者能够沿着关系边走查知识，帮助学习路径规划，也支持自动化的知识完整性检查（例如：引用了一个不存在的前置条目时报警）。</p>
+<p>本知识库定义了六种知识关系类型：<code>prerequisite</code>、<code>related</code>、<code>derived</code>、<code>contrast</code>、<code>version-of</code> 和 <code>replaces</code>。每种关系具有明确的语义和约束。</p>
+<hr>
+<h2>核心内容</h2>
+<h3>一、六种关系类型详解</h3>
+<h4>1.1 <code>prerequisite</code> — 前置依赖</h4>
+<p><strong>语义：</strong> 要理解条目 B，必须先掌握条目 A。A 中定义的概念是 B 的认知前提。</p>
+<p><strong>方向：</strong> B → A（B 声明 A 是自己的前置依赖）。</p>
+<p><strong>约束：</strong></p>
+<ul>
+<li>是一种偏序关系（非对称，可传递）：若 B prerequisite A，C prerequisite B，则 C 隐含 prerequisite A。</li>
+<li>不应形成循环依赖（检查工具应能检测并报警）。</li>
+<li><code>prerequisite</code> 链的叶子节点通常是 <code>beginner</code> 级别的条目。</li>
+</ul>
+<p><strong>使用场景：</strong></p>
+<table>
+<thead>
+<tr>
+<th>B（当前条目）</th>
+<th>A（前置条目）</th>
+<th>原因</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Spring Boot 自动配置原理</td>
+<td>Java 注解与反射</td>
+<td>理解自动配置需要注解和反射知识</td>
+</tr>
+<tr>
+<td>Seata 分布式事务</td>
+<td>数据库事务 ACID</td>
+<td>分布式事务是本地事务的扩展</td>
+</tr>
+<tr>
+<td>Spring AI Tool Calling</td>
+<td>JSON Schema 规范</td>
+<td>Tool 定义基于 JSON Schema</td>
+</tr>
+<tr>
+<td>Kubernetes Pod 调度</td>
+<td>Linux cgroup</td>
+<td>Pod 资源限制底层机制</td>
+</tr>
+</tbody></table>
+<p><strong>示例（当前条目的 frontmatter）：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># 文件: 03-Java应用平台/03-spring-boot-auto-configuration.md
+relations:
+  prerequisite:
+    - &quot;02-Java平台/02-reflection-and-annotations&quot;
+    - &quot;02-Java平台/02-class-loading-mechanism&quot;
+</code></pre></div>
+<p><strong>学习路径可视化：</strong> 将所有条目的 <code>prerequisite</code> 关系展开后，可以生成一个有向无环图（DAG），用于自动推荐学习顺序。工具可以为读者标出：&quot;在学习本条目之前，建议先完成以下 2 个前置条目&quot;。</p>
+<h4>1.2 <code>related</code> — 相关关系</h4>
+<p><strong>语义：</strong> 条目 A 和 B 在主题上相互关联，建议并行或交叉学习，但没有严格的先后顺序依赖。</p>
+<p><strong>方向：</strong> 双向（对称关系）。如果 A related B，则 B 通常也会 related A。</p>
+<p><strong>约束：</strong></p>
+<ul>
+<li>是对称关系（但不会自动补全，两方都应在 frontmatter 中显式声明）。</li>
+<li>不能同时也是 <code>prerequisite</code>（关系类型互斥；选择更精确的类型）。</li>
+<li>适合建立&quot;水平关联&quot;而非&quot;垂直依赖&quot;。</li>
+</ul>
+<p><strong>使用场景：</strong></p>
+<table>
+<thead>
+<tr>
+<th>A</th>
+<th>B</th>
+<th>关联点</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>PostgreSQL 索引优化</td>
+<td>Elasticsearch 倒排索引</td>
+<td>不同存储引擎的索引策略对比</td>
+</tr>
+<tr>
+<td>Redis 数据结构</td>
+<td>Java 集合框架</td>
+<td>两种数据结构设计的对比学习</td>
+</tr>
+<tr>
+<td>MCP 协议</td>
+<td>A2A 协议</td>
+<td>两个 AI 协议的互补理解</td>
+</tr>
+<tr>
+<td>Docker 容器化</td>
+<td>Kubernetes 编排</td>
+<td>容器与编排的关系</td>
+</tr>
+<tr>
+<td>Virtual Threads</td>
+<td>CompletableFuture</td>
+<td>两种并发编程模型</td>
+</tr>
+</tbody></table>
+<p><strong>示例：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># 文件: 04-数据与中间件/04-redis-data-structures.md
+relations:
+  prerequisite:
+    - &quot;01-计算机基础/01-数据结构与算法&quot;
+  related:
+    - &quot;02-Java平台/02-java-collections-framework&quot;
+    - &quot;04-数据与中间件/04-redis-persistence&quot;
+</code></pre></div>
+<h4>1.3 <code>derived</code> — 派生关系</h4>
+<p><strong>语义：</strong> 条目 B 是条目 A 中理论或原理的直接应用或工程实现。A 是&quot;为什么&quot;，B 是&quot;怎么做&quot;。</p>
+<p><strong>方向：</strong> B → A（B 是 A 的派生应用）。</p>
+<p><strong>约束：</strong></p>
+<ul>
+<li>不对称、不可传递（B derived A，C derived B 不意味着 C derived A）。</li>
+<li><code>derived</code> 意味着 B 不应该完全重复 A 中的理论内容，而应该引用 A 并在此基础上展开工程实践。</li>
+<li>通常跨域使用。例如，域 07（AI 基础）中的理论条目被域 11（RAG）中的工程条目派生。</li>
+</ul>
+<p><strong>典型派生链：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>07-AI基础/transformer-architecture (理论)
+  └─ derived → 08-模型接入与推理/模型API/08-OpenAI兼容协议详解 (应用)
+       └─ derived → 11-rag/hybrid-search (进一步应用)
+</code></pre></div>
+<p><strong>使用场景：</strong></p>
+<table>
+<thead>
+<tr>
+<th>A（理论/基础）</th>
+<th>B（应用/工程）</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Transformer Self-Attention 原理</td>
+<td>Embedding 模型选择与评测</td>
+</tr>
+<tr>
+<td>CAP 定理</td>
+<td>分布式事务方案选型</td>
+</tr>
+<tr>
+<td>MVCC 原理</td>
+<td>PostgreSQL 事务隔离级别实践</td>
+</tr>
+<tr>
+<td>B+Tree 索引原理</td>
+<td>MySQL 索引优化实战</td>
+</tr>
+<tr>
+<td>Tokenization 算法</td>
+<td>Token 计数与成本优化</td>
+</tr>
+</tbody></table>
+<p><strong>示例：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># 文件: 11-检索与RAG/11-hybrid-search-with-pgvector.md
+relations:
+  prerequisite:
+    - &quot;07-AI基础/07-embedding-models&quot;
+    - &quot;04-数据与中间件/04-postgresql-indexing&quot;
+  derived:
+    - &quot;07-AI基础/07-vector-semantic-similarity&quot;
+</code></pre></div>
+<h4>1.4 <code>contrast</code> — 对比关系</h4>
+<p><strong>语义：</strong> 条目 A 和条目 B 针对同一问题提供了不同的技术方案，需要从多个维度（性能、复杂度、适用场景、生态）进行对比选型。</p>
+<p><strong>方向：</strong> 双向（对称关系）。</p>
+<p><strong>约束：</strong></p>
+<ul>
+<li>两方解决的是同一类问题（问题域一致）。</li>
+<li>对比应尽量客观，基于可测量的指标（吞吐量、延迟、内存占用）而非主观偏好。</li>
+<li><code>contrast</code> 关系的条目应该有一个做出&quot;决策建议&quot;的条目或段落。</li>
+</ul>
+<p><strong>使用场景：</strong></p>
+<table>
+<thead>
+<tr>
+<th>方案 A</th>
+<th>方案 B</th>
+<th>对比维度</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Spring AI</td>
+<td>LangChain4j</td>
+<td>生态、API 设计、Spring 集成度、学习曲线</td>
+</tr>
+<tr>
+<td>PostgreSQL pgvector</td>
+<td>Qdrant</td>
+<td>数据规模、延迟、运维复杂度、混合检索</td>
+</tr>
+<tr>
+<td>Virtual Threads</td>
+<td>WebFlux/Reactor</td>
+<td>吞吐量、内存、代码可读性、调试难度</td>
+</tr>
+<tr>
+<td>MyBatis</td>
+<td>Spring Data JPA</td>
+<td>SQL 控制力、开发效率、复杂查询支持</td>
+</tr>
+<tr>
+<td>Redis Cluster</td>
+<td>Redis Sentinel</td>
+<td>可扩展性、运维复杂度、数据一致性</td>
+</tr>
+</tbody></table>
+<p><strong>示例：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># 文件: 09-Java AI框架/09-spring-ai-vs-langchain4j.md
+relations:
+  prerequisite: []
+  related: []
+  derived: []
+  contrast: []
+  version-of: []
+  replaces: []
+tags: [&quot;spring-ai&quot;, &quot;langchain4j&quot;, &quot;framework-comparison&quot;, &quot;java-ai&quot;]
+
+# 注意：两个被对比的条目各自也应标注 contrast 关系指向对比条目。
+# 例如，在 spring-ai-overview.md 和 langchain4j-overview.md 中：
+#   contrast: [&quot;09-spring-ai-vs-langchain4j&quot;]
+</code></pre></div>
+<p><strong>对比最佳实践：</strong> 对比条目本身是一个独立的知识单元，包含对比矩阵、决策树和场景推荐。它不应该是两个条目的简单并列，而应该回答&quot;在 X 场景下选择 Y 的理由&quot;。</p>
+<h4>1.5 <code>version-of</code> — 版本关系</h4>
+<p><strong>语义：</strong> 条目 B 是条目 A 的新版本。A 和 B 讨论的是同一技术在不同版本下的知识。通常，A 会被标记为 <code>status: outdated</code>，B 标记为 <code>status: verified</code>。</p>
+<p><strong>方向：</strong> B → A（B 是 A 的新版本）。</p>
+<p><strong>约束：</strong></p>
+<ul>
+<li>新版本条目（B）应明确标注与旧版本（A）的差异变更。</li>
+<li>旧版本条目（A）保留但不作为主要学习资料。</li>
+<li>不适用于&quot;替代技术&quot;（那是 <code>replaces</code> 关系）。</li>
+</ul>
+<p><strong>使用场景：</strong></p>
+<table>
+<thead>
+<tr>
+<th>A（旧版本）</th>
+<th>B（新版本）</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>JDK 21 Virtual Threads 初探</td>
+<td>JDK 25 Virtual Threads 深度解析</td>
+</tr>
+<tr>
+<td>Spring AI 1.x ChatClient</td>
+<td>Spring AI 2.x ChatClient</td>
+</tr>
+<tr>
+<td>Spring Boot 3.x 自动配置</td>
+<td>Spring Boot 4.x 自动配置</td>
+</tr>
+<tr>
+<td>HTTP/2 详解</td>
+<td>HTTP/3 (QUIC) 详解</td>
+</tr>
+</tbody></table>
+<p><strong>示例：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># 文件: 02-Java平台/02-virtual-threads-jdk25.md (新版)
+relations:
+  version-of: [&quot;02-Java平台/02-virtual-threads-jdk21&quot;]
+# 旧版 frontmatter:
+# status: &quot;outdated&quot;
+# relations:
+#   version-of: []  # 旧版可以不标注，或由新版反向引用
+</code></pre></div>
+<h4>1.6 <code>replaces</code> — 替代关系</h4>
+<p><strong>语义：</strong> 技术 B 在大多数场景下替代了技术 A。A 不再是推荐的主栈方案。</p>
+<p><strong>方向：</strong> B → A（B 替代了 A）。</p>
+<p><strong>约束：</strong></p>
+<ul>
+<li><code>replaces</code> 是 <code>contrast</code> 的升级版——当对比结果明确倾向于一方且技术雷达已将其列入 Hold 时，使用 <code>replaces</code>。</li>
+<li>被替代的条目（A）状态通常为 <code>outdated</code>，并保留作为历史参考。</li>
+<li>替代不是永久的：如果技术格局再次变化，<code>replaces</code> 关系可以被移除。</li>
+</ul>
+<p><strong>与 <code>version-of</code> 的区别：</strong></p>
+<ul>
+<li><code>version-of</code>：同一技术的版本演进（JDK 21 → JDK 25）</li>
+<li><code>replaces</code>：不同技术的此消彼长（Reactor 被 Virtual Threads 在多数场景替代）</li>
+</ul>
+<p><strong>使用场景：</strong></p>
+<table>
+<thead>
+<tr>
+<th>A（被替代）</th>
+<th>B（替代者）</th>
+<th>判断依据</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Reactor/WebFlux（非响应式场景）</td>
+<td>Virtual Threads</td>
+<td>技术雷达：Reactor 已降为 Trial</td>
+</tr>
+<tr>
+<td>ThreadLocal（上下文传递）</td>
+<td>Scoped Values</td>
+<td>JEP 481 正式替代方案</td>
+</tr>
+<tr>
+<td>JUnit 4</td>
+<td>JUnit 5</td>
+<td>社区已全面迁移</td>
+</tr>
+<tr>
+<td>Date/Calendar</td>
+<td>java.time (JSR 310)</td>
+<td>JDK 官方替代</td>
+</tr>
+<tr>
+<td>手动 new Thread()</td>
+<td>ExecutorService / Virtual Threads</td>
+<td>最佳实践转移</td>
+</tr>
+</tbody></table>
+<p><strong>示例：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># 文件: 02-Java平台/02-scoped-values.md
+relations:
+  prerequisite:
+    - &quot;02-Java平台/02-jmm-basics&quot;
+  replaces:
+    - &quot;02-Java平台/02-threadlocal-in-depth&quot;
+</code></pre></div>
+<hr>
+<h3>二、关系建立与维护</h3>
+<h4>2.1 关系建立的时机</h4>
+<table>
+<thead>
+<tr>
+<th>阶段</th>
+<th>行动</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>条目创建时</strong></td>
+<td>填写 <code>prerequisite</code> 和 <code>related</code>（创作者最清楚需要什么前置知识）</td>
+</tr>
+<tr>
+<td><strong>条目审核时</strong></td>
+<td>审核人补充 <code>derived</code>、<code>contrast</code>（审核人有更广的全局视角）</td>
+</tr>
+<tr>
+<td><strong>技术雷达更新后</strong></td>
+<td>检查是否需要新增 <code>replaces</code> 或 <code>version-of</code> 关系</td>
+</tr>
+<tr>
+<td><strong>定期维护时</strong></td>
+<td>扫描是否存在&quot;断链&quot;（引用了已删除或重命名的条目）</td>
+</tr>
+</tbody></table>
+<h4>2.2 冗余关系避免</h4>
+<p>关系应该是最小化的——仅保留最精确的关系类型。例如：</p>
+<ul>
+<li><strong>反例：</strong> A prerequisite B，同时 A related B（冗余，选更精确的 <code>prerequisite</code>）。</li>
+<li><strong>反例：</strong> A replaces B，同时 A contrast B（<code>replaces</code> 隐含了对比结论）。</li>
+<li><strong>正例：</strong> A prerequisite B，B related C（两者不冗余，各有独立语义）。</li>
+</ul>
+<p><strong>判定优先级规则（关系互斥时的选择）：</strong></p>
+<ol>
+<li>如果 A 和 B 是同一技术的不同版本 → <code>version-of</code></li>
+<li>如果 B 在技术雷达中替代了 A → <code>replaces</code></li>
+<li>如果必须有先后学习顺序 → <code>prerequisite</code></li>
+<li>如果 B 是 A 的应用/工程实现 → <code>derived</code></li>
+<li>如果两者是竞争性方案需要对比 → <code>contrast</code></li>
+<li>以上都不适用但有主题关联 → <code>related</code></li>
+</ol>
+<h4>2.3 大规模重命名与关系更新</h4>
+<p>当知识条目文件被重命名时，所有引用该文件的关系字段需要同步更新。建议使用脚本扫描所有 <code>.md</code> 文件的 frontmatter，检查是否存在不存在的引用目标。</p>
+<p><strong>检测命令示例（bash 脚本思路）：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># 扫描所有 relations 中的引用是否指向存在的文件
+for md in knowledge/**/*.md; do
+  # 提取 prerequisite/related/derived/contrast/version-of/replaces 值
+  # 检查对应的 .md 文件是否存在
+done
+</code></pre></div>
+<h4>2.4 关系图入度/出度平衡</h4>
+<p>一个健康的知识网络应避免两种极端：</p>
+<ul>
+<li><strong>孤立节点（入度=0, 出度=0）：</strong> 没有任何关系的条目——可能是遗漏了关联。</li>
+<li><strong>超级枢纽（入度 &gt;&gt; 10）：</strong> 太多条目指向同一个——可能是该条目过于&quot;宽泛&quot;，应考虑拆分。</li>
+</ul>
+<hr>
+<h3>三、知识图谱可视化建议</h3>
+<p>将 frontmatter 中的 <code>relations</code> 字段提取出来，可以生成知识图谱。以下是推荐的图结构映射：</p>
+<table>
+<thead>
+<tr>
+<th>关系类型</th>
+<th>图示方式</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>prerequisite</code></td>
+<td>实线有向箭头 A→B</td>
+<td>A 是 B 的前置</td>
+</tr>
+<tr>
+<td><code>related</code></td>
+<td>虚线无向连线 A---B</td>
+<td>对称关系</td>
+</tr>
+<tr>
+<td><code>derived</code></td>
+<td>空心有向箭头 A⇢B</td>
+<td>理论到应用</td>
+</tr>
+<tr>
+<td><code>contrast</code></td>
+<td>双箭头 A↔B</td>
+<td>双向对比</td>
+</tr>
+<tr>
+<td><code>version-of</code></td>
+<td>标注版本号的实线箭头 v1→v2</td>
+<td>版本演进</td>
+</tr>
+<tr>
+<td><code>replaces</code></td>
+<td>红色箭头 + &quot;X&quot;标记 A↛B</td>
+<td>B 替代 A</td>
+</tr>
+</tbody></table>
+<p><strong>可视化工具建议：</strong></p>
+<ul>
+<li><strong>D3.js</strong> 力导向图：适合交互式浏览器查看整个知识图谱。</li>
+<li><strong>Graphviz (DOT 语言)：</strong> 适合生成静态图片嵌入到文档中。</li>
+<li><strong>Obsidian Graph View：</strong> 如果使用 Obsidian 作为知识库前端（其 <code><span class="broken-ref" title="未找到: wikilink">wikilink</span></code> 语法可映射为关系）。</li>
+<li><strong>Mermaid：</strong> 适合嵌入到 Markdown 中的轻量级图。</li>
+</ul>
+<p><strong>Mermaid 示例（嵌入在 Markdown 中）：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">mermaid</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-mermaid">graph TD
+    A[01-数据结构与算法] --&gt;|prerequisite| B[02-Java集合框架]
+    A --&gt;|prerequisite| C[02-并发编程]
+    B --&gt;|prerequisite| D[03-Spring核心]
+    C --&gt;|related| B
+    D --&gt;|derived| E[07-Embedding模型]
+    E --&gt;|prerequisite| F[11-向量检索]
+    F --&gt;|related| G[11-混合检索]
+    H[JDK21 Virtual Threads] --&gt;|version-of| I[JDK25 Virtual Threads]
+    J[ThreadLocal] --&gt;|replaces| K[Scoped Values]
+</code></pre></div>
+<p><strong>大型图谱的分层展示建议：</strong></p>
+<ul>
+<li><strong>第 1 层（域级）：</strong> 只展示 19 个知识域之间的关系。</li>
+<li><strong>第 2 层（条目级）：</strong> 展示某个域内所有条目之间的关系。</li>
+<li><strong>第 3 层（概念级）：</strong> 展示单个条目内部的概念图（通过标签系统实现）。</li>
+</ul>
+<hr>
+<h3>四、关系与学习路径生成</h3>
+<h4>4.1 拓扑排序生成学习路径</h4>
+<p>将所有条目的 <code>prerequisite</code> 边提取出来，对整个知识库做拓扑排序，可以得到建议的学习顺序。步骤如下：</p>
+<ol>
+<li>构建有向图 G = (V, E)，其中 V = 所有条目，E = 所有 prerequisite 边。</li>
+<li>检测是否存在环（有环意味着存在循环依赖，需要修正）。</li>
+<li>对 DAG 做拓扑排序。</li>
+<li>对拓扑排序的每一层（入度为 0 的节点组成一层），按域分组展示给读者。</li>
+</ol>
+<h4>4.2 个性化推荐</h4>
+<ul>
+<li><strong>基于已有基础推荐：</strong> 标记已掌握的条目，找到&quot;前置条件已满足&quot;的条目集合。</li>
+<li><strong>基于目标推荐：</strong> 从目标条目出发，反向追溯 prerequisite 链，生成缺失的前置知识清单。</li>
+<li><strong>基于兴趣推荐：</strong> 利用 <code>related</code> 边做&quot;猜你喜欢&quot;（例如：学习了 Redis 数据结构的读者可能也对 Java 集合框架感兴趣）。</li>
+</ul>
+<hr>
+<h2>常见问题</h2>
+<p><strong>Q1: 如果我创建的新条目暂时不知道和谁关联怎么办？</strong></p>
+<p>至少填写 <code>prerequisite</code> 和 <code>related</code> 为空数组 <code>[]</code>。之后在审核或交叉阅读时逐步补充。孤立条目会在定期的关系完整性扫描中被发现，触发补充提醒。</p>
+<p><strong>Q2: <code>prerequisite</code> 和 <code>related</code> 的界限有时模糊，怎么判断？</strong></p>
+<p>问自己：&quot;如果读者不理解 A，他能读懂 B 吗？&quot; 如果答案是&quot;不能&quot;，则是 <code>prerequisite</code>。如果是&quot;可以，但了解 A 会有更深的体会&quot;，则是 <code>related</code>。</p>
+<p><strong>Q3: 一个条目可以有多个同类型关系吗？</strong></p>
+<p>可以。<code>prerequisite</code>、<code>related</code> 等字段的值是一个数组，可以包含任意数量的引用。</p>
+<p><strong>Q4: 跨域关系如何表示？</strong></p>
+<p>在引用值中加域前缀。例如，域 03 的条目引用域 02 的条目：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">prerequisite: [&quot;02-Java平台/02-reflection-and-annotations&quot;]
+</code></pre></div>
+<p>不加域前缀的引用默认为同域引用。</p>
+<hr>
+<h2>相关条目</h2>
+<ul>
+<li><a href="/00-知识工程/00-元数据规范与来源等级标准" class="cross-ref" data-ref="00-元数据规范与来源等级标准">00-元数据规范与来源等级标准</a> — 元数据规范与来源等级标准</li>
+<li><span class="broken-ref" title="未找到: KNOWLEDGE_TAXONOMY">KNOWLEDGE_TAXONOMY</span> — 知识域分类体系（含关系类型定义）</li>
+<li><span class="broken-ref" title="未找到: TECHNOLOGY_RADAR">TECHNOLOGY_RADAR</span> — 技术雷达（<code>replaces</code> 关系的判断依据）</li>
+</ul>
+</div>
+</article>

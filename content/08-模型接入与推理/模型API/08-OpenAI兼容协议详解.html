@@ -1,0 +1,1201 @@
+
+<article class="kb-entry" data-path="/08-模型接入与推理/模型API/08-OpenAI兼容协议详解">
+  <div class="entry-meta">
+    <div class="entry-domain"><a href="/?d=08">08-模型接入与推理</a></div>
+    <h1>OpenAI Compatible Protocol</h1>
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#["openai"</span><span class="badge badge-tag">#"api"</span><span class="badge badge-tag">#"chat-completions"</span><span class="badge badge-tag">#"tool-calling"</span></div>
+    
+  </div>
+  <div class="entry-body"><h1>OpenAI Compatible Protocol</h1>
+<h2>概述</h2>
+<p>OpenAI 的 Chat Completions API 已成为 LLM 接入的事实标准协议。几乎所有的模型提供商（从 Anthropic 到 Ollama 到 vLLM）都支持这一协议或其变体。掌握这一协议，就等于掌握了与任何 LLM 交互的通用语言。本条目从请求结构、流式事件、Tool Calling、Structured Output 到多 Provider 差异，全面深入剖析。</p>
+<h2>Chat Completions API 详解</h2>
+<h3>请求结构</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>POST https://api.openai.com/v1/chat/completions
+Authorization: Bearer sk-...
+Content-Type: application/json
+
+{
+  &quot;model&quot;: &quot;gpt-4o&quot;,
+  &quot;messages&quot;: [...],
+  &quot;stream&quot;: false,
+  &quot;tools&quot;: [...],
+  &quot;tool_choice&quot;: &quot;auto&quot;,
+  &quot;temperature&quot;: 0.7,
+  &quot;top_p&quot;: 0.9,
+  &quot;max_tokens&quot;: 4096,
+  &quot;frequency_penalty&quot;: 0,
+  &quot;presence_penalty&quot;: 0,
+  &quot;stop&quot;: [&quot;\n\n\n&quot;],
+  &quot;seed&quot;: 42,
+  &quot;response_format&quot;: { &quot;type&quot;: &quot;json_object&quot; }
+}
+</code></pre></div>
+<p><strong>各参数详解：</strong></p>
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>类型</th>
+<th>必需</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>model</td>
+<td>string</td>
+<td>是</td>
+<td>模型标识符 (gpt-4o, gpt-4o-mini)</td>
+</tr>
+<tr>
+<td>messages</td>
+<td>array</td>
+<td>是</td>
+<td>对话消息列表，按时间顺序排列</td>
+</tr>
+<tr>
+<td>stream</td>
+<td>boolean</td>
+<td>否</td>
+<td>是否流式返回 (SSE)</td>
+</tr>
+<tr>
+<td>tools</td>
+<td>array</td>
+<td>否</td>
+<td>可用函数/工具定义列表</td>
+</tr>
+<tr>
+<td>tool_choice</td>
+<td>string/object</td>
+<td>否</td>
+<td>工具选择策略 (auto/none/required/指定)</td>
+</tr>
+<tr>
+<td>temperature</td>
+<td>float</td>
+<td>否</td>
+<td>采样温度 (0-2)，默认 1</td>
+</tr>
+<tr>
+<td>top_p</td>
+<td>float</td>
+<td>否</td>
+<td>Nucleus 采样阈值 (0-1)，默认 1</td>
+</tr>
+<tr>
+<td>max_tokens</td>
+<td>int</td>
+<td>否</td>
+<td>最大输出 token 数</td>
+</tr>
+<tr>
+<td>max_completion_tokens</td>
+<td>int</td>
+<td>否</td>
+<td>(新) 最大完成 token 数，取代 max_tokens</td>
+</tr>
+<tr>
+<td>frequency_penalty</td>
+<td>float</td>
+<td>否</td>
+<td>频率惩罚 (-2~2)</td>
+</tr>
+<tr>
+<td>presence_penalty</td>
+<td>float</td>
+<td>否</td>
+<td>存在惩罚 (-2~2)</td>
+</tr>
+<tr>
+<td>stop</td>
+<td>string/array</td>
+<td>否</td>
+<td>停止序列</td>
+</tr>
+<tr>
+<td>seed</td>
+<td>int</td>
+<td>否</td>
+<td>尽力保证确定性输出</td>
+</tr>
+<tr>
+<td>response_format</td>
+<td>object</td>
+<td>否</td>
+<td>输出格式控制</td>
+</tr>
+<tr>
+<td>n</td>
+<td>int</td>
+<td>否</td>
+<td>返回几个候选完成 (默认1)</td>
+</tr>
+<tr>
+<td>logprobs</td>
+<td>boolean</td>
+<td>否</td>
+<td>是否返回对数概率</td>
+</tr>
+<tr>
+<td>top_logprobs</td>
+<td>int</td>
+<td>否</td>
+<td>每个位置返回前N个token的概率</td>
+</tr>
+</tbody></table>
+<h3>消息角色</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>消息类型与角色：
+
+┌──────────────┬───────────────────────────────────────────────────────┐
+│ 角色         │ 含义和用法                                             │
+├──────────────┼───────────────────────────────────────────────────────┤
+│ system       │ 系统级指令，定义AI的整体行为、边界、语气               │
+│              │ 位置：消息列表的第一条                                │
+│              │ 示例：&quot;你是一个专业的Java技术顾问，只回答...&quot;          │
+├──────────────┼───────────────────────────────────────────────────────┤
+│ user         │ 用户输入，代表人类的消息                               │
+│              │ 可包含文本、图片（多模态）内容                        │
+├──────────────┼───────────────────────────────────────────────────────┤
+│ assistant    │ AI的历史回复                                          │
+│              │ 可包含普通文本或 tool_calls                            │
+│              │ 用于提供对话上下文                                     │
+├──────────────┼───────────────────────────────────────────────────────┤
+│ tool         │ 工具执行的结果，必须对应之前的 tool_calls              │
+│              │ 每个 tool 消息必须携带 tool_call_id                    │
+└──────────────┴───────────────────────────────────────────────────────┘
+</code></pre></div>
+<p><strong>完整对话示例的 JSON 结构：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-json">{
+  &quot;model&quot;: &quot;gpt-4o&quot;,
+  &quot;messages&quot;: [
+    {&quot;role&quot;: &quot;system&quot;, &quot;content&quot;: &quot;你是Java智能助手。使用工具查询数据。&quot;},
+    {&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;查询用户123的订单&quot;},
+    {
+      &quot;role&quot;: &quot;assistant&quot;,
+      &quot;content&quot;: null,
+      &quot;tool_calls&quot;: [
+        {
+          &quot;id&quot;: &quot;call_abc123&quot;,
+          &quot;type&quot;: &quot;function&quot;,
+          &quot;function&quot;: {&quot;name&quot;: &quot;query_orders&quot;, &quot;arguments&quot;: &quot;{\&quot;userId\&quot;: \&quot;123\&quot;}&quot;}
+        }
+      ]
+    },
+    {
+      &quot;role&quot;: &quot;tool&quot;,
+      &quot;tool_call_id&quot;: &quot;call_abc123&quot;,
+      &quot;content&quot;: &quot;{\&quot;orders\&quot;: [{\&quot;id\&quot;: 1, \&quot;amount\&quot;: 99.9}]}&quot;
+    },
+    {&quot;role&quot;: &quot;assistant&quot;, &quot;content&quot;: &quot;用户123有1笔订单，金额99.9元。&quot;}
+  ]
+}
+</code></pre></div>
+<h3>响应结构</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public record ChatCompletionResponse(
+    String id,                           // 唯一请求ID
+    String object,                       // &quot;chat.completion&quot;
+    long created,                        // Unix时间戳
+    String model,                        // 实际使用的模型
+    List&lt;Choice&gt; choices,                // 候选回复列表
+    CompletionUsage usage                // Token使用量
+) {
+    public record Choice(
+        int index,                       // 候选序号
+        ChatMessage message,             // 完整消息 (非流式)
+        MessageDelta delta,              // 增量消息 (流式)
+        String finishReason              // 结束原因
+    ) {}
+
+    public record ChatMessage(
+        String role,                     // &quot;assistant&quot;
+        String content,                  // 文本内容
+        List&lt;ToolCall&gt; toolCalls,        // 工具调用
+        String refusal                   // 安全拒绝原因 (如有)
+    ) {}
+
+    public record ToolCall(
+        String id,                       // 工具调用ID
+        String type,                     // &quot;function&quot;
+        FunctionCall function            // 函数名和参数
+    ) {}
+
+    public record FunctionCall(
+        String name,                     // 函数名
+        String arguments                 // JSON字符串参数
+    ) {}
+
+    public record CompletionUsage(
+        int promptTokens,                // 输入token数
+        int completionTokens,            // 输出token数
+        int totalTokens,                 // 总token数
+        CompletionTokensDetails completionTokensDetails  // (新)细分
+    ) {}
+
+    public record CompletionTokensDetails(
+        int reasoningTokens,             // 推理token (如o1系列)
+        int acceptedPredictionTokens,
+        int rejectedPredictionTokens
+    ) {}
+
+    public record MessageDelta(
+        String role,
+        String content,                  // 增量文本
+        List&lt;ToolCall&gt; toolCalls         // 增量工具调用
+    ) {}
+
+    /** Finish Reason 含义 */
+    public enum FinishReason {
+        STOP,           // 正常结束（遇到停止条件或EOS）
+        LENGTH,         // 达到 max_tokens 限制
+        TOOL_CALLS,     // 模型决定调用工具
+        CONTENT_FILTER,  // 内容被过滤（安全策略）
+        FUNCTION_CALL   // 旧版函数调用
+    }
+}
+</code></pre></div>
+<h3>流式响应（SSE）</h3>
+<p>流式响应使用 Server-Sent Events (SSE) 格式。这是实时输出、改善用户体验的关键机制。</p>
+<p><strong>请求：</strong> 将 <code>stream: true</code></p>
+<p><strong>SSE 事件格式：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>data: {&quot;id&quot;:&quot;chatcmpl-123&quot;,&quot;object&quot;:&quot;chat.completion.chunk&quot;,&quot;created&quot;:1694268190,&quot;model&quot;:&quot;gpt-4o&quot;,&quot;choices&quot;:[{&quot;index&quot;:0,&quot;delta&quot;:{&quot;role&quot;:&quot;assistant&quot;,&quot;content&quot;:&quot;&quot;},&quot;finish_reason&quot;:null}]}
+
+data: {&quot;id&quot;:&quot;chatcmpl-123&quot;,&quot;object&quot;:&quot;chat.completion.chunk&quot;,&quot;created&quot;:1694268190,&quot;model&quot;:&quot;gpt-4o&quot;,&quot;choices&quot;:[{&quot;index&quot;:0,&quot;delta&quot;:{&quot;content&quot;:&quot;Java&quot;},&quot;finish_reason&quot;:null}]}
+
+data: {&quot;id&quot;:&quot;chatcmpl-123&quot;,&quot;object&quot;:&quot;chat.completion.chunk&quot;,&quot;created&quot;:1694268190,&quot;model&quot;:&quot;gpt-4o&quot;,&quot;choices&quot;:[{&quot;index&quot;:0,&quot;delta&quot;:{&quot;content&quot;:&quot;虚拟&quot;},&quot;finish_reason&quot;:null}]}
+
+data: {&quot;id&quot;:&quot;chatcmpl-123&quot;,&quot;object&quot;:&quot;chat.completion.chunk&quot;,&quot;created&quot;:1694268190,&quot;model&quot;:&quot;gpt-4o&quot;,&quot;choices&quot;:[{&quot;index&quot;:0,&quot;delta&quot;:{&quot;content&quot;:&quot;线程&quot;},&quot;finish_reason&quot;:null}]}
+
+data: {&quot;id&quot;:&quot;chatcmpl-123&quot;,&quot;object&quot;:&quot;chat.completion.chunk&quot;,&quot;created&quot;:1694268190,&quot;model&quot;:&quot;gpt-4o&quot;,&quot;choices&quot;:[{&quot;index&quot;:0,&quot;delta&quot;:{},&quot;finish_reason&quot;:&quot;stop&quot;}]}
+
+data: [DONE]
+</code></pre></div>
+<p><strong>关键规则：</strong></p>
+<ul>
+<li>每条 <code>data:</code> 行是一个 JSON 事件</li>
+<li>最后一条是 <code>data: [DONE]</code>（特殊标记，不是 JSON）</li>
+<li><code>delta</code> 是增量内容，<code>message</code> 是完整内容（两者互斥）</li>
+<li>第一个 chunk 可能包含 <code>delta.role: &quot;assistant&quot;</code>（角色声明）</li>
+<li>最后一个 chunk 的 <code>finish_reason</code> 非 null</li>
+</ul>
+<p><strong>Java SSE 解析器：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.io.BufferedReader;
+import java.io.InputStreamReader;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.util.concurrent.Flow;
+import java.util.function.Consumer;
+
+/**
+ * 流式 Chat Completion 的 SSE 解析
+ */
+public class ChatCompletionSSEParser {
+
+    /**
+     * 发起流式请求并逐块处理
+     */
+    public static void streamChatCompletion(
+            String apiKey,
+            String model,
+            List&lt;Map&lt;String, Object&gt;&gt; messages,
+            Consumer&lt;String&gt; onToken,          // 每收到一个文本增量
+            Consumer&lt;String&gt; onComplete,       // 流结束
+            Consumer&lt;Throwable&gt; onError) {
+
+        var requestBody = Map.of(
+            &quot;model&quot;, model,
+            &quot;messages&quot;, messages,
+            &quot;stream&quot;, true,
+            &quot;temperature&quot;, 0.7d
+        );
+
+        // 使用 Virtual Threads 处理
+        Thread.ofVirtual().start(() -&gt; {
+            try {
+                var client = HttpClient.newHttpClient();
+                var request = HttpRequest.newBuilder()
+                    .uri(URI.create(&quot;https://api.openai.com/v1/chat/completions&quot;))
+                    .header(&quot;Authorization&quot;, &quot;Bearer &quot; + apiKey)
+                    .header(&quot;Content-Type&quot;, &quot;application/json&quot;)
+                    .POST(HttpRequest.BodyPublishers.ofString(
+                        new com.fasterxml.jackson.databind.ObjectMapper()
+                            .writeValueAsString(requestBody)))
+                    .build();
+
+                var response = client.send(request,
+                    HttpResponse.BodyHandlers.ofLines());
+
+                response.body().forEach(line -&gt; {
+                    if (line.startsWith(&quot;data: &quot;) &amp;&amp; !line.equals(&quot;data: [DONE]&quot;)) {
+                        var data = line.substring(6);
+                        try {
+                            // 解析 delta content
+                            var node = new com.fasterxml.jackson.databind.ObjectMapper()
+                                .readTree(data);
+                            var choices = node.get(&quot;choices&quot;);
+                            if (choices != null &amp;&amp; choices.size() &gt; 0) {
+                                var delta = choices.get(0).get(&quot;delta&quot;);
+                                if (delta != null &amp;&amp; delta.has(&quot;content&quot;)) {
+                                    onToken.accept(delta.get(&quot;content&quot;).asText());
+                                }
+                            }
+                        } catch (Exception e) {
+                            // 忽略解析失败的行
+                        }
+                    } else if (line.equals(&quot;data: [DONE]&quot;)) {
+                        onComplete.accept(&quot;DONE&quot;);
+                    }
+                });
+
+            } catch (Exception e) {
+                onError.accept(e);
+            }
+        });
+    }
+
+    /**
+     * 使用示例
+     */
+    public static void main(String[] args) throws InterruptedException {
+        var sb = new StringBuilder();
+        streamChatCompletion(
+            System.getenv(&quot;OPENAI_API_KEY&quot;),
+            &quot;gpt-4o-mini&quot;,
+            List.of(Map.of(&quot;role&quot;, &quot;user&quot;, &quot;content&quot;, &quot;用Java写一个Hello World&quot;)),
+            token -&gt; {
+                System.out.print(token);
+                sb.append(token);
+            },
+            done -&gt; System.out.println(&quot;\n--- 流结束 ---\n完整内容: &quot; + sb),
+            error -&gt; error.printStackTrace()
+        );
+
+        Thread.sleep(30000); // 等待 Virtual Thread 完成
+    }
+}
+</code></pre></div>
+<h2>Tool Calling 协议</h2>
+<p>Tool Calling（旧称 Function Calling）是 LLM API 最重要的能力之一。它让模型可以&quot;调用&quot;外部函数来获取信息或执行操作。</p>
+<h3>工具定义</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-json">{
+  &quot;tools&quot;: [
+    {
+      &quot;type&quot;: &quot;function&quot;,
+      &quot;function&quot;: {
+        &quot;name&quot;: &quot;get_current_weather&quot;,
+        &quot;description&quot;: &quot;获取指定城市的当前天气&quot;,
+        &quot;parameters&quot;: {
+          &quot;type&quot;: &quot;object&quot;,
+          &quot;properties&quot;: {
+            &quot;city&quot;: {
+              &quot;type&quot;: &quot;string&quot;,
+              &quot;description&quot;: &quot;城市名称，如 &#39;Beijing&#39;&quot;
+            },
+            &quot;unit&quot;: {
+              &quot;type&quot;: &quot;string&quot;,
+              &quot;enum&quot;: [&quot;celsius&quot;, &quot;fahrenheit&quot;],
+              &quot;description&quot;: &quot;温度单位&quot;
+            }
+          },
+          &quot;required&quot;: [&quot;city&quot;]
+        }
+      }
+    }
+  ]
+}
+</code></pre></div>
+<h3>tool_choice 策略</h3>
+<table>
+<thead>
+<tr>
+<th>值</th>
+<th>含义</th>
+<th>使用场景</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>&quot;auto&quot; (默认)</td>
+<td>模型自主决定是否调用工具</td>
+<td>常规对话+工具</td>
+</tr>
+<tr>
+<td>&quot;none&quot;</td>
+<td>强制不调用工具</td>
+<td>纯文本对话</td>
+</tr>
+<tr>
+<td>&quot;required&quot;</td>
+<td>必须调用工具</td>
+<td>有明确工具需求时</td>
+</tr>
+<tr>
+<td>{&quot;type&quot;:&quot;function&quot;,&quot;function&quot;:{&quot;name&quot;:&quot;x&quot;}}</td>
+<td>强制调用指定函数</td>
+<td>确定的路由场景</td>
+</tr>
+</tbody></table>
+<h3>工具调用状态机</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>多轮工具调用对话的状态转换：
+
+          user消息
+            │
+            ▼
+     ┌─────────────┐
+     │ AI 处理     │
+     └──────┬──────┘
+            │
+    ┌───────┴────────┐
+    ▼                ▼
+ text回复          tool_calls
+  (完成)              │
+                      ▼
+              ┌──────────────┐
+              │ 执行工具      │
+              │ 获得结果      │
+              └──────┬───────┘
+                     │
+                     ▼
+              role: &quot;tool&quot;  消息
+              (附带 tool_call_id)
+                     │
+                     ▼
+              ┌──────────────┐
+              │ AI 处理结果   │
+              └──────┬───────┘
+                     │
+            ┌────────┴────────┐
+            ▼                 ▼
+         下一轮tool_calls   text回复
+            │              (完成)
+            │
+            ▼
+          (递归)
+</code></pre></div>
+<p><strong>Java 工具调用处理：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+
+public class ToolCallingOrchestrator {
+
+    private final ObjectMapper mapper = new ObjectMapper();
+    private final Map&lt;String, java.util.function.Function&lt;Map&lt;String, Object&gt;, String&gt;&gt;
+        toolRegistry = new ConcurrentHashMap&lt;&gt;();
+
+    /**
+     * 注册工具
+     */
+    public void registerTool(String name,
+            String description,
+            Map&lt;String, Object&gt; jsonSchema,
+            java.util.function.Function&lt;Map&lt;String, Object&gt;, String&gt; handler) {
+        toolRegistry.put(name, handler);
+    }
+
+    /**
+     * 处理多轮对话直到不需要工具调用
+     */
+    public String processConversation(
+            List&lt;Map&lt;String, Object&gt;&gt; messages,
+            java.util.function.Function&lt;List&lt;Map&lt;String, Object&gt;&gt;,
+                Map&lt;String, Object&gt;&gt; modelCall) {
+
+        int maxRounds = 10;  // 防止无限循环
+
+        for (int round = 0; round &lt; maxRounds; round++) {
+            var response = modelCall.apply(messages);
+            var choices = (List&lt;Map&lt;String, Object&gt;&gt;) response.get(&quot;choices&quot;);
+            var message = (Map&lt;String, Object&gt;) choices.get(0).get(&quot;message&quot;);
+
+            // 检查是否有 tool_calls
+            var toolCalls = (List&lt;Map&lt;String, Object&gt;&gt;) message.get(&quot;tool_calls&quot;);
+
+            if (toolCalls == null || toolCalls.isEmpty()) {
+                // 正常文本回复
+                return (String) message.get(&quot;content&quot;);
+            }
+
+            // 添加 assistant 消息（含 tool_calls）
+            messages.add(Map.of(
+                &quot;role&quot;, &quot;assistant&quot;,
+                &quot;content&quot;, message.getOrDefault(&quot;content&quot;, null),
+                &quot;tool_calls&quot;, toolCalls
+            ));
+
+            // 执行每个工具调用
+            for (var toolCall : toolCalls) {
+                String callId = (String) toolCall.get(&quot;id&quot;);
+                var function = (Map&lt;String, Object&gt;) toolCall.get(&quot;function&quot;);
+                String funcName = (String) function.get(&quot;name&quot;);
+                String argsJson = (String) function.get(&quot;arguments&quot;);
+
+                // 执行工具
+                String result;
+                try {
+                    var args = mapper.readValue(argsJson, Map.class);
+                    var handler = toolRegistry.get(funcName);
+                    result = handler != null
+                        ? handler.apply(args)
+                        : &quot;{\&quot;error\&quot;: \&quot;Unknown function: &quot; + funcName + &quot;\&quot;}&quot;;
+                } catch (Exception e) {
+                    result = &quot;{\&quot;error\&quot;: \&quot;&quot; + e.getMessage() + &quot;\&quot;}&quot;;
+                }
+
+                // 添加 tool 消息
+                messages.add(Map.of(
+                    &quot;role&quot;, &quot;tool&quot;,
+                    &quot;tool_call_id&quot;, callId,
+                    &quot;content&quot;, result
+                ));
+            }
+        }
+
+        throw new RuntimeException(&quot;达到最大工具调用轮数 &quot; + maxRounds);
+    }
+}
+</code></pre></div>
+<h2>Structured Output</h2>
+<h3>JSON Mode</h3>
+<p>早期的输出格式控制：<code>response_format: { type: &quot;json_object&quot; }</code></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-json">{
+  &quot;model&quot;: &quot;gpt-4o&quot;,
+  &quot;messages&quot;: [{&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;列出3本Java书籍，返回JSON&quot;}],
+  &quot;response_format&quot;: {&quot;type&quot;: &quot;json_object&quot;}
+}
+</code></pre></div>
+<p><strong>限制：</strong> 只保证输出是有效 JSON，不保证 JSON 结构符合特定 Schema。需要在 system prompt 中描述期望的结构。</p>
+<h3>Structured Outputs (strict mode)</h3>
+<p>OpenAI 的 Structured Outputs 是更强约束的输出控制：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-json">{
+  &quot;model&quot;: &quot;gpt-4o&quot;,
+  &quot;messages&quot;: [...],
+  &quot;response_format&quot;: {
+    &quot;type&quot;: &quot;json_schema&quot;,
+    &quot;json_schema&quot;: {
+      &quot;name&quot;: &quot;java_book_list&quot;,
+      &quot;strict&quot;: true,
+      &quot;schema&quot;: {
+        &quot;type&quot;: &quot;object&quot;,
+        &quot;properties&quot;: {
+          &quot;books&quot;: {
+            &quot;type&quot;: &quot;array&quot;,
+            &quot;items&quot;: {
+              &quot;type&quot;: &quot;object&quot;,
+              &quot;properties&quot;: {
+                &quot;title&quot;: {&quot;type&quot;: &quot;string&quot;},
+                &quot;author&quot;: {&quot;type&quot;: &quot;string&quot;},
+                &quot;year&quot;: {&quot;type&quot;: &quot;integer&quot;},
+                &quot;topics&quot;: {
+                  &quot;type&quot;: &quot;array&quot;,
+                  &quot;items&quot;: {&quot;type&quot;: &quot;string&quot;}
+                }
+              },
+              &quot;required&quot;: [&quot;title&quot;, &quot;author&quot;, &quot;year&quot;, &quot;topics&quot;],
+              &quot;additionalProperties&quot;: false
+            }
+          }
+        },
+        &quot;required&quot;: [&quot;books&quot;],
+        &quot;additionalProperties&quot;: false
+      }
+    }
+  }
+}
+</code></pre></div>
+<p><strong>Structured Outputs 保证：</strong></p>
+<ul>
+<li>100% 符合给定的 JSON Schema</li>
+<li>支持 <code>additionalProperties: false</code>（不允许额外字段）</li>
+<li>支持所有 JSON Schema 类型（object, array, string, number, integer, boolean, null, enum, anyOf, allOf）</li>
+</ul>
+<h3>Function Calling vs Structured Outputs 差异</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌──────────────────────┬─────────────────────┬──────────────────────────┐
+│ 特性                 │ Function Calling    │ Structured Outputs       │
+├──────────────────────┼─────────────────────┼──────────────────────────┤
+│ Schema 遵从性         │ 尽力而为 (best-effort) │ 严格100%保证 (strict)  │
+│ 输出的 JSON Schema   │ 自动从函数参数生成   │ 手动提供完整 Schema     │
+│ tool_calls 数组       │ 使用 tool_calls     │ 不使用，content 中是JSON  │
+│ 适用场景              │ 工具调用 / 函数路由 │ 结构化数据提取           │
+│ 多轮对话              │ 原生支持             │ 需手动管理               │
+│ 响应中的 content      │ null (工具调用时)   │ 即JSON字符串             │
+└──────────────────────┴─────────────────────┴──────────────────────────┘
+</code></pre></div>
+<h2>Token 相关</h2>
+<h3>Input / Output / Reasoning Token</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Token 分类：
+  prompt_tokens:        输入消息的全部 token
+  completion_tokens:    模型生成的 token
+  total_tokens:         上述两项之和
+
+新增细分 (o1 系列)：
+  reasoning_tokens:     模型内部推理消耗的 token
+                        （不可见，但计费）
+  cached_tokens:        被 Prompt Cache 命中的输入 token
+                        （通常半价或免费）
+</code></pre></div>
+<h3>Prompt Cache</h3>
+<p><strong>OpenAI：自动缓存</strong></p>
+<ul>
+<li>自动对长 prompt 的前缀进行缓存</li>
+<li>缓存命中的 token 享受 50% 折扣</li>
+<li>不需要开发者做任何配置</li>
+</ul>
+<p><strong>Anthropic：显式缓存 (cache_control)</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-json">{
+  &quot;model&quot;: &quot;claude-sonnet-4-20250514&quot;,
+  &quot;system&quot;: [
+    {
+      &quot;type&quot;: &quot;text&quot;,
+      &quot;text&quot;: &quot;你是一个Java专家... (一长段固定内容)&quot;,
+      &quot;cache_control&quot;: {&quot;type&quot;: &quot;ephemeral&quot;}
+    }
+  ],
+  &quot;messages&quot;: [...]
+}
+</code></pre></div>
+<ul>
+<li>在 system prompt 中标记 <code>cache_control: {type: &quot;ephemeral&quot;}</code></li>
+<li>缓存存活时间：5 分钟（每次使用续期）</li>
+<li>缓存命中的 token 享受 90% 折扣</li>
+</ul>
+<h3>Token 计数和预估</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class TokenCounter {
+
+    /**
+     * 基于启发式规则的 token 预估
+     * 精确计数需要专门的 tokenizer 库（如 JTokkit）
+     */
+    public record TokenEstimate(
+        int systemTokens,
+        int messagesTokens,
+        int expectedOutputTokens,
+        int totalInputTokens,
+        int cacheableTokens
+    ) {
+        public int totalChargedTokens() {
+            // 假设缓存命中率 80%，cache tokens 享受 50% 折扣
+            int cachedCharged = (int) (cacheableTokens * 0.5 * 0.8);
+            int uncached = totalInputTokens - (int) (cacheableTokens * 0.8);
+            return cachedCharged + uncached + expectedOutputTokens;
+        }
+    }
+
+    /**
+     * 预估对话的 Token 使用量
+     */
+    public static TokenEstimate estimate(List&lt;Map&lt;String, Object&gt;&gt; messages,
+            int expectedOutputLen) {
+        int total = 0;
+        int systemTokens = 0;
+        int cacheableTokens = 0;
+
+        for (var msg : messages) {
+            var content = (String) msg.getOrDefault(&quot;content&quot;, &quot;&quot;);
+            int tokens = content.length() / 4;  // 粗估: 4字符≈1token
+
+            if (&quot;system&quot;.equals(msg.get(&quot;role&quot;))) {
+                systemTokens = tokens;
+                // system prompt 通常是 cacheable 的
+                cacheableTokens = tokens;
+            }
+            total += tokens;
+        }
+
+        int expectedOutput = expectedOutputLen / 4;
+
+        return new TokenEstimate(
+            systemTokens, total - systemTokens,
+            expectedOutput, total, cacheableTokens);
+    }
+}
+</code></pre></div>
+<h2>Provider 差异对照表</h2>
+<h3>认证方式</h3>
+<table>
+<thead>
+<tr>
+<th>Provider</th>
+<th>认证方式</th>
+<th>Header/参数</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>OpenAI</td>
+<td>API Key</td>
+<td><code>Authorization: Bearer sk-...</code> 或 <code>api-key: ...</code></td>
+</tr>
+<tr>
+<td>Anthropic</td>
+<td>API Key</td>
+<td><code>x-api-key: sk-ant-...</code> + <code>anthropic-version: 2023-06-01</code></td>
+</tr>
+<tr>
+<td>AWS Bedrock</td>
+<td>AWS SigV4</td>
+<td>AWS Access Key + Secret Key + Session Token</td>
+</tr>
+<tr>
+<td>Google GenAI</td>
+<td>API Key / OAuth2</td>
+<td><code>x-goog-api-key: ...</code> 或 OAuth2 Bearer Token</td>
+</tr>
+<tr>
+<td>Azure OpenAI</td>
+<td>API Key + Resource</td>
+<td><code>api-key: ...</code> + URL 中包含 resource name</td>
+</tr>
+<tr>
+<td>Ollama (本地)</td>
+<td>无</td>
+<td>本地 HTTP，无需认证</td>
+</tr>
+<tr>
+<td>vLLM (本地)</td>
+<td>可选</td>
+<td>支持 API Key 但本地常不启用</td>
+</tr>
+</tbody></table>
+<h3>模型命名规范</h3>
+<table>
+<thead>
+<tr>
+<th>Provider</th>
+<th>命名示例</th>
+<th>命名规范</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>OpenAI</td>
+<td>gpt-4o, gpt-4o-mini, o1, o1-mini</td>
+<td>品牌-版本-变体</td>
+</tr>
+<tr>
+<td>Anthropic</td>
+<td>claude-sonnet-4-20250514</td>
+<td>品牌-层次-版本-日期</td>
+</tr>
+<tr>
+<td>AWS Bedrock</td>
+<td>us.anthropic.claude-sonnet-4-20250514-v1:0</td>
+<td>供应商.品牌.模型:版本</td>
+</tr>
+<tr>
+<td>Google</td>
+<td>gemini-2.5-flash, gemini-2.5-pro</td>
+<td>模型-版本-层次</td>
+</tr>
+<tr>
+<td>Azure</td>
+<td>gpt-4o (deployment name)</td>
+<td>用户自定义部署名</td>
+</tr>
+<tr>
+<td>Ollama</td>
+<td>llama3.1:8b, qwen2:7b</td>
+<td>模型:参数量(:tag)</td>
+</tr>
+<tr>
+<td>vLLM</td>
+<td>&quot;/models/llama-3-8b&quot;</td>
+<td>路径映射到模型文件</td>
+</tr>
+</tbody></table>
+<h3>速率限制策略</h3>
+<table>
+<thead>
+<tr>
+<th>Provider</th>
+<th>限速维度</th>
+<th>典型免费/初级配额</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>OpenAI</td>
+<td>RPM + TPM</td>
+<td>500 RPM / 200K TPM (Tier 1)</td>
+</tr>
+<tr>
+<td>Anthropic</td>
+<td>RPM + TPM</td>
+<td>50 RPM / 50K TPM (Tier 1)</td>
+</tr>
+<tr>
+<td>AWS Bedrock</td>
+<td>按模型 + 区域</td>
+<td>每个模型独立配额（可提升）</td>
+</tr>
+<tr>
+<td>Google</td>
+<td>RPM + TPM + RPD</td>
+<td>1500 RPM (免费层)</td>
+</tr>
+<tr>
+<td>Azure</td>
+<td>TPM (按部署)</td>
+<td>可配置</td>
+</tr>
+<tr>
+<td>Ollama</td>
+<td>自行控制</td>
+<td>无（本地硬件限制）</td>
+</tr>
+</tbody></table>
+<h3>错误码映射</h3>
+<table>
+<thead>
+<tr>
+<th>错误类型</th>
+<th>OpenAI</th>
+<th>Anthropic</th>
+<th>AWS Bedrock</th>
+<th>通用含义</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>认证失败</td>
+<td>401</td>
+<td>401</td>
+<td>403</td>
+<td>API Key 无效或过期</td>
+</tr>
+<tr>
+<td>速率限制</td>
+<td>429</td>
+<td>429</td>
+<td>429 / ThrottlingException</td>
+<td>请求过多</td>
+</tr>
+<tr>
+<td>服务器错误</td>
+<td>500/502/503</td>
+<td>500/529</td>
+<td>500/503</td>
+<td>临时故障，可重试</td>
+</tr>
+<tr>
+<td>上下文过长</td>
+<td>400</td>
+<td>400</td>
+<td>400/ValidationException</td>
+<td>超过 context window</td>
+</tr>
+<tr>
+<td>内容过滤</td>
+<td>400 (content_filter)</td>
+<td>400 (invalid_request)</td>
+<td>400</td>
+<td>安全策略拒绝</td>
+</tr>
+<tr>
+<td>模型不可用</td>
+<td>404</td>
+<td>404</td>
+<td>ResourceNotFoundException</td>
+<td>模型名错误或未部署</td>
+</tr>
+</tbody></table>
+<h3>特殊参数支持</h3>
+<table>
+<thead>
+<tr>
+<th>特性</th>
+<th>OpenAI</th>
+<th>Anthropic</th>
+<th>Google</th>
+<th>AWS Bedrock</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>cache_control</td>
+<td>自动</td>
+<td>显式标记</td>
+<td>context caching</td>
+<td>不支持</td>
+</tr>
+<tr>
+<td>reasoning_effort</td>
+<td>o1系列支持</td>
+<td>extended thinking</td>
+<td>thinking_level</td>
+<td>不支持</td>
+</tr>
+<tr>
+<td>logprobs</td>
+<td>支持</td>
+<td>不支持</td>
+<td>不支持</td>
+<td>不支持</td>
+</tr>
+<tr>
+<td>seed</td>
+<td>支持</td>
+<td>不支持</td>
+<td>不支持</td>
+<td>不支持</td>
+</tr>
+<tr>
+<td>stop_sequences</td>
+<td>支持</td>
+<td>必须</td>
+<td>支持</td>
+<td>支持</td>
+</tr>
+<tr>
+<td>image (多模态)</td>
+<td>content数组</td>
+<td>content数组</td>
+<td>content数组</td>
+<td>content数组</td>
+</tr>
+<tr>
+<td>thinking（推理过程可见）</td>
+<td>o1 reasoning_tokens</td>
+<td>extended thinking</td>
+<td>thinking</td>
+<td>不支持</td>
+</tr>
+</tbody></table>
+<h2>错误处理与重试策略</h2>
+<h3>指数退避 + 抖动</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.time.Duration;
+import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
+
+public class ApiRetryStrategy {
+
+    private final int maxRetries;
+    private final Duration initialBackoff;
+    private final Duration maxBackoff;
+    private final double jitterFactor;
+    private final Set&lt;Integer&gt; retryableStatuses = Set.of(429, 500, 502, 503, 504);
+
+    public ApiRetryStrategy(int maxRetries, Duration initialBackoff,
+            Duration maxBackoff, double jitterFactor) {
+        this.maxRetries = maxRetries;
+        this.initialBackoff = initialBackoff;
+        this.maxBackoff = maxBackoff;
+        this.jitterFactor = jitterFactor;
+    }
+
+    /**
+     * 计算第 n 次重试的等待时间
+     * backoff = min(initial * 2^n, maxBackoff)
+     * 加随机抖动避免惊群效应
+     */
+    public Duration getBackoff(int retryNumber) {
+        long baseMs = initialBackoff.toMillis() * (1L &lt;&lt; retryNumber);
+        long cappedMs = Math.min(baseMs, maxBackoff.toMillis());
+
+        // 抖动：在 [1-jitter, 1+jitter] 范围内随机
+        double jitter = 1.0 + (ThreadLocalRandom.current().nextDouble() * 2 - 1) * jitterFactor;
+        return Duration.ofMillis((long) (cappedMs * jitter));
+    }
+
+    /**
+     * 判断状态码是否可重试
+     */
+    public boolean isRetryable(int httpStatus) {
+        return retryableStatuses.contains(httpStatus);
+    }
+
+    /**
+     * 带重试的 API 调用模板
+     */
+    public &lt;T&gt; T executeWithRetry(
+            java.util.function.Supplier&lt;T&gt; apiCall,
+            java.util.function.BiConsumer&lt;Integer, String&gt; errorConsumer)
+            throws Exception {
+
+        Exception lastException = null;
+
+        for (int retry = 0; retry &lt;= maxRetries; retry++) {
+            try {
+                return apiCall.get();
+            } catch (ApiException e) {
+                lastException = e;
+                if (!isRetryable(e.getHttpStatus()) || retry == maxRetries) {
+                    throw e;
+                }
+                var backoff = getBackoff(retry);
+                errorConsumer.accept(retry + 1,
+                    &quot;Retry after &quot; + backoff.toMillis() + &quot;ms&quot;);
+                Thread.sleep(backoff.toMillis());
+            }
+        }
+        throw lastException;
+    }
+
+    static class ApiException extends Exception {
+        private final int httpStatus;
+        public ApiException(int httpStatus, String message) {
+            super(message);
+            this.httpStatus = httpStatus;
+        }
+        public int getHttpStatus() { return httpStatus; }
+    }
+}
+</code></pre></div>
+<h3>幂等键</h3>
+<p>对于非幂等的工具调用（如创建订单、扣款），应使用幂等键防止重复：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class IdempotentApiCall {
+
+    /**
+     * 生成幂等键
+     * 格式：{operation}-{business_id}-{timestamp_hash}
+     */
+    public static String generateIdempotencyKey(
+            String operation, String businessId) {
+        var hash = Long.toHexString(System.nanoTime());
+        return STR.&quot;\{operation}-\{businessId}-\{hash.substring(hash.length() - 8)}&quot;;
+    }
+
+    /**
+     * 带幂等键的 API 调用
+     * 建议：使用数据库唯一约束防止重复执行业务操作
+     */
+    public static void executeIdempotently(
+            String idempotencyKey,
+            java.util.function.Consumer&lt;String&gt; businessLogic) {
+        // 1. 检查是否已执行过
+        if (isAlreadyExecuted(idempotencyKey)) {
+            return;
+        }
+        // 2. 执行业务逻辑
+        businessLogic.accept(idempotencyKey);
+        // 3. 记录已执行
+        markAsExecuted(idempotencyKey);
+    }
+
+    private static boolean isAlreadyExecuted(String key) {
+        // 查数据库唯一索引
+        return false;  // 简化
+    }
+
+    private static void markAsExecuted(String key) {
+        // 写入数据库（唯一索引防止并发重复）
+    }
+}
+</code></pre></div>
+<h2>最佳实践</h2>
+<ol>
+<li><strong>始终使用 stream=true</strong>：除非是简单的单次调用且输出很短，否则流式返回能大幅改善用户体验（降低 TTFB 体感）</li>
+<li><strong>system prompt 放缓存标记</strong>：如果使用 Anthropic，长 system prompt 一定要加 <code>cache_control</code>；如果是 OpenAI，利用其自动缓存特性</li>
+<li><strong>工具参数验证</strong>：不要在收到 tool_calls 后直接执行——先验证参数完整性，因为模型可能产生不合法的参数</li>
+<li><strong>优雅处理 finish_reason: &quot;length&quot;</strong>：当检测到达到 max_tokens 时，考虑增加 max_tokens 或拆分请求</li>
+<li><strong>避免混合使用不同 Provider 的特殊参数</strong>：这些参数在跨 Provider 时不兼容，需要在适配层做转换</li>
+</ol>
+<h2>常见问题</h2>
+<p><strong>Q: OpenAI 兼容 = 可以用 OpenAI SDK 调用其他模型吗？</strong></p>
+<p>A: 大部分可以。Ollama、vLLM、Groq、DeepSeek 都支持 <code>/v1/chat/completions</code> 端点。但特殊参数（如 o1 的 reasoning_effort、Anthropic 的 cache_control）只在原生端点可用。</p>
+<p><strong>Q: 流式和非流式的 finish_reason 有什么区别？</strong></p>
+<p>A: 非流式中 finish_reason 在 choices[0].finish_reason 中；流式中每个 chunk 都有 finish_reason，但只有最后一个 chunk 的值非 null。</p>
+<p><strong>Q: tool_choice: &quot;required&quot; 和 &quot;auto&quot; 区别？</strong></p>
+<p>A: &quot;auto&quot; 下模型可能选择不调用工具而直接文本回复。&quot;required&quot; 强制调用工具——但如果工具定义与用户输入不匹配，模型可能&quot;编造&quot;工具调用。</p>
+<h2>Responses API</h2>
+<p>OpenAI Responses API 是较新的有状态 API，与经典的 Chat Completions API 在架构理念上有本质区别。Chat Completions API 是无状态的：每次请求都需要客户端手动拼接完整的消息历史，工具调用（Function Calling / Tools）的结果也需要客户端自行管理循环。Responses API 则将对话状态管理内置在服务端，开发者只需传入 <code>previous_response_id</code> 即可延续之前的对话上下文。</p>
+<p>Responses API 的核心优势在于内置工具（Built-in Tools）的原生集成：</p>
+<ul>
+<li><strong>web_search</strong>：模型可自动发起互联网搜索，返回带引用的结构化结果。适合需要实时信息的问题。</li>
+<li><strong>file_search</strong>：基于 Vector Store 的文件检索，适用于 RAG 场景。需要预先创建 Vector Store 并上传文件。</li>
+<li><strong>code_interpreter</strong>：Python 沙箱执行环境，支持数据处理、图表生成。适合数据分析类任务。</li>
+</ul>
+<p>两者的关键区别总结：</p>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>Chat Completions API</th>
+<th>Responses API</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>状态管理</td>
+<td>无状态，客户端维护消息列表</td>
+<td>有状态，服务端管理对话</td>
+</tr>
+<tr>
+<td>工具调用</td>
+<td>客户端循环管理 tool_calls</td>
+<td>服务端自动循环完成工具调用</td>
+</tr>
+<tr>
+<td>多轮对话</td>
+<td>每次提交完整 messages 数组</td>
+<td>传入 previous_response_id 即可</td>
+</tr>
+<tr>
+<td>内置工具</td>
+<td>无，需客户端实现</td>
+<td>web_search / file_search / code_interpreter</td>
+</tr>
+<tr>
+<td>适用场景</td>
+<td>简单对话、兼容性优先</td>
+<td>工具密集型 Agent、复杂多步骤任务</td>
+</tr>
+</tbody></table>
+<p>选型建议：简单对话和需要完全控制消息流的场景使用 Chat Completions API；涉及多步工具调用、需要内置搜索或代码执行的 Agent 场景使用 Responses API。注意部分第三方模型 Provider 尚未支持 Responses API，仅 OpenAI 官方端点可用。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// JDK 25 + Spring Boot 4.x: Responses API 调用示例
+import com.fasterxml.jackson.databind.ObjectMapper;
+import java.net.URI;
+import java.net.http.*;
+
+public class ResponsesApiExample {
+    private static final String API_KEY = System.getenv(&quot;OPENAI_API_KEY&quot;);
+    private static final HttpClient http = HttpClient.newHttpClient();
+    private static final ObjectMapper mapper = new ObjectMapper();
+
+    public String searchAndAnswer(String question) throws Exception {
+        // Responses API with web_search built-in tool
+        var body = mapper.writeValueAsString(Map.of(
+            &quot;model&quot;, &quot;gpt-4o&quot;,
+            &quot;tools&quot;, List.of(Map.of(
+                &quot;type&quot;, &quot;web_search&quot;,
+                &quot;search_context_size&quot;, &quot;medium&quot;
+            )),
+            &quot;input&quot;, question
+        ));
+
+        var request = HttpRequest.newBuilder()
+            .uri(URI.create(&quot;https://api.openai.com/v1/responses&quot;))
+            .header(&quot;Authorization&quot;, &quot;Bearer &quot; + API_KEY)
+            .header(&quot;Content-Type&quot;, &quot;application/json&quot;)
+            .POST(HttpRequest.BodyPublishers.ofString(body))
+            .build();
+
+        var response = http.send(request, HttpResponse.BodyHandlers.ofString());
+        var json = mapper.readTree(response.body());
+        // 提取模型输出和搜索引用
+        var answer = json.get(&quot;output&quot;).get(0).get(&quot;content&quot;).get(0).get(&quot;text&quot;).asText();
+        return answer;
+    }
+
+    // 有状态多轮：通过 previous_response_id 延续对话
+    public String continueConversation(String previousResponseId, String followUp) throws Exception {
+        var body = mapper.writeValueAsString(Map.of(
+            &quot;model&quot;, &quot;gpt-4o&quot;,
+            &quot;previous_response_id&quot;, previousResponseId,
+            &quot;input&quot;, followUp
+        ));
+        var request = HttpRequest.newBuilder()
+            .uri(URI.create(&quot;https://api.openai.com/v1/responses&quot;))
+            .header(&quot;Authorization&quot;, &quot;Bearer &quot; + API_KEY)
+            .header(&quot;Content-Type&quot;, &quot;application/json&quot;)
+            .POST(HttpRequest.BodyPublishers.ofString(body))
+            .build();
+        var response = http.send(request, HttpResponse.BodyHandlers.ofString());
+        return mapper.readTree(response.body()).get(&quot;id&quot;).asText();
+    }
+}
+</code></pre></div>
+<h2>相关条目</h2>
+<ul>
+<li><a href="/08-模型接入与推理/模型API/08-云模型API与SDK使用" class="cross-ref" data-ref="08-云模型API与SDK使用">08-云模型API与SDK使用</a> — 各 Provider 的 Java SDK 使用</li>
+<li><a href="/08-模型接入与推理/推理部署/08-本地推理与Ollama" class="cross-ref" data-ref="08-本地推理与Ollama">08-本地推理与Ollama</a> — Ollama 的 OpenAI 兼容端点</li>
+<li><a href="/08-模型接入与推理/推理部署/08-模型能力矩阵与路由策略" class="cross-ref" data-ref="08-模型能力矩阵与路由策略">08-模型能力矩阵与路由策略</a> — 模型选型和路由策略</li>
+<li><a href="/09-Java AI框架/09-架构抽象层设计" class="cross-ref" data-ref="09-架构抽象层设计">09-架构抽象层设计</a> — 如何抽象多 Provider 差异</li>
+</ul>
+</div>
+</article>

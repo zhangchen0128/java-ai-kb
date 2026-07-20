@@ -1,0 +1,815 @@
+
+<article class="kb-entry" data-path="/12-Agent工程/协作模式/12-Agent工作流与人机协作">
+  <div class="entry-meta">
+    <div class="entry-domain"><a href="/?d=12">12-Agent工程</a></div>
+    <h1>Agent Workflow 范式与 Human-in-the-loop 实战</h1>
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#["workflow"</span><span class="badge badge-tag">#"human-in-the-loop"</span><span class="badge badge-tag">#"state-machine"</span><span class="badge badge-tag">#"spring-state-machine"</span></div>
+    
+  </div>
+  <div class="entry-body"><h1>Agent Workflow 范式与 Human-in-the-loop 实战</h1>
+<h2>一、Agent Workflow 两种范式</h2>
+<h3>1.1 确定性 Workflow</h3>
+<p>确定性 Workflow 的执行路径在设计阶段就已经确定——通过 DAG（有向无环图）、条件分支、循环和重试机制来编排固定流程。它追求可预测性、可审计性和确定性。</p>
+<p><strong>典型结构</strong>：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>[数据提取] → [规则校验] → [风险评分] → [条件分支] →
+  ├─ 低风险 → [自动审批] → [通知用户]
+  └─ 高风险 → [人工审批] → [通知用户]
+</code></pre></div>
+<p><strong>适用场景</strong>：</p>
+<ul>
+<li>审批流程（请假、报销、核保）</li>
+<li>ETL 数据处理管道</li>
+<li>定期报告生成</li>
+<li>合规检查流程</li>
+</ul>
+<h3>1.2 LLM 驱动 Agent</h3>
+<p>LLM 驱动 Agent 将控制权交给模型——模型自主决定调用哪些工具、执行哪些操作、何时结束。它追求灵活性和智能决策。</p>
+<p><strong>适用场景</strong>：</p>
+<ul>
+<li>客服对话</li>
+<li>开放式信息检索</li>
+<li>复杂问题诊断</li>
+<li>需要上下文理解的动态流程</li>
+</ul>
+<h3>1.3 选择原则</h3>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>确定性 Workflow</th>
+<th>LLM 驱动 Agent</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>可预测性</td>
+<td>高</td>
+<td>低</td>
+</tr>
+<tr>
+<td>灵活性</td>
+<td>低</td>
+<td>高</td>
+</tr>
+<tr>
+<td>成本</td>
+<td>低（LLM 只在关键节点调用）</td>
+<td>高（大量 LLM 调用）</td>
+</tr>
+<tr>
+<td>可审计性</td>
+<td>高（每步可追溯）</td>
+<td>低（模型黑盒决策）</td>
+</tr>
+<tr>
+<td>适用规模</td>
+<td>大批量、重复性任务</td>
+<td>小批量、个性化任务</td>
+</tr>
+</tbody></table>
+<p><strong>核心原则</strong>：&quot;能用确定性流程解决的问题，不要用 Agent。Agent 是最后的手段，不是第一选择。&quot; —— Anthropic Building Effective Agents</p>
+<h2>二、Workflow 引擎选型</h2>
+<h3>2.1 轻量级：Spring State Machine</h3>
+<p>适合简单的状态流转场景（几十个状态以内）。配置式定义，与 Spring 生态深度集成。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// UnderwritingStateMachineConfig.java
+package com.example.insurance.workflow;
+
+import org.springframework.context.annotation.Configuration;
+import org.springframework.statemachine.config.EnableStateMachineFactory;
+import org.springframework.statemachine.config.StateMachineConfigurerAdapter;
+import org.springframework.statemachine.config.builders.StateMachineStateConfigurer;
+import org.springframework.statemachine.config.builders.StateMachineTransitionConfigurer;
+import java.util.EnumSet;
+
+@Configuration
+@EnableStateMachineFactory
+public class UnderwritingStateMachineConfig 
+        extends StateMachineConfigurerAdapter&lt;UnderwritingState, UnderwritingEvent&gt; {
+
+    @Override
+    public void configure(StateMachineStateConfigurer&lt;UnderwritingState, UnderwritingEvent&gt; states) 
+            throws Exception {
+        states
+            .withStates()
+            .initial(UnderwritingState.DATA_COLLECTED)
+            .state(UnderwritingState.RISK_ASSESSING)
+            .state(UnderwritingState.AWAITING_MANUAL_REVIEW)
+            .state(UnderwritingState.APPROVED)
+            .state(UnderwritingState.REJECTED)
+            .end(UnderwritingState.COMPLETED);
+    }
+
+    @Override
+    public void configure(StateMachineTransitionConfigurer&lt;UnderwritingState, UnderwritingEvent&gt; transitions) 
+            throws Exception {
+        transitions
+            // 数据收集完成 → 风险评估
+            .withExternal()
+                .source(UnderwritingState.DATA_COLLECTED)
+                .target(UnderwritingState.RISK_ASSESSING)
+                .event(UnderwritingEvent.START_RISK_ASSESSMENT)
+                .and()
+            // 风险评估完成 → 自动通过
+            .withExternal()
+                .source(UnderwritingState.RISK_ASSESSING)
+                .target(UnderwritingState.APPROVED)
+                .event(UnderwritingEvent.LOW_RISK)
+                .guard(ctx -&gt; (int) ctx.getExtendedState().get(&quot;riskScore&quot;, 0) &lt; 60)
+                .and()
+            // 风险评估完成 → 中风险 → 人工审核
+            .withExternal()
+                .source(UnderwritingState.RISK_ASSESSING)
+                .target(UnderwritingState.AWAITING_MANUAL_REVIEW)
+                .event(UnderwritingEvent.MEDIUM_RISK)
+                .guard(ctx -&gt; {
+                    int score = ctx.getExtendedState().get(&quot;riskScore&quot;, 0);
+                    return score &gt;= 60 &amp;&amp; score &lt; 85;
+                })
+                .and()
+            // 风险评估完成 → 高风险 → 拒绝
+            .withExternal()
+                .source(UnderwritingState.RISK_ASSESSING)
+                .target(UnderwritingState.REJECTED)
+                .event(UnderwritingEvent.HIGH_RISK)
+                .guard(ctx -&gt; (int) ctx.getExtendedState().get(&quot;riskScore&quot;, 0) &gt;= 85)
+                .and()
+            // 人工审核 → 通过
+            .withExternal()
+                .source(UnderwritingState.AWAITING_MANUAL_REVIEW)
+                .target(UnderwritingState.APPROVED)
+                .event(UnderwritingEvent.MANUAL_APPROVE)
+                .and()
+            // 人工审核 → 拒绝
+            .withExternal()
+                .source(UnderwritingState.AWAITING_MANUAL_REVIEW)
+                .target(UnderwritingState.REJECTED)
+                .event(UnderwritingEvent.MANUAL_REJECT)
+                .and()
+            // 通过 → 完成
+            .withExternal()
+                .source(UnderwritingState.APPROVED)
+                .target(UnderwritingState.COMPLETED)
+                .event(UnderwritingEvent.FINALIZE)
+                .and()
+            // 拒绝 → 完成
+            .withExternal()
+                .source(UnderwritingState.REJECTED)
+                .target(UnderwritingState.COMPLETED)
+                .event(UnderwritingEvent.FINALIZE);
+    }
+}
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// UnderwritingState.java
+package com.example.insurance.workflow;
+
+public enum UnderwritingState {
+    DATA_COLLECTED,     // 已收集投保数据
+    RISK_ASSESSING,     // 风险评估中
+    AWAITING_MANUAL_REVIEW, // 等待人工审核
+    APPROVED,           // 已通过
+    REJECTED,           // 已拒绝
+    COMPLETED           // 已完成
+}
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// UnderwritingEvent.java
+package com.example.insurance.workflow;
+
+public enum UnderwritingEvent {
+    START_RISK_ASSESSMENT,
+    LOW_RISK,
+    MEDIUM_RISK,
+    HIGH_RISK,
+    MANUAL_APPROVE,
+    MANUAL_REJECT,
+    FINALIZE
+}
+</code></pre></div>
+<h3>2.2 中量级：Spring Batch Chunk-Oriented Processing</h3>
+<p>适合大批量数据处理，支持 Chunk 模式（读取→处理→写入）和 Tasklet 模式。Spring Batch 5.x 提供了 Virtual Thread 支持，极大简化了异步批处理。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// BatchRiskAssessmentConfig.java
+package com.example.insurance.batch;
+
+import org.springframework.batch.core.Job;
+import org.springframework.batch.core.Step;
+import org.springframework.batch.core.job.builder.JobBuilder;
+import org.springframework.batch.core.repository.JobRepository;
+import org.springframework.batch.core.step.builder.StepBuilder;
+import org.springframework.batch.item.ItemProcessor;
+import org.springframework.batch.item.ItemReader;
+import org.springframework.batch.item.ItemWriter;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class BatchRiskAssessmentConfig {
+
+    @Bean
+    public Job riskAssessmentJob(JobRepository jobRepository, Step assessmentStep) {
+        return new JobBuilder(&quot;riskAssessmentJob&quot;, jobRepository)
+            .start(assessmentStep)
+            .build();
+    }
+
+    @Bean
+    public Step assessmentStep(JobRepository jobRepository,
+                                org.springframework.transaction.PlatformTransactionManager tm,
+                                ItemReader&lt;InsuranceApplication&gt; reader,
+                                ItemProcessor&lt;InsuranceApplication, AssessmentResult&gt; processor,
+                                ItemWriter&lt;AssessmentResult&gt; writer) {
+        return new StepBuilder(&quot;assessmentStep&quot;, jobRepository)
+            .&lt;InsuranceApplication, AssessmentResult&gt;chunk(100, tm)
+            .reader(reader)
+            .processor(processor)
+            .writer(writer)
+            // JDK 25 Virtual Threads 支持
+            .taskExecutor(java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor())
+            .build();
+    }
+}
+</code></pre></div>
+<h3>2.3 重量级：Temporal / Camunda / Conductor</h3>
+<p>对于复杂的、运行时间长的（数天甚至数周）、需要高可靠性的 Workflow，需要使用专业的 Workflow 引擎。</p>
+<p><strong>Temporal 特点</strong>：</p>
+<ul>
+<li>自动重试和超时处理</li>
+<li>Workflow 状态持久化（即使服务重启也不丢失状态）</li>
+<li>支持 Signal（外部触发）、Query（查询状态）</li>
+<li>原生支持 Human-in-the-loop（通过 Signal 机制）</li>
+</ul>
+<p><strong>选择建议</strong>：</p>
+<ul>
+<li>简单流程（&lt; 10 个状态）→ 自定义状态机或 Spring State Machine</li>
+<li>批处理（百万级数据）→ Spring Batch</li>
+<li>长时间运行、需要持久化和补偿的流程 → Temporal</li>
+</ul>
+<h2>三、Human-in-the-loop 模式</h2>
+<h3>3.1 审批节点</h3>
+<p>审批节点是 Human-in-the-loop 的最常见模式。系统在执行到关键节点时暂停，发起审批请求，等待人工决策后继续。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// ApprovalNode.java
+package com.example.insurance.hitl;
+
+import java.util.concurrent.*;
+import java.time.Duration;
+
+public class ApprovalNode {
+
+    private final ConcurrentHashMap&lt;String, CompletableFuture&lt;ApprovalDecision&gt;&gt; pendingApprovals
+        = new ConcurrentHashMap&lt;&gt;();
+
+    /**
+     * 发起审批请求，阻塞等待结果
+     */
+    public ApprovalDecision requestApproval(String applicationId, String reason, Duration timeout) {
+        var future = new CompletableFuture&lt;ApprovalDecision&gt;();
+        pendingApprovals.put(applicationId, future);
+
+        // 通知审批人（邮件、消息推送等）
+        notifyReviewer(applicationId, reason);
+
+        try {
+            return future.get(timeout.toSeconds(), TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            pendingApprovals.remove(applicationId);
+            return new ApprovalDecision(false, &quot;审批超时，自动拒绝&quot;);
+        } catch (Exception e) {
+            Thread.currentThread().interrupt();
+            return new ApprovalDecision(false, &quot;审批异常: &quot; + e.getMessage());
+        }
+    }
+
+    /**
+     * 审批人提交决策（通过 Web API 调用）
+     */
+    public void submitDecision(String applicationId, boolean approved, String comment) {
+        var future = pendingApprovals.remove(applicationId);
+        if (future != null) {
+            future.complete(new ApprovalDecision(approved, comment));
+        }
+    }
+
+    private void notifyReviewer(String applicationId, String reason) {
+        // 实际实现：发送邮件、站内通知、企业微信消息等
+        System.out.printf(&quot;[审批通知] 申请号: %s, 原因: %s%n&quot;, applicationId, reason);
+    }
+}
+
+record ApprovalDecision(boolean approved, String comment) {}
+</code></pre></div>
+<h3>3.2 中断与恢复</h3>
+<p>长时间运行的 Workflow 需要支持中断和恢复。通过持久化状态实现：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// PausableWorkflowEngine.java
+package com.example.insurance.workflow;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Service;
+import java.time.Instant;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+
+@Service
+public class PausableWorkflowEngine {
+
+    private final JdbcTemplate jdbc;
+    private final ObjectMapper mapper;
+    private final Map&lt;String, WorkflowContext&gt; activeContexts = new ConcurrentHashMap&lt;&gt;();
+
+    public PausableWorkflowEngine(JdbcTemplate jdbc, ObjectMapper mapper) {
+        this.jdbc = jdbc;
+        this.mapper = mapper;
+    }
+
+    /**
+     * 暂停 Workflow（持久化当前状态）
+     */
+    public void pause(String workflowId, String currentStep, Map&lt;String, Object&gt; state) {
+        try {
+            var stateJson = mapper.writeValueAsString(state);
+            jdbc.update(&quot;&quot;&quot;
+                INSERT INTO workflow_snapshots (workflow_id, current_step, state_json, paused_at)
+                VALUES (?, ?, ?, ?)
+                ON CONFLICT (workflow_id) DO UPDATE SET
+                    current_step = EXCLUDED.current_step,
+                    state_json = EXCLUDED.state_json,
+                    paused_at = EXCLUDED.paused_at
+                &quot;&quot;&quot;, workflowId, currentStep, stateJson, Instant.now());
+        } catch (Exception e) {
+            throw new WorkflowException(&quot;暂停 Workflow 失败&quot;, e);
+        }
+    }
+
+    /**
+     * 恢复 Workflow（从持久化状态恢复）
+     */
+    public WorkflowContext resume(String workflowId) {
+        var row = jdbc.queryForMap(
+            &quot;SELECT current_step, state_json FROM workflow_snapshots WHERE workflow_id = ?&quot;,
+            workflowId);
+
+        try {
+            var currentStep = (String) row.get(&quot;current_step&quot;);
+            var stateJson = (String) row.get(&quot;state_json&quot;);
+            @SuppressWarnings(&quot;unchecked&quot;)
+            var state = (Map&lt;String, Object&gt;) mapper.readValue(
+                stateJson, new com.fasterxml.jackson.core.type.TypeReference&lt;Map&lt;String, Object&gt;&gt;() {});
+
+            var ctx = new WorkflowContext(workflowId, currentStep, state);
+            activeContexts.put(workflowId, ctx);
+            return ctx;
+        } catch (Exception e) {
+            throw new WorkflowException(&quot;恢复 Workflow 失败&quot;, e);
+        }
+    }
+
+    /**
+     * 保存检查点
+     */
+    public void saveCheckpoint(String workflowId, String checkpoint, Map&lt;String, Object&gt; state) {
+        pause(workflowId, checkpoint, state);
+    }
+}
+
+class WorkflowContext {
+    private final String workflowId;
+    private String currentStep;
+    private final Map&lt;String, Object&gt; state;
+
+    public WorkflowContext(String workflowId, String currentStep, Map&lt;String, Object&gt; state) {
+        this.workflowId = workflowId;
+        this.currentStep = currentStep;
+        this.state = state;
+    }
+
+    public String workflowId() { return workflowId; }
+    public String currentStep() { return currentStep; }
+    public void currentStep(String step) { this.currentStep = step; }
+    public Map&lt;String, Object&gt; state() { return state; }
+}
+
+class WorkflowException extends RuntimeException {
+    public WorkflowException(String message, Throwable cause) {
+        super(message, cause);
+    }
+}
+</code></pre></div>
+<h3>3.3 权限升级</h3>
+<p>当 Agent 的操作超出其权限范围时，需要触发权限升级——请求更高级别的人工授权：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// EscalationManager.java
+package com.example.insurance.hitl;
+
+import org.springframework.stereotype.Service;
+import java.time.Duration;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
+
+@Service
+public class EscalationManager {
+
+    private final ConcurrentHashMap&lt;String, PendingEscalation&gt; escalations = new ConcurrentHashMap&lt;&gt;();
+    private final ApprovalNode approvalNode;
+
+    public EscalationManager(ApprovalNode approvalNode) {
+        this.approvalNode = approvalNode;
+    }
+
+    /**
+     * 检查操作是否需要权限升级
+     */
+    public boolean requiresEscalation(String operation, int agentAuthLevel) {
+        var requiredLevel = switch (operation) {
+            case &quot;view_policy&quot; -&gt; 1;
+            case &quot;modify_beneficiary&quot; -&gt; 2;
+            case &quot;cancel_policy&quot; -&gt; 3;
+            case &quot;process_claim_over_100k&quot; -&gt; 4;
+            default -&gt; 1;
+        };
+        return agentAuthLevel &lt; requiredLevel;
+    }
+
+    /**
+     * 执行权限升级：请求上级授权
+     */
+    public EscalationResult escalate(String sessionId, String operation, 
+                                      String reason, Duration timeout) {
+        var escalation = new PendingEscalation(sessionId, operation, reason, timeout);
+        escalations.put(sessionId, escalation);
+
+        // 发起审批
+        var decision = approvalNode.requestApproval(sessionId, reason, timeout);
+
+        if (decision.approved()) {
+            return new EscalationResult(true, &quot;上级已授权: &quot; + decision.comment(), null);
+        } else {
+            return new EscalationResult(false, &quot;上级拒绝授权: &quot; + decision.comment(), 
+                &quot;该操作需要更高级别权限，已请求审批但被拒绝&quot;);
+        }
+    }
+
+    /**
+     * 临时授权令牌
+     */
+    public String grantTemporaryToken(String sessionId, Duration validity) {
+        var token = &quot;TEMP-AUTH-&quot; + java.util.UUID.randomUUID().toString().substring(0, 8);
+        // 存储临时令牌（实际应存入 Redis）
+        return token;
+    }
+}
+
+record PendingEscalation(String sessionId, String operation, String reason, Duration timeout) {}
+record EscalationResult(boolean authorized, String message, String fallbackMessage) {}
+</code></pre></div>
+<h2>四、完整代码：带人工审批的保险核保 Agent Workflow</h2>
+<h3>4.1 核保数据模型</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// InsuranceApplication.java
+package com.example.insurance.model;
+
+import java.time.LocalDate;
+import java.util.Map;
+
+public record InsuranceApplication(
+    String applicationId,
+    String applicantName,
+    String idNumber,
+    LocalDate birthDate,
+    String gender,
+    String occupation,
+    double annualIncome,
+    String insuranceType,       // &quot;term_life&quot;, &quot;critical_illness&quot;, &quot;medical&quot;
+    double coverageAmount,
+    String medicalHistory,      // 健康告知
+    String smokingStatus,       // &quot;never&quot;, &quot;former&quot;, &quot;current&quot;
+    Map&lt;String, Object&gt; additionalInfo
+) {}
+</code></pre></div>
+<h3>4.2 风险评估服务</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// RiskAssessmentService.java
+package com.example.insurance.service;
+
+import com.example.insurance.model.InsuranceApplication;
+import org.springframework.stereotype.Service;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
+
+@Service
+public class RiskAssessmentService {
+
+    /**
+     * 计算风险评分（0-100），分数越高风险越大
+     */
+    public int calculateRiskScore(InsuranceApplication app) {
+        int score = 0;
+
+        // 年龄因素
+        var age = ChronoUnit.YEARS.between(app.birthDate(), LocalDate.now());
+        if (age &gt; 60) score += 30;
+        else if (age &gt; 50) score += 20;
+        else if (age &gt; 40) score += 10;
+
+        // 保额因素
+        if (app.coverageAmount() &gt; 5_000_000) score += 25;
+        else if (app.coverageAmount() &gt; 1_000_000) score += 15;
+
+        // 职业风险
+        var highRiskOccupations = java.util.Set.of(&quot;miner&quot;, &quot;firefighter&quot;, &quot;pilot&quot;, &quot;diver&quot;);
+        if (highRiskOccupations.contains(app.occupation().toLowerCase())) {
+            score += 30;
+        }
+
+        // 吸烟状态
+        if (&quot;current&quot;.equals(app.smokingStatus())) score += 15;
+        else if (&quot;former&quot;.equals(app.smokingStatus())) score += 5;
+
+        // 健康告知中有异常
+        if (app.medicalHistory() != null &amp;&amp; !app.medicalHistory().isBlank()) {
+            score += 20;
+        }
+
+        return Math.min(score, 100);
+    }
+
+    /**
+     * LLM 增强的智能风险评估（使用 AI 分析健康告知文本）
+     */
+    public String aiRiskAnalysis(InsuranceApplication app, 
+                                  org.springframework.ai.chat.client.ChatClient llm) {
+        var prompt = &quot;&quot;&quot;
+            作为保险核保专家，分析以下投保申请的健康告知：
+            
+            申请人年龄：%d
+            职业：%s
+            保额：%f
+            健康告知：%s
+            
+            请提供：
+            1. 风险等级（低/中/高）
+            2. 主要风险点
+            3. 是否需要人工审核
+            4. 建议的核保结论
+            &quot;&quot;&quot;.formatted(
+                ChronoUnit.YEARS.between(app.birthDate(), LocalDate.now()),
+                app.occupation(),
+                app.coverageAmount(),
+                app.medicalHistory()
+            );
+
+        return llm.prompt().user(prompt).call().content();
+    }
+}
+</code></pre></div>
+<h3>4.3 核保 Workflow 编排器</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// UnderwritingWorkflowOrchestrator.java
+package com.example.insurance.workflow;
+
+import com.example.insurance.hitl.ApprovalNode;
+import com.example.insurance.model.InsuranceApplication;
+import com.example.insurance.service.RiskAssessmentService;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.stereotype.Service;
+import java.time.Duration;
+import java.util.*;
+
+@Service
+public class UnderwritingWorkflowOrchestrator {
+
+    private static final Logger log = LoggerFactory.getLogger(UnderwritingWorkflowOrchestrator.class);
+
+    private final RiskAssessmentService riskService;
+    private final ApprovalNode approvalNode;
+    private final ChatClient llm;
+    private final PausableWorkflowEngine workflowEngine;
+
+    public UnderwritingWorkflowOrchestrator(
+            RiskAssessmentService riskService,
+            ApprovalNode approvalNode,
+            ChatClient llm,
+            PausableWorkflowEngine workflowEngine) {
+        this.riskService = riskService;
+        this.approvalNode = approvalNode;
+        this.llm = llm;
+        this.workflowEngine = workflowEngine;
+    }
+
+    /**
+     * 执行核保 Workflow
+     */
+    public UnderwritingResult execute(InsuranceApplication application) {
+        var workflowId = &quot;UW-&quot; + application.applicationId();
+        var state = new HashMap&lt;String, Object&gt;();
+        state.put(&quot;application&quot;, application);
+        state.put(&quot;startedAt&quot;, java.time.Instant.now());
+
+        log.info(&quot;[{}] 核保流程开始: 申请人={}, 保额={}&quot;, 
+            workflowId, application.applicantName(), application.coverageAmount());
+
+        try {
+            // Step 1: 数据校验
+            log.info(&quot;[{}] Step 1: 数据校验&quot;, workflowId);
+            var validationResult = validateApplication(application);
+            if (!validationResult.passed()) {
+                return UnderwritingResult.rejected(application.applicationId(), validationResult.reason());
+            }
+            state.put(&quot;step&quot;, &quot;DATA_VALIDATED&quot;);
+
+            // Step 2: 风险评估
+            log.info(&quot;[{}] Step 2: 风险评估&quot;, workflowId);
+            var riskScore = riskService.calculateRiskScore(application);
+            state.put(&quot;riskScore&quot;, riskScore);
+            log.info(&quot;[{}] 风险评分: {}&quot;, workflowId, riskScore);
+
+            // 如果保额超过200万，暂停流程等待复核
+            if (application.coverageAmount() &gt; 2_000_000) {
+                log.info(&quot;[{}] 高保额触发暂停: 保额={}&quot;, workflowId, application.coverageAmount());
+                workflowEngine.pause(workflowId, &quot;HIGH_COVERAGE_PAUSE&quot;, state);
+                // 在实际系统中，这里会通过消息通知核保人员
+            }
+
+            // Step 3: AI 增强分析
+            log.info(&quot;[{}] Step 3: AI 增强分析&quot;, workflowId);
+            var aiAnalysis = riskService.aiRiskAnalysis(application, llm);
+            state.put(&quot;aiAnalysis&quot;, aiAnalysis);
+            state.put(&quot;step&quot;, &quot;AI_ANALYZED&quot;);
+
+            // Step 4: 决策分支
+            log.info(&quot;[{}] Step 4: 决策分支 (riskScore={})&quot;, workflowId, riskScore);
+
+            if (riskScore &lt; 40) {
+                // 低风险：自动通过
+                log.info(&quot;[{}] 低风险，自动通过&quot;, workflowId);
+                return UnderwritingResult.approved(application.applicationId(), 
+                    &quot;自动核保通过，风险评分: &quot; + riskScore);
+            } else if (riskScore &lt; 70) {
+                // 中风险：人工审核
+                log.info(&quot;[{}] 中风险，进入人工审核&quot;, workflowId);
+                var approvalResult = approvalNode.requestApproval(
+                    application.applicationId(),
+                    buildApprovalReason(application, riskScore, aiAnalysis),
+                    Duration.ofHours(24)
+                );
+
+                if (approvalResult.approved()) {
+                    return UnderwritingResult.approved(application.applicationId(),
+                        &quot;人工审核通过: &quot; + approvalResult.comment());
+                } else {
+                    return UnderwritingResult.rejected(application.applicationId(),
+                        &quot;人工审核拒绝: &quot; + approvalResult.comment());
+                }
+            } else {
+                // 高风险：建议拒绝，但仍需人工确认
+                log.info(&quot;[{}] 高风险，建议拒绝，等待人工确认&quot;, workflowId);
+                var approvalResult = approvalNode.requestApproval(
+                    application.applicationId(),
+                    buildHighRiskApprovalReason(application, riskScore, aiAnalysis),
+                    Duration.ofHours(48)
+                );
+
+                if (approvalResult.approved()) {
+                    return UnderwritingResult.approved(application.applicationId(),
+                        &quot;高风险申请经人工特批通过: &quot; + approvalResult.comment());
+                } else {
+                    return UnderwritingResult.rejected(application.applicationId(),
+                        &quot;高风险申请被拒绝: &quot; + approvalResult.comment());
+                }
+            }
+
+        } catch (Exception e) {
+            log.error(&quot;[{}] 核保流程异常&quot;, workflowId, e);
+            // 异常时持久化状态以便恢复
+            workflowEngine.pause(workflowId, &quot;ERROR&quot;, state);
+            return UnderwritingResult.error(application.applicationId(), e.getMessage());
+        }
+    }
+
+    private ValidationResult validateApplication(InsuranceApplication app) {
+        if (app.applicantName() == null || app.applicantName().isBlank()) {
+            return new ValidationResult(false, &quot;申请人姓名不能为空&quot;);
+        }
+        if (app.idNumber() == null || app.idNumber().isBlank()) {
+            return new ValidationResult(false, &quot;身份证号不能为空&quot;);
+        }
+        if (app.coverageAmount() &lt;= 0) {
+            return new ValidationResult(false, &quot;保额必须大于0&quot;);
+        }
+        return new ValidationResult(true, null);
+    }
+
+    private String buildApprovalReason(InsuranceApplication app, int riskScore, String aiAnalysis) {
+        return &quot;&quot;&quot;
+            投保申请需要人工审核：
+            
+            申请人：%s
+            保险类型：%s
+            保额：%.2f
+            风险评分：%d/100
+            AI分析摘要：%s
+            &quot;&quot;&quot;.formatted(app.applicantName(), app.insuranceType(), 
+                app.coverageAmount(), riskScore, 
+                aiAnalysis.length() &gt; 200 ? aiAnalysis.substring(0, 200) + &quot;...&quot; : aiAnalysis);
+    }
+
+    private String buildHighRiskApprovalReason(InsuranceApplication app, int riskScore, String aiAnalysis) {
+        return &quot;&quot;&quot;
+            【高风险申请 - 需要高级审批权限】
+            
+            申请人：%s
+            保险类型：%s
+            保额：%.2f
+            风险评分：%d/100（高风险）
+            AI分析摘要：%s
+            
+            注意：此申请风险评分较高，建议谨慎审批。
+            &quot;&quot;&quot;.formatted(app.applicantName(), app.insuranceType(),
+                app.coverageAmount(), riskScore, aiAnalysis);
+    }
+
+    record ValidationResult(boolean passed, String reason) {}
+}
+</code></pre></div>
+<h3>4.4 核保结果与审批 API</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// UnderwritingResult.java
+package com.example.insurance.workflow;
+
+public record UnderwritingResult(
+    String applicationId,
+    String status,     // &quot;approved&quot;, &quot;rejected&quot;, &quot;pending&quot;, &quot;error&quot;
+    String reason
+) {
+    public static UnderwritingResult approved(String id, String reason) {
+        return new UnderwritingResult(id, &quot;approved&quot;, reason);
+    }
+    public static UnderwritingResult rejected(String id, String reason) {
+        return new UnderwritingResult(id, &quot;rejected&quot;, reason);
+    }
+    public static UnderwritingResult pending(String id, String reason) {
+        return new UnderwritingResult(id, &quot;pending&quot;, reason);
+    }
+    public static UnderwritingResult error(String id, String reason) {
+        return new UnderwritingResult(id, &quot;error&quot;, reason);
+    }
+}
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// UnderwritingController.java
+package com.example.insurance.controller;
+
+import com.example.insurance.hitl.ApprovalNode;
+import com.example.insurance.model.InsuranceApplication;
+import com.example.insurance.workflow.UnderwritingWorkflowOrchestrator;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping(&quot;/api/underwriting&quot;)
+public class UnderwritingController {
+
+    private final UnderwritingWorkflowOrchestrator orchestrator;
+    private final ApprovalNode approvalNode;
+
+    public UnderwritingController(UnderwritingWorkflowOrchestrator orchestrator,
+                                   ApprovalNode approvalNode) {
+        this.orchestrator = orchestrator;
+        this.approvalNode = approvalNode;
+    }
+
+    @PostMapping(&quot;/submit&quot;)
+    public var submitApplication(@RequestBody InsuranceApplication application) {
+        return orchestrator.execute(application);
+    }
+
+    @PostMapping(&quot;/approve/{applicationId}&quot;)
+    public var approve(@PathVariable String applicationId, @RequestBody ApprovalRequest request) {
+        approvalNode.submitDecision(applicationId, true, request.comment());
+        return Map.of(&quot;status&quot;, &quot;ok&quot;, &quot;action&quot;, &quot;approved&quot;);
+    }
+
+    @PostMapping(&quot;/reject/{applicationId}&quot;)
+    public var reject(@PathVariable String applicationId, @RequestBody ApprovalRequest request) {
+        approvalNode.submitDecision(applicationId, false, request.comment());
+        return Map.of(&quot;status&quot;, &quot;ok&quot;, &quot;action&quot;, &quot;rejected&quot;);
+    }
+}
+
+record ApprovalRequest(String comment) {}
+</code></pre></div>
+<h2>五、最佳实践</h2>
+<ol>
+<li><p><strong>审批超时必须处理</strong>：永远设置审批超时时间。超时后根据业务规则自动决策（如小额自动通过、大额自动拒绝）。</p>
+</li>
+<li><p><strong>状态持久化是必须的</strong>：任何涉及 Human-in-the-loop 的 Workflow 都必须持久化状态。用户可能在任何时候关闭浏览器，几天后才回来处理。</p>
+</li>
+<li><p><strong>审批信息要完整</strong>：提交给审批人的信息应包含决策所需的全部上下文，减少审批人的往返沟通。</p>
+</li>
+<li><p><strong>Workflow 和 Agent 可以组合</strong>：在确定性 Workflow 的某些节点（如健康告知分析）嵌入 LLM Agent 调用，兼得可控性和智能性。</p>
+</li>
+<li><p><strong>审计日志不可少</strong>：记录每一步的状态变更、审批决策、操作人和时间戳。对于保险、金融等合规要求高的行业，审计日志是强制要求。</p>
+</li>
+</ol>
+<h2>六、常见问题</h2>
+<p><strong>Q: 审批节点如何通知审批人？</strong>
+A: 多渠道组合——WebSocket 实时推送、邮件通知、企业微信/钉钉消息、短信。对于超时未处理的审批，应触发升级通知（通知审批人的上级）。</p>
+<p><strong>Q: Workflow 中某个节点失败了如何恢复？</strong>
+A: 持久化每个节点的输入和输出。失败后从最近的检查点恢复，跳过已成功的节点。Spring State Machine 的 <code>StateMachinePersister</code> 可以做到这一点。</p>
+<p><strong>Q: 如何在 Workflow 中嵌入 LLM 调用？</strong>
+A: 将 LLM 调用封装为一个 State Action。Spring State Machine 的 <code>withStates().state(..., action())</code> 可以定义进入某个状态时执行的 Action。</p>
+<hr>
+<p><strong>总结</strong>：Workflow 和 Human-in-the-loop 是构建生产级 AI 应用的关键模式。确定性 Workflow 提供可预测性，LLM Agent 提供灵活性，两者结合才能构建稳健的 AI 系统。Human-in-the-loop 不是 AI 的弱点，而是系统可靠性的保障——关键决策始终应该有人类把关。</p>
+</div>
+</article>

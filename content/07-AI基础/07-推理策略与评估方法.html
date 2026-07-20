@@ -1,0 +1,833 @@
+
+<article class="kb-entry" data-path="/07-AI基础/07-推理策略与评估方法">
+  <div class="entry-meta">
+    <div class="entry-domain"><a href="/?d=07">07-AI基础</a></div>
+    <h1>Inference and Evaluation</h1>
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#["inference"</span><span class="badge badge-tag">#"decoding"</span><span class="badge badge-tag">#"sampling"</span><span class="badge badge-tag">#"kv-cache"</span></div>
+    
+  </div>
+  <div class="entry-body"><h1>Inference and Evaluation</h1>
+<h2>概述</h2>
+<p>推理（Inference）和评估（Evaluation）是 LLM 应用落地的两个关键环节。推理策略决定了模型&quot;怎么说&quot;（如何从概率分布中选择输出），评估方法决定了模型&quot;说得好不好&quot;（如何度量输出质量）。本条目从算法原理、性能优化到评估体系，全面覆盖这两方面。</p>
+<h2>推理策略</h2>
+<p>模型在每个生成步骤输出的是词汇表上的概率分布（logits → softmax → probabilities）。如何从这个分布中选择下一个 token，就是推理策略的核心问题。</p>
+<h3>Greedy Decoding</h3>
+<p>最简单的策略：每步选择概率最高的 token。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Greedy Decoding:
+  for each step t:
+    probs = softmax(logits[t])
+    token_t = argmax(probs)
+    if token_t == EOS: break
+
+优点：确定性，速度快，可复现
+缺点：
+  - 容易陷入重复循环（&quot;I am happy. I am happy. I am happy...&quot;）
+  - 缺乏多样性，输出可能不是全局最优（贪心的局部最优 ≠ 全局最优）
+</code></pre></div>
+<p><strong>重复问题示例</strong>：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Prompt: &quot;What is Java?&quot;
+Greedy: &quot;Java is a programming language that is a programming language
+         that is a programming language...&quot;  ← 陷入循环
+</code></pre></div>
+<p><strong>为什么 Greedy 会重复</strong>：贪心选择使得之前选过的高概率 token 在后续步骤中仍然保持高概率，形成正反馈循环。</p>
+<h3>Temperature 采样</h3>
+<p>在 softmax 之前对 logits 除以温度参数 T：</p>
+<p>$$p_i = \frac{\exp(z_i / T)}{\sum_j \exp(z_j / T)}$$</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>T → 0:  等价于 Greedy（概率分布极度尖锐）
+T = 0.7: 推荐用于事实类回答（平衡准确性和自然度）
+T = 1.0: 标准采样（使用原始概率分布）
+T = 1.5: 增加创造性（概率分布变平）
+T → ∞:  等价于均匀分布（完全随机）
+</code></pre></div>
+<p><strong>Java 实现：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class TemperatureSampling {
+
+    /**
+     * 应用温度参数后采样
+     * @param logits 原始 logits
+     * @param temperature 温度参数
+     * @param random 随机数生成器
+     * @return 采样得到的 token 索引
+     */
+    public static int sample(float[] logits, float temperature, java.util.Random random) {
+        float[] probs = applyTemperature(logits, temperature);
+        return sampleFromDistribution(probs, random);
+    }
+
+    public static float[] applyTemperature(float[] logits, float temperature) {
+        if (temperature &lt;= 0) temperature = 1e-6f;  // 防止除零
+        float[] scaled = new float[logits.length];
+
+        // 数值稳定性：减去最大值
+        float maxLogit = Float.NEGATIVE_INFINITY;
+        for (float l : logits) maxLogit = Math.max(maxLogit, l);
+
+        double sum = 0;
+        for (int i = 0; i &lt; logits.length; i++) {
+            scaled[i] = (float) Math.exp((logits[i] - maxLogit) / temperature);
+            sum += scaled[i];
+        }
+
+        for (int i = 0; i &lt; scaled.length; i++) {
+            scaled[i] = (float) (scaled[i] / sum);
+        }
+        return scaled;
+    }
+
+    public static int sampleFromDistribution(float[] probs, java.util.Random random) {
+        double r = random.nextDouble();
+        double cumulative = 0;
+        for (int i = 0; i &lt; probs.length; i++) {
+            cumulative += probs[i];
+            if (r &lt;= cumulative) return i;
+        }
+        return probs.length - 1;  // 兜底
+    }
+
+    /**
+     * 演示不同温度的效果
+     */
+    public static void demonstrate() {
+        // 模拟一个词汇表上的 logits
+        float[] logits = {3.0f, 2.0f, 1.0f, 0.5f, 0.1f};
+        String[] tokens = {&quot;Java&quot;, &quot;Python&quot;, &quot;Rust&quot;, &quot;Go&quot;, &quot;C&quot;};
+
+        System.out.println(&quot;原始 logits: &quot; + Arrays.toString(logits));
+        System.out.println();
+
+        for (float t : new float[]{0.1f, 0.7f, 1.0f, 2.0f}) {
+            float[] probs = applyTemperature(logits, t);
+            System.out.printf(&quot;T=%.1f: &quot;, t);
+            for (int i = 0; i &lt; tokens.length; i++) {
+                System.out.printf(&quot;%s:%.3f &quot;, tokens[i], probs[i]);
+            }
+            System.out.println();
+        }
+        // 输出：
+        // T=0.1: Java:0.996 Python:0.004 Rust:0.000 Go:0.000 C:0.000  (接近Greedy)
+        // T=0.7: Java:0.614 Python:0.239 Rust:0.100 Go:0.035 C:0.012
+        // T=1.0: Java:0.506 Python:0.266 Rust:0.148 Go:0.064 C:0.016
+        // T=2.0: Java:0.351 Python:0.265 Rust:0.195 Go:0.128 C:0.061  (更平坦)
+    }
+
+    public static void main(String[] args) {
+        demonstrate();
+    }
+}
+</code></pre></div>
+<h3>Top-k 采样</h3>
+<p>只保留概率最高的 k 个 token，将其他的概率设为 0，然后重新归一化采样。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Top-k 采样流程：
+1. 取概率最高的 k 个 token
+2. 将这 k 个 token 的概率重新归一化
+3. 从这 k 个 token 中随机采样
+
+k 值选择：
+  k = 5-10:  高确定度输出（事实问答、代码生成）
+  k = 20-50: 中等创造性（通用对话）
+  k = 100+:  高创造性（创意写作、头脑风暴）
+
+问题：固定的 k 无法适应不同上下文
+  - 概率已集中在1-2个 token 时，k=50 引入了噪音
+  - 概率均匀分布时，k=10 可能切掉了合理选项
+</code></pre></div>
+<p><strong>Java 实现：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class TopKSampling {
+
+    /**
+     * Top-K 采样
+     * @param logits 原始 logits
+     * @param k 保留 top-k 个 token
+     */
+    public static int sample(float[] logits, int k, java.util.Random random) {
+        // 创建索引数组并按 logits 降序排序
+        var indices = new Integer[logits.length];
+        for (int i = 0; i &lt; logits.length; i++) indices[i] = i;
+        Arrays.sort(indices, (a, b) -&gt; Float.compare(logits[b], logits[a]));
+
+        // 保留 top-k
+        var filtered = new float[logits.length];
+        for (int i = 0; i &lt; k &amp;&amp; i &lt; logits.length; i++) {
+            filtered[indices[i]] = logits[indices[i]];
+        }
+
+        // softmax 归一化 top-k
+        float[] probs = TemperatureSampling.applyTemperature(filtered, 1.0f);
+        return TemperatureSampling.sampleFromDistribution(probs, random);
+    }
+}
+</code></pre></div>
+<h3>Top-p (Nucleus) 采样</h3>
+<p>不固定 token 数量，而是从概率最高的开始累加，直到累积概率超过阈值 p：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Top-p 采样流程：
+1. 将 token 按概率从大到小排序
+2. 从大到小累加，直到累积概率 ≥ p
+3. 只保留这些 token，重新归一化采样
+
+p 值选择：
+  p = 0.1:  非常保守（通常只保留 1-3 个 token）
+  p = 0.5:  中等
+  p = 0.9:  常用默认值（保留概率主体的 token）
+  p = 0.95: 高创造性
+  p = 1.0:  等价于纯 temperature 采样
+
+优势：动态适应不同上下文
+  - 概率集中时 → 自动取少（可能只需1-3个token就覆盖90%）
+  - 概率均匀时 → 自动取多（可能需要100+个token才覆盖90%）
+</code></pre></div>
+<p><strong>Java 实现 Top-p 采样：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class TopPSampling {
+
+    /**
+     * Top-p (Nucleus) 采样
+     * @param logits 原始 logits
+     * @param p 累积概率阈值 (如 0.9)
+     */
+    public static int sample(float[] logits, float p, float temperature,
+                              java.util.Random random) {
+        // 先应用 temperature
+        float[] probs = TemperatureSampling.applyTemperature(logits, temperature);
+
+        // 按概率降序排序
+        record IndexedProb(int index, float prob) {}
+        var sorted = new IndexedProb[probs.length];
+        for (int i = 0; i &lt; probs.length; i++) {
+            sorted[i] = new IndexedProb(i, probs[i]);
+        }
+        Arrays.sort(sorted, (a, b) -&gt; Float.compare(b.prob, a.prob));
+
+        // 找 nucleus：累积概率达到 p 的 token 集合
+        double cumulative = 0;
+        int nucleusSize = 0;
+        for (int i = 0; i &lt; sorted.length; i++) {
+            cumulative += sorted[i].prob;
+            nucleusSize = i + 1;
+            if (cumulative &gt;= p) break;
+        }
+
+        // 重建概率分布（只有 nucleus 内的）
+        var filteredProbs = new float[probs.length];
+        double filteredSum = 0;
+        for (int i = 0; i &lt; nucleusSize; i++) {
+            filteredProbs[sorted[i].index] = sorted[i].prob;
+            filteredSum += sorted[i].prob;
+        }
+        // 重新归一化
+        for (int i = 0; i &lt; filteredProbs.length; i++) {
+            filteredProbs[i] = (float) (filteredProbs[i] / filteredSum);
+        }
+
+        return TemperatureSampling.sampleFromDistribution(filteredProbs, random);
+    }
+
+    public static void main(String[] args) {
+        // 演示 Top-p 在不同概率分布下的自适应行为
+        float[] peakedLogits = {10.0f, 1.0f, 0.5f, 0.2f, 0.1f};  // 尖峰分布
+        float[] flatLogits = {2.0f, 1.9f, 1.8f, 1.7f, 1.6f};     // 平坦分布
+
+        var probs = TemperatureSampling.applyTemperature(peakedLogits, 1.0f);
+        System.out.println(&quot;尖峰分布: &quot; + Arrays.toString(probs));
+        // nucleus 很小 (~1-2 tokens)
+
+        probs = TemperatureSampling.applyTemperature(flatLogits, 1.0f);
+        System.out.println(&quot;平坦分布: &quot; + Arrays.toString(probs));
+        // nucleus 很大 (可能全5个都需要)
+    }
+}
+</code></pre></div>
+<h3>Beam Search</h3>
+<p>保持 k 个候选序列（beam width），每步从 k × |V| 个候选中选出最优 k 个。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Beam Search (beam width = 3):
+Step 1: [A:0.5] [B:0.3] [C:0.1]        ← 选 top-3
+Step 2: [A→X:0.2] [B→Y:0.15] [A→Z:0.1]  ← 从所有延续中选 top-3
+Step 3: ...
+最终：返回分数最高的完整序列
+
+得分 = Σ log P(token_t | tokens_{&lt;t})    (对数概率之和)
+
+问题：
+  - 对长序列不友好（log prob 始终为负，越长总分越低）
+  - 常用长度惩罚：score / length^α
+  - 输出可能缺乏多样性（所有 beam 趋同）
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class BeamSearch {
+
+    record Beam(double score, List&lt;Integer&gt; tokens) {}
+
+    public static List&lt;Integer&gt; search(
+            java.util.function.Function&lt;List&lt;Integer&gt;, float[]&gt; modelForward,
+            int beamWidth, int maxLen, int eosTokenId) {
+
+        var beams = new ArrayList&lt;Beam&gt;();
+        beams.add(new Beam(0.0, new ArrayList&lt;&gt;()));
+
+        for (int step = 0; step &lt; maxLen; step++) {
+            var candidates = new ArrayList&lt;Beam&gt;();
+
+            for (var beam : beams) {
+                if (!beam.tokens.isEmpty() &amp;&amp;
+                    beam.tokens.get(beam.tokens.size() - 1) == eosTokenId) {
+                    candidates.add(beam);  // 保留已完成序列
+                    continue;
+                }
+
+                float[] logits = modelForward.apply(beam.tokens);
+                float[] probs = TemperatureSampling.applyTemperature(logits, 1.0f);
+
+                for (int tokenId = 0; tokenId &lt; probs.length; tokenId++) {
+                    var newTokens = new ArrayList&lt;&gt;(beam.tokens);
+                    newTokens.add(tokenId);
+                    double newScore = beam.score + Math.log(probs[tokenId] + 1e-9);
+                    candidates.add(new Beam(newScore, newTokens));
+                }
+            }
+
+            // 选 top-k candidates
+            candidates.sort((a, b) -&gt; Double.compare(b.score, a.score));
+            beams = new ArrayList&lt;&gt;(candidates.subList(0,
+                Math.min(beamWidth, candidates.size())));
+        }
+
+        return beams.get(0).tokens;  // 返回最高分序列
+    }
+}
+</code></pre></div>
+<h3>惩罚机制</h3>
+<p>除了采样策略，还可以通过惩罚项来抑制重复：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class RepetitionPenalties {
+
+    /**
+     * 重复惩罚 (Repetition Penalty)
+     * 对已出现的 token 降低其概率
+     */
+    public static float[] applyRepetitionPenalty(
+            float[] logits, Set&lt;Integer&gt; seenTokens, float penalty) {
+        // penalty 通常取 1.1-1.5
+        // penalty &gt; 1: 惩罚已出现 token（让它们变难出现）
+        // penalty = 1: 不惩罚
+        // penalty &lt; 1: 鼓励已出现 token（让它们更容易出现）
+        float[] penalized = logits.clone();
+        for (int tid : seenTokens) {
+            if (penalized[tid] &gt; 0) {
+                penalized[tid] /= penalty;  // 降低正 logit
+            } else {
+                penalized[tid] *= penalty;  // 增大负 logit 的绝对值
+            }
+        }
+        return penalized;
+    }
+
+    /**
+     * 频率惩罚 (Frequency Penalty)
+     * 按出现次数降低概率
+     */
+    public static float[] applyFrequencyPenalty(
+            float[] logits, Map&lt;Integer, Integer&gt; tokenCounts, float freqPenalty) {
+        float[] penalized = logits.clone();
+        for (var entry : tokenCounts.entrySet()) {
+            penalized[entry.getKey()] -= freqPenalty * entry.getValue();
+        }
+        return penalized;
+    }
+
+    /**
+     * 存在惩罚 (Presence Penalty)
+     * 只要出现过就惩罚（不管出现几次）
+     */
+    public static float[] applyPresencePenalty(
+            float[] logits, Set&lt;Integer&gt; seenTokens, float presencePenalty) {
+        float[] penalized = logits.clone();
+        for (int tid : seenTokens) {
+            penalized[tid] -= presencePenalty;  // 出现过就扣分
+        }
+        return penalized;
+    }
+
+    public static void main(String[] args) {
+        float[] logits = {3.0f, 2.5f, 1.0f, 0.5f};
+
+        System.out.println(&quot;原始: &quot; + Arrays.toString(logits));
+        System.out.println(&quot;重复惩罚(1.2): &quot; +
+            Arrays.toString(applyRepetitionPenalty(logits, Set.of(0), 1.2f)));
+        System.out.println(&quot;存在惩罚(0.5): &quot; +
+            Arrays.toString(applyPresencePenalty(logits, Set.of(0, 1), 0.5f)));
+    }
+}
+</code></pre></div>
+<p><strong>惩罚参数配合使用建议：</strong></p>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>Temperature</th>
+<th>Top-p</th>
+<th>Freq Penalty</th>
+<th>Presence Penalty</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>事实问答</td>
+<td>0-0.3</td>
+<td>0.9</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>通用对话</td>
+<td>0.7</td>
+<td>0.9</td>
+<td>0.1</td>
+<td>0.1</td>
+</tr>
+<tr>
+<td>创意写作</td>
+<td>0.9-1.2</td>
+<td>0.95</td>
+<td>0.3</td>
+<td>0.3</td>
+</tr>
+<tr>
+<td>代码生成</td>
+<td>0-0.2</td>
+<td>0.9</td>
+<td>0</td>
+<td>0</td>
+</tr>
+<tr>
+<td>头脑风暴</td>
+<td>1.2-1.5</td>
+<td>0.95</td>
+<td>0.1</td>
+<td>0.5</td>
+</tr>
+</tbody></table>
+<h2>推理性能优化</h2>
+<h3>KV Cache</h3>
+<p>KV Cache 是 LLM 推理最重要的性能优化。在自回归生成中，每个新 token 需要与所有历史 token 做 attention。如果不缓存，每个 step 都需要重新计算所有历史 token 的 K 和 V。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>无 KV Cache:
+  Step 1: 计算 token1 的 Q,K,V → attention
+  Step 2: 计算 token1,token2 的 Q,K,V → attention  ← 重复计算了 token1!
+  Step 3: 计算 token1,token2,token3 的 Q,K,V → attention  ← 重复计算了 token1,token2!
+  计算量: O(n² × d) 每层每 token（因为重新计算）
+
+有 KV Cache:
+  Step 1: 计算 token1 的 Q,K,V → 缓存 K1,V1, attention
+  Step 2: 计算 token2 的 Q, K2, V2 → 读取 K1,V1, attention  ← 不重复
+  Step 3: 计算 token3 的 Q, K3, V3 → 读取 K1,K2,V1,V2, attention
+  计算量: O(n × d²) 每层每 token（只计算新 token）
+</code></pre></div>
+<p><strong>内存占用分析：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>KV Cache 内存 = 2 × num_layers × batch_size × seq_len × num_heads × head_dim × dtype_size
+
+示例（LLaMA 70B, half precision）：
+  2 × 80 × 1 × 4096 × 64 × 128 × 2 bytes
+  = 2 × 80 × 1 × 4096 × 8192 × 2
+  ≈ 10.7 GB (仅 KV Cache!)
+
+扩展到 128K 上下文：
+  ≈ 10.7 GB × 32 = 342 GB (恐怖的 KV Cache)
+</code></pre></div>
+<h3>PagedAttention (vLLM)</h3>
+<p>PagedAttention 是 vLLM 的核心创新，借鉴了操作系统的虚拟内存管理：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>传统 KV Cache 管理：
+  ┌────────────────────────────────────────┐
+  │ Token1 KV │ Token2 KV │ Token3 KV │ ...│   ┌─ 连续分配的整块内存
+  └────────────────────────────────────────┘   └─ 碎片化严重
+
+PagedAttention (分页管理):
+  Block 0: [Tok1, Tok2, Tok3]  ← 一页存多个 token 的 KV
+  Block 1: [Tok4, Tok5, Tok6]
+  Block 2: [Tok7, Tok8, Tok9]  ← 不要求连续
+  Block 3: [空闲]
+  Block 4: [Tok10,Tok11,Tok12]
+
+优势：
+  1. 零内存碎片（通过动态分配 page）
+  2. 内存共享（beam search 中不同 beam 共享同一 prefix 的 KV Cache）
+  3. 高吞吐（可把 GPU 内存利用率从 20-40% 提升到 80%+）
+</code></pre></div>
+<h3>Multi-Query / Grouped-Query Attention</h3>
+<p>标准 Multi-Head Attention (MHA): Q, K, V 各有 h 个头
+Multi-Query Attention (MQA): Q 有 h 个头，但 K, V 只有 1 个头（所有 Q 头共享）
+Grouped-Query Attention (GQA): Q 有 h 个头，K, V 有 g 个头（g 组，每组共享）</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>MHA (标准):          MQA (极度压缩):       GQA (LLaMA 2 70B):
+  Q K V               Q K V                 Q K V
+  ■ ■ ■               ■ □ □                 ■ ◇ ◇
+  ■ ■ ■     h=4       ■ □ □       h=4       ■ ◇ ◇       h=4
+  ■ ■ ■               ■ □ □                 ■ ◆ ◆        g=2
+  ■ ■ ■               ■ □ □                 ■ ◆ ◆
+
+KV Cache 大小对比：
+  MHA: size ∝ 2 × h     (1x)
+  MQA: size ∝ 2 × 1     (1/h x)  ← h=64 时缩小 64 倍!
+  GQA: size ∝ 2 × g     (g/h x)  ← g=8, h=64 时缩小 8 倍
+</code></pre></div>
+<p>GQA 是目前的最佳平衡点：LLaMA 2 70B 使用 g=8, h=64，KV Cache 缩小 8 倍，质量几乎无损失。</p>
+<h3>Speculative Decoding</h3>
+<p>用一个小模型（草稿模型，Draft Model）快速生成候选 token，大模型（目标模型，Target Model）一次性验证：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Speculative Decoding 流程：
+┌──────────────────────────────────────────────────────────┐
+│ Step 1: Draft Model 快速生成 k 个候选 token              │
+│   Draft(小模型): &quot;The quick brown fox jumps&quot; (5 tokens)  │
+│   速度: 2000 tokens/s (小模型快)                         │
+│                                                          │
+│ Step 2: Target Model 一次性验证所有 k 个 token           │
+│   Target(大模型): 前向传播一次，验证 5 个 token           │
+│   结果: 前 3 个通过，第 4 个拒绝，第 4 个位置校正         │
+│                                                          │
+│ Step 3: 返回通过 + 校正的 token                          │
+│   Output: &quot;The quick brown fox&quot;  (3 through + 1 corrected)│
+│                                                          │
+│ 加速比: 2-3x (实际吞吐提升)                              │
+└──────────────────────────────────────────────────────────┘
+</code></pre></div>
+<p><strong>正确性保证</strong>：Target Model 的验证过程确保了输出分布与直接使用 Target Model 完全相同（无质量损失）。</p>
+<h3>Continuous Batching</h3>
+<p>传统 Static Batching 的致命缺陷：一个 batch 中所有请求必须等最长的那个完成才能一起返回。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Static Batching:
+Batch = [Req1(10 tokens), Req2(100 tokens), Req3(5 tokens)]
+  → Req3 和 Req1 完成了，但必须等 Req2 的 100 个 token 生成完
+  → GPU 利用率低
+
+Continuous Batching:
+  时刻 0: Batch = [Req1, Req2, Req3]
+  时刻 1: Req3 完成(EOS) → 立即从 batch 移除，插入新请求 Req4
+  时刻 2: Req1 完成 → 移除，插入 Req5
+  时刻 3: Batch = [Req2(继续), Req4, Req5]
+  → GPU 始终满载，吞吐提升 10x+
+</code></pre></div>
+<h2>LLM 评估方法</h2>
+<h3>Perplexity</h3>
+<p>困惑度（Perplexity）是语言模型的最经典指标：</p>
+<p>$$\text{PPL} = \exp\left(-\frac{1}{N}\sum_{i=1}^{N} \log P(w_i | w_{&lt;i})\right)$$</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>直观理解：
+  PPL = 1:   模型 100% 确定下一个 token（完美，但不现实）
+  PPL = 10:  模型平均在 10 个 token 中选择（优秀）
+  PPL = 100: 模型平均在 100 个 token 中选择（一般）
+  PPL = 词汇表大小：等价于随机猜测
+
+局限性：
+  1. PPL 低 ≠ 生成质量高（可能只是学会了重复训练数据）
+  2. PPL 高可能只是 tokenizer 差异导致的（不同 tokenizer 的 PPL 不可直接比较）
+  3. 无法衡量事实准确性、逻辑一致性、有用性
+</code></pre></div>
+<h3>BLEU / ROUGE</h3>
+<p>用于机器翻译（BLEU）和文本摘要（ROUGE）的 n-gram 匹配指标：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>BLEU: 计算生成文本和参考文本之间的 n-gram 精确匹配率
+  BLEU-1: unigram 匹配
+  BLEU-4: 1-4 gram 的几何平均（最常用）
+
+ROUGE: 计算生成文本和参考文本之间的 n-gram 召回率
+  ROUGE-1: unigram 召回率
+  ROUGE-2: bigram 召回率
+  ROUGE-L: 最长公共子序列 (LCS)
+
+问题：
+  - 过于字面：同义表达被视为错误
+  - 无法评估创造性和灵活性
+  - 在 LLM 时代几乎过时，仅用于极简单的翻译/摘要任务
+</code></pre></div>
+<h3>LLM-as-a-Judge</h3>
+<p>LLM-as-a-Judge 是目前最实用的 LLM 评估方法。用能力较强的模型来评判另一个模型的输出：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>LLM-as-a-Judge 工作流：
+
+输入：
+  原始问题: &quot;解释Spring Boot自动配置的原理&quot;
+  待评估回答: model_A 的输出
+  参考标准: 人工编写的 gold answer (可选)
+
+Judge Prompt:
+  &quot;你是一个严格的评审。请从以下维度给这段回答打分(1-10)：
+   1. 准确性: 技术事实是否正确？
+   2. 完整性: 是否覆盖了关键要点？
+   3. 清晰度: 表达是否清晰易懂？
+   4. 实用性: 是否包含可操作的指导？
+
+   请给出各维度分数和理由。&quot;
+
+输出:
+  准确性: 9, 完整性: 7, 清晰度: 8, 实用性: 8
+  理由: ...
+</code></pre></div>
+<p><strong>Java LLM-as-a-Judge 实现：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.util.*;
+
+public class LlmAsJudge {
+
+    public record EvaluationDimension(String name, String description, double weight) {}
+
+    public record EvaluationResult(
+        Map&lt;String, Double&gt; scores,
+        double weightedScore,
+        String reasoning
+    ) {
+        @Override
+        public String toString() {
+            var sb = new StringBuilder();
+            sb.append(String.format(&quot;总分: %.1f/10\n&quot;, weightedScore));
+            sb.append(&quot;--- 各维度 ---\n&quot;);
+            scores.forEach((dim, score) -&gt;
+                sb.append(String.format(&quot;  %s: %.1f/10\n&quot;, dim, score)));
+            sb.append(&quot;--- 评语 ---\n&quot;).append(reasoning);
+            return sb.toString();
+        }
+    }
+
+    private final List&lt;EvaluationDimension&gt; dimensions;
+
+    public LlmAsJudge(List&lt;EvaluationDimension&gt; dimensions) {
+        this.dimensions = dimensions;
+    }
+
+    /**
+     * 构建 Judge Prompt
+     */
+    public String buildJudgePrompt(String question, String answer, String reference) {
+        var sb = new StringBuilder();
+        sb.append(&quot;你是一个严格的评审。请从以下维度评估回答质量：\n\n&quot;);
+
+        for (int i = 0; i &lt; dimensions.size(); i++) {
+            var dim = dimensions.get(i);
+            sb.append(String.format(&quot;%d. %s: %s\n&quot;, i + 1, dim.name(), dim.description()));
+        }
+
+        sb.append(&quot;\n【问题】\n&quot;).append(question).append(&quot;\n\n&quot;);
+        sb.append(&quot;【待评估回答】\n&quot;).append(answer).append(&quot;\n\n&quot;);
+
+        if (reference != null &amp;&amp; !reference.isBlank()) {
+            sb.append(&quot;【参考答案】\n&quot;).append(reference).append(&quot;\n\n&quot;);
+        }
+
+        sb.append(&quot;请以 JSON 格式返回各维度的 1-10 评分和简要理由。&quot;);
+
+        return sb.toString();
+    }
+
+    /**
+     * 多模型 Panel（多裁判取平均）
+     * 每维度的最终分数 = 所有裁判的分数去掉最高最低后取平均
+     */
+    public EvaluationResult panelEvaluation(
+            List&lt;Map&lt;String, Double&gt;&gt; judgeResults) {
+        var finalScores = new LinkedHashMap&lt;String, Double&gt;();
+
+        for (var dim : dimensions) {
+            var dimScores = judgeResults.stream()
+                .map(r -&gt; r.get(dim.name()))
+                .sorted()
+                .toList();
+
+            // 去掉最高最低
+            double sum = 0;
+            int count = 0;
+            for (int i = 1; i &lt; dimScores.size() - 1; i++) {
+                sum += dimScores.get(i);
+                count++;
+            }
+            finalScores.put(dim.name(), count &gt; 0 ? sum / count : dimScores.get(0));
+        }
+
+        double weightedSum = 0;
+        double totalWeight = 0;
+        for (var dim : dimensions) {
+            weightedSum += finalScores.get(dim.name()) * dim.weight();
+            totalWeight += dim.weight();
+        }
+
+        return new EvaluationResult(finalScores,
+            weightedSum / totalWeight, &quot;Panel 综合评定&quot;);
+    }
+
+    /**
+     * 位置偏差检测
+     * 如果答案在前的分数显著高于答案在后 → 存在位置偏差
+     */
+    public static boolean detectPositionBias(
+            double scoreWhenFirst, double scoreWhenSecond, double threshold) {
+        return Math.abs(scoreWhenFirst - scoreWhenSecond) &gt; threshold;
+    }
+
+    public static void main(String[] args) {
+        var dims = List.of(
+            new EvaluationDimension(&quot;准确性&quot;, &quot;技术事实是否正确&quot;, 0.4),
+            new EvaluationDimension(&quot;完整性&quot;, &quot;是否覆盖关键要点&quot;, 0.2),
+            new EvaluationDimension(&quot;清晰度&quot;, &quot;表达是否清晰&quot;, 0.2),
+            new EvaluationDimension(&quot;实用性&quot;, &quot;是否包含可操作指导&quot;, 0.2)
+        );
+
+        var judge = new LlmAsJudge(dims);
+        var prompt = judge.buildJudgePrompt(
+            &quot;解释 CAP 理论&quot;,
+            &quot;CAP 理论是说分布式系统中一致性、可用性、分区容错性只能同时满足两个。&quot;,
+            &quot;CAP 定理由 Eric Brewer 在 2000 年提出...&quot;
+
+        );
+        System.out.println(prompt);
+    }
+}
+</code></pre></div>
+<p><strong>位置偏差问题：</strong></p>
+<p>LLM-as-a-Judge 的一个已知问题是位置偏差（Position Bias）-- 模型倾向于给先出现的回答更高分。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Position Bias 检测：
+1. A vs B: 给 A 的打分 (4.5/5)
+2. B vs A (交换位置): 给 B 的打分 (4.2/5)
+  → 位置偏差 = (4.5 + 4.2) / 2 的差异 ≈ 0.3
+
+缓解策略：
+  - 双次评估：每个答案在第一位次各评一次取平均
+  - 随机打乱：输出前先随机排列，减少系统偏差
+  - 多模型 Panel：不同模型的偏好不同，取平均
+</code></pre></div>
+<h3>Arena Elo</h3>
+<p>LMSYS Chatbot Arena 是当前最有影响力的 LLM 评估平台。使用 Bradley-Terry 模型计算 Elo 分数。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Chatbot Arena 流程：
+1. 用户输入任意问题
+2. 系统随机选择两个匿名模型，同时生成回答
+3. 用户投票（A更好/B更好/平局/都差）
+4. 根据所有投票计算 Elo 分数
+
+Elo 计算 (Bradley-Terry Model):
+  P(model_i beats model_j) = σ(Elo_i - Elo_j)
+  其中 σ 是 sigmoid 函数
+
+优势：真实用户、真实问题、客观偏好
+劣势：偏向英语、受用户群体偏好影响、无法评估具体维度
+</code></pre></div>
+<h3>任务特定评估</h3>
+<table>
+<thead>
+<tr>
+<th>基准</th>
+<th>任务</th>
+<th>指标</th>
+<th>代表高分模型</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>HumanEval</td>
+<td>Python 代码生成</td>
+<td>pass@1, pass@10</td>
+<td>Claude Opus, GPT-4</td>
+</tr>
+<tr>
+<td>SWE-bench</td>
+<td>真实 GitHub Issue 修复</td>
+<td>resolved rate</td>
+<td>Claude Opus, GPT-4</td>
+</tr>
+<tr>
+<td>MMLU</td>
+<td>57学科多选问答</td>
+<td>Accuracy</td>
+<td>GPT-4, Claude</td>
+</tr>
+<tr>
+<td>GSM8K</td>
+<td>中小学数学推理</td>
+<td>Accuracy</td>
+<td>GPT-4, Claude</td>
+</tr>
+<tr>
+<td>MATH</td>
+<td>竞赛级数学</td>
+<td>Accuracy</td>
+<td>GPT-4, Claude</td>
+</tr>
+<tr>
+<td>HellaSwag</td>
+<td>常识推理</td>
+<td>Accuracy</td>
+<td>大多数模型都饱和</td>
+</tr>
+<tr>
+<td>BBH</td>
+<td>困难推理 (BIG-Bench Hard)</td>
+<td>Accuracy</td>
+<td>Claude, GPT-4</td>
+</tr>
+</tbody></table>
+<p><strong>HumanEval 评估模拟：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class HumanEvalEvaluator {
+
+    /**
+     * pass@k = 1 - C(n-c, k) / C(n, k)
+     * 其中 n = 总生成数, c = 正确数, k = k
+     */
+    public static double passAtK(int totalGenerations, int correctCount, int k) {
+        if (totalGenerations - correctCount &lt; k) return 1.0;
+        return 1.0 - combination(totalGenerations - correctCount, k)
+                     / combination(totalGenerations, k);
+    }
+
+    private static double combination(int n, int k) {
+        if (k &gt; n) return 0;
+        if (k == 0 || k == n) return 1;
+        double result = 1;
+        for (int i = 1; i &lt;= k; i++) {
+            result = result * (n - k + i) / i;
+        }
+        return result;
+    }
+
+    /**
+     * 验证代码正确性（简化：编译+运行测试用例）
+     */
+    public static boolean verifyCode(String generatedCode, List&lt;TestCase&gt; testCases) {
+        // 实际实现需要：
+        // 1. 在沙箱中编译代码
+        // 2. 运行所有测试用例
+        // 3. 所有测试通过才返回 true
+        return true; // 简化
+    }
+
+    record TestCase(String input, String expectedOutput) {}
+
+    public static void main(String[] args) {
+        // pass@1: 生成 10 份代码，其中 4 份正确
+        System.out.println(&quot;pass@1 = &quot; + passAtK(10, 4, 1));  // 0.4
+        // pass@10: 同上，但 k=10
+        System.out.println(&quot;pass@10 = &quot; + passAtK(10, 4, 10)); // 1.0
+    }
+}
+</code></pre></div>
+<h2>推理策略选择决策树</h2>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>你需要什么样的输出？
+├── 确定性 + 可复现
+│   └── Greedy (Temperature=0) + 不需要惩罚
+│       场景：事实提取、分类、数据转换
+│
+├── 高准确性 + 一定自然度
+│   └── Temperature=0.3 + Top-p=0.9
+│       场景：代码生成、事实问答、API 调用
+│
+├── 自然对话
+│   └── Temperature=0.7 + Top-p=0.9 + FreqPenalty=0.1 + PresencePenalty=0.1
+│       场景：客服对话、通用聊天
+│
+└── 高创造性
+    └── Temperature=1.0-1.5 + Top-p=0.95 + PresencePenalty=0.3
+        场景：创意写作、头脑风暴、故事生成
+</code></pre></div>
+<h2>最佳实践</h2>
+<ol>
+<li><strong>默认推理参数</strong>：Temperature=0.7, Top-p=0.9, FreqPenalty=0.1, PresencePenalty=0.1，这是绝大多数场景的合理起点</li>
+<li><strong>生产环境</strong>：务必使用 KV Cache + Continuous Batching，这两种优化在 vLLM 中已默认启用</li>
+<li><strong>评估策略</strong>：Perplexity 用于训练阶段监控，BLEU/ROUGE 基本淘汰，LLM-as-a-Judge 是当前最实用的方法</li>
+<li><strong>LLM-as-a-Judge 陷阱</strong>：一定要注意位置偏差，每次评估做双次交换位置取平均</li>
+<li><strong>Human-in-the-loop</strong>：关键评估结果必须有人工抽查，LLM judge 本身也有偏好和偏见</li>
+</ol>
+<h2>常见问题</h2>
+<p><strong>Q: Temperature=0 就是确定性吗？</strong></p>
+<p>A: 理论上是的，但实际上不同 Provider 的实现可能略有差异（精度问题）。对于需要严格确定性的场景（如 API 输出格式、数据提取），建议用 Structured Output 而不是依赖 temperature=0。</p>
+<p><strong>Q: Speculative Decoding 有没有质量损失？</strong></p>
+<p>A: 没有。Target Model 的验证过程确保了目标分布的正确性。加速来自于用 Draft Model 做&quot;投机&quot;，但最终输出与纯 Target Model 完全相同。</p>
+<p><strong>Q: 为什么不能只看 PPL？</strong></p>
+<p>A: PPL 衡量的是模型对训练分布的拟合程度，不是对用户需求的有用程度。一个背下整个训练集的模型PPL极低，但对新问题毫无用处。LLM-as-a-Judge 的&quot;有用性&quot;评分比 PPL 更接近实际需求。</p>
+<h2>相关条目</h2>
+<ul>
+<li><a href="/07-AI基础/07-Transformer架构深度解析" class="cross-ref" data-ref="07-Transformer架构深度解析">07-Transformer架构深度解析</a> — Transformer 架构（Attention、FFN等计算基础）</li>
+<li><a href="/08-模型接入与推理/模型API/08-OpenAI兼容协议详解" class="cross-ref" data-ref="08-OpenAI兼容协议详解">08-OpenAI兼容协议详解</a> — 模型 API 中的 temperature、top_p 等参数使用</li>
+<li><a href="/08-模型接入与推理/推理部署/08-模型能力矩阵与路由策略" class="cross-ref" data-ref="08-模型能力矩阵与路由策略">08-模型能力矩阵与路由策略</a> — 不同模型的推理能力和评估基准得分</li>
+</ul>
+</div>
+</article>

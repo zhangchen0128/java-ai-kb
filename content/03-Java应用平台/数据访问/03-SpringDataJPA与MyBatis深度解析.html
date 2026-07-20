@@ -1,0 +1,587 @@
+
+<article class="kb-entry" data-path="/03-Java应用平台/数据访问/03-SpringDataJPA与MyBatis深度解析">
+  <div class="entry-meta">
+    <div class="entry-domain"><a href="/?d=03">03-Java应用平台</a></div>
+    <h1>Spring Data JPA与MyBatis深度解析</h1>
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#["jpa"</span><span class="badge badge-tag">#"hibernate"</span><span class="badge badge-tag">#"mybatis"</span><span class="badge badge-tag">#"mybatis-plus"</span></div>
+    
+  </div>
+  <div class="entry-body"><h1>Spring Data JPA 与 MyBatis 深度解析</h1>
+<h2>概述</h2>
+<p>数据持久化是 Java 后端的核心战场。Spring Data JPA（基于 Hibernate）和 MyBatis（及其增强工具 MyBatis-Plus）代表了 Java 持久层的两大流派：<strong>ORM 自动映射</strong>与<strong>SQL 显式控制</strong>。</p>
+<p>本文从 JPA 实体映射、关系管理、N+1 问题、Spring Data Repository 模式，到 MyBatis XML Mapper、动态 SQL、MyBatis-Plus 条件构造器，全面对比两种方案的适用场景，并提供可运行的代码示例（JDK 25 + Spring Boot 4.x）。</p>
+<hr>
+<h2>一、JPA 核心</h2>
+<h3>1.1 Entity 映射</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Entity
+@Table(name = &quot;users&quot;, indexes = {
+    @Index(name = &quot;idx_email&quot;, columnList = &quot;email&quot;, unique = true)
+})
+public class User {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY) // 自增主键
+    private Long id;
+
+    @Column(nullable = false, length = 100)
+    private String name;
+
+    @Column(nullable = false, unique = true, length = 200)
+    private String email;
+
+    @Enumerated(EnumType.STRING) // 枚举存储为字符串，而非序数
+    @Column(nullable = false)
+    private UserStatus status;
+
+    @Column(name = &quot;created_at&quot;, updatable = false)
+    private LocalDateTime createdAt;
+
+    @Column(name = &quot;updated_at&quot;)
+    private LocalDateTime updatedAt;
+
+    // 生命周期回调
+    @PrePersist
+    void prePersist() {
+        this.createdAt = LocalDateTime.now();
+        this.updatedAt = this.createdAt;
+    }
+
+    @PreUpdate
+    void preUpdate() {
+        this.updatedAt = LocalDateTime.now();
+    }
+}
+</code></pre></div>
+<h3>1.2 关系映射</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 一对多：一个用户有多个订单
+@Entity
+public class User {
+    @OneToMany(mappedBy = &quot;user&quot;, cascade = CascadeType.ALL, orphanRemoval = true,
+               fetch = FetchType.LAZY) // 默认 LAZY
+    private List&lt;Order&gt; orders = new ArrayList&lt;&gt;();
+
+    // 辅助方法：维护双向关系
+    public void addOrder(Order order) {
+        orders.add(order);
+        order.setUser(this);
+    }
+}
+
+// 多对一：多个订单属于一个用户
+@Entity
+public class Order {
+    @ManyToOne(fetch = FetchType.LAZY) // 多对一默认 EAGER！必须改为 LAZY
+    @JoinColumn(name = &quot;user_id&quot;, nullable = false)
+    private User user;
+}
+
+// 多对多：用户和角色
+@Entity
+public class User {
+    @ManyToMany
+    @JoinTable(
+        name = &quot;user_roles&quot;,
+        joinColumns = @JoinColumn(name = &quot;user_id&quot;),
+        inverseJoinColumns = @JoinColumn(name = &quot;role_id&quot;)
+    )
+    private Set&lt;Role&gt; roles = new HashSet&lt;&gt;();
+}
+</code></pre></div>
+<p><strong>关键注意事项：</strong></p>
+<ul>
+<li><code>@OneToMany</code> 和 <code>@ManyToMany</code> 默认 LAZY</li>
+<li><code>@ManyToOne</code> 和 <code>@OneToOne</code> <strong>默认 EAGER！</strong> 这是最常见的性能陷阱，务必显式设置 <code>fetch = FetchType.LAZY</code></li>
+<li>级联操作（CascadeType）：PERSIST（级联保存）、MERGE（级联更新）、REMOVE（级联删除）、ALL（包含所有）</li>
+</ul>
+<h3>1.3 FetchType：LAZY vs EAGER</h3>
+<table>
+<thead>
+<tr>
+<th>策略</th>
+<th>加载时机</th>
+<th>SQL 数量</th>
+<th>风险</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>LAZY（推荐）</td>
+<td>首次访问关联属性时</td>
+<td>按需追加</td>
+<td>需要事务上下文（LazyInitializationException）</td>
+</tr>
+<tr>
+<td>EAGER</td>
+<td>立即加载（JOIN 或额外 SELECT）</td>
+<td>1 + N（JOIN）</td>
+<td>N+1 问题、笛卡尔积</td>
+</tr>
+</tbody></table>
+<p><strong>LazyInitializationException 解决方案：</strong></p>
+<ol>
+<li>在 Service 层（有事务）完成关联数据的加载</li>
+<li>使用 DTO 投影，明确查询哪些字段</li>
+<li>在 Controller 层使用 <code>OpenSessionInViewFilter</code>（不推荐生产环境）</li>
+</ol>
+<h3>1.4 级联操作</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Persist：保存用户时自动保存关联订单
+cascade = CascadeType.PERSIST
+
+// Remove：删除用户时自动删除关联订单（配合 orphanRemoval）
+cascade = CascadeType.REMOVE
+orphanRemoval = true // 从集合中移除订单时，自动删除数据库记录
+
+// 不做级联删除的安全做法：使用软删除
+@SQLDelete(sql = &quot;UPDATE orders SET deleted = true WHERE id = ?&quot;)
+@Where(clause = &quot;deleted = false&quot;) // Hibernate 6+ 改用 @SoftDelete
+</code></pre></div>
+<hr>
+<h2>二、N+1 问题：原因与解决方案</h2>
+<h3>2.1 问题演示</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 查询所有用户（1 条 SQL）
+List&lt;User&gt; users = userRepository.findAll(); // SELECT * FROM users
+
+// 遍历用户获取订单（N 条 SQL！）
+for (var user : users) {
+    System.out.println(user.getOrders().size()); // 每个 user 触发一次 SELECT
+}
+// 总共：1 + N 条 SQL
+</code></pre></div>
+<h3>2.2 解决方案一：@EntityGraph</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 方案1：在 Repository 方法上直接声明
+public interface UserRepository extends JpaRepository&lt;User, Long&gt; {
+
+    @EntityGraph(attributePaths = {&quot;orders&quot;, &quot;roles&quot;})
+    List&lt;User&gt; findAll(); // 生成的 SQL 使用 LEFT JOIN FETCH
+
+    @EntityGraph(attributePaths = {&quot;orders&quot;})
+    Optional&lt;User&gt; findById(Long id);
+}
+
+// 方案2：在 Entity 上定义命名 EntityGraph
+@NamedEntityGraph(
+    name = &quot;User.withOrders&quot;,
+    attributeNodes = @NamedAttributeNode(&quot;orders&quot;)
+)
+@Entity
+public class User { /* ... */ }
+
+// 使用时引用
+@EntityGraph(&quot;User.withOrders&quot;)
+List&lt;User&gt; findAll();
+</code></pre></div>
+<h3>2.3 解决方案二：JOIN FETCH</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// JPQL JOIN FETCH
+@Query(&quot;SELECT DISTINCT u FROM User u LEFT JOIN FETCH u.orders WHERE u.status = :status&quot;)
+List&lt;User&gt; findUsersWithOrders(@Param(&quot;status&quot;) UserStatus status);
+</code></pre></div>
+<h3>2.4 解决方案三：Batch Size</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Entity
+public class User {
+    @BatchSize(size = 50) // 一次加载 50 个关联对象
+    @OneToMany(mappedBy = &quot;user&quot;)
+    private List&lt;Order&gt; orders;
+}
+
+// 全局配置（application.yml）
+// spring.jpa.properties.hibernate.default_batch_fetch_size: 50
+</code></pre></div>
+<hr>
+<h2>三、JPQL 与 Criteria</h2>
+<h3>3.1 JPQL 语法</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 基本查询
+@Query(&quot;SELECT u FROM User u WHERE u.email = :email&quot;)
+Optional&lt;User&gt; findByEmail(@Param(&quot;email&quot;) String email);
+
+// 投影查询（返回 DTO）
+public record UserSummary(Long id, String name, String email) {}
+
+@Query(&quot;SELECT new com.example.dto.UserSummary(u.id, u.name, u.email) &quot; +
+       &quot;FROM User u WHERE u.status = :status&quot;)
+List&lt;UserSummary&gt; findSummariesByStatus(@Param(&quot;status&quot;) UserStatus status);
+
+// 更新查询
+@Modifying
+@Query(&quot;UPDATE User u SET u.status = :status WHERE u.lastLoginAt &lt; :threshold&quot;)
+int deactivateInactiveUsers(@Param(&quot;status&quot;) UserStatus status,
+                            @Param(&quot;threshold&quot;) LocalDateTime threshold);
+</code></pre></div>
+<h3>3.2 CriteriaBuilder 动态查询</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Repository
+public class UserSearchRepository {
+
+    @PersistenceContext
+    private EntityManager em;
+
+    public List&lt;User&gt; searchUsers(String name, UserStatus status, LocalDate fromDate) {
+        var cb = em.getCriteriaBuilder();
+        var query = cb.createQuery(User.class);
+        var root = query.from(User.class);
+
+        var predicates = new ArrayList&lt;Predicate&gt;();
+
+        if (name != null &amp;&amp; !name.isBlank()) {
+            predicates.add(cb.like(root.get(&quot;name&quot;), &quot;%&quot; + name + &quot;%&quot;));
+        }
+        if (status != null) {
+            predicates.add(cb.equal(root.get(&quot;status&quot;), status));
+        }
+        if (fromDate != null) {
+            predicates.add(cb.greaterThanOrEqualTo(
+                root.get(&quot;createdAt&quot;), fromDate.atStartOfDay()));
+        }
+
+        query.where(predicates.toArray(new Predicate[0]));
+        return em.createQuery(query).getResultList();
+    }
+}
+</code></pre></div>
+<h3>3.3 Specification 模式（Spring Data JPA）</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 更优雅的动态查询方式
+import org.springframework.data.jpa.domain.Specification;
+
+public class UserSpecifications {
+    public static Specification&lt;User&gt; nameContains(String name) {
+        return (root, query, cb) -&gt;
+            name == null ? null : cb.like(root.get(&quot;name&quot;), &quot;%&quot; + name + &quot;%&quot;);
+    }
+
+    public static Specification&lt;User&gt; hasStatus(UserStatus status) {
+        return (root, query, cb) -&gt;
+            status == null ? null : cb.equal(root.get(&quot;status&quot;), status);
+    }
+}
+
+// 使用
+public interface UserRepository extends JpaRepository&lt;User, Long&gt;,
+                                          JpaSpecificationExecutor&lt;User&gt; {}
+
+// 组合多种条件
+var spec = Specification
+    .where(UserSpecifications.nameContains(&quot;zhang&quot;))
+    .and(UserSpecifications.hasStatus(UserStatus.ACTIVE));
+List&lt;User&gt; users = userRepository.findAll(spec);
+</code></pre></div>
+<hr>
+<h2>四、Spring Data JPA 核心功能</h2>
+<h3>4.1 Auditing 审计</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Configuration
+@EnableJpaAuditing
+public class JpaConfig {}
+
+@Entity
+@EntityListeners(AuditingEntityListener.class)
+public class User {
+    @CreatedDate
+    private LocalDateTime createdAt;
+
+    @LastModifiedDate
+    private LocalDateTime updatedAt;
+
+    @CreatedBy
+    private String createdBy;
+
+    @LastModifiedBy
+    private String lastModifiedBy;
+}
+
+// 配合 AuditorAware
+@Component
+public class AuditorAwareImpl implements AuditorAware&lt;String&gt; {
+    @Override
+    public Optional&lt;String&gt; getCurrentAuditor() {
+        // 从 SecurityContext 或请求上下文中获取当前用户
+        return Optional.of(SecurityContextHolder.getContext()
+            .getAuthentication().getName());
+    }
+}
+</code></pre></div>
+<h3>4.2 分页与排序</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 分页查询
+Page&lt;User&gt; page = userRepository.findAll(PageRequest.of(0, 20,
+    Sort.by(Sort.Direction.DESC, &quot;createdAt&quot;)));
+
+System.out.println(&quot;Total pages: &quot; + page.getTotalPages());
+System.out.println(&quot;Total elements: &quot; + page.getTotalElements());
+
+// Slice：不查询总数，更高效（适合无限滚动）
+Slice&lt;User&gt; slice = userRepository.findByStatus(
+    UserStatus.ACTIVE, PageRequest.of(0, 20));
+while (slice.hasNext()) {
+    slice = userRepository.findByStatus(
+        UserStatus.ACTIVE, slice.nextPageable());
+    slice.getContent().forEach(System.out::println);
+}
+</code></pre></div>
+<hr>
+<h2>五、MyBatis</h2>
+<h3>5.1 XML Mapper</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;!-- UserMapper.xml --&gt;
+&lt;mapper namespace=&quot;com.example.mapper.UserMapper&quot;&gt;
+
+    &lt;!-- ResultMap：字段映射 --&gt;
+    &lt;resultMap id=&quot;userResultMap&quot; type=&quot;com.example.entity.User&quot;&gt;
+        &lt;id property=&quot;id&quot; column=&quot;id&quot;/&gt;
+        &lt;result property=&quot;name&quot; column=&quot;name&quot;/&gt;
+        &lt;result property=&quot;email&quot; column=&quot;email&quot;/&gt;
+        &lt;result property=&quot;createdAt&quot; column=&quot;created_at&quot;/&gt;
+        &lt;!-- 一对多关联 --&gt;
+        &lt;collection property=&quot;orders&quot; ofType=&quot;com.example.entity.Order&quot;
+                    select=&quot;com.example.mapper.OrderMapper.findByUserId&quot;
+                    column=&quot;id&quot;/&gt;
+    &lt;/resultMap&gt;
+
+    &lt;!-- 动态查询 --&gt;
+    &lt;select id=&quot;findByCondition&quot; resultMap=&quot;userResultMap&quot;&gt;
+        SELECT * FROM users
+        &lt;where&gt;
+            &lt;if test=&quot;name != null and name != &#39;&#39;&quot;&gt;
+                AND name LIKE CONCAT(&#39;%&#39;, #{name}, &#39;%&#39;)
+            &lt;/if&gt;
+            &lt;if test=&quot;status != null&quot;&gt;
+                AND status = #{status}
+            &lt;/if&gt;
+            &lt;if test=&quot;ids != null and ids.size() &gt; 0&quot;&gt;
+                AND id IN
+                &lt;foreach collection=&quot;ids&quot; item=&quot;id&quot; open=&quot;(&quot; separator=&quot;,&quot; close=&quot;)&quot;&gt;
+                    #{id}
+                &lt;/foreach&gt;
+            &lt;/if&gt;
+        &lt;/where&gt;
+        ORDER BY created_at DESC
+    &lt;/select&gt;
+
+    &lt;!-- 批量插入 --&gt;
+    &lt;insert id=&quot;batchInsert&quot;&gt;
+        INSERT INTO users (name, email, status, created_at) VALUES
+        &lt;foreach collection=&quot;users&quot; item=&quot;user&quot; separator=&quot;,&quot;&gt;
+            (#{user.name}, #{user.email}, #{user.status}, #{user.createdAt})
+        &lt;/foreach&gt;
+    &lt;/insert&gt;
+
+&lt;/mapper&gt;
+</code></pre></div>
+<h3>5.2 动态 SQL 标签</h3>
+<table>
+<thead>
+<tr>
+<th>标签</th>
+<th>功能</th>
+<th>示例场景</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>&lt;if&gt;</code></td>
+<td>条件判断</td>
+<td>搜索筛选条件</td>
+</tr>
+<tr>
+<td><code>&lt;choose&gt;/&lt;when&gt;/&lt;otherwise&gt;</code></td>
+<td>多条件选择</td>
+<td>按不同字段排序</td>
+</tr>
+<tr>
+<td><code>&lt;foreach&gt;</code></td>
+<td>遍历集合</td>
+<td>IN 查询、批量插入</td>
+</tr>
+<tr>
+<td><code>&lt;where&gt;</code></td>
+<td>自动处理 WHERE 和 AND/OR</td>
+<td>动态查询条件拼接</td>
+</tr>
+<tr>
+<td><code>&lt;set&gt;</code></td>
+<td>自动处理 SET 和逗号</td>
+<td>动态更新字段</td>
+</tr>
+<tr>
+<td><code>&lt;trim&gt;</code></td>
+<td>自定义截断前缀/后缀</td>
+<td>复杂 SQL 生成</td>
+</tr>
+<tr>
+<td><code>&lt;bind&gt;</code></td>
+<td>创建变量</td>
+<td>OGNL 表达式预处理</td>
+</tr>
+</tbody></table>
+<h3>5.3 注解方式</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Mapper
+public interface UserMapper {
+
+    @Select(&quot;SELECT * FROM users WHERE id = #{id}&quot;)
+    User findById(Long id);
+
+    @Select(&quot;SELECT * FROM users WHERE email = #{email}&quot;)
+    @Results({
+        @Result(property = &quot;createdAt&quot;, column = &quot;created_at&quot;),
+        @Result(property = &quot;orders&quot;, column = &quot;id&quot;,
+                many = @Many(select = &quot;com.example.mapper.OrderMapper.findByUserId&quot;))
+    })
+    User findByEmail(String email);
+
+    @Insert(&quot;INSERT INTO users(name, email, status, created_at) &quot; +
+            &quot;VALUES(#{name}, #{email}, #{status}, #{createdAt})&quot;)
+    @Options(useGeneratedKeys = true, keyProperty = &quot;id&quot;)
+    int insert(User user);
+}
+</code></pre></div>
+<h3>5.4 Plugin 拦截器</h3>
+<p>MyBatis Plugin 可以实现分页、审计、SQL 监控等功能：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 自定义 SQL 监控拦截器
+@Intercepts({
+    @Signature(type = StatementHandler.class, method = &quot;prepare&quot;,
+               args = {Connection.class, Integer.class})
+})
+public class SqlMonitorInterceptor implements Interceptor {
+
+    @Override
+    public Object intercept(Invocation invocation) throws Throwable {
+        var statementHandler = (StatementHandler) invocation.getTarget();
+        var sql = statementHandler.getBoundSql().getSql();
+        var start = System.nanoTime();
+        try {
+            return invocation.proceed();
+        } finally {
+            var elapsed = (System.nanoTime() - start) / 1_000_000;
+            System.out.printf(&quot;[SQL] %s (took %dms)%n&quot;,
+                sql.replaceAll(&quot;\\s+&quot;, &quot; &quot;).trim(), elapsed);
+        }
+    }
+}
+</code></pre></div>
+<hr>
+<h2>六、MyBatis-Plus</h2>
+<h3>6.1 BaseMapper</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Mapper
+public interface UserMapper extends BaseMapper&lt;User&gt; {
+    // 无需写任何 SQL，自动获得 CRUD 方法：
+    // insert(), deleteById(), updateById(), selectById(), selectList(), selectPage()
+}
+</code></pre></div>
+<h3>6.2 条件构造器</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
+public class UserService {
+
+    @Autowired
+    private UserMapper userMapper;
+
+    // LambdaQueryWrapper：类型安全，避免字段名硬编码
+    public List&lt;User&gt; searchUsers(String keyword) {
+        return userMapper.selectList(
+            new LambdaQueryWrapper&lt;User&gt;()
+                .like(StringUtils.hasText(keyword), User::getName, keyword)
+                .or()
+                .like(StringUtils.hasText(keyword), User::getEmail, keyword)
+                .eq(User::getStatus, UserStatus.ACTIVE)
+                .orderByDesc(User::getCreatedAt)
+        );
+    }
+
+    // 分页查询
+    public Page&lt;User&gt; pageUsers(int pageNum, int pageSize) {
+        return userMapper.selectPage(
+            new Page&lt;&gt;(pageNum, pageSize),
+            new LambdaQueryWrapper&lt;User&gt;()
+                .eq(User::getStatus, UserStatus.ACTIVE)
+        );
+    }
+}
+</code></pre></div>
+<h3>6.3 自动填充</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Component
+public class MetaObjectHandler implements com.baomidou.mybatisplus.core.handlers.MetaObjectHandler {
+
+    @Override
+    public void insertFill(MetaObject metaObject) {
+        this.strictInsertFill(metaObject, &quot;createdAt&quot;, LocalDateTime.class, LocalDateTime.now());
+        this.strictInsertFill(metaObject, &quot;updatedAt&quot;, LocalDateTime.class, LocalDateTime.now());
+    }
+
+    @Override
+    public void updateFill(MetaObject metaObject) {
+        this.strictUpdateFill(metaObject, &quot;updatedAt&quot;, LocalDateTime.class, LocalDateTime.now());
+    }
+}
+
+@Entity
+public class User {
+    @TableField(fill = FieldFill.INSERT)
+    private LocalDateTime createdAt;
+
+    @TableField(fill = FieldFill.INSERT_UPDATE)
+    private LocalDateTime updatedAt;
+}
+</code></pre></div>
+<hr>
+<h2>七、JPA vs MyBatis 选型</h2>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>Spring Data JPA</th>
+<th>MyBatis / MyBatis-Plus</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><strong>学习曲线</strong></td>
+<td>较陡（Hibernate 生态复杂）</td>
+<td>平缓（写 SQL 即可）</td>
+</tr>
+<tr>
+<td><strong>标准 CRUD</strong></td>
+<td>Spring Data Repository 方法命名自动生成 SQL</td>
+<td>MyBatis-Plus BaseMapper 自动提供</td>
+</tr>
+<tr>
+<td><strong>复杂查询</strong></td>
+<td>JPQL/Criteria（语法受限）</td>
+<td>原生 SQL（灵活、可控）</td>
+</tr>
+<tr>
+<td><strong>多表关联</strong></td>
+<td>Entity 关系映射 + @EntityGraph</td>
+<td>手写 JOIN SQL</td>
+</tr>
+<tr>
+<td><strong>动态查询</strong></td>
+<td>Specification / CriteriaBuilder</td>
+<td>动态 SQL 标签（更灵活）</td>
+</tr>
+<tr>
+<td><strong>性能调优</strong></td>
+<td>Hibernate 缓存/N+1 需要理解框架行为</td>
+<td>SQL 层面直接控制，更透明</td>
+</tr>
+<tr>
+<td><strong>数据库迁移</strong></td>
+<td>Hibernate ddl-auto（开发便利）</td>
+<td>Flyway / Liquibase（推荐）</td>
+</tr>
+<tr>
+<td><strong>适用场景</strong></td>
+<td>标准 CRUD + 简单查询 + 少量关联</td>
+<td>复杂报表 + 动态 SQL + 多表关联 + 存储过程</td>
+</tr>
+</tbody></table>
+<p><strong>推荐策略：</strong> 在一个项目中同时使用两者——JPA 处理简单 CRUD，MyBatis 处理复杂查询。通过不同的包名和 Mapper 路径区分。</p>
+<hr>
+<h2>常见问题</h2>
+<p><strong>Q: N+1 问题如何系统性排查？</strong>
+A: 1) 开启 Hibernate SQL 日志：<code>spring.jpa.show-sql=true</code>；2) 使用 <code>hibernate.default_batch_fetch_size=50</code> 全局缓解；3) Datadog/NewRelic 等 APM 工具监控 SQL 数量。</p>
+<p><strong>Q: JPA 的一级缓存和二级缓存是什么？</strong>
+A: 一级缓存（Session 级别）：同一事务内，相同 ID 的查询不会重复访问数据库（默认开启）。二级缓存（SessionFactory 级别）：跨事务共享，需要显式配置（Redis/Caffeine 等缓存提供者）。</p>
+<p><strong>Q: MyBatis 中 # 和 $ 的区别？</strong>
+A: <code>#{}</code>是预编译占位符（防止 SQL 注入），<code>${}</code>是字符串拼接（存在 SQL 注入风险）。除非用于动态表名/列名，始终使用 <code>#{}</code>。</p>
+<p><strong>Q: 多数据源场景如何配置？</strong>
+A: Spring Boot 通过 <code>@Primary</code> 标注主数据源，自定义 <code>DataSource</code>、<code>EntityManagerFactory</code>、<code>TransactionManager</code> Bean。MyBatis 通过 <code>@MapperScan</code> 指定不同包名的 <code>sqlSessionFactoryRef</code>。</p>
+<hr>
+<h2>相关条目</h2>
+<ul>
+<li><a href="/03-Java应用平台/Spring核心/03-Spring核心IoC-AOP-事务" class="cross-ref" data-ref="03-Spring核心IoC-AOP-事务">03-Spring核心IoC-AOP-事务</a>：事务管理</li>
+<li><a href="/03-Java应用平台/Spring核心/03-SpringBoot4深度解析" class="cross-ref" data-ref="03-SpringBoot4深度解析">03-SpringBoot4深度解析</a>：自动配置</li>
+<li><a href="/?d=04" class="cross-ref domain-ref">04-数据库与缓存/PostgreSQL</a>：数据库选型</li>
+<li><a href="/01-计算机基础/数据库原理/01-数据库原理" class="cross-ref" data-ref="01-数据库原理">01-数据库原理</a>：索引与查询优化</li>
+</ul>
+</div>
+</article>

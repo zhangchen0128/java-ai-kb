@@ -1,0 +1,760 @@
+
+<article class="kb-entry" data-path="/04-数据与中间件/对象存储/04-对象存储与中间件扩展">
+  <div class="entry-meta">
+    <div class="entry-domain"><a href="/?d=04">04-数据与中间件</a></div>
+    <h1>对象存储、RabbitMQ 与中间件扩展</h1>
+    <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#["minio"</span><span class="badge badge-tag">#"s3"</span><span class="badge badge-tag">#"object-storage"</span><span class="badge badge-tag">#"rabbitmq"</span></div>
+    
+  </div>
+  <div class="entry-body"><h1>对象存储、RabbitMQ 与中间件扩展</h1>
+<h2>概述</h2>
+<p>对象存储是 AI 数据工程的基础设施，承载着从原始文档上传到向量索引的完整文件链路。RabbitMQ 作为传统消息中间件，在轻量级消息路由、死信队列、延迟消息等场景仍不可替代。</p>
+<p>本文涵盖 MinIO 部署和集成、S3 兼容 API、AI 文档存储链路、RabbitMQ 核心概念与选型对比、对象存储安全最佳实践。</p>
+<hr>
+<h2>一、MinIO</h2>
+<h3>1.1 部署</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># docker-compose.yml
+services:
+  minio:
+    image: quay.io/minio/minio:latest
+    command: server /data --console-address &quot;:9001&quot;
+    ports:
+      - &quot;9000:9000&quot;  # API
+      - &quot;9001:9001&quot;  # Console
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD}
+      MINIO_BROWSER_REDIRECT_URL: http://localhost:9001
+    volumes:
+      - minio_data:/data
+    healthcheck:
+      test: [&quot;CMD&quot;, &quot;mc&quot;, &quot;ready&quot;, &quot;local&quot;]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # 分布式部署（4 节点，纠删码 EC:2）
+  minio-distributed:
+    image: quay.io/minio/minio
+    command: server http://minio-{1...4}/data --console-address &quot;:9001&quot;
+    environment:
+      MINIO_ROOT_USER: admin
+      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD}
+
+volumes:
+  minio_data:
+</code></pre></div>
+<h3>1.2 Bucket 策略</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-json">{
+  &quot;Version&quot;: &quot;2012-10-17&quot;,
+  &quot;Statement&quot;: [
+    {
+      &quot;Effect&quot;: &quot;Allow&quot;,
+      &quot;Principal&quot;: { &quot;AWS&quot;: [&quot;*&quot;] },
+      &quot;Action&quot;: [&quot;s3:GetObject&quot;],
+      &quot;Resource&quot;: [&quot;arn:aws:s3:::public-docs/*&quot;],
+      &quot;Condition&quot;: {
+        &quot;IpAddress&quot;: { &quot;aws:SourceIp&quot;: [&quot;10.0.0.0/8&quot;, &quot;172.16.0.0/12&quot;] }
+      }
+    },
+    {
+      &quot;Effect&quot;: &quot;Allow&quot;,
+      &quot;Principal&quot;: { &quot;AWS&quot;: [&quot;arn:aws:iam::app-user&quot;] },
+      &quot;Action&quot;: [&quot;s3:GetObject&quot;, &quot;s3:PutObject&quot;, &quot;s3:DeleteObject&quot;],
+      &quot;Resource&quot;: [&quot;arn:aws:s3:::app-documents/*&quot;]
+    }
+  ]
+}
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># mc 命令行工具
+mc alias set local http://localhost:9000 admin ${MINIO_PASSWORD}
+mc mb local/ai-documents
+mc policy set download local/public-assets
+mc anonymous set public local/public-assets
+</code></pre></div>
+<h3>1.3 预签名 URL</h3>
+<p>预签名 URL 是对象存储的安全访问模式，允许临时授权而无需暴露访问密钥。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
+public class MinioPresignedUrlService {
+
+    private final MinioClient minioClient;
+
+    // 生成上传预签名 URL（PUT）
+    public String generateUploadUrl(String objectName, Duration expiry) {
+        try {
+            var args = GetPresignedObjectUrlArgs.builder()
+                    .method(Method.PUT)
+                    .bucket(&quot;ai-documents&quot;)
+                    .object(objectName)
+                    .expiry((int) expiry.getSeconds())
+                    .build();
+            return minioClient.getPresignedObjectUrl(args);
+        } catch (Exception e) {
+            throw new StorageException(&quot;Failed to generate upload URL&quot;, e);
+        }
+    }
+
+    // 生成下载预签名 URL（GET）
+    public String generateDownloadUrl(String objectName, Duration expiry) {
+        try {
+            var args = GetPresignedObjectUrlArgs.builder()
+                    .method(Method.GET)
+                    .bucket(&quot;ai-documents&quot;)
+                    .object(objectName)
+                    .expiry((int) expiry.getSeconds())
+                    .build();
+            return minioClient.getPresignedObjectUrl(args);
+        } catch (Exception e) {
+            throw new StorageException(&quot;Failed to generate download URL&quot;, e);
+        }
+    }
+
+    // 结合自定义响应头的预签名 URL
+    public String generateDownloadUrlWithHeaders(String objectName,
+                                                  String contentDisposition) {
+        try {
+            var reqParams = new HashMap&lt;String, String&gt;();
+            reqParams.put(&quot;response-content-disposition&quot;,
+                    &quot;attachment; filename=\&quot;&quot; + contentDisposition + &quot;\&quot;&quot;);
+
+            var args = GetPresignedObjectUrlArgs.builder()
+                    .method(Method.GET)
+                    .bucket(&quot;ai-documents&quot;)
+                    .object(objectName)
+                    .expiry(3600)
+                    .extraQueryParams(reqParams)
+                    .build();
+            return minioClient.getPresignedObjectUrl(args);
+        } catch (Exception e) {
+            throw new StorageException(&quot;Failed to generate download URL&quot;, e);
+        }
+    }
+}
+</code></pre></div>
+<h3>1.4 事件通知</h3>
+<p>MinIO 支持将对象变更事件推送到 Webhook、Kafka、Redis、NATS 等。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># Kafka 事件通知配置
+mc admin config set local notify_kafka:doc-events \
+  brokers=&quot;kafka:9092&quot; \
+  topic=&quot;minio-events&quot;
+
+mc event add local/ai-documents arn:minio:sqs::doc-events:kafka \
+  --event put,delete
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-json">// MinIO 事件格式（发送到 Kafka）
+{
+  &quot;EventName&quot;: &quot;s3:ObjectCreated:Put&quot;,
+  &quot;Key&quot;: &quot;ai-documents/user-123/report.pdf&quot;,
+  &quot;Records&quot;: [{
+    &quot;s3&quot;: {
+      &quot;bucket&quot;: { &quot;name&quot;: &quot;ai-documents&quot; },
+      &quot;object&quot;: {
+        &quot;key&quot;: &quot;user-123/report.pdf&quot;,
+        &quot;size&quot;: 1048576,
+        &quot;eTag&quot;: &quot;d41d8cd98f00b204e9800998ecf8427e&quot;,
+        &quot;contentType&quot;: &quot;application/pdf&quot;
+      }
+    }
+  }]
+}
+</code></pre></div>
+<p><strong>AI 场景事件驱动流水线：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>MinIO Put事件 → Kafka → 文档处理服务
+├── Apache Tika 解析 PDF
+├── Markdown 标准化
+├── 语义切片
+├── Embedding 生成
+└── pgvector/ES 索引写入
+</code></pre></div>
+<h3>1.5 版本控制与对象锁定</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># 启用版本控制
+mc version enable local/ai-documents
+
+# 查看对象版本
+mc ls --versions local/ai-documents/user-123/report.pdf
+
+# 回退到指定版本
+mc cp --version-id &quot;xxx&quot; local/ai-documents/user-123/report.pdf .
+
+# 对象锁定（WORM，合规场景）
+mc retention set --default COMPLIANCE 30d local/compliance-docs
+</code></pre></div>
+<hr>
+<h2>二、S3 兼容 API</h2>
+<h3>2.1 核心操作</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
+public class S3DocumentService {
+
+    private final MinioClient minio;
+    private static final String BUCKET = &quot;ai-documents&quot;;
+
+    // PutObject
+    public void uploadDocument(String key, InputStream data, long size,
+                                String contentType, Map&lt;String, String&gt; metadata) {
+        try {
+            minio.putObject(PutObjectArgs.builder()
+                    .bucket(BUCKET)
+                    .object(key)
+                    .stream(data, size, -1)
+                    .contentType(contentType)
+                    .userMetadata(metadata)  // 自定义元数据
+                    .build());
+        } catch (Exception e) {
+            throw new StorageException(&quot;Upload failed: &quot; + key, e);
+        }
+    }
+
+    // GetObject
+    public InputStream downloadDocument(String key) {
+        try {
+            return minio.getObject(GetObjectArgs.builder()
+                    .bucket(BUCKET)
+                    .object(key)
+                    .build());
+        } catch (Exception e) {
+            throw new StorageException(&quot;Download failed: &quot; + key, e);
+        }
+    }
+
+    // DeleteObject
+    public void deleteDocument(String key) {
+        try {
+            minio.removeObject(RemoveObjectArgs.builder()
+                    .bucket(BUCKET)
+                    .object(key)
+                    .build());
+        } catch (Exception e) {
+            throw new StorageException(&quot;Delete failed: &quot; + key, e);
+        }
+    }
+
+    // HeadObject（获取元数据）
+    public Map&lt;String, String&gt; getMetadata(String key) {
+        try {
+            var stat = minio.statObject(StatObjectArgs.builder()
+                    .bucket(BUCKET)
+                    .object(key)
+                    .build());
+            return stat.userMetadata();
+        } catch (Exception e) {
+            throw new StorageException(&quot;Stat failed: &quot; + key, e);
+        }
+    }
+
+    // ListObjects（带前缀过滤）
+    public List&lt;String&gt; listDocuments(String prefix) {
+        var keys = new ArrayList&lt;String&gt;();
+        var results = minio.listObjects(ListObjectsArgs.builder()
+                .bucket(BUCKET)
+                .prefix(prefix)
+                .recursive(true)
+                .build());
+        results.forEach(item -&gt; {
+            try {
+                keys.add(item.get().objectName());
+            } catch (Exception e) {
+                throw new StorageException(&quot;List failed&quot;, e);
+            }
+        });
+        return keys;
+    }
+}
+</code></pre></div>
+<h3>2.2 分段上传（Multipart Upload）</h3>
+<p>大文件（&gt;5MB）推荐使用分段上传，支持断点续传和并行上传。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public void uploadLargeFile(String key, Path filePath) {
+    try {
+        // 1. 初始化分段上传
+        var uploadId = minio.createMultipartUpload(BUCKET, null, key, null, null);
+
+        // 2. 上传各部分（每部分 &gt;= 5MB，最多 10000 部分）
+        var parts = new ArrayList&lt;ComposeSource&gt;();
+        var partSize = 10 * 1024 * 1024; // 10MB
+        var fileSize = Files.size(filePath);
+        var partCount = (int) Math.ceil((double) fileSize / partSize);
+
+        try (var fileStream = Files.newInputStream(filePath)) {
+            for (int i = 0; i &lt; partCount; i++) {
+                long currentPartSize = Math.min(partSize, fileSize - (long) i * partSize);
+                var part = minio.uploadPart(
+                        BUCKET, null, key,
+                        uploadId,
+                        fileStream, currentPartSize,
+                        i + 1, null, null);
+                parts.add(part);
+            }
+        }
+
+        // 3. 完成分段上传
+        minio.completeMultipartUpload(BUCKET, null, key, uploadId, parts.toArray(new Part[0]));
+
+    } catch (Exception e) {
+        // 中止分段上传清理残留部分
+        try {
+            minio.abortMultipartUpload(BUCKET, null, key, uploadId);
+        } catch (Exception ex) {
+            log.error(&quot;Abort multipart upload failed&quot;, ex);
+        }
+        throw new StorageException(&quot;Large file upload failed: &quot; + key, e);
+    }
+}
+</code></pre></div>
+<h3>2.3 生命周期策略</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;!-- 生命周期配置（XML） --&gt;
+&lt;LifecycleConfiguration&gt;
+  &lt;Rule&gt;
+    &lt;ID&gt;expire-temp-files&lt;/ID&gt;
+    &lt;Status&gt;Enabled&lt;/Status&gt;
+    &lt;Filter&gt;
+      &lt;Prefix&gt;temp/&lt;/Prefix&gt;
+    &lt;/Filter&gt;
+    &lt;Expiration&gt;
+      &lt;Days&gt;7&lt;/Days&gt;
+    &lt;/Expiration&gt;
+  &lt;/Rule&gt;
+  &lt;Rule&gt;
+    &lt;ID&gt;transition-to-cold&lt;/ID&gt;
+    &lt;Status&gt;Enabled&lt;/Status&gt;
+    &lt;Filter&gt;
+      &lt;Prefix&gt;archive/&lt;/Prefix&gt;
+    &lt;/Filter&gt;
+    &lt;Transition&gt;
+      &lt;Days&gt;30&lt;/Days&gt;
+      &lt;StorageClass&gt;GLACIER&lt;/StorageClass&gt;
+    &lt;/Transition&gt;
+  &lt;/Rule&gt;
+&lt;/LifecycleConfiguration&gt;
+</code></pre></div>
+<hr>
+<h2>三、AI 场景：文档存储链路</h2>
+<h3>3.1 完整文件链路</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>原始文件上传 → 预处理 → 切片 → 向量索引
+
+详细路径：
+1. 用户上传 PDF/Word/HTML
+   存储路径: raw/{tenant_id}/{doc_id}/original.{ext}
+   
+2. Apache Tika 解析 → Markdown
+   存储路径: processed/{tenant_id}/{doc_id}/content.md
+   
+3. 语义切片
+   存储路径: chunks/{tenant_id}/{doc_id}/chunk_{seq}.txt
+   元数据: {chunk_index, start_offset, end_offset, token_count}
+   
+4. Embedding 向量化
+   存储: pgvector / Elasticsearch dense_vector
+   关联: chunk_path → embedding → vector_id
+</code></pre></div>
+<h3>3.2 Java 实现示例</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
+public class DocumentPipelineService {
+
+    private static final String RAW_PREFIX = &quot;raw/&quot;;
+    private static final String PROCESSED_PREFIX = &quot;processed/&quot;;
+    private static final String CHUNK_PREFIX = &quot;chunks/&quot;;
+
+    private final MinioClient minio;
+    private final DocumentParser parser;      // Apache Tika
+    private final ChunkingStrategy chunker;   // 语义切片
+    private final EmbeddingService embedder;  // Embedding 生成
+    private final VectorStore vectorStore;    // pgvector
+
+    public record DocPipelineResult(String docId, int chunkCount, long totalTokens) {}
+
+    public DocPipelineResult processDocument(String tenantId, String docId,
+                                              InputStream content,
+                                              String originalFilename) {
+        // 1. 存储原始文件
+        var rawKey = RAW_PREFIX + tenantId + &quot;/&quot; + docId + &quot;/&quot; + originalFilename;
+        storeObject(rawKey, content);
+
+        // 2. 解析为标准 Markdown
+        var markdown = parser.parseToMarkdown(content, originalFilename);
+        var processedKey = PROCESSED_PREFIX + tenantId + &quot;/&quot; + docId + &quot;/content.md&quot;;
+        storeObject(processedKey, new ByteArrayInputStream(markdown.getBytes(UTF_8)));
+
+        // 3. 语义切片
+        var chunks = chunker.chunk(markdown, Map.of(
+                &quot;tenantId&quot;, tenantId,
+                &quot;docId&quot;, docId,
+                &quot;source&quot;, originalFilename
+        ));
+
+        // 4. 存储切片文件 + 写入向量索引
+        int totalTokens = 0;
+        for (int i = 0; i &lt; chunks.size(); i++) {
+            var chunk = chunks.get(i);
+            totalTokens += chunk.tokenCount();
+
+            // 存储切片
+            var chunkKey = CHUNK_PREFIX + tenantId + &quot;/&quot; + docId + &quot;/chunk_&quot; + i + &quot;.txt&quot;;
+            storeObject(chunkKey,
+                    new ByteArrayInputStream(chunk.text().getBytes(UTF_8)));
+
+            // 向量化 + 索引
+            var embedding = embedder.embed(chunk.text());
+            vectorStore.add(List.of(
+                    Document.builder()
+                            .id(docId + &quot;_chunk_&quot; + i)
+                            .text(chunk.text())
+                            .embedding(embedding)
+                            .metadata(Map.of(
+                                    &quot;tenantId&quot;, tenantId,
+                                    &quot;docId&quot;, docId,
+                                    &quot;chunkIndex&quot;, String.valueOf(i),
+                                    &quot;sourceFile&quot;, originalFilename,
+                                    &quot;storageKey&quot;, chunkKey
+                            ))
+                            .build()
+            ));
+        }
+
+        return new DocPipelineResult(docId, chunks.size(), totalTokens);
+    }
+
+    private void storeObject(String key, InputStream data) {
+        try {
+            minio.putObject(PutObjectArgs.builder()
+                    .bucket(&quot;ai-documents&quot;)
+                    .object(key)
+                    .stream(data, data.available(), -1)
+                    .build());
+        } catch (Exception e) {
+            throw new StorageException(&quot;Store failed: &quot; + key, e);
+        }
+    }
+}
+</code></pre></div>
+<h3>3.3 模型文件管理</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 模型版本管理
+// 存储路径: models/{model_name}/{version}/{file}
+// 示例: models/bge-m3/v1/config.json, pytorch_model.bin, tokenizer.json
+
+@Service
+public class ModelStorageService {
+
+    public void uploadModelVersion(String modelName, String version,
+                                    Path modelDir) throws IOException {
+        try (var files = Files.walk(modelDir)) {
+            files.filter(Files::isRegularFile).forEach(file -&gt; {
+                var relative = modelDir.relativize(file).toString();
+                var key = STR.&quot;models/\{modelName}/\{version}/\{relative}&quot;;
+                try (var in = Files.newInputStream(file)) {
+                    minio.putObject(PutObjectArgs.builder()
+                            .bucket(&quot;model-repository&quot;)
+                            .object(key)
+                            .stream(in, Files.size(file), -1)
+                            .build());
+                } catch (Exception e) {
+                    throw new StorageException(&quot;Model upload failed: &quot; + key, e);
+                }
+            });
+        }
+    }
+}
+</code></pre></div>
+<hr>
+<h2>四、RabbitMQ（简要）</h2>
+<h3>4.1 Exchange 类型</h3>
+<table>
+<thead>
+<tr>
+<th>类型</th>
+<th>路由逻辑</th>
+<th>示例</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>Direct</td>
+<td>Routing key 完全匹配 Binding key</td>
+<td><code>order.created</code> → 订单队列</td>
+</tr>
+<tr>
+<td>Topic</td>
+<td>Routing key 通配符匹配（<code>.</code> + <code>*</code>/<code>#</code>）</td>
+<td><code>order.*</code> 匹配 <code>order.created</code>, <code>order.paid</code></td>
+</tr>
+<tr>
+<td>Fanout</td>
+<td>广播到所有绑定队列</td>
+<td>配置刷新通知</td>
+</tr>
+<tr>
+<td>Headers</td>
+<td>根据消息 headers 匹配</td>
+<td>属性匹配路由</td>
+</tr>
+</tbody></table>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Configuration
+public class RabbitMQConfig {
+
+    @Bean
+    public TopicExchange orderExchange() {
+        return new TopicExchange(&quot;order.exchange&quot;);
+    }
+
+    @Bean
+    public Queue orderCreatedQueue() {
+        return QueueBuilder.durable(&quot;order.created.queue&quot;)
+                .deadLetterExchange(&quot;order.dlx.exchange&quot;)
+                .deadLetterRoutingKey(&quot;order.dlq&quot;)
+                .ttl(30000)
+                .maxLength(10000)
+                .build();
+    }
+
+    @Bean
+    public Binding orderCreatedBinding() {
+        return BindingBuilder.bind(orderCreatedQueue())
+                .to(orderExchange())
+                .with(&quot;order.created&quot;);
+    }
+}
+</code></pre></div>
+<h3>4.2 死信队列（DLQ）</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Configuration
+public class DeadLetterConfig {
+
+    @Bean
+    public DirectExchange dlxExchange() {
+        return new DirectExchange(&quot;order.dlx.exchange&quot;);
+    }
+
+    @Bean
+    public Queue deadLetterQueue() {
+        return QueueBuilder.durable(&quot;order.dlq&quot;).build();
+    }
+
+    @Bean
+    public Binding dlqBinding() {
+        return BindingBuilder.bind(deadLetterQueue())
+                .to(dlxExchange())
+                .with(&quot;order.dlq&quot;);
+    }
+}
+
+// DLQ 消费者：记录失败消息并发送告警
+@RabbitListener(queues = &quot;order.dlq&quot;)
+public void handleDeadLetter(Message failedMessage) {
+    var headers = failedMessage.getMessageProperties().getHeaders();
+    var deathReason = headers.get(&quot;x-death&quot;);
+
+    log.error(&quot;&quot;&quot;
+            Dead letter received:
+            Original Queue: {}
+            Reason: {}
+            Body: {}
+            &quot;&quot;&quot;,
+            headers.get(&quot;x-first-death-queue&quot;),
+            headers.get(&quot;x-first-death-reason&quot;),
+            new String(failedMessage.getBody()));
+
+    // 存储到数据库供后续排查
+    failedMessageRepository.save(new FailedMessage(
+            failedMessage.getMessageProperties().getMessageId(),
+            deathReason.toString(),
+            new String(failedMessage.getBody()),
+            Instant.now()
+    ));
+}
+</code></pre></div>
+<h3>4.3 延迟队列</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// RabbitMQ 延迟消息插件（rabbitmq_delayed_message_exchange）
+@Bean
+public CustomExchange delayedExchange() {
+    var args = new HashMap&lt;String, Object&gt;();
+    args.put(&quot;x-delayed-type&quot;, &quot;direct&quot;);
+    return new CustomExchange(&quot;order.delayed.exchange&quot;, &quot;x-delayed-message&quot;,
+            true, false, args);
+}
+
+// 发送延迟消息
+public void sendDelayed(String orderId, long delayMs) {
+    var message = MessageBuilder.withBody(orderId.getBytes())
+            .setHeader(&quot;x-delay&quot;, delayMs)
+            .build();
+    rabbitTemplate.send(&quot;order.delayed.exchange&quot;, &quot;order.timeout&quot;, message);
+}
+</code></pre></div>
+<h3>4.4 消息确认</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">spring:
+  rabbitmq:
+    publisher-confirm-type: correlated   # 发布确认
+    publisher-returns: true              # 路由失败返回
+    listener:
+      simple:
+        acknowledge-mode: manual         # 手动确认
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 1000ms
+          multiplier: 2.0
+</code></pre></div>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Publisher Confirms（确保消息到达 Broker）
+rabbitTemplate.setConfirmCallback((correlationData, ack, cause) -&gt; {
+    if (!ack) {
+        log.error(&quot;Message not confirmed: id={}, cause={}&quot;,
+                correlationData.getId(), cause);
+        // 写入 outbox 表重试
+    }
+});
+
+// Consumer Manual Ack
+@RabbitListener(queues = &quot;order.created.queue&quot;)
+public void onOrderCreated(OrderEvent event, Channel channel,
+                            @Header(AmqpHeaders.DELIVERY_TAG) long tag) {
+    try {
+        orderService.process(event);
+        channel.basicAck(tag, false);  // 确认
+    } catch (Exception e) {
+        channel.basicNack(tag, false, true);  // 拒绝并重新入队
+    }
+}
+</code></pre></div>
+<h3>4.5 Kafka vs RabbitMQ 选型</h3>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>Kafka</th>
+<th>RabbitMQ</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>消息模型</td>
+<td>日志（分区追加序）</td>
+<td>队列（消费后删除）</td>
+</tr>
+<tr>
+<td>吞吐量</td>
+<td>百万级/秒</td>
+<td>万级/秒</td>
+</tr>
+<tr>
+<td>延迟</td>
+<td>毫秒级（批量优化）</td>
+<td>微秒级（单消息）</td>
+</tr>
+<tr>
+<td>消息回溯</td>
+<td>支持（按 offset 重新消费）</td>
+<td>不支持（消费即删除）</td>
+</tr>
+<tr>
+<td>路由灵活性</td>
+<td>简单（仅分区路由）</td>
+<td>丰富（Exchange 类型 + binding）</td>
+</tr>
+<tr>
+<td>优先级</td>
+<td>不支持</td>
+<td>支持</td>
+</tr>
+<tr>
+<td>延迟消息</td>
+<td>需要额外设计</td>
+<td>插件原生支持</td>
+</tr>
+<tr>
+<td>运维复杂度</td>
+<td>较高（ZK/KRaft + Broker）</td>
+<td>较低（单节点即可）</td>
+</tr>
+<tr>
+<td>典型场景</td>
+<td>事件流/日志/CDC/大数据</td>
+<td>任务分发/RPC/延迟消息/优先级</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>五、对象存储安全</h2>
+<h3>5.1 访问密钥管理</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">spring:
+  cloud:
+    vault:
+      kv:
+        enabled: true
+      authentication: APPROLE
+
+# 通过 Vault 获取 MinIO 凭证
+minio:
+  access-key: ${vault:secret/minio#access_key}
+  secret-key: ${vault:secret/minio#secret_key}
+</code></pre></div>
+<h3>5.2 服务端加密</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// MinIO SSE-S3（服务端托管密钥）
+minioClient.putObject(PutObjectArgs.builder()
+        .bucket(BUCKET)
+        .object(key)
+        .stream(data, size, -1)
+        .sse(Sse.newBuilder()
+                .type(ServerSideEncryption.AES256)  // SSE-S3
+                .build())
+        .build());
+
+// SSE-C（客户端提供密钥）
+var sseCustomerKey = new ServerSideEncryptionCustomerKey(
+        Base64.getDecoder().decode(customerKeyBase64));
+
+minioClient.getObject(GetObjectArgs.builder()
+        .bucket(BUCKET)
+        .object(key)
+        .ssec(sseCustomerKey)
+        .build());
+</code></pre></div>
+<h3>5.3 公开访问防护</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># 禁止公共访问（Bucket 级别）
+mc anonymous set none local/ai-documents
+
+# 检查公开访问的 Bucket
+mc ls --json local | jq &#39;select(.access == &quot;public&quot;)&#39;
+
+# 阻止公开策略的设置（MInIO 策略）
+mc admin policy set local block-public-policy
+</code></pre></div>
+<h3>5.4 访问策略最小化</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-json">{
+  &quot;Version&quot;: &quot;2012-10-17&quot;,
+  &quot;Statement&quot;: [
+    {
+      &quot;Effect&quot;: &quot;Allow&quot;,
+      &quot;Action&quot;: [&quot;s3:GetObject&quot;],
+      &quot;Resource&quot;: [&quot;arn:aws:s3:::ai-documents/users/${aws:username}/*&quot;]
+    },
+    {
+      &quot;Effect&quot;: &quot;Allow&quot;,
+      &quot;Action&quot;: [&quot;s3:PutObject&quot;],
+      &quot;Resource&quot;: [&quot;arn:aws:s3:::ai-documents/upload/${aws:username}/*&quot;],
+      &quot;Condition&quot;: {
+        &quot;NumericLessThan&quot;: { &quot;s3:content-length&quot;: 104857600 }
+      }
+    },
+    {
+      &quot;Effect&quot;: &quot;Deny&quot;,
+      &quot;Action&quot;: [&quot;s3:*&quot;],
+      &quot;Resource&quot;: [&quot;arn:aws:s3:::ai-documents/admin/*&quot;],
+      &quot;Condition&quot;: { &quot;StringNotEquals&quot;: { &quot;aws:username&quot;: &quot;admin&quot; } }
+    }
+  ]
+}
+</code></pre></div>
+<hr>
+<h2>常见问题</h2>
+<p><strong>Q: 预签名 URL 安全吗？</strong>
+A: 预签名 URL 包含签名认证，在有效期内可被任何人使用。应设置短有效期（几分钟到几小时），并通过 HTTPS 传输。</p>
+<p><strong>Q: MinIO 的纠删码（Erasure Coding）如何工作？</strong>
+A: 将数据分为 N 份数据 + M 份校验（EC:N+M），可容忍 M 个节点故障。默认 EC:4+2 可容忍 2 个节点故障。</p>
+<p><strong>Q: 何时用 RabbitMQ 而非 Kafka？</strong>
+A: 需要复杂度由 Broker 端处理（延迟/优先级/路由）、微秒级延迟、任务分发场景。AI 场景中以 Kafka 为主，RabbitMQ 作为补充。</p>
+<p><strong>Q: 模型文件为什么要放对象存储而非直接打包到镜像？</strong>
+A: 模型文件动辄数GB，打包进镜像会导致镜像臃肿、部署慢、版本管理困难。通过对象存储 + 启动时下载或挂载，可实现独立版本管理和快速切换。</p>
+<hr>
+<h2>相关条目</h2>
+<ul>
+<li><a href="/04-数据与中间件/数据库与缓存/04-PostgreSQL与pgvector深度解析" class="cross-ref" data-ref="04-PostgreSQL与pgvector深度解析">04-PostgreSQL与pgvector深度解析</a> — 向量索引存储</li>
+<li><a href="/04-数据与中间件/消息与搜索/04-Elasticsearch深度解析" class="cross-ref" data-ref="04-Elasticsearch深度解析">04-Elasticsearch深度解析</a> — 全文检索索引</li>
+<li><a href="/04-数据与中间件/消息与搜索/04-Kafka深度解析" class="cross-ref" data-ref="04-Kafka深度解析">04-Kafka深度解析</a> — Kafka 与 RabbitMQ 选型对比</li>
+<li><a href="/?d=10" class="cross-ref domain-ref">10-AI数据工程/README</a> — AI 数据工程完整流水线</li>
+</ul>
+</div>
+</article>

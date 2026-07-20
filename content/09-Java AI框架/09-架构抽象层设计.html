@@ -1,0 +1,1099 @@
+
+<article class="kb-entry" data-path="/09-Java AI框架/09-架构抽象层设计">
+  <div class="entry-meta">
+    <div class="entry-domain"><a href="/?d=09">09-Java AI框架</a></div>
+    <h1>Architecture Abstraction Layer</h1>
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#["architecture"</span><span class="badge badge-tag">#"port-adapter"</span><span class="badge badge-tag">#"abstraction"</span><span class="badge badge-tag">#"hexagonal"</span></div>
+    
+  </div>
+  <div class="entry-body"><h1>Architecture Abstraction Layer</h1>
+<h2>概述</h2>
+<p>这是知识库最重要的架构文件之一。本条目定义了如何在 Spring AI / LangChain4j / SDK 之上构建一个<strong>业务无关的 AI 能力抽象层（Port &amp; Adapter）</strong>，实现框架锁定保护、厂商锁定保护和可测试性。</p>
+<h2>为什么要抽象</h2>
+<h3>问题场景</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>问题 1: 框架锁定
+@Service
+public class OrderAnalysisService {
+    @Autowired
+    private ChatClient chatClient;  // 直接依赖 Spring AI
+
+    public String analyze(Order order) {
+        return chatClient.prompt()     // 业务代码与框架耦合
+            .user(&quot;分析订单: &quot; + order)
+            .call()
+            .content();
+    }
+}
+// 如果明年 LangChain4j 成为主流怎么办？全部重写。
+
+问题 2: 厂商锁定
+@Service
+public class QaService {
+    @Autowired
+    private OpenAiClient openAiClient;  // 直接依赖 OpenAI SDK
+
+    // 无法切换到 Anthropic / Bedrock / 本地模型
+    // 无法做故障转移
+    // 测试需要 mock HTTP 调用
+}
+
+问题 3: 测试困难
+// Mock ChatClient 的 Fluent API？非常困难。
+// Mock OpenAI SDK 的内部 HTTP 调用？不必要。
+// 真正的业务逻辑被埋没在框架调用中。
+</code></pre></div>
+<h3>解决方案：Port &amp; Adapter（六边形架构）</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>                     ┌───────────────────────────────┐
+                     │       业务代码层               │
+                     │   (OrderService, QAService)   │
+                     └───────────────┬───────────────┘
+                                     │ 依赖（注入）
+                     ┌───────────────▼───────────────┐
+                     │      Port 接口层 (核心)        │
+                     │  ChatModelPort               │
+                     │  EmbeddingModelPort          │
+                     │  RerankModelPort             │
+                     │  RetrievalPort               │
+                     │  ConversationMemoryPort      │
+                     │  ToolRegistryPort            │
+                     │  PromptRepositoryPort        │
+                     │  EvaluationPort              │
+                     │  ModelRouterPort             │
+                     │  AiTracePort                 │
+                     └───────┬───────────┬───────────┘
+                             │           │
+                  ┌──────────▼──┐  ┌─────▼──────────┐
+                  │ Spring AI   │  │ SDK 适配器      │
+                  │ Adapter     │  │ (OpenAI/Anthr/  │
+                  │             │  │  Bedrock...)    │
+                  └─────────────┘  └────────────────┘
+</code></pre></div>
+<h2>核心接口设计</h2>
+<h3>1. ChatModelPort</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.ai.port;
+
+import reactor.core.publisher.Flux;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 聊天模型端口 — 核心接口
+ * 所有 LLM 对话的能力抽象
+ */
+public interface ChatModelPort {
+
+    /**
+     * 同步聊天
+     */
+    ChatResponse chat(ChatRequest request);
+
+    /**
+     * 流式聊天
+     */
+    Flux&lt;ChatChunk&gt; chatStream(ChatRequest request);
+
+    /**
+     * 获取模型信息
+     */
+    ModelInfo getModelInfo();
+
+    // ──── 数据模型 ────
+
+    record ChatRequest(
+        List&lt;ChatMessage&gt; messages,        // 对话消息
+        String requestId,                  // 请求追踪ID
+        Double temperature,                // 温度参数
+        Integer maxTokens,                 // 最大输出token
+        Double topP,                       // top-p采样
+        List&lt;String&gt; stopSequences,        // 停止序列
+        List&lt;ToolDefinition&gt; tools,        // 可用工具
+        String toolChoice,                 // 工具选择策略: auto/none/required
+        ResponseFormat responseFormat,     // 输出格式
+        Map&lt;String, Object&gt; metadata       // 扩展元数据（如conversationId）
+    ) {
+        public static Builder builder() {
+            return new Builder();
+        }
+
+        public static class Builder {
+            private final List&lt;ChatMessage&gt; messages = new ArrayList&lt;&gt;();
+            private String requestId = java.util.UUID.randomUUID().toString();
+            private Double temperature = 0.7;
+            private Integer maxTokens = 2048;
+            private Double topP = 0.9;
+            private List&lt;String&gt; stopSequences = List.of();
+            private List&lt;ToolDefinition&gt; tools = List.of();
+            private String toolChoice = &quot;auto&quot;;
+            private ResponseFormat responseFormat = ResponseFormat.TEXT;
+            private Map&lt;String, Object&gt; metadata = Map.of();
+
+            public Builder addSystemMessage(String content) {
+                messages.add(new ChatMessage(&quot;system&quot;, content, null, null));
+                return this;
+            }
+
+            public Builder addUserMessage(String content) {
+                messages.add(new ChatMessage(&quot;user&quot;, content, null, null));
+                return this;
+            }
+
+            public Builder addAssistantMessage(String content) {
+                messages.add(new ChatMessage(&quot;assistant&quot;, content, null, null));
+                return this;
+            }
+
+            public Builder addToolResult(String toolCallId, String content) {
+                messages.add(new ChatMessage(&quot;tool&quot;, content, toolCallId, null));
+                return this;
+            }
+
+            public Builder temperature(Double temperature) {
+                this.temperature = temperature;
+                return this;
+            }
+
+            public Builder maxTokens(Integer maxTokens) {
+                this.maxTokens = maxTokens;
+                return this;
+            }
+
+            public Builder tools(List&lt;ToolDefinition&gt; tools) {
+                this.tools = tools;
+                return this;
+            }
+
+            public Builder responseFormat(ResponseFormat format) {
+                this.responseFormat = format;
+                return this;
+            }
+
+            public ChatRequest build() {
+                return new ChatRequest(
+                    List.copyOf(messages), requestId, temperature,
+                    maxTokens, topP, stopSequences, List.copyOf(tools),
+                    toolChoice, responseFormat, Map.copyOf(metadata));
+            }
+        }
+    }
+
+    record ChatMessage(
+        String role,          // system / user / assistant / tool
+        String content,       // 文本内容
+        String toolCallId,    // tool 消息的关联ID
+        List&lt;ToolCall&gt; toolCalls  // assistant 消息的工具调用
+    ) {}
+
+    record ChatResponse(
+        String content,              // 文本内容
+        List&lt;ToolCall&gt; toolCalls,    // 工具调用列表
+        String finishReason,         // stop / length / tool_calls
+        TokenUsage tokenUsage,       // Token 使用统计
+        String modelId,              // 实际使用的模型ID
+        Map&lt;String, Object&gt; metadata // 额外元数据
+    ) {}
+
+    record ChatChunk(
+        String delta,          // 增量文本
+        String finishReason,   // 流结束时的原因
+        TokenUsage tokenUsage  // 累积token使用（可能为null）
+    ) {}
+
+    record ToolDefinition(
+        String name,
+        String description,
+        Map&lt;String, Object&gt; jsonSchema  // JSON Schema
+    ) {}
+
+    record ToolCall(
+        String id,
+        String name,
+        String arguments  // JSON string
+    ) {}
+
+    record TokenUsage(
+        int inputTokens,
+        int outputTokens,
+        int totalTokens
+    ) {
+        public static final TokenUsage EMPTY = new TokenUsage(0, 0, 0);
+
+        public TokenUsage add(TokenUsage other) {
+            return new TokenUsage(
+                inputTokens + other.inputTokens,
+                outputTokens + other.outputTokens,
+                totalTokens + other.totalTokens);
+        }
+    }
+
+    record ModelInfo(
+        String modelId,
+        String provider,
+        int contextWindow,
+        double inputPricePer1M,
+        double outputPricePer1M,
+        boolean supportsVision,
+        boolean supportsToolCalling,
+        boolean supportsStreaming
+    ) {}
+
+    enum ResponseFormat { TEXT, JSON_OBJECT, JSON_SCHEMA }
+}
+</code></pre></div>
+<h3>2. EmbeddingModelPort</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.ai.port;
+
+import java.util.List;
+
+/**
+ * Embedding 模型端口
+ */
+public interface EmbeddingModelPort {
+
+    /**
+     * 对单个文本生成 Embedding
+     */
+    EmbeddingResponse embed(String text);
+
+    /**
+     * 批量生成 Embedding
+     */
+    EmbeddingResponse embed(List&lt;String&gt; texts);
+
+    /**
+     * 获取 Embedding 维度
+     */
+    int dimensions();
+
+    /**
+     * 获取模型信息
+     */
+    String getModelId();
+
+    // ──── 数据模型 ────
+
+    record EmbeddingResponse(
+        List&lt;float[]&gt; embeddings,  // text 数量 × dimensions
+        TokenUsage tokenUsage,
+        String modelId
+    ) {}
+
+    record TokenUsage(int totalTokens, String modelId) {}
+}
+</code></pre></div>
+<h3>3. RerankModelPort</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.ai.port;
+
+import java.util.List;
+
+/**
+ * 重排序模型端口
+ */
+public interface RerankModelPort {
+
+    /**
+     * 对候选文档重新排序
+     * @param query 查询文本
+     * @param documents 候选文档列表
+     * @param topN 返回前N个结果
+     */
+    RerankResponse rerank(String query, List&lt;String&gt; documents, int topN);
+
+    /**
+     * 带分数的重排序
+     */
+    RerankResponse rerank(String query, List&lt;ScoredDocument&gt; documents, int topN);
+
+    // ──── 数据模型 ────
+
+    record RerankResponse(
+        List&lt;ScoredDocument&gt; results,
+        String modelId,
+        long latencyMs
+    ) {}
+
+    record ScoredDocument(
+        int index,           // 原始文档索引
+        String content,      // 文档内容
+        double score         // 相关度分数 (0-1)
+    ) {}
+}
+</code></pre></div>
+<h3>4. RetrievalPort</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.ai.port;
+
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 检索端口 — 向量检索 + 关键词检索 + 混合检索的统一抽象
+ */
+public interface RetrievalPort {
+
+    /**
+     * 语义搜索（基于 Embedding 的 ANN 检索）
+     */
+    RetrievalResult semanticSearch(RetrievalQuery query);
+
+    /**
+     * 关键词搜索（基于 BM25 等）
+     */
+    RetrievalResult keywordSearch(RetrievalQuery query);
+
+    /**
+     * 混合搜索（语义 + 关键词）
+     */
+    RetrievalResult hybridSearch(RetrievalQuery query, double semanticWeight);
+
+    /**
+     * 按 ID 获取文档
+     */
+    List&lt;RetrievalDocument&gt; getByIds(List&lt;String&gt; ids);
+
+    /**
+     * 按元数据过滤后的搜索
+     */
+    RetrievalResult searchWithMetadataFilter(RetrievalQuery query,
+        Map&lt;String, Object&gt; metadataFilter);
+
+    // ──── 数据模型 ────
+
+    record RetrievalQuery(
+        String query,
+        int topK,
+        Double similarityThreshold,
+        Map&lt;String, Object&gt; filters,
+        List&lt;String&gt; fields  // 返回哪些字段
+    ) {
+        public static RetrievalQuery of(String query, int topK) {
+            return new RetrievalQuery(query, topK, null, Map.of(), List.of(&quot;*&quot;));
+        }
+    }
+
+    record RetrievalResult(
+        List&lt;RetrievalDocument&gt; documents,
+        long totalHits,
+        long searchTimeMs,
+        RetrievalMethod method
+    ) {}
+
+    record RetrievalDocument(
+        String id,
+        String content,
+        double score,
+        Map&lt;String, Object&gt; metadata,
+        float[] embedding  // 可选
+    ) {}
+
+    enum RetrievalMethod { SEMANTIC, KEYWORD, HYBRID }
+}
+</code></pre></div>
+<h3>5. ConversationMemoryPort</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.ai.port;
+
+import java.time.Instant;
+import java.util.List;
+
+/**
+ * 对话记忆端口
+ */
+public interface ConversationMemoryPort {
+
+    /**
+     * 保存一条消息
+     */
+    void save(String conversationId, MemoryMessage message);
+
+    /**
+     * 批量保存消息
+     */
+    void saveAll(String conversationId, List&lt;MemoryMessage&gt; messages);
+
+    /**
+     * 获取最近的 N 条消息
+     */
+    List&lt;MemoryMessage&gt; get(String conversationId, int lastN);
+
+    /**
+     * 获取指定对话的所有消息
+     */
+    List&lt;MemoryMessage&gt; getAll(String conversationId);
+
+    /**
+     * 删除指定对话
+     */
+    void delete(String conversationId);
+
+    /**
+     * 裁剪对话（保留最近 N 条 + 早期摘要）
+     */
+    void trim(String conversationId, int keepRecent, int summaryMaxTokens);
+
+    /**
+     * 获取对话摘要
+     */
+    String getSummary(String conversationId);
+
+    // ──── 数据模型 ────
+
+    record MemoryMessage(
+        String role,          // user / assistant / system / tool
+        String content,
+        Instant timestamp,
+        Map&lt;String, Object&gt; metadata  // 如 tool_call_id, token_usage
+    ) {}
+}
+</code></pre></div>
+<h3>6. ToolRegistryPort</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.ai.port;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.function.Function;
+
+/**
+ * 工具注册端口
+ */
+public interface ToolRegistryPort {
+
+    /**
+     * 注册工具
+     */
+    void register(ToolDefinition definition, Function&lt;Map&lt;String, Object&gt;, String&gt; handler);
+
+    /**
+     * 获取工具定义
+     */
+    Optional&lt;ToolDefinition&gt; getTool(String name);
+
+    /**
+     * 获取所有已注册的工具
+     */
+    List&lt;ToolDefinition&gt; getAllTools();
+
+    /**
+     * 执行工具
+     */
+    String execute(String toolName, Map&lt;String, Object&gt; arguments);
+
+    /**
+     * 获取工具注册数量
+     */
+    int toolCount();
+
+    // ──── 数据模型 ────
+
+    record ToolDefinition(
+        String name,
+        String description,
+        Map&lt;String, Object&gt; jsonSchema
+    ) {}
+}
+</code></pre></div>
+<h3>7. PromptRepositoryPort</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.ai.port;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+
+/**
+ * Prompt 仓库端口 — 模板化、版本化的 Prompt 管理
+ */
+public interface PromptRepositoryPort {
+
+    /**
+     * 获取 Prompt 模板
+     */
+    Optional&lt;PromptTemplate&gt; getPrompt(String promptId, String version);
+
+    /**
+     * 获取最新版本的 Prompt
+     */
+    Optional&lt;PromptTemplate&gt; getLatestPrompt(String promptId);
+
+    /**
+     * 验证参数是否满足 Prompt 模板需求
+     */
+    ValidationResult validateParams(String promptId, Map&lt;String, Object&gt; params);
+
+    /**
+     * 渲染 Prompt（填充参数）
+     */
+    String render(String promptId, Map&lt;String, Object&gt; params);
+
+    /**
+     * 注册 Prompt 模板
+     */
+    void register(String promptId, String version, PromptTemplate template);
+
+    // ──── 数据模型 ────
+
+    record PromptTemplate(
+        String promptId,
+        String version,
+        String template,                   // 包含 {{variable}} 占位符的模板
+        List&lt;String&gt; requiredVariables,     // 必需参数列表
+        List&lt;String&gt; optionalVariables,     // 可选参数列表
+        String description,
+        String modelHint,                  // 推荐模型
+        Map&lt;String, Object&gt; defaultParams   // 默认参数值
+    ) {}
+
+    record ValidationResult(
+        boolean valid,
+        List&lt;String&gt; missingVariables,
+        List&lt;String&gt; extraVariables
+    ) {}
+}
+</code></pre></div>
+<h3>8. EvaluationPort</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.ai.port;
+
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 评估端口 — AI 输出的质量评估
+ */
+public interface EvaluationPort {
+
+    /**
+     * 评估 AI 回答的质量
+     */
+    EvaluationResult evaluate(EvaluationRequest request);
+
+    /**
+     * 批量评估（用于回归测试）
+     */
+    List&lt;EvaluationResult&gt; evaluateBatch(List&lt;EvaluationRequest&gt; requests);
+
+    // ──── 数据模型 ────
+
+    record EvaluationRequest(
+        String question,             // 原始问题
+        String answer,               // AI 回答
+        String reference,            // 参考答案 (黄金数据集)
+        List&lt;String&gt; contextFacts,   // 已知事实（用于事实检查）
+        List&lt;String&gt; criteria        // 评估维度
+    ) {}
+
+    record EvaluationResult(
+        boolean passed,
+        double overallScore,              // 总分 0-1
+        Map&lt;String, Double&gt; dimensionScores, // 各维度分数
+        String feedback,                  // 评估反馈
+        List&lt;String&gt; issues               // 发现的问题
+    ) {}
+}
+</code></pre></div>
+<h3>9. ModelRouterPort</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.ai.port;
+
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 模型路由端口
+ */
+public interface ModelRouterPort {
+
+    /**
+     * 根据请求特征选择最合适的模型
+     */
+    RouteDecision route(ChatModelPort.ChatRequest request);
+
+    /**
+     * 注册模型端点
+     */
+    void registerEndpoint(ModelEndpoint endpoint);
+
+    /**
+     * 获取所有已注册的端点
+     */
+    List&lt;ModelEndpoint&gt; getEndpoints();
+
+    /**
+     * 更新端点状态
+     */
+    void updateEndpointStatus(String endpointId, EndpointStatus status);
+
+    // ──── 数据模型 ────
+
+    record RouteDecision(
+        String endpointId,
+        String modelId,
+        String provider,
+        String reason,            // 路由原因
+        double estimatedCost,     // 预估成本
+        Map&lt;String, Object&gt; metadata
+    ) {}
+
+    record ModelEndpoint(
+        String id,
+        String modelId,
+        String provider,
+        ChatModelPort chatModel,
+        int priority,             // 1=首选, 2=备用, 3=本地兜底
+        double costPer1MInput,
+        double costPer1MOutput,
+        boolean supportsVision,
+        boolean supportsToolCalling,
+        List&lt;String&gt; supportedLanguages,  // &quot;zh&quot;, &quot;en&quot;, ...
+        RouteRule routeRule       // 路由规则
+    ) {}
+
+    record RouteRule(
+        List&lt;String&gt; taskTypes,    // 该模型擅长的任务
+        int minTaskComplexity,     // 最低任务复杂度 (1-10)
+        double maxCostPerRequest   // 最大单次请求预算
+    ) {}
+
+    enum EndpointStatus { ONLINE, DEGRADED, OFFLINE, MAINTENANCE }
+}
+</code></pre></div>
+<h3>10. AiTracePort</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.ai.port;
+
+import java.time.Instant;
+import java.util.Map;
+
+/**
+ * AI 追踪端口 — 请求级别的可观测性
+ */
+public interface AiTracePort {
+
+    /**
+     * 开始一个追踪 Span
+     */
+    TraceSpan startSpan(String spanName, Map&lt;String, String&gt; attributes);
+
+    /**
+     * 记录事件（如工具调用、RAG检索）
+     */
+    void addEvent(TraceSpan span, String eventName, Map&lt;String, String&gt; attributes);
+
+    /**
+     * 记录 Token 使用量
+     */
+    void recordTokenUsage(TraceSpan span, ChatModelPort.TokenUsage usage);
+
+    /**
+     * 结束 Span（成功）
+     */
+    void endSpan(TraceSpan span);
+
+    /**
+     * 结束 Span（失败）
+     */
+    void endSpanWithError(TraceSpan span, Throwable error);
+
+    // ──── 数据模型 ────
+
+    record TraceSpan(
+        String traceId,
+        String spanId,
+        String spanName,
+        Instant startTime,
+        Map&lt;String, String&gt; initialAttributes
+    ) {}
+}
+</code></pre></div>
+<h2>适配器实现示例</h2>
+<h3>Spring AI ChatModel Adapter</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.ai.adapter;
+
+import com.example.ai.port.ChatModelPort;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.model.ChatModel;
+import reactor.core.publisher.Flux;
+
+/**
+ * Spring AI ChatModel 适配器
+ * 将 Spring AI 的 ChatClient 适配为 ChatModelPort
+ */
+@Component
+@ConditionalOnBean(ChatModel.class)
+public class SpringAiChatModelAdapter implements ChatModelPort {
+
+    private final ChatClient chatClient;
+    private final ChatModel chatModel;
+    private final String modelId;
+
+    public SpringAiChatModelAdapter(ChatClient.Builder builder,
+            ChatModel chatModel,
+            @Value(&quot;${app.ai.default-model:gpt-4o}&quot;) String modelId) {
+        this.chatClient = builder.build();
+        this.chatModel = chatModel;
+        this.modelId = modelId;
+    }
+
+    @Override
+    public ChatResponse chat(ChatRequest request) {
+        var prompt = chatClient.prompt();
+
+        // 添加消息
+        for (var msg : request.messages()) {
+            switch (msg.role()) {
+                case &quot;system&quot; -&gt; prompt.system(msg.content());
+                case &quot;user&quot; -&gt; prompt.user(msg.content());
+                case &quot;assistant&quot; -&gt; {
+                    if (msg.toolCalls() != null) {
+                        prompt.messages(
+                            new org.springframework.ai.chat.messages
+                                .AssistantMessage(msg.content()));
+                    } else {
+                        prompt.messages(
+                            new org.springframework.ai.chat.messages
+                                .AssistantMessage(msg.content()));
+                    }
+                }
+            }
+        }
+
+        // 配置参数
+        prompt.options(
+            org.springframework.ai.chat.prompt.ChatOptionsBuilder.builder()
+                .withTemperature(request.temperature())
+                .withMaxTokens(request.maxTokens())
+                .withTopP(request.topP())
+                .build());
+
+        // 执行
+        var response = prompt.call().chatResponse();
+        var output = response.getResult().getOutput();
+
+        // 转换 Token 使用量
+        var usage = new TokenUsage(0, 0, 0);
+        if (response.getMetadata() != null &amp;&amp; response.getMetadata().getUsage() != null) {
+            var u = response.getMetadata().getUsage();
+            usage = new TokenUsage(
+                (int) u.getPromptTokens(),
+                (int) u.getGenerationTokens(),
+                (int) u.getTotalTokens());
+        }
+
+        // 转换工具调用
+        var toolCalls = new ArrayList&lt;ToolCall&gt;();
+        if (output instanceof AssistantMessage am &amp;&amp; am.getToolCalls() != null) {
+            for (var tc : am.getToolCalls()) {
+                toolCalls.add(new ToolCall(tc.id(), tc.name(), tc.arguments()));
+            }
+        }
+
+        return new ChatResponse(
+            output.getContent(),
+            toolCalls,
+            response.getResult().getMetadata().getFinishReason(),
+            usage,
+            modelId,
+            Map.of(&quot;framework&quot;, &quot;spring-ai&quot;, &quot;provider&quot;, &quot;auto-detected&quot;));
+    }
+
+    @Override
+    public Flux&lt;ChatChunk&gt; chatStream(ChatRequest request) {
+        var prompt = chatClient.prompt();
+
+        for (var msg : request.messages()) {
+            switch (msg.role()) {
+                case &quot;system&quot; -&gt; prompt.system(msg.content());
+                case &quot;user&quot; -&gt; prompt.user(msg.content());
+            }
+        }
+
+        return prompt.stream().chatResponse()
+            .map(chunk -&gt; {
+                var content = chunk.getResult().getOutput().getContent();
+                var finishReason = chunk.getResult().getMetadata()
+                    .getFinishReason();
+                return new ChatChunk(content, finishReason, null);
+            });
+    }
+
+    @Override
+    public ModelInfo getModelInfo() {
+        return new ModelInfo(
+            modelId, &quot;auto&quot;, 128000, 3.0, 15.0,
+            true, true, true);
+    }
+}
+</code></pre></div>
+<h3>OpenAI SDK 直接适配器（降级方案）</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.ai.adapter;
+
+import com.example.ai.port.ChatModelPort;
+import com.openai.client.OpenAiClient;
+import com.openai.client.okhttp.OpenAiOkHttpClient;
+import com.openai.models.chat.completions.*;
+import reactor.core.publisher.Flux;
+
+/**
+ * OpenAI SDK 直接适配器
+ * 当 Spring AI 不支持某个 OpenAI 最新特性时使用
+ */
+@Component
+@ConditionalOnProperty(name = &quot;app.ai.adapter&quot;, havingValue = &quot;openai-sdk&quot;)
+public class OpenAiSdkChatModelAdapter implements ChatModelPort {
+
+    private final OpenAiClient client;
+    private final String modelId;
+
+    public OpenAiSdkChatModelAdapter(
+            @Value(&quot;${openai.api-key}&quot;) String apiKey,
+            @Value(&quot;${openai.model:gpt-4o}&quot;) String modelId) {
+        this.client = OpenAiOkHttpClient.builder()
+            .apiKey(apiKey)
+            .build();
+        this.modelId = modelId;
+    }
+
+    @Override
+    public ChatResponse chat(ChatRequest request) {
+        var messages = convertMessages(request.messages());
+        var tools = convertTools(request.tools());
+
+        var params = ChatCompletionCreateParams.builder()
+            .model(modelId)
+            .messages(messages)
+            .tools(tools)
+            .temperature(request.temperature())
+            .maxTokens(request.maxTokens())
+            .build();
+
+        var response = client.chat().completions().create(params);
+        var choice = response.choices().get(0);
+
+        // 转换 Token 使用量
+        var usage = new TokenUsage(
+            response.usage().map(CompletionUsage::promptTokens).orElse(0),
+            response.usage().map(CompletionUsage::completionTokens).orElse(0),
+            response.usage().map(CompletionUsage::totalTokens).orElse(0));
+
+        // 转换工具调用
+        var toolCalls = new ArrayList&lt;ToolCall&gt;();
+        choice.message().toolCalls().ifPresent(tcs -&gt; {
+            for (var tc : tcs) {
+                toolCalls.add(new ToolCall(
+                    tc.id(), tc.function().name(), tc.function().arguments()));
+            }
+        });
+
+        return new ChatResponse(
+            choice.message().content().orElse(&quot;&quot;),
+            toolCalls,
+            choice.finishReason() != null ?
+                choice.finishReason().toString() : &quot;stop&quot;,
+            usage,
+            modelId,
+            Map.of(&quot;adapter&quot;, &quot;openai-sdk-direct&quot;));
+    }
+
+    @Override
+    public Flux&lt;ChatChunk&gt; chatStream(ChatRequest request) {
+        // 使用 OpenAI SDK 的流式 API
+        return Flux.create(sink -&gt; {
+            var messages = convertMessages(request.messages());
+            var params = ChatCompletionCreateParams.builder()
+                .model(modelId)
+                .messages(messages)
+                .stream(true)
+                .temperature(request.temperature())
+                .maxTokens(request.maxTokens())
+                .build();
+
+            try (var stream = client.chat().completions().createStream(params)) {
+                stream.forEach(chunk -&gt; {
+                    var choices = chunk.choices();
+                    if (!choices.isEmpty()) {
+                        var delta = choices.get(0).delta();
+                        var content = delta.content().orElse(&quot;&quot;);
+                        var finishReason = choices.get(0).finishReason();
+                        sink.next(new ChatChunk(content,
+                            finishReason != null ? finishReason.toString() : null, null));
+                    }
+                });
+                sink.complete();
+            } catch (Exception e) {
+                sink.error(e);
+            }
+        });
+    }
+
+    @Override
+    public ModelInfo getModelInfo() {
+        return new ModelInfo(
+            modelId, &quot;openai&quot;, 128000, 3.0, 15.0,
+            true, true, true);
+    }
+
+    private List&lt;ChatCompletionMessageParam&gt; convertMessages(
+            List&lt;ChatMessage&gt; messages) {
+        return messages.stream().map(msg -&gt; switch (msg.role()) {
+            case &quot;system&quot; -&gt; ChatCompletionMessageParam.ofSystem(msg.content());
+            case &quot;user&quot; -&gt; ChatCompletionMessageParam.ofUser(msg.content());
+            case &quot;assistant&quot; -&gt; ChatCompletionMessageParam.ofAssistant(
+                ChatCompletionAssistantMessageParam.builder()
+                    .content(msg.content())
+                    .build());
+            default -&gt; throw new IllegalArgumentException(
+                &quot;Unsupported role: &quot; + msg.role());
+        }).toList();
+    }
+
+    private List&lt;ChatCompletionTool&gt; convertTools(
+            List&lt;ToolDefinition&gt; tools) {
+        if (tools == null || tools.isEmpty()) return List.of();
+        return tools.stream().map(t -&gt; ChatCompletionTool.builder()
+            .function(FunctionDefinition.builder()
+                .name(t.name())
+                .description(t.description())
+                .parameters(SchemaDefinition.of(
+                    com.openai.core.JsonObject.from(t.jsonSchema())))
+                .build())
+            .build()).toList();
+    }
+}
+</code></pre></div>
+<h2>依赖注入：自动切换</h2>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.ai.config;
+
+/**
+ * 自动选择适配器的配置
+ * 优先级：Spring AI Adapter &gt; OpenAI SDK Adapter &gt; Anthropic SDK Adapter
+ */
+@Configuration
+public class AiAdapterAutoConfiguration {
+
+    /**
+     * 当 Spring AI ChatModel 可用时使用 Spring AI 适配器
+     */
+    @Bean
+    @ConditionalOnBean(ChatModel.class)
+    @ConditionalOnMissingBean(name = &quot;primaryChatModelPort&quot;)
+    @Primary
+    public ChatModelPort springAiChatAdapter(ChatClient.Builder builder,
+            ChatModel chatModel) {
+        return new SpringAiChatModelAdapter(builder, chatModel, &quot;gpt-4o&quot;);
+    }
+
+    /**
+     * 当明确配置使用 OpenAI SDK 时
+     */
+    @Bean
+    @ConditionalOnProperty(name = &quot;app.ai.adapter&quot;, havingValue = &quot;openai-sdk&quot;)
+    public ChatModelPort openAiSdkAdapter(
+            @Value(&quot;${openai.api-key}&quot;) String apiKey,
+            @Value(&quot;${openai.model:gpt-4o}&quot;) String model) {
+        return new OpenAiSdkChatModelAdapter(apiKey, model);
+    }
+
+    /**
+     * 当明确配置使用 Anthropic SDK 时
+     */
+    @Bean
+    @ConditionalOnProperty(name = &quot;app.ai.adapter&quot;, havingValue = &quot;anthropic-sdk&quot;)
+    public ChatModelPort anthropicSdkAdapter(
+            @Value(&quot;${anthropic.api-key}&quot;) String apiKey) {
+        // return new AnthropicSdkChatModelAdapter(apiKey);
+        throw new UnsupportedOperationException(&quot;待实现&quot;);
+    }
+}
+</code></pre></div>
+<h2>分层架构图</h2>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌─────────────────────────────────────────────────────────────────────┐
+│                         表现层 (Presentation)                        │
+│  REST Controller │ SSE Endpoint │ WebSocket │ GraphQL               │
+├─────────────────────────────────────────────────────────────────────┤
+│                         应用层 (Application)                         │
+│  OrderAnalysisService │ QAService │ InsuranceAgentService           │
+│  ┌─ 所有依赖都是 Port 接口，通过构造函数注入                          │
+│  └─ 零依赖具体框架或 SDK                                             │
+├─────────────────────────────────────────────────────────────────────┤
+│                         领域层 (Domain)                              │
+│  Order │ Policy │ Claim │ AnalysisResult (纯 POJO)                  │
+├─────────────────────────────────────────────────────────────────────┤
+│                     基础设施层 (Infrastructure)                      │
+│  ┌─────────────────────────────────────────────────────────────┐    │
+│  │ Adapter Implementations                                      │    │
+│  │ ├─ SpringAiChatModelAdapter                                  │    │
+│  │ ├─ OpenAiSdkChatModelAdapter (降级)                          │    │
+│  │ ├─ AnthropicSdkChatModelAdapter (降级)                       │    │
+│  │ ├─ OllamaChatModelAdapter (本地)                             │    │
+│  │ ├─ SpringAiEmbeddingAdapter                                  │    │
+│  │ ├─ JdbcConversationMemoryAdapter                             │    │
+│  │ ├─ RedisCacheAdapter                                         │    │
+│  │ └─ OpenTelemetryTraceAdapter                                 │    │
+│  └─────────────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────────────┘
+
+依赖方向：
+  表现层 → 应用层 → 领域层
+              ↓
+         基础设施层 (Port实现，通过 DI 反转依赖)
+</code></pre></div>
+<h2>单元测试优势</h2>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+ * 测试业务逻辑 — 只需 mock Port 接口
+ */
+@ExtendWith(MockitoExtension.class)
+class OrderAnalysisServiceTest {
+
+    @Mock
+    private ChatModelPort chatModel;
+
+    @Mock
+    private RetrievalPort retrieval;
+
+    @InjectMocks
+    private OrderAnalysisService service;
+
+    @Test
+    void shouldAnalyzeOrderCorrectly() {
+        // Given
+        var order = new Order(&quot;ORD-001&quot;, 99.90, &quot;pending&quot;);
+        when(chatModel.chat(any())).thenReturn(
+            new ChatModelPort.ChatResponse(
+                &quot;订单正常&quot;, List.of(), &quot;stop&quot;,
+                new ChatModelPort.TokenUsage(50, 20, 70),
+                &quot;test-model&quot;, Map.of()));
+
+        // When
+        var result = service.analyze(order);
+
+        // Then
+        assertEquals(&quot;订单正常&quot;, result);
+        // 验证调用了正确的参数
+        var captor = ArgumentCaptor.forClass(ChatModelPort.ChatRequest.class);
+        verify(chatModel).chat(captor.capture());
+        assertTrue(captor.getValue().messages().get(0).content()
+            .contains(&quot;ORD-001&quot;));
+    }
+}
+</code></pre></div>
+<h2>最佳实践</h2>
+<ol>
+<li><strong>业务代码只依赖 Port 接口</strong>：通过构造函数注入，永远不 import Spring AI 或任何 SDK 的类</li>
+<li><strong>Port 接口定义在独立的 Maven 模块</strong>：<code>ai-port</code> 模块零外部依赖，只有 JDK + Reactor（用于 Flux）</li>
+<li><strong>Adapter 实现放在独立的 Maven 模块</strong>：<code>ai-adapter-spring-ai</code>, <code>ai-adapter-openai-sdk</code> 等，按需引入</li>
+<li><strong>使用 Spring @ConditionalOnBean/@ConditionalOnProperty 自动切换</strong>：部署时只需改配置，无需改代码</li>
+<li><strong>每个 Adapter 有完整的单元测试</strong>：用 WireMock 模拟 HTTP 响应，验证适配逻辑</li>
+<li><strong>Port 接口设计遵循最小化原则</strong>：只暴露业务需要的操作，不暴露框架内部概念</li>
+<li><strong>将 Port 接口视为 API 合约</strong>：变更 Port 方法签名需要跨团队协调（因为影响了所有 Adapter 实现和所有消费者）</li>
+</ol>
+<h2>常见问题</h2>
+<p><strong>Q: 这样是不是过度设计？</strong></p>
+<p>A: 如果你只用一个模型提供商且不打算换，可能是。但 AI 领域变化极快：(1) 模型价格战导致成本优化频繁，(2) 新模型/新协议不断出现，(3) 不同任务需要不同模型。Port &amp; Adapter 的成本远低于&quot;从头重写所有 AI 调用代码&quot;。</p>
+<p><strong>Q: Port 接口如何处理不同 Provider 的特有特性（如 Anthropic cache_control）？</strong></p>
+<p>A: 两种方式：(1) 通过 <code>metadata</code> map 透传（灵活但不优雅），(2) 当特性足够通用时升级为 Port 方法的正式参数。经验法则：如果只有一个 Provider 支持的特性，走 metadata；如果两个以上 Provider 都支持，升级为正式参数。</p>
+<p><strong>Q: 适配层会有性能损失吗？</strong></p>
+<p>A: 几乎为零。适配层主要是对象转换（DTO → SDK 对象 → DTO），都是 in-memory 操作，相比网络 I/O（LLM API 调用通常 500ms-30s）完全可以忽略。</p>
+<h2>相关条目</h2>
+<ul>
+<li><a href="/09-Java AI框架/09-SpringAI2深度解析" class="cross-ref" data-ref="09-SpringAI2深度解析">09-SpringAI2深度解析</a> — Spring AI 框架深度使用</li>
+<li><a href="/09-Java AI框架/09-LangChain4j对比与选型" class="cross-ref" data-ref="09-LangChain4j对比与选型">09-LangChain4j对比与选型</a> — 框架对比和选型</li>
+<li><a href="/08-模型接入与推理/推理部署/08-模型能力矩阵与路由策略" class="cross-ref" data-ref="08-模型能力矩阵与路由策略">08-模型能力矩阵与路由策略</a> — 模型路由实现</li>
+<li><a href="/08-模型接入与推理/模型API/08-云模型API与SDK使用" class="cross-ref" data-ref="08-云模型API与SDK使用">08-云模型API与SDK使用</a> — 各 Provider SDK 使用（作为 Adapter 的实现参考）</li>
+<li><a href="/14-AI平台与LLMOps/14-模型网关与Prompt管理" class="cross-ref" data-ref="14-模型网关与Prompt管理">14-模型网关与Prompt管理</a> — 模型网关和平台治理</li>
+</ul>
+</div>
+</article>

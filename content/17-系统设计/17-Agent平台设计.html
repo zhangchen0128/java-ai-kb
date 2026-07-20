@@ -1,0 +1,1069 @@
+
+<article class="kb-entry" data-path="/17-系统设计/17-Agent平台设计">
+  <div class="entry-meta">
+    <div class="entry-domain"><a href="/?d=17">17-系统设计</a></div>
+    <h1>Agent Platform Design</h1>
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#["agent-platform"</span><span class="badge badge-tag">#"workflow"</span><span class="badge badge-tag">#"tool-market"</span><span class="badge badge-tag">#"dag"</span></div>
+    
+  </div>
+  <div class="entry-body"><h1>Agent平台设计</h1>
+<h2>概述</h2>
+<p>Agent平台是构建、运行、管理和监控AI Agent的基础设施。它不仅承载Agent的运行时执行，还提供Agent生命周期管理、工具市场、工作流编排、会话持久化和监控告警等完整的平台能力。本节从架构全景、核心子系统到REST API设计，全面深入Agent平台的系统设计。</p>
+<h2>一、平台架构全景图</h2>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌─────────────────────────────────────────────────────────────────────────────┐
+│                           Agent Platform                                     │
+│                                                                              │
+│  ┌─────────┐    ┌──────────────┐    ┌──────────────┐    ┌───────────────┐   │
+│  │  Agent  │───►│ Agent Runtime│───►│ Tool Market  │───►│   Monitor     │   │
+│  │ Builder │    │              │    │              │    │               │   │
+│  │         │    │ - Workflow   │    │ - Registry   │    │ - Metrics     │   │
+│  │ - UI    │    │   Engine     │    │ - Discovery  │    │ - Tracing     │   │
+│  │ - API   │    │ - Executor   │    │ - Billing    │    │ - Alerting    │   │
+│  │ - DSL   │    │ - Sandbox    │    │ - Audit      │    │ - Cost Track  │   │
+│  └─────────┘    └──────┬───────┘    └──────┬───────┘    └──────┬────────┘   │
+│                        │                  │                    │            │
+│                        ▼                  ▼                    ▼            │
+│  ┌──────────────────────────────────────────────────────────────────────┐   │
+│  │                       Infrastructure Layer                            │   │
+│  │                                                                       │   │
+│  │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐             │   │
+│  │  │PostgreSQL │  │  Redis   │  │  Kafka   │  │  MinIO   │             │   │
+│  │  │+pgvector  │  │ (Cache)  │  │ (Events)│  │ (Files)  │             │   │
+│  │  └──────────┘  └──────────┘  └──────────┘  └──────────┘             │   │
+│  └──────────────────────────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+用户 (User)
+  │
+  ▼
+Agent Builder (可视化/API/DSL)
+  │
+  ├─ 创建 Agent 定义 (System Prompt, Tools, Memory配置, 模型选择)
+  ├─ 测试 (Sandbox环境, 模拟对话)
+  ├─ 审核 (安全扫描, 权限审查, 合规检查)
+  ├─ 发布 (灰度 → 全量, 版本管理)
+  │
+  ▼
+Agent Runtime
+  │
+  ├─ 接收用户请求
+  ├─ 加载Agent定义和会话状态
+  ├─ 执行工作流 (DAG编排)
+  │   ├─ Tool Calling (串行/并行)
+  │   ├─ 条件分支 (if/switch)
+  │   ├─ 人工审批节点
+  │   └─ 错误重试
+  ├─ 流式返回结果
+  └─ 持久化会话状态
+</code></pre></div>
+<h2>二、Agent生命周期管理</h2>
+<h3>2.1 完整生命周期</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐   ┌──────────┐
+│  CREATE  │──►│   TEST   │──►│  REVIEW  │──►│ PUBLISH  │──►│ MONITOR  │
+└──────────┘   └──────────┘   └──────────┘   └──────────┘   └────┬─────┘
+     │              │              │              │               │
+     │              │              │              │         ┌─────▼─────┐
+     │              │              │              │         │  OFFLINE  │
+     │              │              │              │         └───────────┘
+     │              │              │              │
+     │              ▼              ▼              │
+     │         ┌──────────┐  ┌──────────┐         │
+     └────────►│  DRAFT   │◄─┤  REJECT  │◄────────┘
+               └──────────┘  └──────────┘
+</code></pre></div>
+<p><strong>各阶段详解</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>阶段</th>
+<th>操作</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>CREATE</td>
+<td>UI/API/DSL</td>
+<td>定义Agent的System Prompt、Tool列表、模型、Memory配置</td>
+</tr>
+<tr>
+<td>TEST</td>
+<td>Sandbox</td>
+<td>在隔离沙箱中测试Agent，使用模拟工具，避免副作用</td>
+</tr>
+<tr>
+<td>REVIEW</td>
+<td>安全+合规</td>
+<td>内容安全扫描、工具权限审查、合规检查</td>
+</tr>
+<tr>
+<td>PUBLISH</td>
+<td>灰度+全量</td>
+<td>灰度发布(10%→50%→100%)，支持版本回滚</td>
+</tr>
+<tr>
+<td>MONITOR</td>
+<td>指标+告警</td>
+<td>成功率、延迟、Token消耗、用户反馈</td>
+</tr>
+<tr>
+<td>OFFLINE</td>
+<td>归档</td>
+<td>保留历史数据，标记为已下线</td>
+</tr>
+</tbody></table>
+<h3>2.2 Agent定义DSL</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+ * Agent定义模型 — 声明式Agent配置。
+ */
+public record AgentDefinition(
+    String id,
+    String name,
+    String version,
+    String description,
+    String systemPrompt,               // System Prompt模板
+    List&lt;String&gt; toolNames,            // 绑定的工具列表
+    String modelName,                  // 默认模型
+    MemoryConfig memory,               // Memory配置
+    WorkflowConfig workflow,           // 工作流配置
+    Map&lt;String, Object&gt; metadata       // 扩展元数据
+) {
+    public record MemoryConfig(
+        String type,                    // &quot;sliding_window&quot; | &quot;vector&quot; | &quot;summary&quot;
+        int maxTokens,
+        int maxMessages,
+        boolean enableLongTermMemory
+    ) {}
+
+    public record WorkflowConfig(
+        String engineType,              // &quot;dag&quot; | &quot;temporal&quot; | &quot;camunda&quot;
+        Object dagDefinition,           // DAG DSL定义
+        boolean humanInTheLoop,
+        int maxRetries,
+        Duration stepTimeout
+    ) {}
+}
+</code></pre></div>
+<h3>2.3 Sandbox测试环境</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+ * Agent沙箱执行环境。
+ * 在隔离环境中测试Agent，使用Mock工具和Mock模型响应。
+ */
+@Service
+public class AgentSandbox {
+
+    private final MockToolExecutor mockTools;
+    private final MockModelClient mockModel;
+
+    /**
+     * 在沙箱中运行Agent测试用例。
+     */
+    public SandboxTestResult runTest(AgentDefinition agent,
+            List&lt;TestCase&gt; testCases) {
+        var results = new ArrayList&lt;TestCaseResult&gt;();
+
+        for (var testCase : testCases) {
+            var start = Instant.now();
+            var agent = buildAgentForSandbox(agent);
+
+            try {
+                var response = agent.run(testCase.userInput());
+                var passed = evaluateResponse(
+                    response, testCase.expectedBehaviors());
+                results.add(new TestCaseResult(
+                    testCase.name(), passed,
+                    response, null,
+                    Duration.between(start, Instant.now()).toMillis()
+                ));
+            } catch (Exception e) {
+                results.add(new TestCaseResult(
+                    testCase.name(), false,
+                    null, e.getMessage(),
+                    Duration.between(start, Instant.now()).toMillis()
+                ));
+            }
+        }
+
+        return new SandboxTestResult(
+            results,
+            results.stream().filter(TestCaseResult::passed).count(),
+            results.size()
+        );
+    }
+
+    public record TestCase(
+        String name,
+        String userInput,
+        List&lt;String&gt; expectedBehaviors  // 如: [&quot;调用tool:search&quot;, &quot;未调用tool:delete&quot;]
+    ) {}
+
+    public record TestCaseResult(
+        String name, boolean passed,
+        String response, String error, long durationMs
+    ) {}
+
+    public record SandboxTestResult(
+        List&lt;TestCaseResult&gt; results,
+        long passed, long total
+    ) {
+        public boolean allPassed() { return passed == total; }
+    }
+}
+</code></pre></div>
+<h2>三、Tool市场</h2>
+<h3>3.1 整体架构</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌─────────────────────────────────────────────────────────────────┐
+│                        Tool Market                               │
+│                                                                  │
+│  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐        │
+│  │ Tool Registry │   │ Tool Audit   │   │ Tool Billing │        │
+│  │              │   │              │   │              │        │
+│  │ - 注册/发现   │   │ - 安全扫描   │   │ - 按调用计费 │        │
+│  │ - 版本管理   │   │ - 权限审查   │   │ - 按Token计费│        │
+│  │ - 搜索/分类  │   │ - 合规检查   │   │ - 免费/付费  │        │
+│  │ - 评分/评价  │   │ - 沙箱测试   │   │ - 租户配额   │        │
+│  └──────────────┘   └──────────────┘   └──────────────┘        │
+│                                                                  │
+│  开发者 ───────► 上传Tool (JAR/JSON Schema)                       │
+│                    │                                             │
+│                    ▼                                             │
+│              审核管道 → 通过 → 发布到市场                           │
+│                         │                                        │
+│                         ▼                                        │
+│              Agent构建者 → 搜索/浏览 → 安装Tool                     │
+└─────────────────────────────────────────────────────────────────┘
+</code></pre></div>
+<h3>3.2 Tool注册与定义</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+ * Tool市场注册模型。
+ */
+@Entity
+@Table(name = &quot;tool_registry&quot;)
+public class ToolMarketEntry {
+
+    @Id
+    private String id;
+
+    @Column(unique = true, nullable = false)
+    private String name;
+
+    @Column(columnDefinition = &quot;TEXT&quot;)
+    private String description;
+
+    @Column(columnDefinition = &quot;JSONB&quot;)
+    private String jsonSchema;          // Tool参数JSON Schema
+
+    @Column(columnDefinition = &quot;JSONB&quot;)
+    private String outputSchema;        // Tool输出JSON Schema
+
+    private String version;
+
+    @ElementCollection
+    private List&lt;String&gt; tags;
+
+    @Enumerated(EnumType.STRING)
+    private ToolCategory category;
+
+    @Enumerated(EnumType.STRING)
+    private PricingModel pricingModel;  // FREE, PER_CALL, PER_TOKEN, SUBSCRIPTION
+
+    private double pricePerCall;        // 分/每次调用
+    private double pricePerThousandToken;
+
+    private String authorId;
+    private String authorName;
+
+    @Enumerated(EnumType.STRING)
+    private ReviewStatus reviewStatus;  // PENDING, APPROVED, REJECTED
+
+    private int downloads;
+    private double avgRating;           // 1-5
+    private int ratingCount;
+
+    private Instant createdAt;
+    private Instant updatedAt;
+
+    public enum ToolCategory {
+        DATA_QUERY, FILE_OPERATION, COMMUNICATION,
+        CODE_EXECUTION, AI_MODEL, EXTERNAL_API,
+        UTILITY, CUSTOM
+    }
+
+    public enum PricingModel {
+        FREE, PER_CALL, PER_TOKEN, SUBSCRIPTION
+    }
+
+    public enum ReviewStatus {
+        PENDING, APPROVED, REJECTED
+    }
+}
+</code></pre></div>
+<h3>3.3 Tool搜索与发现</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+ * Tool搜索引擎。
+ * 支持关键词搜索、标签过滤、分类浏览、评分排序。
+ */
+@Service
+public class ToolSearchService {
+
+    private final ToolMarketRepository repository;
+    private final PgVectorStore vectorStore;
+
+    /**
+     * 全文搜索 + 语义搜索 + 过滤条件。
+     */
+    public Page&lt;ToolMarketEntry&gt; search(ToolSearchRequest request) {
+        return repository.search(
+            request.keyword(),
+            request.tags(),
+            request.category(),
+            request.pricingModel(),
+            request.minRating(),
+            request.sortBy(),
+            PageRequest.of(request.page(), request.size())
+        );
+    }
+
+    /**
+     * 语义搜索：用自然语言描述找到最匹配的Tool。
+     */
+    public List&lt;ToolMarketEntry&gt; semanticSearch(
+            String description, int topK) {
+        // 对Tool描述做Embedding，与Query Embedding做相似度检索
+        return vectorStore.similaritySearch(
+            SearchRequest.query(embed(description))
+                .withTopK(topK)
+                .withSimilarityThreshold(0.7)
+        ).stream()
+        .map(doc -&gt; repository.findById(
+            UUID.fromString(doc.getId())).orElse(null))
+        .filter(Objects::nonNull)
+        .toList();
+    }
+
+    public record ToolSearchRequest(
+        String keyword,
+        List&lt;String&gt; tags,
+        ToolMarketEntry.ToolCategory category,
+        ToolMarketEntry.PricingModel pricingModel,
+        double minRating,
+        SortBy sortBy,
+        int page, int size
+    ) {}
+
+    public enum SortBy { RELEVANCE, DOWNLOADS, RATING, NEWEST, PRICE }
+}
+</code></pre></div>
+<h3>3.4 Tool计费</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+ * Tool按量计费服务。
+ */
+@Service
+public class ToolBillingService {
+
+    /**
+     * 记录工具调用并扣费。
+     */
+    @Transactional
+    public BillingResult charge(String tenantId, String toolName,
+            int callCount, int tokensUsed) {
+        var tool = toolRepo.findByName(toolName).orElseThrow();
+
+        var cost = switch (tool.getPricingModel()) {
+            case FREE -&gt; 0.0;
+            case PER_CALL -&gt; callCount * tool.getPricePerCall();
+            case PER_TOKEN -&gt; (tokensUsed / 1000.0)
+                * tool.getPricePerThousandToken();
+            case SUBSCRIPTION -&gt; 0.0;  // 订阅制，不计单次调用
+        };
+
+        // 更新租户账单
+        tenantBillingRepo.addCharge(tenantId, toolName, cost,
+            BillingPeriod.current());
+
+        return new BillingResult(cost, tool.getPricingModel());
+    }
+}
+</code></pre></div>
+<h2>四、工作流编排引擎</h2>
+<h3>4.1 DAG设计器</h3>
+<p>Agent平台提供两种DAG定义方式：可视化拖拽和DSL声明。</p>
+<p><strong>DSL定义示例</strong>：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-json">{
+  &quot;name&quot;: &quot;insurance_claim_agent&quot;,
+  &quot;nodes&quot;: [
+    {
+      &quot;id&quot;: &quot;start&quot;,
+      &quot;type&quot;: &quot;input&quot;,
+      &quot;description&quot;: &quot;接收用户理赔请求&quot;
+    },
+    {
+      &quot;id&quot;: &quot;verify_policy&quot;,
+      &quot;type&quot;: &quot;tool_call&quot;,
+      &quot;tool&quot;: &quot;query_policy&quot;,
+      &quot;description&quot;: &quot;验证保单有效性&quot;,
+      &quot;config&quot;: { &quot;timeout&quot;: &quot;10s&quot; }
+    },
+    {
+      &quot;id&quot;: &quot;check_claim&quot;,
+      &quot;type&quot;: &quot;condition&quot;,
+      &quot;description&quot;: &quot;检查保单状态是否可理赔&quot;,
+      &quot;condition&quot;: &quot;result.status == &#39;IN_FORCE&#39;&quot;,
+      &quot;true_branch&quot;: &quot;collect_docs&quot;,
+      &quot;false_branch&quot;: &quot;respond_invalid&quot;
+    },
+    {
+      &quot;id&quot;: &quot;collect_docs&quot;,
+      &quot;type&quot;: &quot;tool_call&quot;,
+      &quot;tool&quot;: &quot;ask_for_documents&quot;,
+      &quot;description&quot;: &quot;引导用户提交理赔材料&quot;
+    },
+    {
+      &quot;id&quot;: &quot;review_docs&quot;,
+      &quot;type&quot;: &quot;human_approval&quot;,
+      &quot;description&quot;: &quot;人工审核理赔材料&quot;,
+      &quot;config&quot;: { &quot;approver_role&quot;: &quot;claim_adjuster&quot; }
+    },
+    {
+      &quot;id&quot;: &quot;calculate_amount&quot;,
+      &quot;type&quot;: &quot;tool_call&quot;,
+      &quot;tool&quot;: &quot;calculate_claim_amount&quot;,
+      &quot;description&quot;: &quot;计算赔付金额&quot;
+    },
+    {
+      &quot;id&quot;: &quot;process_payment&quot;,
+      &quot;type&quot;: &quot;tool_call&quot;,
+      &quot;tool&quot;: &quot;initiate_payment&quot;,
+      &quot;description&quot;: &quot;发起赔付&quot;
+    },
+    {
+      &quot;id&quot;: &quot;end&quot;,
+      &quot;type&quot;: &quot;output&quot;,
+      &quot;description&quot;: &quot;返回理赔结果&quot;
+    }
+  ],
+  &quot;edges&quot;: [
+    {&quot;from&quot;: &quot;start&quot;, &quot;to&quot;: &quot;verify_policy&quot;},
+    {&quot;from&quot;: &quot;verify_policy&quot;, &quot;to&quot;: &quot;check_claim&quot;},
+    {&quot;from&quot;: &quot;collect_docs&quot;, &quot;to&quot;: &quot;review_docs&quot;},
+    {&quot;from&quot;: &quot;review_docs&quot;, &quot;to&quot;: &quot;calculate_amount&quot;},
+    {&quot;from&quot;: &quot;calculate_amount&quot;, &quot;to&quot;: &quot;process_payment&quot;},
+    {&quot;from&quot;: &quot;process_payment&quot;, &quot;to&quot;: &quot;end&quot;}
+  ],
+  &quot;error_handler&quot;: {
+    &quot;retry&quot;: {&quot;max_attempts&quot;: 3, &quot;backoff&quot;: &quot;exponential&quot;},
+    &quot;fallback_node&quot;: &quot;respond_error&quot;
+  }
+}
+</code></pre></div>
+<h3>4.2 DAG执行引擎</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+ * DAG工作流执行引擎。
+ * 支持条件分支、并行节点、人工审批、错误重试。
+ */
+@Service
+public class DagExecutionEngine {
+
+    private final Map&lt;String, NodeExecutor&gt; nodeExecutors = new HashMap&lt;&gt;();
+
+    public DagExecutionEngine() {
+        // 注册内置节点执行器
+        nodeExecutors.put(&quot;input&quot;, new InputNodeExecutor());
+        nodeExecutors.put(&quot;output&quot;, new OutputNodeExecutor());
+        nodeExecutors.put(&quot;tool_call&quot;, new ToolCallNodeExecutor());
+        nodeExecutors.put(&quot;condition&quot;, new ConditionNodeExecutor());
+        nodeExecutors.put(&quot;human_approval&quot;, new HumanApprovalNodeExecutor());
+        nodeExecutors.put(&quot;parallel&quot;, new ParallelNodeExecutor());
+        nodeExecutors.put(&quot;llm_call&quot;, new LlmCallNodeExecutor());
+    }
+
+    /**
+     * 执行DAG工作流。
+     */
+    public WorkflowResult execute(WorkflowDefinition dag,
+            WorkflowContext context) {
+        var state = new ExecutionState(dag, context);
+        var startNode = dag.getStartNode();
+
+        // 从起始节点开始，按拓扑序执行
+        executeNode(startNode, state);
+
+        return new WorkflowResult(
+            state.getFinalOutput(),
+            state.getExecutionPath(),
+            state.getDuration());
+    }
+
+    private void executeNode(Node node, ExecutionState state) {
+        var executor = nodeExecutors.get(node.type());
+        if (executor == null) {
+            throw new IllegalArgumentException(
+                &quot;Unknown node type: &quot; + node.type());
+        }
+
+        var startTime = Instant.now();
+
+        // 带重试的执行
+        for (int attempt = 0; attempt &lt;= node.maxRetries(); attempt++) {
+            try {
+                var result = executor.execute(node.config(),
+                    state.getContext());
+
+                state.recordNodeExecution(node.id(), result,
+                    Duration.between(startTime, Instant.now()));
+
+                // 确定下一个节点
+                var nextNode = determineNextNode(node, result);
+                if (nextNode != null) {
+                    executeNode(nextNode, state);  // 递归执行
+                }
+                return;
+
+            } catch (RetryableException e) {
+                if (attempt &lt; node.maxRetries()) {
+                    var backoff = Math.pow(2, attempt) * 1000;
+                    Thread.sleep((long) backoff);
+                } else {
+                    // 达到最大重试，进入错误处理
+                    var fallbackNode = state.getDag()
+                        .getFallbackNode(node.id());
+                    if (fallbackNode != null) {
+                        executeNode(fallbackNode, state);
+                    } else {
+                        throw e;
+                    }
+                }
+            }
+        }
+    }
+
+    private Node determineNextNode(Node currentNode,
+            NodeResult result) {
+        return switch (currentNode.type()) {
+            case &quot;condition&quot; -&gt; {
+                var condition = (String) currentNode.config()
+                    .get(&quot;condition&quot;);
+                var trueNodeId = (String) currentNode.config()
+                    .get(&quot;true_branch&quot;);
+                var falseNodeId = (String) currentNode.config()
+                    .get(&quot;false_branch&quot;);
+                yield evaluateCondition(condition, result)
+                    ? getNode(trueNodeId)
+                    : getNode(falseNodeId);
+            }
+            case &quot;parallel&quot; -&gt; {
+                // 并行节点的所有子节点都执行完成后才继续
+                yield awaitParallelCompletion(currentNode);
+            }
+            default -&gt; getNode(currentNode.nextNodeId());
+        };
+    }
+}
+</code></pre></div>
+<h3>4.3 Temporal/Camunda执行后端</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+ * Temporal工作流适配器 — 支持长时间运行的Agent工作流。
+ * 适用于需要数小时甚至数天才能完成的复杂Agent任务。
+ */
+public class TemporalWorkflowAdapter {
+
+    /**
+     * Temporal Workflow定义。
+     * @Workflow 注解标记为Temporal工作流
+     */
+    @WorkflowInterface
+    public interface AgentWorkflow {
+
+        @WorkflowMethod
+        WorkflowResult execute(AgentDefinition agent,
+                               String sessionId, String userInput);
+
+        @SignalMethod
+        void humanApproval(String nodeId, boolean approved,
+                           String comment);
+
+        @QueryMethod
+        WorkflowStatus getStatus();
+    }
+
+    /**
+     * Temporal Workflow实现。
+     * 利用Temporal的特性：
+     * - 自动重试和错误处理
+     * - 持久化执行状态（即使服务重启也能继续）
+     * - Saga模式的补偿事务
+     * - 超长执行时间（数天甚至数月）
+     */
+    public static class AgentWorkflowImpl implements AgentWorkflow {
+
+        private WorkflowStatus status = WorkflowStatus.RUNNING;
+        private final Map&lt;String, CompletableFuture&lt;Boolean&gt;&gt;
+            approvalFutures = new HashMap&lt;&gt;();
+
+        @Override
+        public WorkflowResult execute(AgentDefinition agent,
+                String sessionId, String userInput) {
+
+            // Step 1: 分析用户输入
+            var analysis = ActivityStub.analyze(userInput);
+
+            // Step 2: 执行DAG中的每个节点
+            for (var node : agent.workflow().nodes()) {
+                ActivityStub.executeNode(node);
+
+                if (node.type().equals(&quot;human_approval&quot;)) {
+                    // 等待人工审批（可能等待数小时）
+                    var approved = Workflow.await(
+                        () -&gt; approvalFutures.get(node.id()),
+                        Duration.ofHours(24)  // 最多等待24小时
+                    );
+                    if (!approved) {
+                        return WorkflowResult.rejected(node.id());
+                    }
+                }
+            }
+
+            // Step 3: 生成最终结果
+            status = WorkflowStatus.COMPLETED;
+            return ActivityStub.generateResult(sessionId);
+        }
+
+        @Override
+        public void humanApproval(String nodeId, boolean approved,
+                String comment) {
+            var future = approvalFutures.get(nodeId);
+            if (future != null) {
+                future.complete(approved);
+            }
+        }
+
+        @Override
+        public WorkflowStatus getStatus() {
+            return status;
+        }
+    }
+}
+</code></pre></div>
+<h2>五、会话持久化</h2>
+<h3>5.1 会话状态模型</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+ * Agent会话持久化。
+ * 支持断点续传和会话回放。
+ */
+@Entity
+@Table(name = &quot;agent_sessions&quot;)
+public class AgentSession {
+
+    @Id
+    private String id;
+
+    private String agentId;
+    private String userId;
+    private String tenantId;
+
+    @Enumerated(EnumType.STRING)
+    private SessionStatus status;  // ACTIVE, PAUSED, COMPLETED, ERROR
+
+    @Column(columnDefinition = &quot;JSONB&quot;)
+    private String messages;       // 完整对话消息列表
+
+    @Column(columnDefinition = &quot;JSONB&quot;)
+    private String workflowState;  // 工作流执行状态快照
+
+    @Column(columnDefinition = &quot;JSONB&quot;)
+    private String scratchpad;     // Agent Working Memory
+
+    private int totalTokens;
+    private double totalCost;
+
+    private String lastCheckpointId; // 最近的检查点ID
+
+    private Instant createdAt;
+    private Instant updatedAt;
+
+    public enum SessionStatus {
+        ACTIVE, PAUSED, COMPLETED, ERROR
+    }
+}
+</code></pre></div>
+<h3>5.2 断点续传</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+ * 会话检查点管理 — 实现断点续传。
+ */
+@Service
+public class SessionCheckpointService {
+
+    private final AgentSessionRepository sessionRepo;
+    private final RedisTemplate&lt;String, byte[]&gt; checkpointCache;
+
+    /**
+     * 创建检查点。
+     */
+    public void createCheckpoint(String sessionId,
+            CheckpointData data) {
+        // 1. 异步持久化到数据库
+        sessionRepo.updateCheckpoint(sessionId,
+            data.toJson(), Instant.now());
+
+        // 2. 热存到Redis（用于快速恢复）
+        checkpointCache.opsForValue().set(
+            &quot;checkpoint:&quot; + sessionId,
+            data.toJson().getBytes(),
+            Duration.ofHours(24)
+        );
+    }
+
+    /**
+     * 从最近的检查点恢复会话。
+     */
+    public Optional&lt;CheckpointData&gt; restoreFromCheckpoint(
+            String sessionId) {
+        // 1. 先从Redis热存中恢复
+        var cached = checkpointCache.opsForValue()
+            .get(&quot;checkpoint:&quot; + sessionId);
+        if (cached != null) {
+            return Optional.of(CheckpointData.fromJson(
+                new String(cached)));
+        }
+
+        // 2. 从数据库恢复
+        var session = sessionRepo.findById(sessionId).orElse(null);
+        if (session != null &amp;&amp; session.lastCheckpointId != null) {
+            return Optional.of(CheckpointData.fromJson(
+                session.workflowState));
+        }
+
+        return Optional.empty();
+    }
+
+    public record CheckpointData(
+        String currentNodeId,
+        Map&lt;String, Object&gt; variables,
+        List&lt;String&gt; completedSteps,
+        int currentRetryCount,
+        Instant timestamp
+    ) {
+        public String toJson() {
+            try {
+                return new ObjectMapper().writeValueAsString(this);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
+        public static CheckpointData fromJson(String json) {
+            try {
+                return new ObjectMapper()
+                    .readValue(json, CheckpointData.class);
+            } catch (Exception e) {
+                throw new RuntimeException(e);
+            }
+        }
+    }
+}
+</code></pre></div>
+<h3>5.3 会话回放</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+ * 会话回放服务 — 用于调试和审计。
+ */
+@Service
+public class SessionReplayService {
+
+    /**
+     * 按时间线回放会话的所有步骤。
+     */
+    public ReplayTimeline replay(String sessionId) {
+        var session = sessionRepo.findById(sessionId)
+            .orElseThrow();
+
+        var events = new ArrayList&lt;ReplayEvent&gt;();
+        var messages = parseMessages(session.messages);
+
+        for (int i = 0; i &lt; messages.size(); i++) {
+            var msg = messages.get(i);
+            events.add(new ReplayEvent(
+                i,
+                msg.role(),
+                msg.content(),
+                msg.toolCalls(),
+                msg.timestamp()
+            ));
+        }
+
+        return new ReplayTimeline(
+            session.id(),
+            session.agentId(),
+            session.userId(),
+            events,
+            session.totalTokens(),
+            session.totalCost(),
+            session.createdAt()
+        );
+    }
+
+    public record ReplayTimeline(
+        String sessionId,
+        String agentId,
+        String userId,
+        List&lt;ReplayEvent&gt; events,
+        int totalTokens,
+        double totalCost,
+        Instant startedAt
+    ) {}
+
+    public record ReplayEvent(
+        int sequence,
+        String role,
+        String content,
+        List&lt;ToolCall&gt; toolCalls,
+        Instant timestamp
+    ) {}
+
+    public record ToolCall(
+        String toolName,
+        Map&lt;String, Object&gt; arguments,
+        String result,
+        long durationMs
+    ) {}
+}
+</code></pre></div>
+<h2>六、监控告警</h2>
+<h3>6.1 Agent执行步骤可视化</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+ * Agent执行步骤追踪 — 生成Graph可视化数据。
+ */
+@Service
+public class AgentExecutionTracer {
+
+    private final Tracer tracer;
+
+    /**
+     * 为每个Agent步骤创建独立的Span。
+     */
+    public TraceSpan traceExecution(String agentId, String sessionId,
+            String stepName) {
+        var span = tracer.spanBuilder(&quot;agent.step&quot;)
+            .setAttribute(&quot;agent.id&quot;, agentId)
+            .setAttribute(&quot;session.id&quot;, sessionId)
+            .setAttribute(&quot;step.name&quot;, stepName)
+            .startSpan();
+        return new TraceSpan(span);
+    }
+
+    /**
+     * 生成Agent执行图数据（用于前端可视化）。
+     */
+    public ExecutionGraph generateExecutionGraph(String sessionId) {
+        var spans = querySpans(sessionId);
+
+        var nodes = new ArrayList&lt;GraphNode&gt;();
+        var edges = new ArrayList&lt;GraphEdge&gt;();
+
+        // 将Span转换为图节点和边
+        for (var span : spans) {
+            nodes.add(new GraphNode(
+                span.getSpanId(),
+                span.getAttribute(&quot;step.name&quot;),
+                span.getAttribute(&quot;step.type&quot;),
+                span.getAttribute(&quot;step.status&quot;),
+                span.getEndTime() - span.getStartTime()
+            ));
+
+            var parentId = span.getParentSpanId();
+            if (parentId != null) {
+                edges.add(new GraphEdge(
+                    parentId, span.getSpanId()));
+            }
+        }
+
+        return new ExecutionGraph(sessionId, nodes, edges);
+    }
+}
+</code></pre></div>
+<h3>6.2 异常检测与SLA监控</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+ * Agent异常检测和SLA监控。
+ */
+@Service
+public class AgentMonitoringService {
+
+    private final MeterRegistry meterRegistry;
+
+    /**
+     * 监控指标定义。
+     */
+    public void recordMetrics(String agentId, String sessionId,
+            ExecutionMetrics metrics) {
+        // 成功率
+        meterRegistry.counter(&quot;agent.execution&quot;,
+            &quot;agent_id&quot;, agentId,
+            &quot;status&quot;, metrics.success() ? &quot;success&quot; : &quot;failure&quot;
+        ).increment();
+
+        // 响应延迟
+        meterRegistry.timer(&quot;agent.latency&quot;,
+            &quot;agent_id&quot;, agentId
+        ).record(metrics.durationMs(), TimeUnit.MILLISECONDS);
+
+        // Token消耗
+        meterRegistry.counter(&quot;agent.tokens&quot;,
+            &quot;agent_id&quot;, agentId,
+            &quot;type&quot;, &quot;input&quot;
+        ).increment(metrics.inputTokens());
+        meterRegistry.counter(&quot;agent.tokens&quot;,
+            &quot;agent_id&quot;, agentId,
+            &quot;type&quot;, &quot;output&quot;
+        ).increment(metrics.outputTokens());
+
+        // 工具调用次数
+        meterRegistry.counter(&quot;agent.tool_calls&quot;,
+            &quot;agent_id&quot;, agentId
+        ).increment(metrics.toolCallCount());
+
+        // 成本
+        meterRegistry.counter(&quot;agent.cost&quot;,
+            &quot;agent_id&quot;, agentId
+        ).increment(metrics.cost());
+    }
+
+    /**
+     * SLA检查。
+     */
+    public void checkSla(String agentId) {
+        var p95Latency = meterRegistry.timer(&quot;agent.latency&quot;,
+            &quot;agent_id&quot;, agentId).takeSnapshot().percentileValue(0.95);
+        var successRate = getSuccessRate(agentId, Duration.ofHours(1));
+
+        // P95延迟告警
+        if (p95Latency &gt; Duration.ofSeconds(30).toNanos()) {
+            alertService.sendAlert(agentId,
+                STR.&quot;P95 latency \{p95Latency / 1_000_000}ms exceeds SLA (30s)&quot;);
+        }
+
+        // 成功率告警
+        if (successRate &lt; 0.95) {
+            alertService.sendAlert(agentId,
+                STR.&quot;Success rate \{successRate} below SLA (95%)&quot;);
+        }
+    }
+}
+</code></pre></div>
+<h2>七、完整REST API设计</h2>
+<h3>7.1 Agent管理API</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>POST   /api/v1/agents                    — 创建Agent
+GET    /api/v1/agents                    — Agent列表（分页+搜索）
+GET    /api/v1/agents/{id}               — Agent详情
+PUT    /api/v1/agents/{id}               — 更新Agent
+DELETE /api/v1/agents/{id}               — 删除Agent
+POST   /api/v1/agents/{id}/test          — 沙箱测试
+POST   /api/v1/agents/{id}/publish       — 发布Agent
+POST   /api/v1/agents/{id}/rollback      — 回滚Agent
+GET    /api/v1/agents/{id}/versions      — 版本历史
+POST   /api/v1/agents/{id}/offline       — 下线Agent
+</code></pre></div>
+<h3>7.2 会话管理API</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>POST   /api/v1/sessions                  — 创建会话
+POST   /api/v1/sessions/{id}/chat        — 发送消息（非流式）
+POST   /api/v1/sessions/{id}/chat/stream — 发送消息（SSE流式）
+GET    /api/v1/sessions/{id}/history     — 会话历史
+GET    /api/v1/sessions/{id}/replay      — 会话回放
+DELETE /api/v1/sessions/{id}             — 删除会话
+POST   /api/v1/sessions/{id}/pause       — 暂停会话
+POST   /api/v1/sessions/{id}/resume      — 恢复会话（断点续传）
+</code></pre></div>
+<h3>7.3 Tool市场API</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>GET    /api/v1/tools/market              — 工具市场列表
+GET    /api/v1/tools/market/search       — 搜索工具
+GET    /api/v1/tools/market/{id}         — 工具详情
+POST   /api/v1/tools/market              — 上传/注册工具
+POST   /api/v1/tools/market/{id}/review  — 审核工具
+GET    /api/v1/tools/market/{id}/ratings — 工具评分/评价
+POST   /api/v1/tools/market/{id}/install — 安装工具到Agent
+</code></pre></div>
+<h3>7.4 Spring Boot Controller实现骨架</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@RestController
+@RequestMapping(&quot;/api/v1/agents&quot;)
+public class AgentManagementController {
+
+    private final AgentService agentService;
+
+    @PostMapping
+    public ResponseEntity&lt;ApiResponse&lt;AgentVO&gt;&gt; create(
+            @Valid @RequestBody CreateAgentRequest request) {
+        var agent = agentService.create(request);
+        return ResponseEntity.status(CREATED)
+            .body(ApiResponse.success(AgentVO.from(agent)));
+    }
+
+    @GetMapping(&quot;/{id}&quot;)
+    public ResponseEntity&lt;ApiResponse&lt;AgentVO&gt;&gt; get(
+            @PathVariable String id) {
+        return ResponseEntity.ok(
+            ApiResponse.success(AgentVO.from(
+                agentService.findById(id))));
+    }
+
+    @PostMapping(&quot;/{id}/test&quot;)
+    public ResponseEntity&lt;ApiResponse&lt;SandboxTestResult&gt;&gt; test(
+            @PathVariable String id,
+            @RequestBody TestAgentRequest request) {
+        return ResponseEntity.ok(
+            ApiResponse.success(agentService.test(id, request)));
+    }
+
+    @PostMapping(&quot;/{id}/publish&quot;)
+    public ResponseEntity&lt;ApiResponse&lt;PublishResult&gt;&gt; publish(
+            @PathVariable String id,
+            @RequestBody PublishRequest request) {
+        return ResponseEntity.ok(
+            ApiResponse.success(agentService.publish(
+                id, request.grayPercentage())));
+    }
+}
+
+@RestController
+@RequestMapping(&quot;/api/v1/sessions&quot;)
+public class SessionController {
+
+    private final SessionService sessionService;
+
+    @PostMapping(&quot;/{id}/chat/stream&quot;)
+    public Flux&lt;ServerSentEvent&lt;String&gt;&gt; chatStream(
+            @PathVariable String id,
+            @RequestBody ChatRequest request) {
+        return sessionService.chatStream(id, request.message())
+            .map(chunk -&gt; ServerSentEvent.&lt;String&gt;builder()
+                .data(chunk)
+                .event(&quot;chunk&quot;)
+                .build())
+            .concatWith(Mono.just(
+                ServerSentEvent.&lt;String&gt;builder()
+                    .event(&quot;done&quot;)
+                    .build()));
+    }
+}
+</code></pre></div>
+<h2>八、最佳实践</h2>
+<ol>
+<li><strong>Agent Sandbox隔离</strong>：每次测试创建独立的沙箱环境，测试完成后自动销毁，防止数据污染</li>
+<li><strong>灰度发布策略</strong>：Agent发布采用10%→50%→100%灰度，每阶段观察15分钟，发现异常自动回滚</li>
+<li><strong>Tool市场评分机制</strong>：使用加权评分（近期评分权重更高），防止刷分</li>
+<li><strong>会话TTL</strong>：默认24小时无活动自动归档，企业版可配置更长</li>
+<li><strong>工作流幂等</strong>：所有Tool执行必须支持幂等调用，通过idempotency key保证</li>
+</ol>
+<h2>九、常见问题</h2>
+<p><strong>Q: Agent平台和RAG系统有什么关系？</strong>
+A: Agent平台通常依赖RAG系统作为其知识检索能力的基础。Agent平台的Tool市场中经常包含RAG检索工具。两者可以作为独立的微服务部署，通过MCP协议集成。</p>
+<p><strong>Q: Temporal vs Camunda如何选择？</strong>
+A: Temporal适合需要超长时间运行（数天到数月）、Saga补偿事务、多语言SDK支持的场景。Camunda适合Java原生环境、BPMN标准流程、轻量级嵌入式部署。对于大多数Agent工作流，建议从Spring Batch + Outbox模式起步。</p>
+<p><strong>Q: 工具市场如何处理工具的向后兼容？</strong>
+A: 工具注册时声明支持的API版本范围。Agent可绑定工具的特定版本。工具发布新版本时，旧版本保留至少6个月过渡期。</p>
+<h2>相关条目</h2>
+<ul>
+<li><a href="/17-系统设计/17-企业级RAG系统设计" class="cross-ref" data-ref="17-企业级RAG系统设计">17-企业级RAG系统设计</a> — 企业级RAG系统架构</li>
+<li><a href="/12-Agent工程/核心能力/12-工具生态管理" class="cross-ref" data-ref="12-工具生态管理">12-工具生态管理</a> — 工具发现、注册、版本管理</li>
+<li><a href="/12-Agent工程/协作模式/12-多Agent协作架构" class="cross-ref" data-ref="12-多Agent协作架构">12-多Agent协作架构</a> — 多Agent协作模式</li>
+<li><a href="/12-Agent工程/协作模式/12-Agent工作流与人机协作" class="cross-ref" data-ref="12-Agent工作流与人机协作">12-Agent工作流与人机协作</a> — Human-in-the-loop设计</li>
+<li><a href="/14-AI平台与LLMOps/14-模型网关与Prompt管理" class="cross-ref" data-ref="14-模型网关与Prompt管理">14-模型网关与Prompt管理</a> — 模型网关与路由策略</li>
+<li><a href="/13-AI协议/13-MCP协议与JavaSDK" class="cross-ref" data-ref="13-MCP协议与JavaSDK">13-MCP协议与JavaSDK</a> — MCP工具集成标准</li>
+</ul>
+</div>
+</article>
