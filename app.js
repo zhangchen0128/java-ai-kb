@@ -4,6 +4,15 @@ let searchIdx = null;
 let currentPath = null;
 let allEntries = [];
 
+// GitHub Pages repo name detection
+const isGHpages = location.hostname.includes('github.io');
+const BASE = isGHpages ? '/' + location.pathname.split('/')[1] : '';
+
+function fixPath(p) {
+  if (isGHpages && p.startsWith(BASE)) return p.slice(BASE.length) || '/';
+  return p;
+}
+
 // ===== DOM refs =====
 const $ = s => document.querySelector(s);
 const $$ = s => document.querySelectorAll(s);
@@ -58,14 +67,14 @@ backToTop.onclick = () => window.scrollTo({ top: 0, behavior: 'smooth' });
 // ===== Load Data =====
 async function loadNav() {
   if (navTree) return navTree;
-  const r = await fetch('/nav-tree.json');
+  const r = await fetch('nav-tree.json');
   navTree = await r.json();
   return navTree;
 }
 
 async function loadSearch() {
   if (searchIdx) return searchIdx;
-  const r = await fetch('/search-index.json');
+  const r = await fetch('search-index.json');
   searchIdx = await r.json();
   allEntries = searchIdx;
   return searchIdx;
@@ -185,7 +194,7 @@ async function navigate(path) {
     let contentPath = url === '/' || url === '' ? null : url;
     if (contentPath) {
       try {
-        const r = await fetch('/content' + contentPath + '.html');
+        const r = await fetch('content' + contentPath + '.html');
         if (!r.ok) throw new Error('Not found');
         const html = await r.text();
         articleEl.innerHTML = html;
@@ -268,13 +277,14 @@ document.addEventListener('click', e => {
   // Internal links only
   if (href.startsWith('/') && !href.startsWith('//')) {
     e.preventDefault();
-    history.pushState(null, '', href);
-    navigate(href);
+    const p = fixPath(href);
+    history.pushState(null, '', BASE + p);
+    navigate(p);
   }
 });
 
 // ===== PopState =====
-window.addEventListener('popstate', () => navigate(location.pathname + location.search));
+window.addEventListener('popstate', () => navigate(fixPath(location.pathname + location.search)));
 
 // ===== Search =====
 let searchTimeout;
@@ -354,8 +364,7 @@ async function init() {
   await loadSearch();
   renderNav();
   renderDomainGrid();
-  const path = location.pathname + location.search;
-  navigate(path === '/' ? '/' : path);
+  navigate(fixPath(location.pathname + location.search));
 }
 
 init();
