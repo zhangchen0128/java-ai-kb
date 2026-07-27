@@ -28,6 +28,9 @@ sources:
 relations:
   prerequisite:
   related:
+    - "03-Java应用平台/Spring核心/03-SpringBoot4深度解析"
+    - "03-Java应用平台/Web与安全/03-SpringMVC与SSE流式输出"
+    - "15-AI安全与治理/15-AI安全全面防护体系"
   derived: []
   contrast: []
   version-of: []

@@ -21,6 +21,9 @@ sources:
 relations:
   prerequisite:
   related:
+    - "03-Java应用平台/Spring核心/03-SpringBoot4深度解析"
+    - "03-Java应用平台/通信协议/03-WebFlux响应式编程"
+    - "03-Java应用平台/通信协议/03-WebSocket与gRPC通信"
   contrast:
 tags:
   - "spring-mvc"

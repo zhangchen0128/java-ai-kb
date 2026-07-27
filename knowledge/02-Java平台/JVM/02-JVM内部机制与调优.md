@@ -30,7 +30,7 @@ sources:
     description: "OpenJDK source code (HotSpot)"
 relations:
   prerequisite: ["01-数据结构与算法"]
-  related: ["02-Java并发深度解析", "02-Java性能诊断全指南"]
+  related: ["02-Java并发深度解析", "02-Java性能诊断全指南", "02-Java-IO模型深度解析"]
 tags: ["jvm", "gc", "jit", "graalvm", "zgc", "g1", "shenandoah", "class-loading", "performance", "tuning", "jfr", "jmc"]
 created: "2026-07-17"
 updated: "2026-07-17"

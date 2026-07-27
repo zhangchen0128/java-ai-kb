@@ -15,7 +15,7 @@ sources:
     description: "《Kafka: The Definitive Guide》— Confluent 官方指南"
 relations:
   prerequisite: ["01-分布式系统理论"]
-  related: ["04-Redis深度解析", "05-幂等设计与分布式锁"]
+  related: ["04-Redis深度解析", "05-幂等设计与分布式锁", "04-对象存储与中间件扩展"]
 tags: ["kafka", "partition", "consumer-group", "isr", "kraft", "spring-kafka", "cdc", "event-driven"]
 created: "2026-07-17"
 updated: "2026-07-17"
