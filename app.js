@@ -400,6 +400,9 @@ async function init() {
   await loadSearch();
   renderNav();
   renderDomainGrid();
+  // Handle 404 redirect recovery
+  const redirect = sessionStorage.getItem('redirect');
+  if (redirect) { sessionStorage.removeItem('redirect'); history.replaceState(null, '', redirect); }
   navigate(fixPath(location.pathname + location.search));
 }
 
