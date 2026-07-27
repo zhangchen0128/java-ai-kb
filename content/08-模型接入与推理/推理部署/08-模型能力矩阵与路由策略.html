@@ -1,576 +1,564 @@
 
-<article class="kb-entry" data-path="/08-模型接入与推理/推理部署/08-模型能力矩阵与路由策略">
+<article class="kb-entry" data-path="/08-模型接入与推理">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=08">08-模型接入与推理</a></div>
     <h1>Model Capability and Routing</h1>
-    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#model-capability</span><span class="badge badge-tag">#model-routing</span><span class="badge badge-tag">#cost-optimization</span><span class="badge badge-tag">#model-selection</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#model-capability</span><span class="badge badge-tag">#model-routing</span><span class="badge badge-tag">#cost-optimization</span><span class="badge badge-tag">#model-selection</span><span class="badge badge-tag">#fallback</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://artificialanalysis.ai/" target="_blank" rel="noopener" class="source-link" title="Artificial Analysis — 模型性能和成本对比">Artificial Analysis — 模型性能和成本对比</a><a href="https://chat.lmsys.org/" target="_blank" rel="noopener" class="source-link" title="Chatbot Arena Leaderboard">Chatbot Arena Leaderboard</a><a href="https://docs.spring.io/spring-ai/reference/" target="_blank" rel="noopener" class="source-link" title="Spring AI Model Routing">Spring AI Model Routing</a></small></div>
   </div>
-  <div class="entry-body"><h1>Model Capability and Routing</h1>
+  <div class="entry-body"><html><head></head><body><h1>Model Capability and Routing</h1>
 <h2>概述</h2>
-<p>截至 2026 年 7 月，LLM 市场已经从&quot;一家独大&quot;走向&quot;百花齐放&quot;。不同的模型在推理、代码、多语言、多模态、成本等维度各有优劣。选对模型可以显著降低成本同时保持甚至提升质量。本文提供模型能力矩阵、选型决策树和模型路由的工程实现。</p>
+<p>截至 2026 年 7 月，LLM 市场已经从"一家独大"走向"百花齐放"。不同的模型在推理、代码、多语言、多模态、成本等维度各有优劣。选对模型可以显著降低成本同时保持甚至提升质量。本文提供模型能力矩阵、选型决策树和模型路由的工程实现。</p>
 <h2>模型能力矩阵（2026年7月）</h2>
 <h3>旗舰推理模型</h3>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌──────────────────────────┬──────────┬──────────┬──────────┬──────────┬──────────┐
 │ 模型                      │ 推理能力  │ 代码能力  │ 中文能力  │ 上下文    │ 多模态   │
 ├──────────────────────────┼──────────┼──────────┼──────────┼──────────┼──────────┤
-│ Claude Opus 4.8          │ ★★★★★   │ ★★★★★   │ ★★★★    │ 200K     │ Vision   │
-│ GPT-5                     │ ★★★★★   │ ★★★★★   │ ★★★★½   │ 128K     │ Vision+  │
-│ Gemini 3 Ultra            │ ★★★★½   │ ★★★★½   │ ★★★★    │ 2M       │ Vision+  │
-│ Claude Sonnet 4.5         │ ★★★★½   │ ★★★★★   │ ★★★★    │ 200K     │ Vision   │
-│ Qwen3-235B               │ ★★★★½   │ ★★★★    │ ★★★★★   │ 128K     │ Vision   │
-│ DeepSeek-R1              │ ★★★★    │ ★★★★    │ ★★★★★   │ 128K     │ Text     │
+│ <span class="hljs-variable">Claude</span> <span class="hljs-variable">Opus</span> <span class="hljs-number">4.8</span>          │ ★★★★★   │ ★★★★★   │ ★★★★    │ <span class="hljs-number">200</span><span class="hljs-built_in">K</span>     │ <span class="hljs-variable">Vision</span>   │
+│ <span class="hljs-variable">GPT</span><span class="hljs-operator">-</span><span class="hljs-number">5</span>                     │ ★★★★★   │ ★★★★★   │ ★★★★½   │ <span class="hljs-number">128</span><span class="hljs-built_in">K</span>     │ <span class="hljs-variable">Vision</span><span class="hljs-operator">+</span>  │
+│ <span class="hljs-variable">Gemini</span> <span class="hljs-number">3</span> <span class="hljs-variable">Ultra</span>            │ ★★★★½   │ ★★★★½   │ ★★★★    │ <span class="hljs-number">2</span><span class="hljs-variable">M</span>       │ <span class="hljs-variable">Vision</span><span class="hljs-operator">+</span>  │
+│ <span class="hljs-variable">Claude</span> <span class="hljs-variable">Sonnet</span> <span class="hljs-number">4.5</span>         │ ★★★★½   │ ★★★★★   │ ★★★★    │ <span class="hljs-number">200</span><span class="hljs-built_in">K</span>     │ <span class="hljs-variable">Vision</span>   │
+│ <span class="hljs-variable">Qwen3</span><span class="hljs-operator">-</span><span class="hljs-number">235</span><span class="hljs-variable">B</span>               │ ★★★★½   │ ★★★★    │ ★★★★★   │ <span class="hljs-number">128</span><span class="hljs-built_in">K</span>     │ <span class="hljs-variable">Vision</span>   │
+│ <span class="hljs-variable">DeepSeek</span><span class="hljs-operator">-</span><span class="hljs-variable">R1</span>              │ ★★★★    │ ★★★★    │ ★★★★★   │ <span class="hljs-number">128</span><span class="hljs-built_in">K</span>     │ <span class="hljs-built_in">Text</span>     │
 └──────────────────────────┴──────────┴──────────┴──────────┴──────────┴──────────┘
-</code></pre></div>
-<h3>中端/高性价比模型</h3>
+</code></pre></div><h3>中端/高性价比模型</h3>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌──────────────────────────┬──────────┬──────────┬──────────┬──────────┬──────────┐
 │ 模型                      │ 推理能力  │ 代码能力  │ 中文能力  │ 上下文    │ 多模态   │
 ├──────────────────────────┼──────────┼──────────┼──────────┼──────────┼──────────┤
-│ Claude Haiku 4.5         │ ★★★★    │ ★★★★    │ ★★★★    │ 200K     │ Vision   │
-│ GPT-5 Mini               │ ★★★★    │ ★★★★½   │ ★★★★    │ 128K     │ Vision   │
-│ Gemini 3 Flash           │ ★★★★    │ ★★★★    │ ★★★★    │ 1M       │ Vision+  │
-│ DeepSeek-V3              │ ★★★★    │ ★★★★    │ ★★★★★   │ 128K     │ Text     │
-│ Qwen3-32B               │ ★★★½    │ ★★★½    │ ★★★★★   │ 128K     │ Text     │
-│ Mistral Large 3          │ ★★★★    │ ★★★★    │ ★★★½    │ 256K     │ Vision   │
+│ <span class="hljs-variable">Claude</span> <span class="hljs-variable">Haiku</span> <span class="hljs-number">4.5</span>         │ ★★★★    │ ★★★★    │ ★★★★    │ <span class="hljs-number">200</span><span class="hljs-built_in">K</span>     │ <span class="hljs-variable">Vision</span>   │
+│ <span class="hljs-variable">GPT</span><span class="hljs-operator">-</span><span class="hljs-number">5</span> <span class="hljs-variable">Mini</span>               │ ★★★★    │ ★★★★½   │ ★★★★    │ <span class="hljs-number">128</span><span class="hljs-built_in">K</span>     │ <span class="hljs-variable">Vision</span>   │
+│ <span class="hljs-variable">Gemini</span> <span class="hljs-number">3</span> <span class="hljs-variable">Flash</span>           │ ★★★★    │ ★★★★    │ ★★★★    │ <span class="hljs-number">1</span><span class="hljs-variable">M</span>       │ <span class="hljs-variable">Vision</span><span class="hljs-operator">+</span>  │
+│ <span class="hljs-variable">DeepSeek</span><span class="hljs-operator">-</span><span class="hljs-variable">V3</span>              │ ★★★★    │ ★★★★    │ ★★★★★   │ <span class="hljs-number">128</span><span class="hljs-built_in">K</span>     │ <span class="hljs-built_in">Text</span>     │
+│ <span class="hljs-variable">Qwen3</span><span class="hljs-operator">-</span><span class="hljs-number">32</span><span class="hljs-variable">B</span>               │ ★★★½    │ ★★★½    │ ★★★★★   │ <span class="hljs-number">128</span><span class="hljs-built_in">K</span>     │ <span class="hljs-built_in">Text</span>     │
+│ <span class="hljs-variable">Mistral</span> <span class="hljs-built_in">Large</span> <span class="hljs-number">3</span>          │ ★★★★    │ ★★★★    │ ★★★½    │ <span class="hljs-number">256</span><span class="hljs-built_in">K</span>     │ <span class="hljs-variable">Vision</span>   │
 └──────────────────────────┴──────────┴──────────┴──────────┴──────────┴──────────┘
-</code></pre></div>
-<h3>成本对比 (2026年7月参考)</h3>
+</code></pre></div><h3>成本对比 (2026年7月参考)</h3>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌──────────────────────────┬─────────────────┬─────────────────┬──────────────┐
-│ 模型                      │ $/1M input       │ $/1M output      │ 速度(Token/s)│
+│ 模型                      │ $<span class="hljs-regexp">/1M input       │ $/</span><span class="hljs-number">1</span>M output      │ 速度(Token/s)│
 ├──────────────────────────┼─────────────────┼─────────────────┼──────────────┤
-│ Claude Opus 4.8          │ $15.00          │ $75.00          │ ~80          │
-│ GPT-5                     │ $12.50          │ $50.00          │ ~100         │
-│ Claude Sonnet 4.5         │ $3.00           │ $15.00          │ ~120         │
-│ GPT-5 Mini               │ $0.75           │ $3.00           │ ~200         │
-│ Claude Haiku 4.5          │ $0.80           │ $4.00           │ ~180         │
-│ Gemini 3 Flash           │ $0.35           │ $1.05           │ ~250         │
-│ DeepSeek-V3              │ $0.27           │ $1.10           │ ~60          │
-│ Qwen3-32B (自托管)       │ N/A             │ N/A             │ ~100-200     │
+│ Claude Opus <span class="hljs-number">4.8</span>          │ <span class="hljs-variable">$15</span>.<span class="hljs-number">00</span>          │ <span class="hljs-variable">$75</span>.<span class="hljs-number">00</span>          │ ~<span class="hljs-number">80</span>          │
+│ GPT-<span class="hljs-number">5</span>                     │ <span class="hljs-variable">$12</span>.<span class="hljs-number">50</span>          │ <span class="hljs-variable">$50</span>.<span class="hljs-number">00</span>          │ ~<span class="hljs-number">100</span>         │
+│ Claude Sonnet <span class="hljs-number">4.5</span>         │ <span class="hljs-variable">$3</span>.<span class="hljs-number">00</span>           │ <span class="hljs-variable">$15</span>.<span class="hljs-number">00</span>          │ ~<span class="hljs-number">120</span>         │
+│ GPT-<span class="hljs-number">5</span> Mini               │ <span class="hljs-variable">$0</span>.<span class="hljs-number">75</span>           │ <span class="hljs-variable">$3</span>.<span class="hljs-number">00</span>           │ ~<span class="hljs-number">200</span>         │
+│ Claude Haiku <span class="hljs-number">4.5</span>          │ <span class="hljs-variable">$0</span>.<span class="hljs-number">80</span>           │ <span class="hljs-variable">$4</span>.<span class="hljs-number">00</span>           │ ~<span class="hljs-number">180</span>         │
+│ Gemini <span class="hljs-number">3</span> Flash           │ <span class="hljs-variable">$0</span>.<span class="hljs-number">35</span>           │ <span class="hljs-variable">$1</span>.<span class="hljs-number">05</span>           │ ~<span class="hljs-number">250</span>         │
+│ DeepSeek-V3              │ <span class="hljs-variable">$0</span>.<span class="hljs-number">27</span>           │ <span class="hljs-variable">$1</span>.<span class="hljs-number">10</span>           │ ~<span class="hljs-number">60</span>          │
+│ Qwen3-<span class="hljs-number">32</span>B (自托管)       │ N<span class="hljs-regexp">/A             │ N/</span>A             │ ~<span class="hljs-number">100</span>-<span class="hljs-number">200</span>     │
 └──────────────────────────┴─────────────────┴─────────────────┴──────────────┘
-</code></pre></div>
-<blockquote>
+</code></pre></div><blockquote>
 <p>注：价格为 2026 年 7 月参考值，实际价格以各 Provider 官网为准。自托管模型成本为 GPU 实例费用，取决于部署方式。</p>
 </blockquote>
 <h3>特长对比</h3>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>推理/分析 (复杂多步推理)：
-  第1梯队: Claude Opus 4.8, GPT-5
-  第2梯队: DeepSeek-R1, Claude Sonnet 4.5, Qwen3-235B
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-attribute">推理/分析 (复杂多步推理)：
+  第1梯队</span><span class="hljs-punctuation">:</span> <span class="hljs-string">Claude Opus 4.8, GPT-5</span>
+  <span class="hljs-attribute">第2梯队</span><span class="hljs-punctuation">:</span> <span class="hljs-string">DeepSeek-R1, Claude Sonnet 4.5, Qwen3-235B</span>
 
-代码生成 (HumanEval/SWE-bench)：
-  第1梯队: Claude Opus 4.8, GPT-5, Claude Sonnet 4.5
-  第2梯队: GPT-5 Mini, DeepSeek-V3, Qwen3-32B
+<span class="hljs-attribute">代码生成 (HumanEval/SWE-bench)：
+  第1梯队</span><span class="hljs-punctuation">:</span> <span class="hljs-string">Claude Opus 4.8, GPT-5, Claude Sonnet 4.5</span>
+  <span class="hljs-attribute">第2梯队</span><span class="hljs-punctuation">:</span> <span class="hljs-string">GPT-5 Mini, DeepSeek-V3, Qwen3-32B</span>
 
-中文能力：
-  第1梯队: Qwen3-235B, DeepSeek-R1/V3
-  第2梯队: GPT-5, Claude Opus 4.8 (中文很强但不如国产)
+<span class="hljs-attribute">中文能力：
+  第1梯队</span><span class="hljs-punctuation">:</span> <span class="hljs-string">Qwen3-235B, DeepSeek-R1/V3</span>
+  <span class="hljs-attribute">第2梯队</span><span class="hljs-punctuation">:</span> <span class="hljs-string">GPT-5, Claude Opus 4.8 (中文很强但不如国产)</span>
 
-超长上下文 (&gt; 200K)：
-  Gemini 3 Ultra: 2M (当前最长)
-  Claude 系列: 200K
-  Mistral Large 3: 256K
+<span class="hljs-attribute">超长上下文 (&gt; 200K)：
+  Gemini 3 Ultra</span><span class="hljs-punctuation">:</span> <span class="hljs-string">2M (当前最长)</span>
+  <span class="hljs-attribute">Claude 系列</span><span class="hljs-punctuation">:</span> <span class="hljs-string">200K</span>
+  <span class="hljs-attribute">Mistral Large 3</span><span class="hljs-punctuation">:</span> <span class="hljs-string">256K</span>
   
-多语言支持 (非中英文)：
-  日韩: GPT-5 ≈ Claude ≈ Gemini
-  欧洲语言: Mistral &gt; GPT-5 &gt; Claude
-  阿拉伯/印地语: GPT-5 &gt; Gemini &gt; Claude
-</code></pre></div>
-<h2>模型选型决策树</h2>
+<span class="hljs-attribute">多语言支持 (非中英文)：
+  日韩</span><span class="hljs-punctuation">:</span> <span class="hljs-string">GPT-5 ≈ Claude ≈ Gemini</span>
+  <span class="hljs-attribute">欧洲语言</span><span class="hljs-punctuation">:</span> <span class="hljs-string">Mistral &gt; GPT-5 &gt; Claude</span>
+  <span class="hljs-attribute">阿拉伯/印地语</span><span class="hljs-punctuation">:</span> <span class="hljs-string">GPT-5 &gt; Gemini &gt; Claude</span>
+</code></pre></div><h2>模型选型决策树</h2>
 <h3>按场景选择</h3>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>你的使用场景是什么？
 
 ├── 简单任务（分类、提取、格式化）
-│   └── 小模型即可 (Haiku 4.5 / GPT-5 Mini / Qwen3-7B)
+│   └── 小模型即可 (Haiku 4.5 / GPT<span class="hljs-string">-5</span> Mini / Qwen3<span class="hljs-string">-7</span>B)
 │       成本极低，延迟极小
 │       示例：情感分析、命名实体识别、JSON格式化
 │
 ├── 代码生成/代码审查
-│   ├── 简单代码 → GPT-5 Mini / Claude Haiku 4.5
+│   ├── 简单代码 → GPT<span class="hljs-string">-5</span> Mini / Claude Haiku 4.5
 │   ├── 复杂代码/架构 → Claude Opus 4.8 / Claude Sonnet 4.5
 │   └── 中文代码注释/文档 → DeepSeek-V3 / Qwen3
 │
 ├── 长文档理解 (&gt;50页)
 │   ├── 200K 以内 → Claude 系列 (200K 原生)
-│   ├── 200K-2M → Gemini 3 (2M 上下文)
+│   ├── 200K<span class="hljs-string">-2</span>M → Gemini 3 (2M 上下文)
 │   └── 极高精度需求 → Claude (长文档理解公认最强)
 │
 ├── 中文为主场景
-│   ├── 高精度 → Qwen3-235B / DeepSeek-V3
+│   ├── 高精度 → Qwen3<span class="hljs-string">-235</span>B / DeepSeek-V3
 │   ├── 性价比 → DeepSeek-V3 (极低成本)
-│   └── 闭源 → GPT-5 (中文很强)
+│   └── 闭源 → GPT<span class="hljs-string">-5</span> (中文很强)
 │
 ├── 多模态理解 (含图片)
-│   ├── Vision 精度 → GPT-5 ≈ Claude Sonnet
-│   ├── 多模态+推理 → GPT-5 (最强多模态推理)
-│   └── 性价比 → GPT-5 Mini / Gemini Flash
+│   ├── Vision 精度 → GPT<span class="hljs-string">-5</span> ≈ Claude Sonnet
+│   ├── 多模态+推理 → GPT<span class="hljs-string">-5</span> (最强多模态推理)
+│   └── 性价比 → GPT<span class="hljs-string">-5</span> Mini / Gemini Flash
 │
 ├── 工具调用 (Agent)
 │   ├── 最佳准确率 → Claude Sonnet 4.5 (Tool Calling 最强)
-│   ├── 性价比 → GPT-5 Mini
-│   └── 并行工具调用 → GPT-5
+│   ├── 性价比 → GPT<span class="hljs-string">-5</span> Mini
+│   └── 并行工具调用 → GPT<span class="hljs-string">-5</span>
 │
 ├── 创意写作
 │   ├── 英文创意 → Claude Opus 4.8
-│   ├── 中文创意 → GPT-5 / Qwen3
-│   └── 多语言创意 → GPT-5
+│   ├── 中文创意 → GPT<span class="hljs-string">-5</span> / Qwen3
+│   └── 多语言创意 → GPT<span class="hljs-string">-5</span>
 │
 └── 翻译
-    ├── 高质量翻译 → GPT-5 / DeepSeek-V3
-    └── 批量低成本 → GPT-5 Mini / Qwen3
-</code></pre></div>
-<h3>按成本约束选择</h3>
+    ├── 高质量翻译 → GPT<span class="hljs-string">-5</span> / DeepSeek-V3
+    └── 批量低成本 → GPT<span class="hljs-string">-5</span> Mini / Qwen3
+</code></pre></div><h3>按成本约束选择</h3>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>你的预算约束？
 
 ├── 无预算限制 → 默认 Claude Opus 4.8 (质量最高)
 │
-├── 中等预算 (降低50-70%成本)
-│   └── Claude Sonnet 4.5 / GPT-5 Mini
+├── 中等预算 (降低50<span class="hljs-string">-70</span>%成本)
+│   └── Claude Sonnet 4.5 / GPT<span class="hljs-string">-5</span> Mini
 │       对 80% 任务质量无显著差异
 │
-├── 严格预算 (降低80-90%成本)
+├── 严格预算 (降低80<span class="hljs-string">-90</span>%成本)
 │   └── DeepSeek-V3 (中文场景)
-│       或 GPT-5 Mini / Gemini Flash (通用)
+│       或 GPT<span class="hljs-string">-5</span> Mini / Gemini Flash (通用)
 │
 └── 近乎零成本
-    └── 自托管开源模型 (Qwen3-7B/32B, Llama 3.1)
+    └── 自托管开源模型 (Qwen3<span class="hljs-string">-7</span>B/32B, Llama 3.1)
         使用 vLLM / Ollama
-</code></pre></div>
-<h2>模型路由策略</h2>
+</code></pre></div><h2>模型路由策略</h2>
 <h3>1. 能力路由（Capability-based Routing）</h3>
 <p>按任务类型自动分发到最合适的模型。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.util.*;
-import java.util.function.Predicate;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> java.util.*;
+<span class="hljs-keyword">import</span> java.util.function.Predicate;
 
-/**
+<span class="hljs-comment">/**
  * 能力路由：根据任务类型选择模型
- */
-public class CapabilityBasedRouter {
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">CapabilityBasedRouter</span> {
 
-    public enum TaskType {
-        CODE_GENERATION(&quot;代码生成/审查&quot;),
-        DOCUMENT_ANALYSIS(&quot;长文档分析&quot;),
-        CHINESE_TASK(&quot;中文为主任务&quot;),
-        SIMPLE_EXTRACTION(&quot;简单提取/分类&quot;),
-        TOOL_CALLING(&quot;工具调用/Agent&quot;),
-        CREATIVE_WRITING(&quot;创意写作&quot;),
-        GENERAL(&quot;通用对话&quot;);
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">enum</span> <span class="hljs-title class_">TaskType</span> {
+        CODE_GENERATION(<span class="hljs-string">"代码生成/审查"</span>),
+        DOCUMENT_ANALYSIS(<span class="hljs-string">"长文档分析"</span>),
+        CHINESE_TASK(<span class="hljs-string">"中文为主任务"</span>),
+        SIMPLE_EXTRACTION(<span class="hljs-string">"简单提取/分类"</span>),
+        TOOL_CALLING(<span class="hljs-string">"工具调用/Agent"</span>),
+        CREATIVE_WRITING(<span class="hljs-string">"创意写作"</span>),
+        GENERAL(<span class="hljs-string">"通用对话"</span>);
 
-        private final String description;
-        TaskType(String desc) { this.description = desc; }
+        <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> String description;
+        TaskType(String desc) { <span class="hljs-built_in">this</span>.description = desc; }
     }
 
-    public record RouteConfig(
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">RouteConfig</span><span class="hljs-params">(
         String modelId,
         String provider,
         TaskType taskType,
-        int priority  // 同类型有多个候选时按优先级
-    ) {}
+        <span class="hljs-type">int</span> priority  // 同类型有多个候选时按优先级
+    )</span> {}
 
-    /**
+    <span class="hljs-comment">/**
      * 模型路由表
-     */
-    public static final Map&lt;TaskType, List&lt;RouteConfig&gt;&gt; ROUTING_TABLE = Map.of(
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> Map&lt;TaskType, List&lt;RouteConfig&gt;&gt; ROUTING_TABLE = Map.of(
         TaskType.CODE_GENERATION, List.of(
-            new RouteConfig(&quot;claude-sonnet-4-20250514&quot;, &quot;anthropic&quot;, TaskType.CODE_GENERATION, 1),
-            new RouteConfig(&quot;claude-opus-4-20250514&quot;, &quot;anthropic&quot;, TaskType.CODE_GENERATION, 2),
-            new RouteConfig(&quot;gpt-5&quot;, &quot;openai&quot;, TaskType.CODE_GENERATION, 3)
+            <span class="hljs-keyword">new</span> <span class="hljs-title class_">RouteConfig</span>(<span class="hljs-string">"claude-sonnet-4-20250514"</span>, <span class="hljs-string">"anthropic"</span>, TaskType.CODE_GENERATION, <span class="hljs-number">1</span>),
+            <span class="hljs-keyword">new</span> <span class="hljs-title class_">RouteConfig</span>(<span class="hljs-string">"claude-opus-4-20250514"</span>, <span class="hljs-string">"anthropic"</span>, TaskType.CODE_GENERATION, <span class="hljs-number">2</span>),
+            <span class="hljs-keyword">new</span> <span class="hljs-title class_">RouteConfig</span>(<span class="hljs-string">"gpt-5"</span>, <span class="hljs-string">"openai"</span>, TaskType.CODE_GENERATION, <span class="hljs-number">3</span>)
         ),
         TaskType.CHINESE_TASK, List.of(
-            new RouteConfig(&quot;deepseek-v3&quot;, &quot;deepseek&quot;, TaskType.CHINESE_TASK, 1),
-            new RouteConfig(&quot;qwen3-235b&quot;, &quot;self-hosted&quot;, TaskType.CHINESE_TASK, 2),
-            new RouteConfig(&quot;gpt-5&quot;, &quot;openai&quot;, TaskType.CHINESE_TASK, 3)
+            <span class="hljs-keyword">new</span> <span class="hljs-title class_">RouteConfig</span>(<span class="hljs-string">"deepseek-v3"</span>, <span class="hljs-string">"deepseek"</span>, TaskType.CHINESE_TASK, <span class="hljs-number">1</span>),
+            <span class="hljs-keyword">new</span> <span class="hljs-title class_">RouteConfig</span>(<span class="hljs-string">"qwen3-235b"</span>, <span class="hljs-string">"self-hosted"</span>, TaskType.CHINESE_TASK, <span class="hljs-number">2</span>),
+            <span class="hljs-keyword">new</span> <span class="hljs-title class_">RouteConfig</span>(<span class="hljs-string">"gpt-5"</span>, <span class="hljs-string">"openai"</span>, TaskType.CHINESE_TASK, <span class="hljs-number">3</span>)
         ),
         TaskType.SIMPLE_EXTRACTION, List.of(
-            new RouteConfig(&quot;claude-haiku-4-5&quot;, &quot;anthropic&quot;, TaskType.SIMPLE_EXTRACTION, 1),
-            new RouteConfig(&quot;gpt-5-mini&quot;, &quot;openai&quot;, TaskType.SIMPLE_EXTRACTION, 2),
-            new RouteConfig(&quot;gemini-3-flash&quot;, &quot;google&quot;, TaskType.SIMPLE_EXTRACTION, 3)
+            <span class="hljs-keyword">new</span> <span class="hljs-title class_">RouteConfig</span>(<span class="hljs-string">"claude-haiku-4-5"</span>, <span class="hljs-string">"anthropic"</span>, TaskType.SIMPLE_EXTRACTION, <span class="hljs-number">1</span>),
+            <span class="hljs-keyword">new</span> <span class="hljs-title class_">RouteConfig</span>(<span class="hljs-string">"gpt-5-mini"</span>, <span class="hljs-string">"openai"</span>, TaskType.SIMPLE_EXTRACTION, <span class="hljs-number">2</span>),
+            <span class="hljs-keyword">new</span> <span class="hljs-title class_">RouteConfig</span>(<span class="hljs-string">"gemini-3-flash"</span>, <span class="hljs-string">"google"</span>, TaskType.SIMPLE_EXTRACTION, <span class="hljs-number">3</span>)
         ),
         TaskType.GENERAL, List.of(
-            new RouteConfig(&quot;claude-sonnet-4-20250514&quot;, &quot;anthropic&quot;, TaskType.GENERAL, 1)
+            <span class="hljs-keyword">new</span> <span class="hljs-title class_">RouteConfig</span>(<span class="hljs-string">"claude-sonnet-4-20250514"</span>, <span class="hljs-string">"anthropic"</span>, TaskType.GENERAL, <span class="hljs-number">1</span>)
         )
     );
 
-    /**
+    <span class="hljs-comment">/**
      * 根据任务类型路由
-     */
-    public RouteConfig route(TaskType taskType) {
-        var candidates = ROUTING_TABLE.getOrDefault(taskType,
+     */</span>
+    <span class="hljs-keyword">public</span> RouteConfig <span class="hljs-title function_">route</span><span class="hljs-params">(TaskType taskType)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">candidates</span> <span class="hljs-operator">=</span> ROUTING_TABLE.getOrDefault(taskType,
             ROUTING_TABLE.get(TaskType.GENERAL));
 
-        return candidates.stream()
+        <span class="hljs-keyword">return</span> candidates.stream()
             .min(Comparator.comparingInt(RouteConfig::priority))
-            .orElseThrow(() -&gt; new IllegalStateException(
-                &quot;No route for task type: &quot; + taskType));
+            .orElseThrow(() -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">IllegalStateException</span>(
+                <span class="hljs-string">"No route for task type: "</span> + taskType));
     }
 }
-</code></pre></div>
-<h3>2. 成本路由（Cost-based Routing）</h3>
+</code></pre></div><h3>2. 成本路由（Cost-based Routing）</h3>
 <p>在预算范围内自动选择最优模型。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">/**
  * 成本路由：在预算约束下选择最优模型
- */
-public class CostBasedRouter {
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">CostBasedRouter</span> {
 
-    public record ModelInfo(
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">ModelInfo</span><span class="hljs-params">(
         String modelId,
-        double inputPricePer1M,
-        double outputPricePer1M,
-        double qualityScore,     // 1-10 质量评级
-        int contextWindow,
-        boolean available         // 当前是否可用
-    ) {
-        /**
+        <span class="hljs-type">double</span> inputPricePer1M,
+        <span class="hljs-type">double</span> outputPricePer1M,
+        <span class="hljs-type">double</span> qualityScore,     // 1-10 质量评级
+        <span class="hljs-type">int</span> contextWindow,
+        <span class="hljs-type">boolean</span> available         // 当前是否可用
+    )</span> {
+        <span class="hljs-comment">/**
          * 性价比 = 质量 / 成本
-         */
-        public double qualityCostRatio(int estimatedTokens) {
-            double estimatedCost = (estimatedTokens / 1_000_000.0) *
-                (inputPricePer1M + outputPricePer1M) / 2;
-            return qualityScore / Math.max(estimatedCost, 0.0001);
+         */</span>
+        <span class="hljs-keyword">public</span> <span class="hljs-type">double</span> <span class="hljs-title function_">qualityCostRatio</span><span class="hljs-params">(<span class="hljs-type">int</span> estimatedTokens)</span> {
+            <span class="hljs-type">double</span> <span class="hljs-variable">estimatedCost</span> <span class="hljs-operator">=</span> (estimatedTokens / <span class="hljs-number">1_000_000.0</span>) *
+                (inputPricePer1M + outputPricePer1M) / <span class="hljs-number">2</span>;
+            <span class="hljs-keyword">return</span> qualityScore / Math.max(estimatedCost, <span class="hljs-number">0.0001</span>);
         }
     }
 
-    private final List&lt;ModelInfo&gt; models = List.of(
-        new ModelInfo(&quot;claude-opus-4-20250514&quot;, 15.0, 75.0, 9.5, 200_000, true),
-        new ModelInfo(&quot;claude-sonnet-4-20250514&quot;, 3.0, 15.0, 9.0, 200_000, true),
-        new ModelInfo(&quot;claude-haiku-4-5&quot;, 0.8, 4.0, 8.0, 200_000, true),
-        new ModelInfo(&quot;gpt-5&quot;, 12.5, 50.0, 9.3, 128_000, true),
-        new ModelInfo(&quot;gpt-5-mini&quot;, 0.75, 3.0, 8.2, 128_000, true),
-        new ModelInfo(&quot;deepseek-v3&quot;, 0.27, 1.10, 8.5, 128_000, true),
-        new ModelInfo(&quot;qwen3-32b-self-host&quot;, 0, 0, 7.5, 128_000, true)
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> List&lt;ModelInfo&gt; models = List.of(
+        <span class="hljs-keyword">new</span> <span class="hljs-title class_">ModelInfo</span>(<span class="hljs-string">"claude-opus-4-20250514"</span>, <span class="hljs-number">15.0</span>, <span class="hljs-number">75.0</span>, <span class="hljs-number">9.5</span>, <span class="hljs-number">200_000</span>, <span class="hljs-literal">true</span>),
+        <span class="hljs-keyword">new</span> <span class="hljs-title class_">ModelInfo</span>(<span class="hljs-string">"claude-sonnet-4-20250514"</span>, <span class="hljs-number">3.0</span>, <span class="hljs-number">15.0</span>, <span class="hljs-number">9.0</span>, <span class="hljs-number">200_000</span>, <span class="hljs-literal">true</span>),
+        <span class="hljs-keyword">new</span> <span class="hljs-title class_">ModelInfo</span>(<span class="hljs-string">"claude-haiku-4-5"</span>, <span class="hljs-number">0.8</span>, <span class="hljs-number">4.0</span>, <span class="hljs-number">8.0</span>, <span class="hljs-number">200_000</span>, <span class="hljs-literal">true</span>),
+        <span class="hljs-keyword">new</span> <span class="hljs-title class_">ModelInfo</span>(<span class="hljs-string">"gpt-5"</span>, <span class="hljs-number">12.5</span>, <span class="hljs-number">50.0</span>, <span class="hljs-number">9.3</span>, <span class="hljs-number">128_000</span>, <span class="hljs-literal">true</span>),
+        <span class="hljs-keyword">new</span> <span class="hljs-title class_">ModelInfo</span>(<span class="hljs-string">"gpt-5-mini"</span>, <span class="hljs-number">0.75</span>, <span class="hljs-number">3.0</span>, <span class="hljs-number">8.2</span>, <span class="hljs-number">128_000</span>, <span class="hljs-literal">true</span>),
+        <span class="hljs-keyword">new</span> <span class="hljs-title class_">ModelInfo</span>(<span class="hljs-string">"deepseek-v3"</span>, <span class="hljs-number">0.27</span>, <span class="hljs-number">1.10</span>, <span class="hljs-number">8.5</span>, <span class="hljs-number">128_000</span>, <span class="hljs-literal">true</span>),
+        <span class="hljs-keyword">new</span> <span class="hljs-title class_">ModelInfo</span>(<span class="hljs-string">"qwen3-32b-self-host"</span>, <span class="hljs-number">0</span>, <span class="hljs-number">0</span>, <span class="hljs-number">7.5</span>, <span class="hljs-number">128_000</span>, <span class="hljs-literal">true</span>)
     );
 
-    /**
+    <span class="hljs-comment">/**
      * 在预算内选性价比最高的模型
-     * @param estimatedTokens 预估总 token 数
-     * @param maxBudget 最大预算（美元）
-     * @param minQuality 最低质量要求
-     */
-    public Optional&lt;ModelInfo&gt; selectBestWithinBudget(
-            int estimatedTokens, double maxBudget, double minQuality) {
+     * <span class="hljs-doctag">@param</span> estimatedTokens 预估总 token 数
+     * <span class="hljs-doctag">@param</span> maxBudget 最大预算（美元）
+     * <span class="hljs-doctag">@param</span> minQuality 最低质量要求
+     */</span>
+    <span class="hljs-keyword">public</span> Optional&lt;ModelInfo&gt; <span class="hljs-title function_">selectBestWithinBudget</span><span class="hljs-params">(
+            <span class="hljs-type">int</span> estimatedTokens, <span class="hljs-type">double</span> maxBudget, <span class="hljs-type">double</span> minQuality)</span> {
 
-        return models.stream()
+        <span class="hljs-keyword">return</span> models.stream()
             .filter(ModelInfo::available)
             .filter(m -&gt; m.qualityScore() &gt;= minQuality)
             .filter(m -&gt; {
-                double cost = estimatedTokens / 1_000_000.0 *
-                    (m.inputPricePer1M() + m.outputPricePer1M()) / 2;
-                return cost &lt;= maxBudget;
+                <span class="hljs-type">double</span> <span class="hljs-variable">cost</span> <span class="hljs-operator">=</span> estimatedTokens / <span class="hljs-number">1_000_000.0</span> *
+                    (m.inputPricePer1M() + m.outputPricePer1M()) / <span class="hljs-number">2</span>;
+                <span class="hljs-keyword">return</span> cost &lt;= maxBudget;
             })
             .max(Comparator.comparingDouble(m -&gt;
                 m.qualityCostRatio(estimatedTokens)));
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 获取当前最便宜的可用模型
-     */
-    public ModelInfo getCheapest() {
-        return models.stream()
+     */</span>
+    <span class="hljs-keyword">public</span> ModelInfo <span class="hljs-title function_">getCheapest</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">return</span> models.stream()
             .filter(ModelInfo::available)
             .min(Comparator.comparingDouble(
                 m -&gt; m.inputPricePer1M() + m.outputPricePer1M()))
             .orElseThrow();
     }
 }
-</code></pre></div>
-<h3>3. 故障转移路由（Fallback Routing）</h3>
+</code></pre></div><h3>3. 故障转移路由（Fallback Routing）</h3>
 <p>主模型不可用时自动切换到备用模型。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.time.Instant;
-import java.time.Duration;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> java.time.Instant;
+<span class="hljs-keyword">import</span> java.time.Duration;
 
-/**
+<span class="hljs-comment">/**
  * 故障转移路由器
- */
-public class FallbackRouter {
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">FallbackRouter</span> {
 
-    public record ModelEndpoint(
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">ModelEndpoint</span><span class="hljs-params">(
         String modelId,
         String provider,
         String apiKey,
-        int priority,             // 1=首选, 2=备用, 3=兜底
-        boolean healthy,
-        int consecutiveFailures,
+        <span class="hljs-type">int</span> priority,             // 1=首选, 2=备用, 3=兜底
+        <span class="hljs-type">boolean</span> healthy,
+        <span class="hljs-type">int</span> consecutiveFailures,
         Instant lastFailureTime
-    ) {}
+    )</span> {}
 
-    private final List&lt;ModelEndpoint&gt; endpoints;
-    private static final int FAILURE_THRESHOLD = 3;
-    private static final Duration COOLDOWN_DURATION = Duration.ofMinutes(5);
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> List&lt;ModelEndpoint&gt; endpoints;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">int</span> <span class="hljs-variable">FAILURE_THRESHOLD</span> <span class="hljs-operator">=</span> <span class="hljs-number">3</span>;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">Duration</span> <span class="hljs-variable">COOLDOWN_DURATION</span> <span class="hljs-operator">=</span> Duration.ofMinutes(<span class="hljs-number">5</span>);
 
-    public FallbackRouter(List&lt;ModelEndpoint&gt; endpoints) {
-        this.endpoints = new ArrayList&lt;&gt;(endpoints);
-        this.endpoints.sort(Comparator.comparingInt(ModelEndpoint::priority));
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">FallbackRouter</span><span class="hljs-params">(List&lt;ModelEndpoint&gt; endpoints)</span> {
+        <span class="hljs-built_in">this</span>.endpoints = <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;&gt;(endpoints);
+        <span class="hljs-built_in">this</span>.endpoints.sort(Comparator.comparingInt(ModelEndpoint::priority));
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 按优先级依次尝试，直到有一个成功
-     */
-    public String executeWithFallback(
-            java.util.function.Function&lt;ModelEndpoint, String&gt; apiCall) {
+     */</span>
+    <span class="hljs-keyword">public</span> String <span class="hljs-title function_">executeWithFallback</span><span class="hljs-params">(
+            java.util.function.Function&lt;ModelEndpoint, String&gt; apiCall)</span> {
 
-        List&lt;String&gt; errors = new ArrayList&lt;&gt;();
+        List&lt;String&gt; errors = <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;&gt;();
 
-        for (var endpoint : endpoints) {
-            // 跳过不健康的端点
-            if (!endpoint.healthy()) {
-                errors.add(endpoint.modelId() + &quot;: unhealthy (skipped)&quot;);
-                continue;
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> endpoint : endpoints) {
+            <span class="hljs-comment">// 跳过不健康的端点</span>
+            <span class="hljs-keyword">if</span> (!endpoint.healthy()) {
+                errors.add(endpoint.modelId() + <span class="hljs-string">": unhealthy (skipped)"</span>);
+                <span class="hljs-keyword">continue</span>;
             }
-            // 跳过低优先级的本地模型（在非必要情况下不使用）
-            if (endpoint.priority() &gt; 2) {
-                errors.add(endpoint.modelId() + &quot;: low priority, trying main&quot;);
-                continue;
+            <span class="hljs-comment">// 跳过低优先级的本地模型（在非必要情况下不使用）</span>
+            <span class="hljs-keyword">if</span> (endpoint.priority() &gt; <span class="hljs-number">2</span>) {
+                errors.add(endpoint.modelId() + <span class="hljs-string">": low priority, trying main"</span>);
+                <span class="hljs-keyword">continue</span>;
             }
 
-            try {
-                var result = apiCall.apply(endpoint);
-                // 成功后重置失败计数
+            <span class="hljs-keyword">try</span> {
+                <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> apiCall.apply(endpoint);
+                <span class="hljs-comment">// 成功后重置失败计数</span>
                 resetFailureCount(endpoint);
-                return result;
-            } catch (Exception e) {
+                <span class="hljs-keyword">return</span> result;
+            } <span class="hljs-keyword">catch</span> (Exception e) {
                 recordFailure(endpoint);
-                errors.add(endpoint.modelId() + &quot;: &quot; + e.getMessage());
+                errors.add(endpoint.modelId() + <span class="hljs-string">": "</span> + e.getMessage());
             }
         }
 
-        // 全部失败，尝试低优先级本地模型作为最后兜底
-        for (var endpoint : endpoints) {
-            if (endpoint.priority() &lt;= 2) continue;  // 已经尝试过
-            try {
-                var result = apiCall.apply(endpoint);
+        <span class="hljs-comment">// 全部失败，尝试低优先级本地模型作为最后兜底</span>
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> endpoint : endpoints) {
+            <span class="hljs-keyword">if</span> (endpoint.priority() &lt;= <span class="hljs-number">2</span>) <span class="hljs-keyword">continue</span>;  <span class="hljs-comment">// 已经尝试过</span>
+            <span class="hljs-keyword">try</span> {
+                <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> apiCall.apply(endpoint);
                 resetFailureCount(endpoint);
-                return result;
-            } catch (Exception e) {
+                <span class="hljs-keyword">return</span> result;
+            } <span class="hljs-keyword">catch</span> (Exception e) {
                 recordFailure(endpoint);
-                errors.add(endpoint.modelId() + &quot;: &quot; + e.getMessage());
+                errors.add(endpoint.modelId() + <span class="hljs-string">": "</span> + e.getMessage());
             }
         }
 
-        throw new RuntimeException(&quot;所有模型端点均失败:\n&quot; +
-            String.join(&quot;\n&quot;, errors));
+        <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RuntimeException</span>(<span class="hljs-string">"所有模型端点均失败:\n"</span> +
+            String.join(<span class="hljs-string">"\n"</span>, errors));
     }
 
-    private void recordFailure(ModelEndpoint endpoint) {
-        // 实际实现使用原子操作更新共享状态
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">recordFailure</span><span class="hljs-params">(ModelEndpoint endpoint)</span> {
+        <span class="hljs-comment">// 实际实现使用原子操作更新共享状态</span>
     }
 
-    private void resetFailureCount(ModelEndpoint endpoint) {
-        // 实际实现使用原子操作更新共享状态
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">resetFailureCount</span><span class="hljs-params">(ModelEndpoint endpoint)</span> {
+        <span class="hljs-comment">// 实际实现使用原子操作更新共享状态</span>
     }
 }
-</code></pre></div>
-<h3>4. 灰度发布路由</h3>
+</code></pre></div><h3>4. 灰度发布路由</h3>
 <p>将新技术模型逐步放量。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.security.MessageDigest;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> java.security.MessageDigest;
+<span class="hljs-keyword">import</span> java.util.concurrent.atomic.AtomicInteger;
+<span class="hljs-keyword">import</span> java.util.concurrent.atomic.AtomicLong;
 
-/**
+<span class="hljs-comment">/**
  * 灰度发布路由器
  * 支持按比例将流量分流到新模型
- */
-public class CanaryRouter {
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">CanaryRouter</span> {
 
-    public record CanaryConfig(
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">CanaryConfig</span><span class="hljs-params">(
         String stableModelId,      // 稳定模型（主线）
         String canaryModelId,      // 金丝雀模型（灰度）
-        int canaryPercentage,      // 灰度流量百分比 (0-100)
-        Instant startedAt,         // 灰度开始时间
-        EvaluationCriteria criteria // 评估标准
+        <span class="hljs-type">int</span> canaryPercentage,      // 灰度流量百分比 (0-100)</span>
+        Instant startedAt,         <span class="hljs-comment">// 灰度开始时间</span>
+        EvaluationCriteria criteria <span class="hljs-comment">// 评估标准</span>
     ) {}
 
-    public record EvaluationCriteria(
-        double minQualityThreshold,
-        double maxLatencyMs,
-        double maxCostPerRequest
-    ) {}
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">EvaluationCriteria</span><span class="hljs-params">(
+        <span class="hljs-type">double</span> minQualityThreshold,
+        <span class="hljs-type">double</span> maxLatencyMs,
+        <span class="hljs-type">double</span> maxCostPerRequest
+    )</span> {}
 
-    private CanaryConfig config;
-    private final AtomicLong canaryRequests = new AtomicLong(0);
-    private final AtomicInteger canaryErrors = new AtomicInteger(0);
+    <span class="hljs-keyword">private</span> CanaryConfig config;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">AtomicLong</span> <span class="hljs-variable">canaryRequests</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">AtomicLong</span>(<span class="hljs-number">0</span>);
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">AtomicInteger</span> <span class="hljs-variable">canaryErrors</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">AtomicInteger</span>(<span class="hljs-number">0</span>);
 
-    /**
+    <span class="hljs-comment">/**
      * 判断当前请求是否走灰度
-     */
-    public String selectModel(String requestId) {
-        if (config == null) {
-            return config.stableModelId();
+     */</span>
+    <span class="hljs-keyword">public</span> String <span class="hljs-title function_">selectModel</span><span class="hljs-params">(String requestId)</span> {
+        <span class="hljs-keyword">if</span> (config == <span class="hljs-literal">null</span>) {
+            <span class="hljs-keyword">return</span> config.stableModelId();
         }
 
-        // 用请求 ID 做确定性哈希，保证同一请求稳定
-        int hash = Math.abs(requestId.hashCode()) % 100;
+        <span class="hljs-comment">// 用请求 ID 做确定性哈希，保证同一请求稳定</span>
+        <span class="hljs-type">int</span> <span class="hljs-variable">hash</span> <span class="hljs-operator">=</span> Math.abs(requestId.hashCode()) % <span class="hljs-number">100</span>;
 
-        if (hash &lt; config.canaryPercentage()) {
+        <span class="hljs-keyword">if</span> (hash &lt; config.canaryPercentage()) {
             canaryRequests.incrementAndGet();
-            return config.canaryModelId();
+            <span class="hljs-keyword">return</span> config.canaryModelId();
         }
 
-        return config.stableModelId();
+        <span class="hljs-keyword">return</span> config.stableModelId();
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 记录灰度模型的结果
-     */
-    public void recordCanaryResult(String requestId, boolean success,
-            long latencyMs, double cost) {
-        if (!success) {
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">recordCanaryResult</span><span class="hljs-params">(String requestId, <span class="hljs-type">boolean</span> success,
+            <span class="hljs-type">long</span> latencyMs, <span class="hljs-type">double</span> cost)</span> {
+        <span class="hljs-keyword">if</span> (!success) {
             canaryErrors.incrementAndGet();
         }
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 评估灰度是否应该全量
-     */
-    public boolean shouldPromoteToFull() {
-        long total = canaryRequests.get();
-        if (total &lt; 1000) return false;  // 样本太少
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">shouldPromoteToFull</span><span class="hljs-params">()</span> {
+        <span class="hljs-type">long</span> <span class="hljs-variable">total</span> <span class="hljs-operator">=</span> canaryRequests.get();
+        <span class="hljs-keyword">if</span> (total &lt; <span class="hljs-number">1000</span>) <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;  <span class="hljs-comment">// 样本太少</span>
 
-        double errorRate = (double) canaryErrors.get() / total;
-        return errorRate &lt; 0.01;  // 错误率 &lt; 1% → 全量
+        <span class="hljs-type">double</span> <span class="hljs-variable">errorRate</span> <span class="hljs-operator">=</span> (<span class="hljs-type">double</span>) canaryErrors.get() / total;
+        <span class="hljs-keyword">return</span> errorRate &lt; <span class="hljs-number">0.01</span>;  <span class="hljs-comment">// 错误率 &lt; 1% → 全量</span>
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 评估灰度是否应该回滚
-     */
-    public boolean shouldRollback() {
-        long total = canaryRequests.get();
-        if (total &lt; 100) return false;
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">shouldRollback</span><span class="hljs-params">()</span> {
+        <span class="hljs-type">long</span> <span class="hljs-variable">total</span> <span class="hljs-operator">=</span> canaryRequests.get();
+        <span class="hljs-keyword">if</span> (total &lt; <span class="hljs-number">100</span>) <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
 
-        double errorRate = (double) canaryErrors.get() / total;
-        return errorRate &gt; 0.05;  // 错误率 &gt; 5% → 回滚
+        <span class="hljs-type">double</span> <span class="hljs-variable">errorRate</span> <span class="hljs-operator">=</span> (<span class="hljs-type">double</span>) canaryErrors.get() / total;
+        <span class="hljs-keyword">return</span> errorRate &gt; <span class="hljs-number">0.05</span>;  <span class="hljs-comment">// 错误率 &gt; 5% → 回滚</span>
     }
 }
-</code></pre></div>
-<h3>5. Spring AI 实现示例</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.stereotype.Component;
+</code></pre></div><h3>5. Spring AI 实现示例</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> org.springframework.ai.chat.client.ChatClient;
+<span class="hljs-keyword">import</span> org.springframework.stereotype.Component;
 
-/**
+<span class="hljs-comment">/**
  * Spring AI 环境下的模型路由实现
- */
-@Component
-public class SpringAiModelRouter {
+ */</span>
+<span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">SpringAiModelRouter</span> {
 
-    private final ChatClient.Builder chatClientBuilder;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> ChatClient.Builder chatClientBuilder;
 
-    public record RouterDecision(
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">RouterDecision</span><span class="hljs-params">(
         String chatModelBeanName,
-        double temperature,
-        int maxTokens,
+        <span class="hljs-type">double</span> temperature,
+        <span class="hljs-type">int</span> maxTokens,
         String reason
-    ) {}
+    )</span> {}
 
-    public SpringAiModelRouter(ChatClient.Builder chatClientBuilder) {
-        this.chatClientBuilder = chatClientBuilder;
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">SpringAiModelRouter</span><span class="hljs-params">(ChatClient.Builder chatClientBuilder)</span> {
+        <span class="hljs-built_in">this</span>.chatClientBuilder = chatClientBuilder;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 根据请求内容智能路由
-     */
-    public RouterDecision decide(String userMessage) {
-        // 简单任务的信号
-        if (isSimpleClassification(userMessage)) {
-            return new RouterDecision(
-                &quot;haikuChatModel&quot;,     // bean name
-                0.0,                   // 零温度确保确定性
-                100,
-                &quot;简单分类任务 → Haiku&quot;);
+     */</span>
+    <span class="hljs-keyword">public</span> RouterDecision <span class="hljs-title function_">decide</span><span class="hljs-params">(String userMessage)</span> {
+        <span class="hljs-comment">// 简单任务的信号</span>
+        <span class="hljs-keyword">if</span> (isSimpleClassification(userMessage)) {
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RouterDecision</span>(
+                <span class="hljs-string">"haikuChatModel"</span>,     <span class="hljs-comment">// bean name</span>
+                <span class="hljs-number">0.0</span>,                   <span class="hljs-comment">// 零温度确保确定性</span>
+                <span class="hljs-number">100</span>,
+                <span class="hljs-string">"简单分类任务 → Haiku"</span>);
         }
 
-        // 代码生成
-        if (isCodeGeneration(userMessage)) {
-            return new RouterDecision(
-                &quot;claudeSonnetChatModel&quot;,
-                0.2,
-                4096,
-                &quot;代码生成 → Claude Sonnet&quot;);
+        <span class="hljs-comment">// 代码生成</span>
+        <span class="hljs-keyword">if</span> (isCodeGeneration(userMessage)) {
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RouterDecision</span>(
+                <span class="hljs-string">"claudeSonnetChatModel"</span>,
+                <span class="hljs-number">0.2</span>,
+                <span class="hljs-number">4096</span>,
+                <span class="hljs-string">"代码生成 → Claude Sonnet"</span>);
         }
 
-        // 中文任务
-        if (isChineseTask(userMessage)) {
-            return new RouterDecision(
-                &quot;deepseekChatModel&quot;,
-                0.7,
-                2048,
-                &quot;中文任务 → DeepSeek V3 (高性价比)&quot;);
+        <span class="hljs-comment">// 中文任务</span>
+        <span class="hljs-keyword">if</span> (isChineseTask(userMessage)) {
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RouterDecision</span>(
+                <span class="hljs-string">"deepseekChatModel"</span>,
+                <span class="hljs-number">0.7</span>,
+                <span class="hljs-number">2048</span>,
+                <span class="hljs-string">"中文任务 → DeepSeek V3 (高性价比)"</span>);
         }
 
-        // 默认
-        return new RouterDecision(
-            &quot;claudeSonnetChatModel&quot;,
-            0.7,
-            2048,
-            &quot;通用任务 → Claude Sonnet&quot;);
+        <span class="hljs-comment">// 默认</span>
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RouterDecision</span>(
+            <span class="hljs-string">"claudeSonnetChatModel"</span>,
+            <span class="hljs-number">0.7</span>,
+            <span class="hljs-number">2048</span>,
+            <span class="hljs-string">"通用任务 → Claude Sonnet"</span>);
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 使用路由决策发起调用
-     */
-    public String routeAndCall(String userMessage) {
-        var decision = decide(userMessage);
-        System.out.println(&quot;路由决策: &quot; + decision.reason());
+     */</span>
+    <span class="hljs-keyword">public</span> String <span class="hljs-title function_">routeAndCall</span><span class="hljs-params">(String userMessage)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">decision</span> <span class="hljs-operator">=</span> decide(userMessage);
+        System.out.println(<span class="hljs-string">"路由决策: "</span> + decision.reason());
 
-        // 从 ApplicationContext 获取对应 Bean
-        // 在实际 Spring 应用中通过 ApplicationContext.getBean()
-        // ChatModel chatModel = context.getBean(decision.chatModelBeanName(),
-        //     ChatModel.class);
-        // ChatClient client = ChatClient.builder(chatModel).build();
+        <span class="hljs-comment">// 从 ApplicationContext 获取对应 Bean</span>
+        <span class="hljs-comment">// 在实际 Spring 应用中通过 ApplicationContext.getBean()</span>
+        <span class="hljs-comment">// ChatModel chatModel = context.getBean(decision.chatModelBeanName(),</span>
+        <span class="hljs-comment">//     ChatModel.class);</span>
+        <span class="hljs-comment">// ChatClient client = ChatClient.builder(chatModel).build();</span>
 
-        // 伪代码（实际需注入 ApplicationContext）
-        return &quot;Response from &quot; + decision.chatModelBeanName() +
-            &quot; (温度=&quot; + decision.temperature() + &quot;)&quot;;
+        <span class="hljs-comment">// 伪代码（实际需注入 ApplicationContext）</span>
+        <span class="hljs-keyword">return</span> <span class="hljs-string">"Response from "</span> + decision.chatModelBeanName() +
+            <span class="hljs-string">" (温度="</span> + decision.temperature() + <span class="hljs-string">")"</span>;
     }
 
-    private boolean isSimpleClassification(String message) {
-        return message.length() &lt; 100 &amp;&amp;
-            (message.contains(&quot;分类&quot;) || message.contains(&quot;提取&quot;) ||
-             message.contains(&quot;判断&quot;) || message.contains(&quot;是否&quot;));
+    <span class="hljs-keyword">private</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">isSimpleClassification</span><span class="hljs-params">(String message)</span> {
+        <span class="hljs-keyword">return</span> message.length() &lt; <span class="hljs-number">100</span> &amp;&amp;
+            (message.contains(<span class="hljs-string">"分类"</span>) || message.contains(<span class="hljs-string">"提取"</span>) ||
+             message.contains(<span class="hljs-string">"判断"</span>) || message.contains(<span class="hljs-string">"是否"</span>));
     }
 
-    private boolean isCodeGeneration(String message) {
-        return message.contains(&quot;代码&quot;) || message.contains(&quot;code&quot;) ||
-            message.contains(&quot;写一个&quot;) || message.contains(&quot;实现&quot;) ||
-            message.contains(&quot;函数&quot;) || message.contains(&quot;class&quot;);
+    <span class="hljs-keyword">private</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">isCodeGeneration</span><span class="hljs-params">(String message)</span> {
+        <span class="hljs-keyword">return</span> message.contains(<span class="hljs-string">"代码"</span>) || message.contains(<span class="hljs-string">"code"</span>) ||
+            message.contains(<span class="hljs-string">"写一个"</span>) || message.contains(<span class="hljs-string">"实现"</span>) ||
+            message.contains(<span class="hljs-string">"函数"</span>) || message.contains(<span class="hljs-string">"class"</span>);
     }
 
-    private boolean isChineseTask(String message) {
-        int chineseChars = 0;
-        int totalChars = message.length();
-        for (char c : message.toCharArray()) {
-            if (Character.UnicodeScript.of(c) ==
+    <span class="hljs-keyword">private</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">isChineseTask</span><span class="hljs-params">(String message)</span> {
+        <span class="hljs-type">int</span> <span class="hljs-variable">chineseChars</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+        <span class="hljs-type">int</span> <span class="hljs-variable">totalChars</span> <span class="hljs-operator">=</span> message.length();
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">char</span> c : message.toCharArray()) {
+            <span class="hljs-keyword">if</span> (Character.UnicodeScript.of(c) ==
                     Character.UnicodeScript.HAN) chineseChars++;
         }
-        return (double) chineseChars / totalChars &gt; 0.5;
+        <span class="hljs-keyword">return</span> (<span class="hljs-type">double</span>) chineseChars / totalChars &gt; <span class="hljs-number">0.5</span>;
     }
 }
-</code></pre></div>
-<h2>完整路由架构</h2>
+</code></pre></div><h2>完整路由架构</h2>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>请求进入
     │
     ▼
 ┌──────────────────────────────────────────────────────────┐
 │                    ModelRouter                           │
 │                                                          │
-│  1. 任务分类 (Capability Classification)                 │
+│  <span class="hljs-number">1</span>. 任务分类 (Capability Classification)                 │
 │     ├── 分析请求内容                                      │
-│     ├── 识别任务类型（代码/中文/长文档/简单提取...）       │
+│     ├── 识别任务类型（代码<span class="hljs-regexp">/中文/</span>长文档/简单提取...）       │
 │     └── 确定最低质量要求                                  │
 │                                                          │
-│  2. 模型选择 (Model Selection)                           │
+│  <span class="hljs-number">2</span>. 模型选择 (Model Selection)                           │
 │     ├── 能力匹配：筛选支持该任务类型的模型                  │
 │     ├── 成本过滤：滤除超出预算的模型                       │
 │     ├── 健康检查：滤除不可用的模型                         │
 │     └── 灰度规则：检查是否命中金丝雀                       │
 │                                                          │
-│  3. 执行调用                                             │
+│  <span class="hljs-number">3</span>. 执行调用                                             │
 │     ├── 尝试首选模型                                      │
 │     ├── 失败？→ 尝试备用模型                               │
 │     └── 全部失败？→ 尝试本地兜底模型                       │
 │                                                          │
-│  4. 结果记录                                             │
+│  <span class="hljs-number">4</span>. 结果记录                                             │
 │     ├── 延迟、成本、成功率                                │
 │     └── 反馈到路由决策（在线学习）                         │
 └──────────────────────────────────────────────────────────┘
-</code></pre></div>
-<h2>最佳实践</h2>
+</code></pre></div><h2>最佳实践</h2>
 <ol>
 <li><strong>默认模型选择</strong>：Claude Sonnet 4.5 是当前质量/速度/成本的最佳平衡点，适合作为默认模型</li>
 <li><strong>中文场景</strong>：如果项目大量使用中文，DeepSeek-V3 是性价比之王——质量接近 GPT-5，成本只有 1/20</li>
@@ -582,18 +570,18 @@ public class SpringAiModelRouter {
 </ol>
 <h2>常见问题</h2>
 <p><strong>Q: 什么时候应该用 Claude Opus 4.8 而不是 Sonnet 4.5？</strong></p>
-<p>A: 当任务难度足够高时——复杂多步推理、高难度代码架构设计、需要&quot;深思熟虑&quot;的法律/金融分析。对日常任务，Sonnet 4.5 的质量已足够，Opus 的额外成本不值得。</p>
+<p>A: 当任务难度足够高时——复杂多步推理、高难度代码架构设计、需要"深思熟虑"的法律/金融分析。对日常任务，Sonnet 4.5 的质量已足够，Opus 的额外成本不值得。</p>
 <p><strong>Q: 国产模型（Qwen/DeepSeek）能替代 GPT/Claude 吗？</strong></p>
 <p>A: 对于中文为主、代码辅助、通用问答场景，完全可以。但对于需要极高推理精度或 Tool Calling 准确性的场景，闭源模型仍有优势。建议中文场景用国产模型主力，复杂推理补充用闭源模型。</p>
 <p><strong>Q: 模型路由的 overhead 是多少？</strong></p>
 <p>A: 任务分类的开销。通常使用简单的规则（关键词匹配 + 百分比规则）+ 一个超轻量分类器（~10ms）。如果使用 LLM 做分类，增加约 0.5-1s 延迟但结果更准。推荐：先上规则，规则无法覆盖的再用 LLM 分类。</p>
 <h2>相关条目</h2>
 <ul>
-<li><a href="#/07-AI基础/07-推理策略与评估方法" class="cross-ref" data-ref="07-推理策略与评估方法">07-推理策略与评估方法</a> — 推理策略和模型评估</li>
-<li><a href="#/08-模型接入与推理/模型API/08-OpenAI兼容协议详解" class="cross-ref" data-ref="08-OpenAI兼容协议详解">08-OpenAI兼容协议详解</a> — API 协议</li>
-<li><a href="#/08-模型接入与推理/模型API/08-云模型API与SDK使用" class="cross-ref" data-ref="08-云模型API与SDK使用">08-云模型API与SDK使用</a> — 各 Provider 的 Java SDK</li>
-<li><a href="#/08-模型接入与推理/推理部署/08-本地推理与Ollama" class="cross-ref" data-ref="08-本地推理与Ollama">08-本地推理与Ollama</a> — 本地推理服务</li>
-<li><a href="#/09-Java AI框架/09-架构抽象层设计" class="cross-ref" data-ref="09-架构抽象层设计">09-架构抽象层设计</a> — 抽象层与路由接口设计</li>
+<li><a href="#/07-AI基础/07-推理策略与评估方法" class="cross-ref">07-推理策略与评估方法</a> — 推理策略和模型评估</li>
+<li><a href="#/08-模型接入与推理/模型API/08-OpenAI兼容协议详解" class="cross-ref">08-OpenAI兼容协议详解</a> — API 协议</li>
+<li><a href="#/08-模型接入与推理/模型API/08-云模型API与SDK使用" class="cross-ref">08-云模型API与SDK使用</a> — 各 Provider 的 Java SDK</li>
+<li><a href="#/08-模型接入与推理/推理部署/08-本地推理与Ollama" class="cross-ref">08-本地推理与Ollama</a> — 本地推理服务</li>
+<li><a href="#/09-Java AI框架/09-架构抽象层设计" class="cross-ref">09-架构抽象层设计</a> — 抽象层与路由接口设计</li>
 </ul>
-</div>
+</body></html></div>
 </article>

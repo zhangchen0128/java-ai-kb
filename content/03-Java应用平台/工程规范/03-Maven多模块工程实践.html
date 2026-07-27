@@ -1,12 +1,12 @@
 
-<article class="kb-entry" data-path="/03-Java应用平台/工程规范/03-Maven多模块工程实践">
+<article class="kb-entry" data-path="/03-Java应用平台">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=03">03-Java应用平台</a></div>
     <h1>Maven多模块工程实践</h1>
-    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#maven</span><span class="badge badge-tag">#multi-module</span><span class="badge badge-tag">#dependency-management</span><span class="badge badge-tag">#bom</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#maven</span><span class="badge badge-tag">#multi-module</span><span class="badge badge-tag">#dependency-management</span><span class="badge badge-tag">#bom</span><span class="badge badge-tag">#wraper</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://maven.apache.org/guides/introduction/introduction-to-the-pom.html" target="_blank" rel="noopener" class="source-link" title="Maven POM Reference Documentation">Maven POM Reference Documentation</a><a href="https://maven.apache.org/plugins/maven-compiler-plugin/" target="_blank" rel="noopener" class="source-link" title="Maven Compiler Plugin — Java 25 configuration">Maven Compiler Plugin — Java 25 configuration</a><a href="https://docs.spring.io/spring-boot/maven-plugin/" target="_blank" rel="noopener" class="source-link" title="Spring Boot Maven Plugin Reference — AOT processing">Spring Boot Maven Plugin Reference — AOT processing</a><a href="https://maven.apache.org/guides/mini/guide-multiple-modules.html" target="_blank" rel="noopener" class="source-link" title="Maven Multi-Module Guide">Maven Multi-Module Guide</a></small></div>
   </div>
-  <div class="entry-body"><h1>Maven 多模块工程实践</h1>
+  <div class="entry-body"><html><head></head><body><h1>Maven 多模块工程实践</h1>
 <h2>概述</h2>
 <p>Maven 是 Java 生态事实上的构建标准。在 AI 应用开发中，一个典型的项目往往包含多个模块：Web API 层、业务服务层、AI 集成层、数据访问层、公共工具层。如何合理划分模块、管理依赖、配置插件，直接影响项目的可维护性和构建效率。</p>
 <p>本文从模块拆分原则、POM 管理策略、依赖治理、插件配置到静态分析集成，覆盖 Maven 多模块工程的完整实践。技术雷达中 Maven 4.x 是 Adopt 象限的主构建工具。</p>
@@ -14,263 +14,257 @@
 <h2>一、多模块设计</h2>
 <h3>1.1 模块拆分原则</h3>
 <p><strong>按层拆分（传统分层架构）：</strong></p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>my-app/
-├── my-app-api/          # 对外接口定义（DTO、Feign 接口）
-├── my-app-common/       # 公共工具类、常量、异常
-├── my-app-service/      # 业务逻辑层
-├── my-app-repository/   # 数据访问层（JPA/MyBatis Mapper）
-└── my-app-web/          # Web 层（Controller、配置）
-</code></pre></div>
-<p><strong>按领域拆分（DDD 风格）：</strong></p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>my-app/
-├── my-app-common/       # 共享基础设施
-├── my-app-user/         # 用户领域（service + repository + api）
-├── my-app-order/        # 订单领域
-├── my-app-product/      # 产品领域
-└── my-app-web/          # Web 聚合层
-</code></pre></div>
-<h3>1.2 AI 项目推荐模块结构</h3>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>ai-knowledge-platform/
-├── ai-knowledge-api/          # 公共 API 接口定义（Port 接口）
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-keyword">my</span>-app/
+├── <span class="hljs-keyword">my</span>-app-api/          <span class="hljs-comment"># 对外接口定义（DTO、Feign 接口）</span>
+├── <span class="hljs-keyword">my</span>-app-common/       <span class="hljs-comment"># 公共工具类、常量、异常</span>
+├── <span class="hljs-keyword">my</span>-app-service/      <span class="hljs-comment"># 业务逻辑层</span>
+├── <span class="hljs-keyword">my</span>-app-repository/   <span class="hljs-comment"># 数据访问层（JPA/MyBatis Mapper）</span>
+└── <span class="hljs-keyword">my</span>-app-web/          <span class="hljs-comment"># Web 层（Controller、配置）</span>
+</code></pre></div><p><strong>按领域拆分（DDD 风格）：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-keyword">my</span>-app/
+├── <span class="hljs-keyword">my</span>-app-common/       <span class="hljs-comment"># 共享基础设施</span>
+├── <span class="hljs-keyword">my</span>-app-user/         <span class="hljs-comment"># 用户领域（service + repository + api）</span>
+├── <span class="hljs-keyword">my</span>-app-order/        <span class="hljs-comment"># 订单领域</span>
+├── <span class="hljs-keyword">my</span>-app-product/      <span class="hljs-comment"># 产品领域</span>
+└── <span class="hljs-keyword">my</span>-app-web/          <span class="hljs-comment"># Web 聚合层</span>
+</code></pre></div><h3>1.2 AI 项目推荐模块结构</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>ai-knowledge-platform<span class="hljs-symbol">/</span>
+├── ai-knowledge-api<span class="hljs-symbol">/</span>          <span class="hljs-comment"># 公共 API 接口定义（Port 接口）</span>
 │   └── com.example.ai.api
 │       ├── ChatModelPort.java
 │       ├── EmbeddingModelPort.java
 │       └── RetrievalPort.java
-├── ai-knowledge-common/       # 公共工具、常量、DTO
+├── ai-knowledge-common<span class="hljs-symbol">/</span>       <span class="hljs-comment"># 公共工具、常量、DTO</span>
 │   └── com.example.ai.common
-│       ├── dto/
-│       ├── exception/
-│       └── util/
-├── ai-knowledge-domain/       # 领域模型与业务规则
+│       ├── dto<span class="hljs-symbol">/</span>
+│       ├── exception<span class="hljs-symbol">/</span>
+│       └── util<span class="hljs-symbol">/</span>
+├── ai-knowledge-domain<span class="hljs-symbol">/</span>       <span class="hljs-comment"># 领域模型与业务规则</span>
 │   └── com.example.ai.domain
-│       ├── knowledge/
-│       ├── agent/
-│       └── conversation/
-├── ai-knowledge-infra/        # 基础设施实现
+│       ├── knowledge<span class="hljs-symbol">/</span>
+│       ├── agent<span class="hljs-symbol">/</span>
+│       └── conversation<span class="hljs-symbol">/</span>
+├── ai-knowledge-infra<span class="hljs-symbol">/</span>        <span class="hljs-comment"># 基础设施实现</span>
 │   └── com.example.ai.infra
-│       ├── chat/              # Spring AI 适配器实现
-│       ├── embedding/
-│       ├── vectorstore/
-│       └── mcp/               # MCP 客户端实现
-├── ai-knowledge-service/      # 应用服务层
+│       ├── chat<span class="hljs-symbol">/</span>              <span class="hljs-comment"># Spring AI 适配器实现</span>
+│       ├── embedding<span class="hljs-symbol">/</span>
+│       ├── vectorstore<span class="hljs-symbol">/</span>
+│       └── mcp<span class="hljs-symbol">/</span>               <span class="hljs-comment"># MCP 客户端实现</span>
+├── ai-knowledge-service<span class="hljs-symbol">/</span>      <span class="hljs-comment"># 应用服务层</span>
 │   └── com.example.ai.service
 │       ├── KnowledgeService.java
 │       ├── AgentService.java
 │       └── RagService.java
-└── ai-knowledge-web/          # Web 层（启动入口）
+└── ai-knowledge-web<span class="hljs-symbol">/</span>          <span class="hljs-comment"># Web 层（启动入口）</span>
     └── com.example.ai.web
-        ├── controller/
-        ├── config/
+        ├── controller<span class="hljs-symbol">/</span>
+        ├── config<span class="hljs-symbol">/</span>
         └── AiKnowledgeApplication.java
-</code></pre></div>
-<p><strong>依赖方向（单向依赖，防止循环）：</strong></p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>web → service → domain → common
-web → infra → domain → common
+</code></pre></div><p><strong>依赖方向（单向依赖，防止循环）：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>web → service → <span class="hljs-built_in">domain</span> → common
+web → infra → <span class="hljs-built_in">domain</span> → common
 service → api
 infra → api
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>二、POM 管理</h2>
 <h3>2.1 Parent POM</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
-&lt;project xmlns=&quot;http://maven.apache.org/POM/4.0.0&quot;
-         xmlns:xsi=&quot;http://www.w3.org/2001/XMLSchema-instance&quot;
-         xsi:schemaLocation=&quot;http://maven.apache.org/POM/4.0.0
-         https://maven.apache.org/xsd/maven-4.0.0.xsd&quot;&gt;
-    &lt;modelVersion&gt;4.0.0&lt;/modelVersion&gt;
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-xml"><span class="hljs-meta">&lt;?xml version=<span class="hljs-string">"1.0"</span> encoding=<span class="hljs-string">"UTF-8"</span>?&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">project</span> <span class="hljs-attr">xmlns</span>=<span class="hljs-string">"http://maven.apache.org/POM/4.0.0"</span>
+         <span class="hljs-attr">xmlns:xsi</span>=<span class="hljs-string">"http://www.w3.org/2001/XMLSchema-instance"</span>
+         <span class="hljs-attr">xsi:schemaLocation</span>=<span class="hljs-string">"http://maven.apache.org/POM/4.0.0
+         https://maven.apache.org/xsd/maven-4.0.0.xsd"</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">modelVersion</span>&gt;</span>4.0.0<span class="hljs-tag">&lt;/<span class="hljs-name">modelVersion</span>&gt;</span>
 
-    &lt;parent&gt;
-        &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
-        &lt;artifactId&gt;spring-boot-starter-parent&lt;/artifactId&gt;
-        &lt;version&gt;4.0.0&lt;/version&gt;
-        &lt;relativePath/&gt;
-    &lt;/parent&gt;
+    <span class="hljs-tag">&lt;<span class="hljs-name">parent</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.boot<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-boot-starter-parent<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">version</span>&gt;</span>4.0.0<span class="hljs-tag">&lt;/<span class="hljs-name">version</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">relativePath</span>/&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">parent</span>&gt;</span>
 
-    &lt;groupId&gt;com.example&lt;/groupId&gt;
-    &lt;artifactId&gt;ai-knowledge-platform&lt;/artifactId&gt;
-    &lt;version&gt;1.0.0-SNAPSHOT&lt;/version&gt;
-    &lt;packaging&gt;pom&lt;/packaging&gt;
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>com.example<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>ai-knowledge-platform<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">version</span>&gt;</span>1.0.0-SNAPSHOT<span class="hljs-tag">&lt;/<span class="hljs-name">version</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">packaging</span>&gt;</span>pom<span class="hljs-tag">&lt;/<span class="hljs-name">packaging</span>&gt;</span>
 
-    &lt;name&gt;AI Knowledge Platform&lt;/name&gt;
-    &lt;description&gt;AI Knowledge Platform — Multi-module Spring Boot 4.x Project&lt;/description&gt;
+    <span class="hljs-tag">&lt;<span class="hljs-name">name</span>&gt;</span>AI Knowledge Platform<span class="hljs-tag">&lt;/<span class="hljs-name">name</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">description</span>&gt;</span>AI Knowledge Platform — Multi-module Spring Boot 4.x Project<span class="hljs-tag">&lt;/<span class="hljs-name">description</span>&gt;</span>
 
-    &lt;!-- 子模块声明（聚合） --&gt;
-    &lt;modules&gt;
-        &lt;module&gt;ai-knowledge-api&lt;/module&gt;
-        &lt;module&gt;ai-knowledge-common&lt;/module&gt;
-        &lt;module&gt;ai-knowledge-domain&lt;/module&gt;
-        &lt;module&gt;ai-knowledge-infra&lt;/module&gt;
-        &lt;module&gt;ai-knowledge-service&lt;/module&gt;
-        &lt;module&gt;ai-knowledge-web&lt;/module&gt;
-    &lt;/modules&gt;
+    <span class="hljs-comment">&lt;!-- 子模块声明（聚合） --&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">modules</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">module</span>&gt;</span>ai-knowledge-api<span class="hljs-tag">&lt;/<span class="hljs-name">module</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">module</span>&gt;</span>ai-knowledge-common<span class="hljs-tag">&lt;/<span class="hljs-name">module</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">module</span>&gt;</span>ai-knowledge-domain<span class="hljs-tag">&lt;/<span class="hljs-name">module</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">module</span>&gt;</span>ai-knowledge-infra<span class="hljs-tag">&lt;/<span class="hljs-name">module</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">module</span>&gt;</span>ai-knowledge-service<span class="hljs-tag">&lt;/<span class="hljs-name">module</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">module</span>&gt;</span>ai-knowledge-web<span class="hljs-tag">&lt;/<span class="hljs-name">module</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">modules</span>&gt;</span>
 
-    &lt;!-- 统一版本管理 --&gt;
-    &lt;properties&gt;
-        &lt;java.version&gt;25&lt;/java.version&gt;
-        &lt;maven.compiler.release&gt;25&lt;/maven.compiler.release&gt;
-        &lt;spring-ai.version&gt;2.0.0&lt;/spring-ai.version&gt;
-        &lt;mybatis-plus.version&gt;3.5.10&lt;/mybatis-plus.version&gt;
-        &lt;mapstruct.version&gt;1.6.3&lt;/mapstruct.version&gt;
-        &lt;guava.version&gt;33.4.0-jre&lt;/guava.version&gt;
-        &lt;spotbugs.version&gt;4.8.6&lt;/spotbugs.version&gt;
-        &lt;checkstyle.version&gt;3.6.0&lt;/checkstyle.version&gt;
-        &lt;pmd.version&gt;3.26.0&lt;/pmd.version&gt;
-    &lt;/properties&gt;
+    <span class="hljs-comment">&lt;!-- 统一版本管理 --&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">properties</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">java.version</span>&gt;</span>25<span class="hljs-tag">&lt;/<span class="hljs-name">java.version</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">maven.compiler.release</span>&gt;</span>25<span class="hljs-tag">&lt;/<span class="hljs-name">maven.compiler.release</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">spring-ai.version</span>&gt;</span>2.0.0<span class="hljs-tag">&lt;/<span class="hljs-name">spring-ai.version</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">mybatis-plus.version</span>&gt;</span>3.5.10<span class="hljs-tag">&lt;/<span class="hljs-name">mybatis-plus.version</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">mapstruct.version</span>&gt;</span>1.6.3<span class="hljs-tag">&lt;/<span class="hljs-name">mapstruct.version</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">guava.version</span>&gt;</span>33.4.0-jre<span class="hljs-tag">&lt;/<span class="hljs-name">guava.version</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">spotbugs.version</span>&gt;</span>4.8.6<span class="hljs-tag">&lt;/<span class="hljs-name">spotbugs.version</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">checkstyle.version</span>&gt;</span>3.6.0<span class="hljs-tag">&lt;/<span class="hljs-name">checkstyle.version</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">pmd.version</span>&gt;</span>3.26.0<span class="hljs-tag">&lt;/<span class="hljs-name">pmd.version</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">properties</span>&gt;</span>
 
-    &lt;!-- 依赖管理（不实际引入，只管理版本） --&gt;
-    &lt;dependencyManagement&gt;
-        &lt;dependencies&gt;
-            &lt;!-- Spring AI BOM --&gt;
-            &lt;dependency&gt;
-                &lt;groupId&gt;org.springframework.ai&lt;/groupId&gt;
-                &lt;artifactId&gt;spring-ai-bom&lt;/artifactId&gt;
-                &lt;version&gt;${spring-ai.version}&lt;/version&gt;
-                &lt;type&gt;pom&lt;/type&gt;
-                &lt;scope&gt;import&lt;/scope&gt;
-            &lt;/dependency&gt;
+    <span class="hljs-comment">&lt;!-- 依赖管理（不实际引入，只管理版本） --&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">dependencyManagement</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">dependencies</span>&gt;</span>
+            <span class="hljs-comment">&lt;!-- Spring AI BOM --&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.ai<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-ai-bom<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">version</span>&gt;</span>${spring-ai.version}<span class="hljs-tag">&lt;/<span class="hljs-name">version</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">type</span>&gt;</span>pom<span class="hljs-tag">&lt;/<span class="hljs-name">type</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">scope</span>&gt;</span>import<span class="hljs-tag">&lt;/<span class="hljs-name">scope</span>&gt;</span>
+            <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
 
-            &lt;!-- 项目内部模块 --&gt;
-            &lt;dependency&gt;
-                &lt;groupId&gt;com.example&lt;/groupId&gt;
-                &lt;artifactId&gt;ai-knowledge-api&lt;/artifactId&gt;
-                &lt;version&gt;${project.version}&lt;/version&gt;
-            &lt;/dependency&gt;
-            &lt;dependency&gt;
-                &lt;groupId&gt;com.example&lt;/groupId&gt;
-                &lt;artifactId&gt;ai-knowledge-common&lt;/artifactId&gt;
-                &lt;version&gt;${project.version}&lt;/version&gt;
-            &lt;/dependency&gt;
+            <span class="hljs-comment">&lt;!-- 项目内部模块 --&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>com.example<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>ai-knowledge-api<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">version</span>&gt;</span>${project.version}<span class="hljs-tag">&lt;/<span class="hljs-name">version</span>&gt;</span>
+            <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>com.example<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>ai-knowledge-common<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">version</span>&gt;</span>${project.version}<span class="hljs-tag">&lt;/<span class="hljs-name">version</span>&gt;</span>
+            <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
 
-            &lt;!-- 第三方库锁定版本 --&gt;
-            &lt;dependency&gt;
-                &lt;groupId&gt;com.baomidou&lt;/groupId&gt;
-                &lt;artifactId&gt;mybatis-plus-spring-boot3-starter&lt;/artifactId&gt;
-                &lt;version&gt;${mybatis-plus.version}&lt;/version&gt;
-            &lt;/dependency&gt;
-            &lt;dependency&gt;
-                &lt;groupId&gt;org.mapstruct&lt;/groupId&gt;
-                &lt;artifactId&gt;mapstruct&lt;/artifactId&gt;
-                &lt;version&gt;${mapstruct.version}&lt;/version&gt;
-            &lt;/dependency&gt;
-        &lt;/dependencies&gt;
-    &lt;/dependencyManagement&gt;
+            <span class="hljs-comment">&lt;!-- 第三方库锁定版本 --&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>com.baomidou<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>mybatis-plus-spring-boot3-starter<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">version</span>&gt;</span>${mybatis-plus.version}<span class="hljs-tag">&lt;/<span class="hljs-name">version</span>&gt;</span>
+            <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.mapstruct<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>mapstruct<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">version</span>&gt;</span>${mapstruct.version}<span class="hljs-tag">&lt;/<span class="hljs-name">version</span>&gt;</span>
+            <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">dependencies</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">dependencyManagement</span>&gt;</span>
 
-    &lt;!-- 所有子模块共享的依赖 --&gt;
-    &lt;dependencies&gt;
-        &lt;!-- 编译时工具 --&gt;
-        &lt;dependency&gt;
-            &lt;groupId&gt;org.projectlombok&lt;/groupId&gt;
-            &lt;artifactId&gt;lombok&lt;/artifactId&gt;
-            &lt;optional&gt;true&lt;/optional&gt;
-        &lt;/dependency&gt;
-        &lt;dependency&gt;
-            &lt;groupId&gt;org.mapstruct&lt;/groupId&gt;
-            &lt;artifactId&gt;mapstruct&lt;/artifactId&gt;
-        &lt;/dependency&gt;
+    <span class="hljs-comment">&lt;!-- 所有子模块共享的依赖 --&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">dependencies</span>&gt;</span>
+        <span class="hljs-comment">&lt;!-- 编译时工具 --&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.projectlombok<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>lombok<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">optional</span>&gt;</span>true<span class="hljs-tag">&lt;/<span class="hljs-name">optional</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.mapstruct<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>mapstruct<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
 
-        &lt;!-- 测试 --&gt;
-        &lt;dependency&gt;
-            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
-            &lt;artifactId&gt;spring-boot-starter-test&lt;/artifactId&gt;
-            &lt;scope&gt;test&lt;/scope&gt;
-        &lt;/dependency&gt;
-    &lt;/dependencies&gt;
+        <span class="hljs-comment">&lt;!-- 测试 --&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.boot<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-boot-starter-test<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">scope</span>&gt;</span>test<span class="hljs-tag">&lt;/<span class="hljs-name">scope</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">dependencies</span>&gt;</span>
 
-    &lt;!-- 插件管理（统一版本和配置） --&gt;
-    &lt;build&gt;
-        &lt;pluginManagement&gt;
-            &lt;plugins&gt;
-                &lt;plugin&gt;
-                    &lt;groupId&gt;org.apache.maven.plugins&lt;/groupId&gt;
-                    &lt;artifactId&gt;maven-compiler-plugin&lt;/artifactId&gt;
-                    &lt;configuration&gt;
-                        &lt;release&gt;25&lt;/release&gt;
-                        &lt;parameters&gt;true&lt;/parameters&gt; &lt;!-- 保留方法参数名（反射需要） --&gt;
-                        &lt;annotationProcessorPaths&gt;
-                            &lt;path&gt;
-                                &lt;groupId&gt;org.projectlombok&lt;/groupId&gt;
-                                &lt;artifactId&gt;lombok&lt;/artifactId&gt;
-                            &lt;/path&gt;
-                            &lt;path&gt;
-                                &lt;groupId&gt;org.mapstruct&lt;/groupId&gt;
-                                &lt;artifactId&gt;mapstruct-processor&lt;/artifactId&gt;
-                                &lt;version&gt;${mapstruct.version}&lt;/version&gt;
-                            &lt;/path&gt;
-                        &lt;/annotationProcessorPaths&gt;
-                    &lt;/configuration&gt;
-                &lt;/plugin&gt;
+    <span class="hljs-comment">&lt;!-- 插件管理（统一版本和配置） --&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">build</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">pluginManagement</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">plugins</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">plugin</span>&gt;</span>
+                    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.apache.maven.plugins<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+                    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>maven-compiler-plugin<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+                    <span class="hljs-tag">&lt;<span class="hljs-name">configuration</span>&gt;</span>
+                        <span class="hljs-tag">&lt;<span class="hljs-name">release</span>&gt;</span>25<span class="hljs-tag">&lt;/<span class="hljs-name">release</span>&gt;</span>
+                        <span class="hljs-tag">&lt;<span class="hljs-name">parameters</span>&gt;</span>true<span class="hljs-tag">&lt;/<span class="hljs-name">parameters</span>&gt;</span> <span class="hljs-comment">&lt;!-- 保留方法参数名（反射需要） --&gt;</span>
+                        <span class="hljs-tag">&lt;<span class="hljs-name">annotationProcessorPaths</span>&gt;</span>
+                            <span class="hljs-tag">&lt;<span class="hljs-name">path</span>&gt;</span>
+                                <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.projectlombok<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+                                <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>lombok<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+                            <span class="hljs-tag">&lt;/<span class="hljs-name">path</span>&gt;</span>
+                            <span class="hljs-tag">&lt;<span class="hljs-name">path</span>&gt;</span>
+                                <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.mapstruct<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+                                <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>mapstruct-processor<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+                                <span class="hljs-tag">&lt;<span class="hljs-name">version</span>&gt;</span>${mapstruct.version}<span class="hljs-tag">&lt;/<span class="hljs-name">version</span>&gt;</span>
+                            <span class="hljs-tag">&lt;/<span class="hljs-name">path</span>&gt;</span>
+                        <span class="hljs-tag">&lt;/<span class="hljs-name">annotationProcessorPaths</span>&gt;</span>
+                    <span class="hljs-tag">&lt;/<span class="hljs-name">configuration</span>&gt;</span>
+                <span class="hljs-tag">&lt;/<span class="hljs-name">plugin</span>&gt;</span>
 
-                &lt;plugin&gt;
-                    &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
-                    &lt;artifactId&gt;spring-boot-maven-plugin&lt;/artifactId&gt;
-                    &lt;configuration&gt;
-                        &lt;excludes&gt;
-                            &lt;exclude&gt;
-                                &lt;groupId&gt;org.projectlombok&lt;/groupId&gt;
-                                &lt;artifactId&gt;lombok&lt;/artifactId&gt;
-                            &lt;/exclude&gt;
-                        &lt;/excludes&gt;
-                    &lt;/configuration&gt;
-                    &lt;executions&gt;
-                        &lt;execution&gt;
-                            &lt;id&gt;process-aot&lt;/id&gt;
-                            &lt;goals&gt;
-                                &lt;goal&gt;process-aot&lt;/goal&gt; &lt;!-- AOT 编译预处理 --&gt;
-                            &lt;/goals&gt;
-                        &lt;/execution&gt;
-                    &lt;/executions&gt;
-                &lt;/plugin&gt;
+                <span class="hljs-tag">&lt;<span class="hljs-name">plugin</span>&gt;</span>
+                    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.boot<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+                    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-boot-maven-plugin<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+                    <span class="hljs-tag">&lt;<span class="hljs-name">configuration</span>&gt;</span>
+                        <span class="hljs-tag">&lt;<span class="hljs-name">excludes</span>&gt;</span>
+                            <span class="hljs-tag">&lt;<span class="hljs-name">exclude</span>&gt;</span>
+                                <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.projectlombok<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+                                <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>lombok<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+                            <span class="hljs-tag">&lt;/<span class="hljs-name">exclude</span>&gt;</span>
+                        <span class="hljs-tag">&lt;/<span class="hljs-name">excludes</span>&gt;</span>
+                    <span class="hljs-tag">&lt;/<span class="hljs-name">configuration</span>&gt;</span>
+                    <span class="hljs-tag">&lt;<span class="hljs-name">executions</span>&gt;</span>
+                        <span class="hljs-tag">&lt;<span class="hljs-name">execution</span>&gt;</span>
+                            <span class="hljs-tag">&lt;<span class="hljs-name">id</span>&gt;</span>process-aot<span class="hljs-tag">&lt;/<span class="hljs-name">id</span>&gt;</span>
+                            <span class="hljs-tag">&lt;<span class="hljs-name">goals</span>&gt;</span>
+                                <span class="hljs-tag">&lt;<span class="hljs-name">goal</span>&gt;</span>process-aot<span class="hljs-tag">&lt;/<span class="hljs-name">goal</span>&gt;</span> <span class="hljs-comment">&lt;!-- AOT 编译预处理 --&gt;</span>
+                            <span class="hljs-tag">&lt;/<span class="hljs-name">goals</span>&gt;</span>
+                        <span class="hljs-tag">&lt;/<span class="hljs-name">execution</span>&gt;</span>
+                    <span class="hljs-tag">&lt;/<span class="hljs-name">executions</span>&gt;</span>
+                <span class="hljs-tag">&lt;/<span class="hljs-name">plugin</span>&gt;</span>
 
-                &lt;plugin&gt;
-                    &lt;groupId&gt;org.codehaus.mojo&lt;/groupId&gt;
-                    &lt;artifactId&gt;flatten-maven-plugin&lt;/artifactId&gt;
-                    &lt;version&gt;1.6.0&lt;/version&gt;
-                    &lt;configuration&gt;
-                        &lt;flattenMode&gt;ci&lt;/flattenMode&gt; &lt;!-- CI 友好 POM（去除变量引用） --&gt;
-                    &lt;/configuration&gt;
-                &lt;/plugin&gt;
-            &lt;/plugins&gt;
-        &lt;/pluginManagement&gt;
-    &lt;/build&gt;
-&lt;/project&gt;
-</code></pre></div>
-<h3>2.2 BOM（Bill of Materials）</h3>
+                <span class="hljs-tag">&lt;<span class="hljs-name">plugin</span>&gt;</span>
+                    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.codehaus.mojo<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+                    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>flatten-maven-plugin<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+                    <span class="hljs-tag">&lt;<span class="hljs-name">version</span>&gt;</span>1.6.0<span class="hljs-tag">&lt;/<span class="hljs-name">version</span>&gt;</span>
+                    <span class="hljs-tag">&lt;<span class="hljs-name">configuration</span>&gt;</span>
+                        <span class="hljs-tag">&lt;<span class="hljs-name">flattenMode</span>&gt;</span>ci<span class="hljs-tag">&lt;/<span class="hljs-name">flattenMode</span>&gt;</span> <span class="hljs-comment">&lt;!-- CI 友好 POM（去除变量引用） --&gt;</span>
+                    <span class="hljs-tag">&lt;/<span class="hljs-name">configuration</span>&gt;</span>
+                <span class="hljs-tag">&lt;/<span class="hljs-name">plugin</span>&gt;</span>
+            <span class="hljs-tag">&lt;/<span class="hljs-name">plugins</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">pluginManagement</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">build</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">project</span>&gt;</span>
+</code></pre></div><h3>2.2 BOM（Bill of Materials）</h3>
 <p>BOM 是 Maven 提供的版本管理机制，用于统一管理一组依赖的版本：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;!-- 创建自定义 BOM（供公司内部多个项目使用） --&gt;
-&lt;project&gt;
-    &lt;groupId&gt;com.example&lt;/groupId&gt;
-    &lt;artifactId&gt;ai-platform-bom&lt;/artifactId&gt;
-    &lt;version&gt;1.0.0&lt;/version&gt;
-    &lt;packaging&gt;pom&lt;/packaging&gt;
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-xml"><span class="hljs-comment">&lt;!-- 创建自定义 BOM（供公司内部多个项目使用） --&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">project</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>com.example<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>ai-platform-bom<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">version</span>&gt;</span>1.0.0<span class="hljs-tag">&lt;/<span class="hljs-name">version</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">packaging</span>&gt;</span>pom<span class="hljs-tag">&lt;/<span class="hljs-name">packaging</span>&gt;</span>
 
-    &lt;dependencyManagement&gt;
-        &lt;dependencies&gt;
-            &lt;dependency&gt;
-                &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
-                &lt;artifactId&gt;spring-boot-starter-parent&lt;/artifactId&gt;
-                &lt;version&gt;4.0.0&lt;/version&gt;
-                &lt;type&gt;pom&lt;/type&gt;
-                &lt;scope&gt;import&lt;/scope&gt;
-            &lt;/dependency&gt;
-            &lt;!-- 锁定所有 AI 相关依赖版本 --&gt;
-        &lt;/dependencies&gt;
-    &lt;/dependencyManagement&gt;
-&lt;/project&gt;
+    <span class="hljs-tag">&lt;<span class="hljs-name">dependencyManagement</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">dependencies</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.boot<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-boot-starter-parent<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">version</span>&gt;</span>4.0.0<span class="hljs-tag">&lt;/<span class="hljs-name">version</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">type</span>&gt;</span>pom<span class="hljs-tag">&lt;/<span class="hljs-name">type</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">scope</span>&gt;</span>import<span class="hljs-tag">&lt;/<span class="hljs-name">scope</span>&gt;</span>
+            <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+            <span class="hljs-comment">&lt;!-- 锁定所有 AI 相关依赖版本 --&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">dependencies</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">dependencyManagement</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">project</span>&gt;</span>
 
-&lt;!-- 其他项目使用这个 BOM --&gt;
-&lt;dependencyManagement&gt;
-    &lt;dependencies&gt;
-        &lt;dependency&gt;
-            &lt;groupId&gt;com.example&lt;/groupId&gt;
-            &lt;artifactId&gt;ai-platform-bom&lt;/artifactId&gt;
-            &lt;version&gt;1.0.0&lt;/version&gt;
-            &lt;type&gt;pom&lt;/type&gt;
-            &lt;scope&gt;import&lt;/scope&gt;
-        &lt;/dependency&gt;
-    &lt;/dependencies&gt;
-&lt;/dependencyManagement&gt;
-</code></pre></div>
-<h3>2.3 聚合 vs 继承</h3>
+<span class="hljs-comment">&lt;!-- 其他项目使用这个 BOM --&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">dependencyManagement</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">dependencies</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>com.example<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>ai-platform-bom<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">version</span>&gt;</span>1.0.0<span class="hljs-tag">&lt;/<span class="hljs-name">version</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">type</span>&gt;</span>pom<span class="hljs-tag">&lt;/<span class="hljs-name">type</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">scope</span>&gt;</span>import<span class="hljs-tag">&lt;/<span class="hljs-name">scope</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">dependencies</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependencyManagement</span>&gt;</span>
+</code></pre></div><h3>2.3 聚合 vs 继承</h3>
 <table>
 <thead>
 <tr>
@@ -294,19 +288,18 @@ infra → api
 <hr>
 <h2>三、Maven Wrapper</h2>
 <p>Maven Wrapper 确保所有开发者使用相同版本的 Maven：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># 在项目根目录执行（一次性）
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-comment"># 在项目根目录执行（一次性）</span>
 mvn wrapper:wrapper -Dmaven=4.0.0
 
-# 生成文件：
-# .mvn/wrapper/maven-wrapper.properties  ← 配置 Maven 版本和下载地址
-# mvnw                                    ← Unix/Mac 可执行脚本
-# mvnw.cmd                                ← Windows 可执行脚本
+<span class="hljs-comment"># 生成文件：</span>
+<span class="hljs-comment"># .mvn/wrapper/maven-wrapper.properties  ← 配置 Maven 版本和下载地址</span>
+<span class="hljs-comment"># mvnw                                    ← Unix/Mac 可执行脚本</span>
+<span class="hljs-comment"># mvnw.cmd                                ← Windows 可执行脚本</span>
 
-# 之后所有构建命令使用 mvnw 代替 mvn：
+<span class="hljs-comment"># 之后所有构建命令使用 mvnw 代替 mvn：</span>
 ./mvnw clean package
 ./mvnw spring-boot:run
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>四、依赖管理</h2>
 <h3>4.1 Scope（作用域）</h3>
 <table>
@@ -362,208 +355,198 @@ mvn wrapper:wrapper -Dmaven=4.0.0
 </tr>
 </tbody></table>
 <h3>4.2 Optional 依赖</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;!-- 声明可选依赖：不会传递给依赖方 --&gt;
-&lt;dependency&gt;
-    &lt;groupId&gt;com.example&lt;/groupId&gt;
-    &lt;artifactId&gt;optional-lib&lt;/artifactId&gt;
-    &lt;optional&gt;true&lt;/optional&gt;
-&lt;/dependency&gt;
-</code></pre></div>
-<h3>4.3 依赖排除</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;dependency&gt;
-    &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
-    &lt;artifactId&gt;spring-boot-starter-web&lt;/artifactId&gt;
-    &lt;!-- 排除 Tomcat，使用 Undertow --&gt;
-    &lt;exclusions&gt;
-        &lt;exclusion&gt;
-            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
-            &lt;artifactId&gt;spring-boot-starter-tomcat&lt;/artifactId&gt;
-        &lt;/exclusion&gt;
-    &lt;/exclusions&gt;
-&lt;/dependency&gt;
-&lt;dependency&gt;
-    &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
-    &lt;artifactId&gt;spring-boot-starter-undertow&lt;/artifactId&gt;
-&lt;/dependency&gt;
-</code></pre></div>
-<h3>4.4 依赖冲突解决</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-xml"><span class="hljs-comment">&lt;!-- 声明可选依赖：不会传递给依赖方 --&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>com.example<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>optional-lib<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">optional</span>&gt;</span>true<span class="hljs-tag">&lt;/<span class="hljs-name">optional</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+</code></pre></div><h3>4.3 依赖排除</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.boot<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-boot-starter-web<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+    <span class="hljs-comment">&lt;!-- 排除 Tomcat，使用 Undertow --&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">exclusions</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">exclusion</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.boot<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-boot-starter-tomcat<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">exclusion</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">exclusions</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.boot<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-boot-starter-undertow<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+</code></pre></div><h3>4.4 依赖冲突解决</h3>
 <p><strong>冲突原则：最短路径优先（Nearest Wins）</strong></p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>项目
- ├─ spring-boot-starter-web (依赖 Jackson 2.18.0)
- └─ 直接声明 jackson-databind 2.19.0
+ ├─ spring-<span class="hljs-keyword">boot-starter-web </span>(依赖 <span class="hljs-keyword">Jackson </span><span class="hljs-number">2</span>.<span class="hljs-number">18</span>.<span class="hljs-number">0</span>)
+ └─ 直接声明 <span class="hljs-keyword">jackson-databind </span><span class="hljs-number">2</span>.<span class="hljs-number">19</span>.<span class="hljs-number">0</span>
 
-结果：使用 2.19.0（直接依赖路径更短）
-</code></pre></div>
-<p><strong>最佳实践：</strong> 使用 <code>dependencyManagement</code> 显式锁定版本，并配合 <code>maven-enforcer-plugin</code> 检测冲突：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;plugin&gt;
-    &lt;groupId&gt;org.apache.maven.plugins&lt;/groupId&gt;
-    &lt;artifactId&gt;maven-enforcer-plugin&lt;/artifactId&gt;
-    &lt;executions&gt;
-        &lt;execution&gt;
-            &lt;id&gt;enforce-dependency-convergence&lt;/id&gt;
-            &lt;goals&gt;
-                &lt;goal&gt;enforce&lt;/goal&gt;
-            &lt;/goals&gt;
-            &lt;configuration&gt;
-                &lt;rules&gt;
-                    &lt;dependencyConvergence/&gt; &lt;!-- 检测依赖版本不一致 --&gt;
-                &lt;/rules&gt;
-            &lt;/configuration&gt;
-        &lt;/execution&gt;
-    &lt;/executions&gt;
-&lt;/plugin&gt;
-</code></pre></div>
-<hr>
+结果：使用 <span class="hljs-number">2</span>.<span class="hljs-number">19</span>.<span class="hljs-number">0</span>（直接依赖路径更短）
+</code></pre></div><p><strong>最佳实践：</strong> 使用 <code>dependencyManagement</code> 显式锁定版本，并配合 <code>maven-enforcer-plugin</code> 检测冲突：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">plugin</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.apache.maven.plugins<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>maven-enforcer-plugin<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">executions</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">execution</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">id</span>&gt;</span>enforce-dependency-convergence<span class="hljs-tag">&lt;/<span class="hljs-name">id</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">goals</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">goal</span>&gt;</span>enforce<span class="hljs-tag">&lt;/<span class="hljs-name">goal</span>&gt;</span>
+            <span class="hljs-tag">&lt;/<span class="hljs-name">goals</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">configuration</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">rules</span>&gt;</span>
+                    <span class="hljs-tag">&lt;<span class="hljs-name">dependencyConvergence</span>/&gt;</span> <span class="hljs-comment">&lt;!-- 检测依赖版本不一致 --&gt;</span>
+                <span class="hljs-tag">&lt;/<span class="hljs-name">rules</span>&gt;</span>
+            <span class="hljs-tag">&lt;/<span class="hljs-name">configuration</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">execution</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">executions</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">plugin</span>&gt;</span>
+</code></pre></div><hr>
 <h2>五、关键插件配置</h2>
 <h3>5.1 spring-boot-maven-plugin（AOT 处理）</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;plugin&gt;
-    &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
-    &lt;artifactId&gt;spring-boot-maven-plugin&lt;/artifactId&gt;
-    &lt;configuration&gt;
-        &lt;image&gt;
-            &lt;builder&gt;paketobuildpacks/builder-jammy-base:latest&lt;/builder&gt;
-            &lt;name&gt;registry.example.com/${project.artifactId}:${project.version}&lt;/name&gt;
-        &lt;/image&gt;
-    &lt;/configuration&gt;
-    &lt;executions&gt;
-        &lt;execution&gt;
-            &lt;id&gt;process-aot&lt;/id&gt;
-            &lt;goals&gt;
-                &lt;goal&gt;process-aot&lt;/goal&gt;
-            &lt;/goals&gt;
-        &lt;/execution&gt;
-    &lt;/executions&gt;
-&lt;/plugin&gt;
-</code></pre></div>
-<h3>5.2 flatten-maven-plugin（CI 友好 POM）</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;plugin&gt;
-    &lt;groupId&gt;org.codehaus.mojo&lt;/groupId&gt;
-    &lt;artifactId&gt;flatten-maven-plugin&lt;/artifactId&gt;
-    &lt;configuration&gt;
-        &lt;flattenMode&gt;ci&lt;/flattenMode&gt;
-    &lt;/configuration&gt;
-    &lt;executions&gt;
-        &lt;execution&gt;
-            &lt;id&gt;flatten&lt;/id&gt;
-            &lt;phase&gt;process-resources&lt;/phase&gt;
-            &lt;goals&gt;
-                &lt;goal&gt;flatten&lt;/goal&gt;
-            &lt;/goals&gt;
-        &lt;/execution&gt;
-    &lt;/executions&gt;
-&lt;/plugin&gt;
-</code></pre></div>
-<p><strong>作用：</strong> 发布时生成去除了 <code>${revision}</code> 等变量引用的 <code>.flattened-pom.xml</code>，确保 CI 系统和 Maven Central 能正确解析。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">plugin</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.boot<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-boot-maven-plugin<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">configuration</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">image</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">builder</span>&gt;</span>paketobuildpacks/builder-jammy-base:latest<span class="hljs-tag">&lt;/<span class="hljs-name">builder</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">name</span>&gt;</span>registry.example.com/${project.artifactId}:${project.version}<span class="hljs-tag">&lt;/<span class="hljs-name">name</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">image</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">configuration</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">executions</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">execution</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">id</span>&gt;</span>process-aot<span class="hljs-tag">&lt;/<span class="hljs-name">id</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">goals</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">goal</span>&gt;</span>process-aot<span class="hljs-tag">&lt;/<span class="hljs-name">goal</span>&gt;</span>
+            <span class="hljs-tag">&lt;/<span class="hljs-name">goals</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">execution</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">executions</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">plugin</span>&gt;</span>
+</code></pre></div><h3>5.2 flatten-maven-plugin（CI 友好 POM）</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">plugin</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.codehaus.mojo<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>flatten-maven-plugin<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">configuration</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">flattenMode</span>&gt;</span>ci<span class="hljs-tag">&lt;/<span class="hljs-name">flattenMode</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">configuration</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">executions</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">execution</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">id</span>&gt;</span>flatten<span class="hljs-tag">&lt;/<span class="hljs-name">id</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">phase</span>&gt;</span>process-resources<span class="hljs-tag">&lt;/<span class="hljs-name">phase</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">goals</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">goal</span>&gt;</span>flatten<span class="hljs-tag">&lt;/<span class="hljs-name">goal</span>&gt;</span>
+            <span class="hljs-tag">&lt;/<span class="hljs-name">goals</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">execution</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">executions</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">plugin</span>&gt;</span>
+</code></pre></div><p><strong>作用：</strong> 发布时生成去除了 <code>${revision}</code> 等变量引用的 <code>.flattened-pom.xml</code>，确保 CI 系统和 Maven Central 能正确解析。</p>
 <hr>
 <h2>六、静态分析集成</h2>
 <h3>6.1 SpotBugs（字节码级别缺陷检测）</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;plugin&gt;
-    &lt;groupId&gt;com.github.spotbugs&lt;/groupId&gt;
-    &lt;artifactId&gt;spotbugs-maven-plugin&lt;/artifactId&gt;
-    &lt;version&gt;${spotbugs.version}&lt;/version&gt;
-    &lt;configuration&gt;
-        &lt;effort&gt;Max&lt;/effort&gt;
-        &lt;threshold&gt;Low&lt;/threshold&gt;
-        &lt;failOnError&gt;true&lt;/failOnError&gt;
-    &lt;/configuration&gt;
-    &lt;executions&gt;
-        &lt;execution&gt;
-            &lt;goals&gt;
-                &lt;goal&gt;check&lt;/goal&gt;
-            &lt;/goals&gt;
-        &lt;/execution&gt;
-    &lt;/executions&gt;
-&lt;/plugin&gt;
-</code></pre></div>
-<h3>6.2 Checkstyle（代码风格检查）</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;plugin&gt;
-    &lt;groupId&gt;org.apache.maven.plugins&lt;/groupId&gt;
-    &lt;artifactId&gt;maven-checkstyle-plugin&lt;/artifactId&gt;
-    &lt;version&gt;${checkstyle.version}&lt;/version&gt;
-    &lt;configuration&gt;
-        &lt;configLocation&gt;checkstyle.xml&lt;/configLocation&gt;
-        &lt;failsOnError&gt;true&lt;/failsOnError&gt;
-    &lt;/configuration&gt;
-    &lt;executions&gt;
-        &lt;execution&gt;
-            &lt;goals&gt;
-                &lt;goal&gt;check&lt;/goal&gt;
-            &lt;/goals&gt;
-        &lt;/execution&gt;
-    &lt;/executions&gt;
-&lt;/plugin&gt;
-</code></pre></div>
-<h3>6.3 PMD（源码级别潜在问题检测）</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;plugin&gt;
-    &lt;groupId&gt;org.apache.maven.plugins&lt;/groupId&gt;
-    &lt;artifactId&gt;maven-pmd-plugin&lt;/artifactId&gt;
-    &lt;version&gt;${pmd.version}&lt;/version&gt;
-    &lt;configuration&gt;
-        &lt;rulesets&gt;
-            &lt;ruleset&gt;category/java/bestpractices.xml&lt;/ruleset&gt;
-            &lt;ruleset&gt;category/java/errorprone.xml&lt;/ruleset&gt;
-        &lt;/rulesets&gt;
-    &lt;/configuration&gt;
-&lt;/plugin&gt;
-</code></pre></div>
-<hr>
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">plugin</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>com.github.spotbugs<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spotbugs-maven-plugin<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">version</span>&gt;</span>${spotbugs.version}<span class="hljs-tag">&lt;/<span class="hljs-name">version</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">configuration</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">effort</span>&gt;</span>Max<span class="hljs-tag">&lt;/<span class="hljs-name">effort</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">threshold</span>&gt;</span>Low<span class="hljs-tag">&lt;/<span class="hljs-name">threshold</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">failOnError</span>&gt;</span>true<span class="hljs-tag">&lt;/<span class="hljs-name">failOnError</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">configuration</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">executions</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">execution</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">goals</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">goal</span>&gt;</span>check<span class="hljs-tag">&lt;/<span class="hljs-name">goal</span>&gt;</span>
+            <span class="hljs-tag">&lt;/<span class="hljs-name">goals</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">execution</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">executions</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">plugin</span>&gt;</span>
+</code></pre></div><h3>6.2 Checkstyle（代码风格检查）</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">plugin</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.apache.maven.plugins<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>maven-checkstyle-plugin<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">version</span>&gt;</span>${checkstyle.version}<span class="hljs-tag">&lt;/<span class="hljs-name">version</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">configuration</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">configLocation</span>&gt;</span>checkstyle.xml<span class="hljs-tag">&lt;/<span class="hljs-name">configLocation</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">failsOnError</span>&gt;</span>true<span class="hljs-tag">&lt;/<span class="hljs-name">failsOnError</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">configuration</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">executions</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">execution</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">goals</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">goal</span>&gt;</span>check<span class="hljs-tag">&lt;/<span class="hljs-name">goal</span>&gt;</span>
+            <span class="hljs-tag">&lt;/<span class="hljs-name">goals</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">execution</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">executions</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">plugin</span>&gt;</span>
+</code></pre></div><h3>6.3 PMD（源码级别潜在问题检测）</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">plugin</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.apache.maven.plugins<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>maven-pmd-plugin<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">version</span>&gt;</span>${pmd.version}<span class="hljs-tag">&lt;/<span class="hljs-name">version</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">configuration</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">rulesets</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">ruleset</span>&gt;</span>category/java/bestpractices.xml<span class="hljs-tag">&lt;/<span class="hljs-name">ruleset</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">ruleset</span>&gt;</span>category/java/errorprone.xml<span class="hljs-tag">&lt;/<span class="hljs-name">ruleset</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">rulesets</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">configuration</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">plugin</span>&gt;</span>
+</code></pre></div><hr>
 <h2>七、子模块 Web 层完整 pom.xml 示例</h2>
-<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
-&lt;project xmlns=&quot;http://maven.apache.org/POM/4.0.0&quot;
-         xmlns:xsi=&quot;http://www.w3.org/2001/XMLSchema-instance&quot;
-         xsi:schemaLocation=&quot;http://maven.apache.org/POM/4.0.0
-         https://maven.apache.org/xsd/maven-4.0.0.xsd&quot;&gt;
-    &lt;modelVersion&gt;4.0.0&lt;/modelVersion&gt;
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-xml"><span class="hljs-meta">&lt;?xml version=<span class="hljs-string">"1.0"</span> encoding=<span class="hljs-string">"UTF-8"</span>?&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">project</span> <span class="hljs-attr">xmlns</span>=<span class="hljs-string">"http://maven.apache.org/POM/4.0.0"</span>
+         <span class="hljs-attr">xmlns:xsi</span>=<span class="hljs-string">"http://www.w3.org/2001/XMLSchema-instance"</span>
+         <span class="hljs-attr">xsi:schemaLocation</span>=<span class="hljs-string">"http://maven.apache.org/POM/4.0.0
+         https://maven.apache.org/xsd/maven-4.0.0.xsd"</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">modelVersion</span>&gt;</span>4.0.0<span class="hljs-tag">&lt;/<span class="hljs-name">modelVersion</span>&gt;</span>
 
-    &lt;parent&gt;
-        &lt;groupId&gt;com.example&lt;/groupId&gt;
-        &lt;artifactId&gt;ai-knowledge-platform&lt;/artifactId&gt;
-        &lt;version&gt;1.0.0-SNAPSHOT&lt;/version&gt;
-    &lt;/parent&gt;
+    <span class="hljs-tag">&lt;<span class="hljs-name">parent</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>com.example<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>ai-knowledge-platform<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">version</span>&gt;</span>1.0.0-SNAPSHOT<span class="hljs-tag">&lt;/<span class="hljs-name">version</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">parent</span>&gt;</span>
 
-    &lt;artifactId&gt;ai-knowledge-web&lt;/artifactId&gt;
-    &lt;packaging&gt;jar&lt;/packaging&gt;
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>ai-knowledge-web<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">packaging</span>&gt;</span>jar<span class="hljs-tag">&lt;/<span class="hljs-name">packaging</span>&gt;</span>
 
-    &lt;dependencies&gt;
-        &lt;!-- 内部模块 --&gt;
-        &lt;dependency&gt;
-            &lt;groupId&gt;com.example&lt;/groupId&gt;
-            &lt;artifactId&gt;ai-knowledge-service&lt;/artifactId&gt;
-        &lt;/dependency&gt;
-        &lt;dependency&gt;
-            &lt;groupId&gt;com.example&lt;/groupId&gt;
-            &lt;artifactId&gt;ai-knowledge-infra&lt;/artifactId&gt;
-        &lt;/dependency&gt;
+    <span class="hljs-tag">&lt;<span class="hljs-name">dependencies</span>&gt;</span>
+        <span class="hljs-comment">&lt;!-- 内部模块 --&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>com.example<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>ai-knowledge-service<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>com.example<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>ai-knowledge-infra<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
 
-        &lt;!-- Spring Boot Starters --&gt;
-        &lt;dependency&gt;
-            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
-            &lt;artifactId&gt;spring-boot-starter-web&lt;/artifactId&gt;
-        &lt;/dependency&gt;
-        &lt;dependency&gt;
-            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
-            &lt;artifactId&gt;spring-boot-starter-actuator&lt;/artifactId&gt;
-        &lt;/dependency&gt;
+        <span class="hljs-comment">&lt;!-- Spring Boot Starters --&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.boot<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-boot-starter-web<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.boot<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-boot-starter-actuator<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
 
-        &lt;!-- 数据库（运行时依赖） --&gt;
-        &lt;dependency&gt;
-            &lt;groupId&gt;org.postgresql&lt;/groupId&gt;
-            &lt;artifactId&gt;postgresql&lt;/artifactId&gt;
-            &lt;scope&gt;runtime&lt;/scope&gt;
-        &lt;/dependency&gt;
-    &lt;/dependencies&gt;
+        <span class="hljs-comment">&lt;!-- 数据库（运行时依赖） --&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.postgresql<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>postgresql<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">scope</span>&gt;</span>runtime<span class="hljs-tag">&lt;/<span class="hljs-name">scope</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">dependencies</span>&gt;</span>
 
-    &lt;build&gt;
-        &lt;plugins&gt;
-            &lt;plugin&gt;
-                &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
-                &lt;artifactId&gt;spring-boot-maven-plugin&lt;/artifactId&gt;
-            &lt;/plugin&gt;
-        &lt;/plugins&gt;
-    &lt;/build&gt;
-&lt;/project&gt;
-</code></pre></div>
-<hr>
+    <span class="hljs-tag">&lt;<span class="hljs-name">build</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">plugins</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">plugin</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.boot<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-boot-maven-plugin<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+            <span class="hljs-tag">&lt;/<span class="hljs-name">plugin</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">plugins</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">build</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">project</span>&gt;</span>
+</code></pre></div><hr>
 <h2>常见问题</h2>
 <p><strong>Q: Maven 多模块中如何避免循环依赖？</strong>
 A: 1) 遵循依赖方向原则（上层依赖下层，下层不依赖上层）；2) 使用 <code>maven-enforcer-plugin</code> 的 <code>banCircularDependencies</code> 规则；3) 出现循环时，抽取公共接口到独立模块（依赖倒置）。</p>
@@ -576,10 +559,10 @@ A: 项目中 Maven 是主栈（Adopt）。Gradle 构建速度快（增量构建�
 <hr>
 <h2>相关条目</h2>
 <ul>
-<li><a href="#/03-Java应用平台/Spring核心/03-SpringBoot4深度解析" class="cross-ref" data-ref="03-SpringBoot4深度解析">03-SpringBoot4深度解析</a>：Spring Boot 启动流程</li>
-<li><a href="#/03-Java应用平台/工程规范/03-Jackson-MapStruct-Validator序列化与校验" class="cross-ref" data-ref="03-Jackson-MapStruct-Validator序列化与校验">03-Jackson-MapStruct-Validator序列化与校验</a>：编译期代码生成与序列化</li>
-<li><a href="#/03-Java应用平台/工程规范/03-任务调度Quartz与XXL-JOB" class="cross-ref" data-ref="03-任务调度Quartz与XXL-JOB">03-任务调度Quartz与XXL-JOB</a>：定时任务依赖配置</li>
-<li><a href="#/09-Java AI框架/09-架构抽象层设计" class="cross-ref" data-ref="09-架构抽象层设计">09-架构抽象层设计</a>：AI 项目模块结构设计</li>
+<li><a href="#/03-Java应用平台/Spring核心/03-SpringBoot4深度解析" class="cross-ref">03-SpringBoot4深度解析</a>：Spring Boot 启动流程</li>
+<li><a href="#/03-Java应用平台/工程规范/03-Jackson-MapStruct-Validator序列化与校验" class="cross-ref">03-Jackson-MapStruct-Validator序列化与校验</a>：编译期代码生成与序列化</li>
+<li><a href="#/03-Java应用平台/工程规范/03-任务调度Quartz与XXL-JOB" class="cross-ref">03-任务调度Quartz与XXL-JOB</a>：定时任务依赖配置</li>
+<li><a href="#/09-Java AI框架/09-架构抽象层设计" class="cross-ref">09-架构抽象层设计</a>：AI 项目模块结构设计</li>
 </ul>
-</div>
+</body></html></div>
 </article>

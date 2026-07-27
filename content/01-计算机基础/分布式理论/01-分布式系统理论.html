@@ -1,14 +1,14 @@
 
-<article class="kb-entry" data-path="/01-计算机基础/分布式理论/01-分布式系统理论">
+<article class="kb-entry" data-path="/01-计算机基础">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=01">01-计算机基础</a></div>
     <h1>分布式系统理论 — CAP、一致性模型与共识算法</h1>
-    <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#distributed-systems</span><span class="badge badge-tag">#cap-theorem</span><span class="badge badge-tag">#consensus</span><span class="badge badge-tag">#raft</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#distributed-systems</span><span class="badge badge-tag">#cap-theorem</span><span class="badge badge-tag">#consensus</span><span class="badge badge-tag">#raft</span><span class="badge badge-tag">#paxos</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://raft.github.io/raft.pdf" target="_blank" rel="noopener" class="source-link" title="Raft 共识算法论文 (Diego Ongaro, John Ousterhout, 2014)">Raft 共识算法论文 (Diego Ongaro, John Ousterhout, 2014)</a><a href="https://lamport.azurewebsites.net/pubs/paxos-simple.pdf" target="_blank" rel="noopener" class="source-link" title="Paxos Made Simple (Leslie Lamport, 2001)">Paxos Made Simple (Leslie Lamport, 2001)</a><a href="https://zookeeper.apache.org/doc/current/zookeeperInternals.html" target="_blank" rel="noopener" class="source-link" title="Apache ZooKeeper 内部原理 — ZAB 协议">Apache ZooKeeper 内部原理 — ZAB 协议</a><a href="https://static.googleusercontent.com/media/research.google.com/en//archive/spanner-osdi2012.pdf" target="_blank" rel="noopener" class="source-link" title="Spanner: Google's Globally-Distributed Database — TrueTime 机制">Spanner: Google's Globally-Distributed Database — TrueTime 机制</a></small></div>
   </div>
-  <div class="entry-body"><h1>分布式系统理论</h1>
+  <div class="entry-body"><html><head></head><body><h1>分布式系统理论</h1>
 <h2>概述</h2>
-<p>分布式系统是现代互联网后端的基础设施。当系统从单机扩展到多机时，一系列全新的问题涌现：部分失败（Partial Failure）、时钟不可靠、网络分区、数据一致性等。这些不是单机系统的&quot;放大版&quot;问题，而是不同性质的问题。本文覆盖 CAP 定理与 PACELC 扩展、BASE 与一致性模型、共识算法（Paxos/Raft/ZAB）、分布式时钟、一致性哈希、故障模型和 Quorum 机制，帮助建立分布式系统的理论框架。</p>
+<p>分布式系统是现代互联网后端的基础设施。当系统从单机扩展到多机时，一系列全新的问题涌现：部分失败（Partial Failure）、时钟不可靠、网络分区、数据一致性等。这些不是单机系统的"放大版"问题，而是不同性质的问题。本文覆盖 CAP 定理与 PACELC 扩展、BASE 与一致性模型、共识算法（Paxos/Raft/ZAB）、分布式时钟、一致性哈希、故障模型和 Quorum 机制，帮助建立分布式系统的理论框架。</p>
 <hr>
 <h2>核心内容</h2>
 <h3>一、CAP 定理</h3>
@@ -34,13 +34,13 @@
 <td>分区容错性。系统在任意消息丢失（网络分区）的情况下仍能继续运行。</td>
 </tr>
 </tbody></table>
-<p><strong>关键认知纠正：</strong> CAP 不是&quot;三选二&quot;——在网络分区发生时，必须在 C 和 A 之间做选择。当没有分区时，C 和 A 可以同时满足。换句话说：<strong>通常情况选 CA，分区情况选 CP 或 AP。</strong></p>
+<p><strong>关键认知纠正：</strong> CAP 不是"三选二"——在网络分区发生时，必须在 C 和 A 之间做选择。当没有分区时，C 和 A 可以同时满足。换句话说：<strong>通常情况选 CA，分区情况选 CP 或 AP。</strong></p>
 <h4>1.2 常见误解</h4>
-<p><strong>误解 1：&quot;CAP 意味着分布式系统只能保证 C 或 A 之一，不能两者兼顾。&quot;</strong>
+<p><strong>误解 1："CAP 意味着分布式系统只能保证 C 或 A 之一，不能两者兼顾。"</strong>
 正解：在没有网络分区时，系统可以既一致又可用。CAP 说的是分区发生时必须做出取舍。</p>
-<p><strong>误解 2：&quot;NoSQL 放弃了 C 选择了 A，传统关系数据库放弃了 A 选择了 C。&quot;</strong>
+<p><strong>误解 2："NoSQL 放弃了 C 选择了 A，传统关系数据库放弃了 A 选择了 C。"</strong>
 正解：这种简化过于粗糙。许多 NoSQL 系统（如 MongoDB、HBase）默认提供强一致性。许多关系数据库也通过主从复制在特定场景下提供弱一致性。</p>
-<p><strong>误解 3：&quot;CAP 已经过时了，被 PACELC 取代。&quot;</strong>
+<p><strong>误解 3："CAP 已经过时了，被 PACELC 取代。"</strong>
 正解：PACELC 是 CAP 的扩展和细化，不是替代。CAP 的核心洞察（分区发生时的一致性与可用性权衡）依然成立。</p>
 <h4>1.3 CP vs AP 的实际选择</h4>
 <table>
@@ -75,11 +75,10 @@
 <h3>二、PACELC — CAP 的扩展模型</h3>
 <p>PACELC 由 Daniel Abadi 在 2010 年提出，是对 CAP 的细化和补充：</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>如果发生网络分区 (P)：
-  在 A 和 C 之间选择 (同 CAP)
+  在 <span class="hljs-selector-tag">A</span> 和 C 之间选择 (同 CAP)
 否则 (E, Else) 没有分区：
   在 L (Latency) 和 C (Consistency) 之间选择
-</code></pre></div>
-<p><strong>PACELC 分类：</strong></p>
+</code></pre></div><p><strong>PACELC 分类：</strong></p>
 <table>
 <thead>
 <tr>
@@ -162,15 +161,15 @@
 <p><strong>实现代价：</strong> 需要共识算法（Paxos/Raft）或同步复制。延迟高，可用性在有分区时受损。</p>
 <h4>4.2 顺序一致性（Sequential Consistency）</h4>
 <p>所有操作在所有副本上按相同的顺序执行，但不需要与真实时间顺序一致。Lamport 的定义：任何执行的结果都像所有处理器按某种顺序顺序执行，每个处理器内部的操作按程序指定的顺序。</p>
-<p><strong>关键区别：</strong> 顺序一致性不要求&quot;读一定返回最近写的结果&quot;——只要所有节点看到的操作顺序一致即可。</p>
+<p><strong>关键区别：</strong> 顺序一致性不要求"读一定返回最近写的结果"——只要所有节点看到的操作顺序一致即可。</p>
 <h4>4.3 因果一致性（Causal Consistency）</h4>
 <p>有因果关系的操作在所有节点按相同顺序执行，没有因果关系的操作可以乱序。</p>
 <p><strong>如何判断因果关系：</strong> 使用 Vector Clock 或 Lamport Timestamp 追踪 happens-before 关系。例如：A 发了帖子，B 评论了 A 的帖子——评论和帖子有因果关系，必须按先后顺序。而 C 发的另一篇帖子和 A 没有因果关系，可以乱序。</p>
 <h4>4.4 最终一致性（Eventual Consistency）</h4>
 <p>如果没有新的写入，最终所有副本都会收敛到相同的值。这是最弱的一致性保证，也是互联网系统中最常见的选择。</p>
-<p><strong>问题：</strong> &quot;最终&quot;是多久？1 秒？1 分钟？没有定义。DNS 的最终一致性（TTL 内可能读到旧记录）和 Cassandra 的最终一致性（毫秒级到秒级）差别很大。</p>
+<p><strong>问题：</strong> "最终"是多久？1 秒？1 分钟？没有定义。DNS 的最终一致性（TTL 内可能读到旧记录）和 Cassandra 的最终一致性（毫秒级到秒级）差别很大。</p>
 <h4>4.5 读己之写（Read-Your-Writes）</h4>
-<p>用户总是能读到自己写入的数据（保证自己看到的是最新的），但其他用户可能看到旧版本。这是最终一致性在用户体验上的重要增强——用户不能忍受自己写的东西&quot;消失&quot;了。</p>
+<p>用户总是能读到自己写入的数据（保证自己看到的是最新的），但其他用户可能看到旧版本。这是最终一致性在用户体验上的重要增强——用户不能忍受自己写的东西"消失"了。</p>
 <p><strong>实现方式：</strong></p>
 <ul>
 <li>主从复制中的读写分离：写后立刻读主库</li>
@@ -196,15 +195,14 @@
 <li><strong>Learner：</strong> 学习最终结果</li>
 </ul>
 <p><strong>两个阶段（Phase 1: Prepare, Phase 2: Accept）：</strong></p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Phase 1 (Prepare):
-  Proposer → Acceptors: Prepare(n)   // n 是提案编号
-  Acceptor → Proposer:  Promise(已接受的最高编号提案，如果有)
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-attribute">Phase 1 (Prepare)</span><span class="hljs-punctuation">:</span>
+  <span class="hljs-attribute">Proposer → Acceptors</span><span class="hljs-punctuation">:</span> <span class="hljs-string">Prepare(n)   // n 是提案编号</span>
+  <span class="hljs-attribute">Acceptor → Proposer</span><span class="hljs-punctuation">:</span> <span class="hljs-string"> Promise(已接受的最高编号提案，如果有)</span>
 
-Phase 2 (Accept):
-  Proposer → Acceptors: Accept(n, value)  // value 可能是从 Promise 中获得的
-  Acceptor → Proposer:  Accepted(n, value)
-</code></pre></div>
-<p><strong>Multi-Paxos 优化：</strong> Basic Paxos 的单值共识需要两次往返。Multi-Paxos 在选出 Leader 后，Phase 1 只需要执行一次（Leader 任期内的后续提案只执行 Phase 2），将每次共识降为一次网络往返。</p>
+<span class="hljs-attribute">Phase 2 (Accept)</span><span class="hljs-punctuation">:</span>
+  <span class="hljs-attribute">Proposer → Acceptors</span><span class="hljs-punctuation">:</span> <span class="hljs-string">Accept(n, value)  // value 可能是从 Promise 中获得的</span>
+  <span class="hljs-attribute">Acceptor → Proposer</span><span class="hljs-punctuation">:</span> <span class="hljs-string"> Accepted(n, value)</span>
+</code></pre></div><p><strong>Multi-Paxos 优化：</strong> Basic Paxos 的单值共识需要两次往返。Multi-Paxos 在选出 Leader 后，Phase 1 只需要执行一次（Leader 任期内的后续提案只执行 Phase 2），将每次共识降为一次网络往返。</p>
 <p><strong>Paxos 的工程挑战：</strong></p>
 <ul>
 <li>难以理解和实现正确</li>
@@ -235,37 +233,36 @@ Phase 2 (Accept):
 <li><strong>成员变更（Joint Consensus）：</strong> 两阶段方法——先过渡到旧配置+新配置的联合状态，再切换到新配置</li>
 </ul>
 <p><strong>Raft 的 Java 实现示例（日志复制状态机关键结构）：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">record LogEntry(int term, int index, byte[] command) {}
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">record</span> <span class="hljs-title class_">LogEntry</span><span class="hljs-params">(<span class="hljs-type">int</span> term, <span class="hljs-type">int</span> index, <span class="hljs-type">byte</span>[] command)</span> {}
 
-class RaftNode {
-    // 持久状态（所有节点）
-    int currentTerm = 0;
-    Integer votedFor = null;
-    List&lt;LogEntry&gt; log = new ArrayList&lt;&gt;();
+<span class="hljs-keyword">class</span> <span class="hljs-title class_">RaftNode</span> {
+    <span class="hljs-comment">// 持久状态（所有节点）</span>
+    <span class="hljs-type">int</span> <span class="hljs-variable">currentTerm</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+    <span class="hljs-type">Integer</span> <span class="hljs-variable">votedFor</span> <span class="hljs-operator">=</span> <span class="hljs-literal">null</span>;
+    List&lt;LogEntry&gt; log = <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;&gt;();
 
-    // 易失状态（所有节点）
-    int commitIndex = 0;
-    int lastApplied = 0;
+    <span class="hljs-comment">// 易失状态（所有节点）</span>
+    <span class="hljs-type">int</span> <span class="hljs-variable">commitIndex</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+    <span class="hljs-type">int</span> <span class="hljs-variable">lastApplied</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
 
-    // 易失状态（Leader 节点）
-    Map&lt;String, Integer&gt; nextIndex = new HashMap&lt;&gt;();   // 每个 Follower 的下一个索引
-    Map&lt;String, Integer&gt; matchIndex = new HashMap&lt;&gt;();  // 每个 Follower 已复制的最高索引
+    <span class="hljs-comment">// 易失状态（Leader 节点）</span>
+    Map&lt;String, Integer&gt; nextIndex = <span class="hljs-keyword">new</span> <span class="hljs-title class_">HashMap</span>&lt;&gt;();   <span class="hljs-comment">// 每个 Follower 的下一个索引</span>
+    Map&lt;String, Integer&gt; matchIndex = <span class="hljs-keyword">new</span> <span class="hljs-title class_">HashMap</span>&lt;&gt;();  <span class="hljs-comment">// 每个 Follower 已复制的最高索引</span>
 
-    void appendEntries(String followerId) {
-        // Leader 给每个 Follower 发送 AppendEntries RPC
-        int prevLogIndex = nextIndex.get(followerId) - 1;
-        int prevLogTerm = prevLogIndex &gt;= 0
-            ? log.get(prevLogIndex).term() : 0;
+    <span class="hljs-keyword">void</span> <span class="hljs-title function_">appendEntries</span><span class="hljs-params">(String followerId)</span> {
+        <span class="hljs-comment">// Leader 给每个 Follower 发送 AppendEntries RPC</span>
+        <span class="hljs-type">int</span> <span class="hljs-variable">prevLogIndex</span> <span class="hljs-operator">=</span> nextIndex.get(followerId) - <span class="hljs-number">1</span>;
+        <span class="hljs-type">int</span> <span class="hljs-variable">prevLogTerm</span> <span class="hljs-operator">=</span> prevLogIndex &gt;= <span class="hljs-number">0</span>
+            ? log.get(prevLogIndex).term() : <span class="hljs-number">0</span>;
 
-        var entries = log.subList(nextIndex.get(followerId), log.size());
-        // 发送给 Follower: (term, prevLogIndex, prevLogTerm, entries, commitIndex)
-        // Follower 检查 prevLogIndex 和 prevLogTerm 是否匹配
-        //   匹配 → 追加 entries，更新 commitIndex
-        //   不匹配 → 返回 false，Leader 减小 nextIndex 并重试
+        <span class="hljs-type">var</span> <span class="hljs-variable">entries</span> <span class="hljs-operator">=</span> log.subList(nextIndex.get(followerId), log.size());
+        <span class="hljs-comment">// 发送给 Follower: (term, prevLogIndex, prevLogTerm, entries, commitIndex)</span>
+        <span class="hljs-comment">// Follower 检查 prevLogIndex 和 prevLogTerm 是否匹配</span>
+        <span class="hljs-comment">//   匹配 → 追加 entries，更新 commitIndex</span>
+        <span class="hljs-comment">//   不匹配 → 返回 false，Leader 减小 nextIndex 并重试</span>
     }
 }
-</code></pre></div>
-<h4>5.3 ZAB（ZooKeeper Atomic Broadcast）</h4>
+</code></pre></div><h4>5.3 ZAB（ZooKeeper Atomic Broadcast）</h4>
 <p>ZAB 是 ZooKeeper 使用的共识协议，与 Raft 在结构上相似（都是 Leader-based、日志复制、多数派提交），但有一些差异：</p>
 <ul>
 <li><strong>顺序保证：</strong> ZAB 保证所有提议按相同的顺序提交（全序广播/Atomic Broadcast）</li>
@@ -328,18 +325,17 @@ class RaftNode {
 </ul>
 <p><strong>性质：</strong> 如果事件 A happens-before 事件 B，则 <code>LC(A) &lt; LC(B)</code>。但反之不成立（<code>LC(A) &lt; LC(B)</code> 不保证 A happens-before B）。</p>
 <p><strong>Java 示例：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">class LamportClock {
-    private final AtomicInteger counter = new AtomicInteger(0);
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">class</span> <span class="hljs-title class_">LamportClock</span> {
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">AtomicInteger</span> <span class="hljs-variable">counter</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">AtomicInteger</span>(<span class="hljs-number">0</span>);
 
-    int tick() { return counter.incrementAndGet(); }
+    <span class="hljs-type">int</span> <span class="hljs-title function_">tick</span><span class="hljs-params">()</span> { <span class="hljs-keyword">return</span> counter.incrementAndGet(); }
 
-    int update(int receivedTimestamp) {
-        return counter.updateAndGet(
-            current -&gt; Math.max(current, receivedTimestamp) + 1);
+    <span class="hljs-type">int</span> <span class="hljs-title function_">update</span><span class="hljs-params">(<span class="hljs-type">int</span> receivedTimestamp)</span> {
+        <span class="hljs-keyword">return</span> counter.updateAndGet(
+            current -&gt; Math.max(current, receivedTimestamp) + <span class="hljs-number">1</span>);
     }
 }
-</code></pre></div>
-<h4>6.3 Vector Clock（向量时钟）</h4>
+</code></pre></div><h4>6.3 Vector Clock（向量时钟）</h4>
 <p>Vector Clock 解决了 Lamport 时钟无法判断因果关系的局限。每个节点维护一个向量 <code>[C1, C2, ..., Cn]</code>，其中 <code>Ci</code> 是节点 i 的本地计数器。</p>
 <p><strong>因果判断规则：</strong></p>
 <ul>
@@ -355,9 +351,8 @@ class RaftNode {
 <h3>七、一致性哈希</h3>
 <p>一致性哈希（Consistent Hashing）解决了动态增删节点时的数据迁移问题。</p>
 <p><strong>普通哈希取模的问题：</strong></p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>node = hash(key) % N
-</code></pre></div>
-<p>当 N 变化时，几乎所有的 key 都需要重新映射。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-keyword">node</span> <span class="hljs-title">= hash</span>(key) % N
+</code></pre></div><p>当 N 变化时，几乎所有的 key 都需要重新映射。</p>
 <p><strong>一致性哈希的解决方案：</strong></p>
 <ul>
 <li>将哈希空间组织为环形（0 到 2^32 - 1）</li>
@@ -366,33 +361,32 @@ class RaftNode {
 <li>增减节点时，只有相邻节点之间的数据需要迁移</li>
 </ul>
 <p><strong>Java 实现示例：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">class ConsistentHash&lt;T&gt; {
-    private final TreeMap&lt;Integer, T&gt; ring = new TreeMap&lt;&gt;();
-    private final int virtualNodeCount;
-    private final HashFunction hashFunction = Hashing.murmur3_32_fixed();
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">class</span> <span class="hljs-title class_">ConsistentHash</span>&lt;T&gt; {
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> TreeMap&lt;Integer, T&gt; ring = <span class="hljs-keyword">new</span> <span class="hljs-title class_">TreeMap</span>&lt;&gt;();
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">int</span> virtualNodeCount;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">HashFunction</span> <span class="hljs-variable">hashFunction</span> <span class="hljs-operator">=</span> Hashing.murmur3_32_fixed();
 
-    ConsistentHash(int virtualNodeCount, Collection&lt;T&gt; nodes) {
-        this.virtualNodeCount = virtualNodeCount;
-        for (T node : nodes) addNode(node);
+    ConsistentHash(<span class="hljs-type">int</span> virtualNodeCount, Collection&lt;T&gt; nodes) {
+        <span class="hljs-built_in">this</span>.virtualNodeCount = virtualNodeCount;
+        <span class="hljs-keyword">for</span> (T node : nodes) addNode(node);
     }
 
-    void addNode(T node) {
-        for (int i = 0; i &lt; virtualNodeCount; i++) {
-            int hash = hashFunction.hashUnencodedChars(
-                node.toString() + &quot;#&quot; + i).asInt();
+    <span class="hljs-keyword">void</span> <span class="hljs-title function_">addNode</span><span class="hljs-params">(T node)</span> {
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; virtualNodeCount; i++) {
+            <span class="hljs-type">int</span> <span class="hljs-variable">hash</span> <span class="hljs-operator">=</span> hashFunction.hashUnencodedChars(
+                node.toString() + <span class="hljs-string">"#"</span> + i).asInt();
             ring.put(hash, node);
         }
     }
 
-    T getNode(String key) {
-        int hash = hashFunction.hashUnencodedChars(key).asInt();
-        var entry = ring.ceilingEntry(hash);
-        if (entry == null) entry = ring.firstEntry();
-        return entry.getValue();
+    T <span class="hljs-title function_">getNode</span><span class="hljs-params">(String key)</span> {
+        <span class="hljs-type">int</span> <span class="hljs-variable">hash</span> <span class="hljs-operator">=</span> hashFunction.hashUnencodedChars(key).asInt();
+        <span class="hljs-type">var</span> <span class="hljs-variable">entry</span> <span class="hljs-operator">=</span> ring.ceilingEntry(hash);
+        <span class="hljs-keyword">if</span> (entry == <span class="hljs-literal">null</span>) entry = ring.firstEntry();
+        <span class="hljs-keyword">return</span> entry.getValue();
     }
 }
-</code></pre></div>
-<p><strong>虚节点的作用：</strong> 物理节点映射到环上多个位置，使数据分布更均匀，避免&quot;数据倾斜&quot;。</p>
+</code></pre></div><p><strong>虚节点的作用：</strong> 物理节点映射到环上多个位置，使数据分布更均匀，避免"数据倾斜"。</p>
 <hr>
 <h3>八、分布式系统故障模型</h3>
 <table>
@@ -433,7 +427,7 @@ class RaftNode {
 <p>区块链系统（如 Bitcoin、Ethereum）基于 BFT 共识，因为它们运行的节点是敌对环境（不信任任何节点）。</p>
 <hr>
 <h3>九、Quorum 机制</h3>
-<p>在分布式系统中，读写操作需要获得一定数量的节点&quot;投票&quot;才能成功：</p>
+<p>在分布式系统中，读写操作需要获得一定数量的节点"投票"才能成功：</p>
 <ul>
 <li><strong>N：</strong> 总副本数</li>
 <li><strong>R：</strong> 读操作需要确认的副本数</li>
@@ -484,7 +478,7 @@ class RaftNode {
 <td>没有重叠保证</td>
 </tr>
 </tbody></table>
-<p><strong>注意：</strong> <code>R + W &gt; N</code> 保证了读写重叠，但这只是&quot;至少有一个副本拥有最新数据&quot;的必要条件——还需要版本检测（Vector Clock）和冲突解决策略（last-write-wins, read-repair 等）。</p>
+<p><strong>注意：</strong> <code>R + W &gt; N</code> 保证了读写重叠，但这只是"至少有一个副本拥有最新数据"的必要条件——还需要版本检测（Vector Clock）和冲突解决策略（last-write-wins, read-repair 等）。</p>
 <hr>
 <h2>常见问题 / 面试题</h2>
 <p><strong>Q1: ZooKeeper 为什么推荐奇数个节点？</strong>
@@ -496,14 +490,14 @@ class RaftNode {
 <p><strong>Q4: Vector Clock 的缺陷是什么？</strong>
 Vector Clock 的大小随节点数线性增长。在大规模系统中（数千个节点），向量时钟可能比数据本身还大。Dynamo 通过定期截断（基于时间戳清除旧版本）和 gossip 协议同步来管理向量时钟的大小。</p>
 <p><strong>Q5: 两阶段提交（2PC）与共识算法（Paxos/Raft）有什么区别？</strong>
-2PC 解决分布式事务问题（一个协调者 + 多个参与者，要么全部提交要么全部回滚），但协调者故障可能导致阻塞。共识算法解决的是让多个节点对&quot;接下来做什么&quot;达成一致，不阻塞——只要多数节点存活就能继续。2PC 的协调者是单点；共识算法的 Leader 可以重新选举。</p>
+2PC 解决分布式事务问题（一个协调者 + 多个参与者，要么全部提交要么全部回滚），但协调者故障可能导致阻塞。共识算法解决的是让多个节点对"接下来做什么"达成一致，不阻塞——只要多数节点存活就能继续。2PC 的协调者是单点；共识算法的 Leader 可以重新选举。</p>
 <hr>
 <h2>相关条目</h2>
 <ul>
-<li><a href="#/01-计算机基础/数据库原理/01-数据库原理" class="cross-ref" data-ref="01-数据库原理">01-数据库原理</a> — 数据库原理（ACID、MVCC、事务）</li>
-<li><a href="#/01-计算机基础/计算机网络/01-计算机网络" class="cross-ref" data-ref="01-计算机网络">01-计算机网络</a> — 计算机网络（TCP、负载均衡）</li>
-<li><a href="#/01-计算机基础/操作系统/01-操作系统基础" class="cross-ref" data-ref="01-操作系统基础">01-操作系统基础</a> — 操作系统基础（同步、调度）</li>
-<li><a href="#/01-计算机基础/数据结构与算法/01-数据结构与算法" class="cross-ref" data-ref="01-数据结构与算法">01-数据结构与算法</a> — 数据结构与算法（一致性哈希、B+Tree）</li>
+<li><a href="#/01-计算机基础/数据库原理/01-数据库原理" class="cross-ref">01-数据库原理</a> — 数据库原理（ACID、MVCC、事务）</li>
+<li><a href="#/01-计算机基础/计算机网络/01-计算机网络" class="cross-ref">01-计算机网络</a> — 计算机网络（TCP、负载均衡）</li>
+<li><a href="#/01-计算机基础/操作系统/01-操作系统基础" class="cross-ref">01-操作系统基础</a> — 操作系统基础（同步、调度）</li>
+<li><a href="#/01-计算机基础/数据结构与算法/01-数据结构与算法" class="cross-ref">01-数据结构与算法</a> — 数据结构与算法（一致性哈希、B+Tree）</li>
 </ul>
-</div>
+</body></html></div>
 </article>

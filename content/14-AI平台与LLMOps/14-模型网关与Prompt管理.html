@@ -1,12 +1,12 @@
 
-<article class="kb-entry" data-path="/14-AI平台与LLMOps/14-模型网关与Prompt管理">
+<article class="kb-entry" data-path="/14-AI平台与LLMOps">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=14">14-AI平台与LLMOps</a></div>
     <h1>模型网关设计与 Prompt 管理平台 — 完整 Spring 实现</h1>
-    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#model-gateway</span><span class="badge badge-tag">#prompt-management</span><span class="badge badge-tag">#spring-ai</span><span class="badge badge-tag">#rate-limiting</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#model-gateway</span><span class="badge badge-tag">#prompt-management</span><span class="badge badge-tag">#spring-ai</span><span class="badge badge-tag">#rate-limiting</span><span class="badge badge-tag">#api-key-management</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://docs.spring.io/spring-ai/reference/" target="_blank" rel="noopener" class="source-link" title="Spring AI 官方参考文档">Spring AI 官方参考文档</a><a href="https://github.com/spring-projects/spring-ai" target="_blank" rel="noopener" class="source-link" title="Spring AI GitHub 仓库">Spring AI GitHub 仓库</a><a href="https://platform.openai.com/docs/api-reference" target="_blank" rel="noopener" class="source-link" title="OpenAI API 参考">OpenAI API 参考</a><a href="https://docs.anthropic.com/en/api" target="_blank" rel="noopener" class="source-link" title="Anthropic API 参考">Anthropic API 参考</a></small></div>
   </div>
-  <div class="entry-body"><h1>模型网关设计与 Prompt 管理平台</h1>
+  <div class="entry-body"><html><head></head><body><h1>模型网关设计与 Prompt 管理平台</h1>
 <h2>一、概述</h2>
 <p>在企业级 AI 应用中，直接调用各个模型提供商的 API 会带来一系列问题：API 协议不一致、密钥管理混乱、缺乏统一的限流和配额控制、Prompt 版本难以追踪。模型网关（Model Gateway）和 Prompt 管理平台正是解决这些痛点的核心基础设施。</p>
 <p>模型网关充当所有 AI 模型调用的统一入口，提供协议适配、智能路由、限流、密钥管理和缓存等能力。Prompt 管理平台则负责 Prompt 模板的全生命周期管理，包括版本控制、环境绑定、A/B 测试和灰度发布。</p>
@@ -14,139 +14,136 @@
 <h2>二、模型网关设计</h2>
 <h3>2.1 统一 API 协议</h3>
 <p>模型网关的核心职责之一是屏蔽不同模型提供商的 API 差异。我们在网关层定义统一的 Chat、Embedding、Rerank 请求格式，然后由适配器转换为各厂商的原生格式。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 统一聊天请求
-public record UnifiedChatRequest(
-    String model,                    // 逻辑模型名，如 &quot;claude-sonnet-4&quot;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 统一聊天请求</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">UnifiedChatRequest</span><span class="hljs-params">(
+    String model,                    // 逻辑模型名，如 "claude-sonnet-4"
     List&lt;UnifiedMessage&gt; messages,
     Double temperature,
     Integer maxTokens,
     List&lt;UnifiedTool&gt; tools,
     Map&lt;String, Object&gt; metadata     // 扩展字段：租户ID、用户ID、traceId等
-) {}
+)</span> {}
 
-public record UnifiedMessage(
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">UnifiedMessage</span><span class="hljs-params">(
     MessageRole role,                // system / user / assistant / tool
     String content,
     List&lt;ToolCallResult&gt; toolCalls,  // 仅assistant消息使用
     String toolCallId                 // 仅tool消息使用
-) {}
+)</span> {}
 
-public enum MessageRole { SYSTEM, USER, ASSISTANT, TOOL }
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">enum</span> <span class="hljs-title class_">MessageRole</span> { SYSTEM, USER, ASSISTANT, TOOL }
 
-// 统一 Embedding 请求
-public record UnifiedEmbeddingRequest(
-    String model,                    // 如 &quot;text-embedding-3-large&quot;
+<span class="hljs-comment">// 统一 Embedding 请求</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">UnifiedEmbeddingRequest</span><span class="hljs-params">(
+    String model,                    // 如 "text-embedding-3-large"
     List&lt;String&gt; inputs,             // 支持批量
-    String encodingFormat            // float / base64
-) {}
+    String encodingFormat            // <span class="hljs-type">float</span> / base64
+)</span> {}
 
-// 统一 Rerank 请求
-public record UnifiedRerankRequest(
+<span class="hljs-comment">// 统一 Rerank 请求</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">UnifiedRerankRequest</span><span class="hljs-params">(
     String model,
     String query,
     List&lt;String&gt; documents,
     Integer topN,
     Boolean returnDocuments
-) {}
-</code></pre></div>
-<p>适配器接口定义如下，每个模型提供商实现自己的适配器：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public interface ModelAdapter {
-    /** 该适配器支持的模型集合 */
-    Set&lt;String&gt; supportedModels();
+)</span> {}
+</code></pre></div><p>适配器接口定义如下，每个模型提供商实现自己的适配器：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">ModelAdapter</span> {
+    <span class="hljs-comment">/** 该适配器支持的模型集合 */</span>
+    Set&lt;String&gt; <span class="hljs-title function_">supportedModels</span><span class="hljs-params">()</span>;
 
-    /** 将统一请求转为厂商原生请求并发起调用 */
-    UnifiedChatResponse chat(UnifiedChatRequest request);
+    <span class="hljs-comment">/** 将统一请求转为厂商原生请求并发起调用 */</span>
+    UnifiedChatResponse <span class="hljs-title function_">chat</span><span class="hljs-params">(UnifiedChatRequest request)</span>;
 
-    /** 流式聊天 */
-    Flux&lt;UnifiedChatChunk&gt; chatStream(UnifiedChatRequest request);
+    <span class="hljs-comment">/** 流式聊天 */</span>
+    Flux&lt;UnifiedChatChunk&gt; <span class="hljs-title function_">chatStream</span><span class="hljs-params">(UnifiedChatRequest request)</span>;
 
-    /** Embedding */
-    UnifiedEmbeddingResponse embed(UnifiedEmbeddingRequest request);
+    <span class="hljs-comment">/** Embedding */</span>
+    UnifiedEmbeddingResponse <span class="hljs-title function_">embed</span><span class="hljs-params">(UnifiedEmbeddingRequest request)</span>;
 
-    /** Rerank */
-    UnifiedRerankResponse rerank(UnefinedRerankRequest request);
+    <span class="hljs-comment">/** Rerank */</span>
+    UnifiedRerankResponse <span class="hljs-title function_">rerank</span><span class="hljs-params">(UnefinedRerankRequest request)</span>;
 }
 
-// OpenAI 适配器示例
-@Component
-public class OpenAiAdapter implements ModelAdapter {
+<span class="hljs-comment">// OpenAI 适配器示例</span>
+<span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">OpenAiAdapter</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">ModelAdapter</span> {
 
-    private final OpenAiApi openAiApi;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> OpenAiApi openAiApi;
 
-    public OpenAiAdapter(@Value(&quot;${openai.api-key}&quot;) String apiKey) {
-        this.openAiApi = OpenAiApi.builder().apiKey(apiKey).build();
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">OpenAiAdapter</span><span class="hljs-params">(<span class="hljs-meta">@Value("${openai.api-key}")</span> String apiKey)</span> {
+        <span class="hljs-built_in">this</span>.openAiApi = OpenAiApi.builder().apiKey(apiKey).build();
     }
 
-    @Override
-    public Set&lt;String&gt; supportedModels() {
-        return Set.of(&quot;gpt-5&quot;, &quot;gpt-5-mini&quot;, &quot;text-embedding-3-large&quot;);
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> Set&lt;String&gt; <span class="hljs-title function_">supportedModels</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">return</span> Set.of(<span class="hljs-string">"gpt-5"</span>, <span class="hljs-string">"gpt-5-mini"</span>, <span class="hljs-string">"text-embedding-3-large"</span>);
     }
 
-    @Override
-    public UnifiedChatResponse chat(UnifiedChatRequest request) {
-        var nativeMessages = request.messages().stream()
-            .map(this::toOpenAiMessage)
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> UnifiedChatResponse <span class="hljs-title function_">chat</span><span class="hljs-params">(UnifiedChatRequest request)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">nativeMessages</span> <span class="hljs-operator">=</span> request.messages().stream()
+            .map(<span class="hljs-built_in">this</span>::toOpenAiMessage)
             .toList();
 
-        var nativeRequest = new ChatCompletionRequest(
+        <span class="hljs-type">var</span> <span class="hljs-variable">nativeRequest</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ChatCompletionRequest</span>(
             nativeMessages, request.model(), request.temperature(), request.maxTokens()
         );
 
-        var nativeResp = openAiApi.chatCompletionEntity(nativeRequest);
-        return toUnifiedResponse(nativeResp);
+        <span class="hljs-type">var</span> <span class="hljs-variable">nativeResp</span> <span class="hljs-operator">=</span> openAiApi.chatCompletionEntity(nativeRequest);
+        <span class="hljs-keyword">return</span> toUnifiedResponse(nativeResp);
     }
 
-    private org.springframework.ai.openai.api.OpenAiApi.ChatCompletionMessage
-            toOpenAiMessage(UnifiedMessage msg) {
-        return switch (msg.role()) {
-            case SYSTEM -&gt; new SystemMessage(msg.content());
-            case USER -&gt; new UserMessage(msg.content());
-            case ASSISTANT -&gt; new AssistantMessage(msg.content());
-            case TOOL -&gt; new ToolResponseMessage(msg.toolCallId(), msg.content());
+    <span class="hljs-keyword">private</span> org.springframework.ai.openai.api.OpenAiApi.ChatCompletionMessage
+            <span class="hljs-title function_">toOpenAiMessage</span><span class="hljs-params">(UnifiedMessage msg)</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">switch</span> (msg.role()) {
+            <span class="hljs-keyword">case</span> SYSTEM -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">SystemMessage</span>(msg.content());
+            <span class="hljs-keyword">case</span> USER -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">UserMessage</span>(msg.content());
+            <span class="hljs-keyword">case</span> ASSISTANT -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">AssistantMessage</span>(msg.content());
+            <span class="hljs-keyword">case</span> TOOL -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">ToolResponseMessage</span>(msg.toolCallId(), msg.content());
         };
     }
 
-    // 流式、Embedding、Rerank 适配实现省略...
+    <span class="hljs-comment">// 流式、Embedding、Rerank 适配实现省略...</span>
 }
-</code></pre></div>
-<h3>2.2 路由策略</h3>
+</code></pre></div><h3>2.2 路由策略</h3>
 <p>路由是网关最核心的能力。我们实现四种路由策略：<strong>能力路由</strong>、<strong>成本路由</strong>、<strong>故障转移</strong>和<strong>灰度分流</strong>。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public interface RoutingStrategy {
-    /** 根据请求和可用模型列表，返回目标模型名 */
-    String route(UnifiedChatRequest request, List&lt;ModelInfo&gt; candidates);
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">RoutingStrategy</span> {
+    <span class="hljs-comment">/** 根据请求和可用模型列表，返回目标模型名 */</span>
+    String <span class="hljs-title function_">route</span><span class="hljs-params">(UnifiedChatRequest request, List&lt;ModelInfo&gt; candidates)</span>;
 }
 
-public record ModelInfo(
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">ModelInfo</span><span class="hljs-params">(
     String modelName,
     ModelCapability capability,      // 模型能力标签
-    double costPer1kTokens,          // 每千token成本
-    int currentLoad,                 // 当前负载
-    boolean healthy                   // 健康状态
-) {}
+    <span class="hljs-type">double</span> costPer1kTokens,          // 每千token成本
+    <span class="hljs-type">int</span> currentLoad,                 // 当前负载
+    <span class="hljs-type">boolean</span> healthy                   // 健康状态
+)</span> {}
 
-public enum ModelCapability {
-    GENERAL,          // 通用对话
-    CODE,             // 代码能力
-    TRANSLATION,      // 翻译
-    VISION,           // 视觉理解
-    LONG_CONTEXT      // 长上下文
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">enum</span> <span class="hljs-title class_">ModelCapability</span> {
+    GENERAL,          <span class="hljs-comment">// 通用对话</span>
+    CODE,             <span class="hljs-comment">// 代码能力</span>
+    TRANSLATION,      <span class="hljs-comment">// 翻译</span>
+    VISION,           <span class="hljs-comment">// 视觉理解</span>
+    LONG_CONTEXT      <span class="hljs-comment">// 长上下文</span>
 }
-</code></pre></div>
-<p><strong>能力路由</strong>：根据请求特征将流量导向最合适的模型。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Component
-public class CapabilityRoutingStrategy implements RoutingStrategy {
+</code></pre></div><p><strong>能力路由</strong>：根据请求特征将流量导向最合适的模型。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">CapabilityRoutingStrategy</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">RoutingStrategy</span> {
 
-    private static final Map&lt;String, ModelCapability&gt; CAPABILITY_HINTS = Map.of(
-        &quot;claude&quot;, ModelCapability.CODE,
-        &quot;gpt&quot;, ModelCapability.GENERAL,
-        &quot;gemini&quot;, ModelCapability.VISION
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> Map&lt;String, ModelCapability&gt; CAPABILITY_HINTS = Map.of(
+        <span class="hljs-string">"claude"</span>, ModelCapability.CODE,
+        <span class="hljs-string">"gpt"</span>, ModelCapability.GENERAL,
+        <span class="hljs-string">"gemini"</span>, ModelCapability.VISION
     );
 
-    @Override
-    public String route(UnifiedChatRequest request, List&lt;ModelInfo&gt; candidates) {
-        var neededCapability = detectCapability(request);
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> String <span class="hljs-title function_">route</span><span class="hljs-params">(UnifiedChatRequest request, List&lt;ModelInfo&gt; candidates)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">neededCapability</span> <span class="hljs-operator">=</span> detectCapability(request);
 
-        return candidates.stream()
+        <span class="hljs-keyword">return</span> candidates.stream()
             .filter(m -&gt; m.healthy() &amp;&amp; m.capability() == neededCapability)
             .min(Comparator.comparingDouble(ModelInfo::costPer1kTokens))
             .map(ModelInfo::modelName)
@@ -154,422 +151,414 @@ public class CapabilityRoutingStrategy implements RoutingStrategy {
                 .filter(ModelInfo::healthy)
                 .min(Comparator.comparingDouble(ModelInfo::costPer1kTokens))
                 .map(ModelInfo::modelName)
-                .orElseThrow(() -&gt; new NoAvailableModelException(&quot;No healthy model&quot;)));
+                .orElseThrow(() -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">NoAvailableModelException</span>(<span class="hljs-string">"No healthy model"</span>)));
     }
 
-    private ModelCapability detectCapability(UnifiedChatRequest request) {
-        // 基于用户消息内容检测意图：含代码块 → CODE，含&quot;翻译&quot; → TRANSLATION
-        var userContent = request.messages().stream()
+    <span class="hljs-keyword">private</span> ModelCapability <span class="hljs-title function_">detectCapability</span><span class="hljs-params">(UnifiedChatRequest request)</span> {
+        <span class="hljs-comment">// 基于用户消息内容检测意图：含代码块 → CODE，含"翻译" → TRANSLATION</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">userContent</span> <span class="hljs-operator">=</span> request.messages().stream()
             .filter(m -&gt; m.role() == MessageRole.USER)
             .map(UnifiedMessage::content)
-            .collect(Collectors.joining(&quot; &quot;));
+            .collect(Collectors.joining(<span class="hljs-string">" "</span>));
 
-        if (userContent.contains(&quot;```&quot;) || userContent.contains(&quot;代码&quot;)
-                || userContent.contains(&quot;debug&quot;)) {
-            return ModelCapability.CODE;
+        <span class="hljs-keyword">if</span> (userContent.contains(<span class="hljs-string">"```"</span>) || userContent.contains(<span class="hljs-string">"代码"</span>)
+                || userContent.contains(<span class="hljs-string">"debug"</span>)) {
+            <span class="hljs-keyword">return</span> ModelCapability.CODE;
         }
-        if (userContent.contains(&quot;翻译&quot;) || userContent.contains(&quot;translate&quot;)) {
-            return ModelCapability.TRANSLATION;
+        <span class="hljs-keyword">if</span> (userContent.contains(<span class="hljs-string">"翻译"</span>) || userContent.contains(<span class="hljs-string">"translate"</span>)) {
+            <span class="hljs-keyword">return</span> ModelCapability.TRANSLATION;
         }
-        return ModelCapability.GENERAL;
+        <span class="hljs-keyword">return</span> ModelCapability.GENERAL;
     }
 }
-</code></pre></div>
-<p><strong>成本路由</strong>：在满足能力要求的前提下，选择成本最低的健康模型。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Component
-public class CostBasedRoutingStrategy implements RoutingStrategy {
+</code></pre></div><p><strong>成本路由</strong>：在满足能力要求的前提下，选择成本最低的健康模型。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">CostBasedRoutingStrategy</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">RoutingStrategy</span> {
 
-    @Override
-    public String route(UnifiedChatRequest request, List&lt;ModelInfo&gt; candidates) {
-        return candidates.stream()
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> String <span class="hljs-title function_">route</span><span class="hljs-params">(UnifiedChatRequest request, List&lt;ModelInfo&gt; candidates)</span> {
+        <span class="hljs-keyword">return</span> candidates.stream()
             .filter(ModelInfo::healthy)
-            .filter(m -&gt; m.currentLoad() &lt; 80)  // 负载低于80%
+            .filter(m -&gt; m.currentLoad() &lt; <span class="hljs-number">80</span>)  <span class="hljs-comment">// 负载低于80%</span>
             .min(Comparator.comparingDouble(ModelInfo::costPer1kTokens))
             .map(ModelInfo::modelName)
-            .orElseThrow(() -&gt; new NoAvailableModelException(&quot;No healthy model under load&quot;));
+            .orElseThrow(() -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">NoAvailableModelException</span>(<span class="hljs-string">"No healthy model under load"</span>));
     }
 }
-</code></pre></div>
-<p><strong>故障转移路由</strong>：主模型不可用时自动切换到备用模型。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Component
-public class FailoverRoutingStrategy implements RoutingStrategy {
+</code></pre></div><p><strong>故障转移路由</strong>：主模型不可用时自动切换到备用模型。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">FailoverRoutingStrategy</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">RoutingStrategy</span> {
 
-    private final List&lt;String&gt; failoverChain; // 配置的降级链路
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> List&lt;String&gt; failoverChain; <span class="hljs-comment">// 配置的降级链路</span>
 
-    public FailoverRoutingStrategy(@Value(&quot;${gateway.failover-chain}&quot;)
-                                   List&lt;String&gt; failoverChain) {
-        this.failoverChain = failoverChain;
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">FailoverRoutingStrategy</span><span class="hljs-params">(<span class="hljs-meta">@Value("${gateway.failover-chain}")</span>
+                                   List&lt;String&gt; failoverChain)</span> {
+        <span class="hljs-built_in">this</span>.failoverChain = failoverChain;
     }
 
-    @Override
-    public String route(UnifiedChatRequest request, List&lt;ModelInfo&gt; candidates) {
-        var modelMap = candidates.stream()
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> String <span class="hljs-title function_">route</span><span class="hljs-params">(UnifiedChatRequest request, List&lt;ModelInfo&gt; candidates)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">modelMap</span> <span class="hljs-operator">=</span> candidates.stream()
             .collect(Collectors.toMap(ModelInfo::modelName, Function.identity()));
 
-        for (var modelName : failoverChain) {
-            var info = modelMap.get(modelName);
-            if (info != null &amp;&amp; info.healthy()) {
-                return modelName;
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> modelName : failoverChain) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">info</span> <span class="hljs-operator">=</span> modelMap.get(modelName);
+            <span class="hljs-keyword">if</span> (info != <span class="hljs-literal">null</span> &amp;&amp; info.healthy()) {
+                <span class="hljs-keyword">return</span> modelName;
             }
         }
-        throw new NoAvailableModelException(&quot;All models in failover chain unhealthy&quot;);
+        <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">NoAvailableModelException</span>(<span class="hljs-string">"All models in failover chain unhealthy"</span>);
     }
 }
-</code></pre></div>
-<p><strong>灰度分流</strong>：按配置的比例将流量分发到不同模型，用于模型升级验证。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Component
-public class CanaryRoutingStrategy implements RoutingStrategy {
+</code></pre></div><p><strong>灰度分流</strong>：按配置的比例将流量分发到不同模型，用于模型升级验证。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">CanaryRoutingStrategy</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">RoutingStrategy</span> {
 
-    private final AtomicInteger counter = new AtomicInteger(0);
-    private final Map&lt;String, Integer&gt; canaryWeights; // model -&gt; weight (0-100)
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">AtomicInteger</span> <span class="hljs-variable">counter</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">AtomicInteger</span>(<span class="hljs-number">0</span>);
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Map&lt;String, Integer&gt; canaryWeights; <span class="hljs-comment">// model -&gt; weight (0-100)</span>
 
-    public CanaryRoutingStrategy(@Value(&quot;#{${gateway.canary-weights}}&quot;)
-                                 Map&lt;String, Integer&gt; canaryWeights) {
-        this.canaryWeights = canaryWeights;
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">CanaryRoutingStrategy</span><span class="hljs-params">(<span class="hljs-meta">@Value("#{${gateway.canary-weights}}")</span>
+                                 Map&lt;String, Integer&gt; canaryWeights)</span> {
+        <span class="hljs-built_in">this</span>.canaryWeights = canaryWeights;
     }
 
-    @Override
-    public String route(UnifiedChatRequest request, List&lt;ModelInfo&gt; candidates) {
-        var totalWeight = canaryWeights.values().stream().mapToInt(Integer::intValue).sum();
-        var point = counter.incrementAndGet() % totalWeight;
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> String <span class="hljs-title function_">route</span><span class="hljs-params">(UnifiedChatRequest request, List&lt;ModelInfo&gt; candidates)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">totalWeight</span> <span class="hljs-operator">=</span> canaryWeights.values().stream().mapToInt(Integer::intValue).sum();
+        <span class="hljs-type">var</span> <span class="hljs-variable">point</span> <span class="hljs-operator">=</span> counter.incrementAndGet() % totalWeight;
 
-        var accumulated = 0;
-        for (var entry : canaryWeights.entrySet()) {
+        <span class="hljs-type">var</span> <span class="hljs-variable">accumulated</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> entry : canaryWeights.entrySet()) {
             accumulated += entry.getValue();
-            if (point &lt; accumulated
+            <span class="hljs-keyword">if</span> (point &lt; accumulated
                     &amp;&amp; candidates.stream().anyMatch(m -&gt; m.modelName().equals(entry.getKey())
                                                         &amp;&amp; m.healthy())) {
-                return entry.getKey();
+                <span class="hljs-keyword">return</span> entry.getKey();
             }
         }
-        // 兜底
-        return candidates.stream()
+        <span class="hljs-comment">// 兜底</span>
+        <span class="hljs-keyword">return</span> candidates.stream()
             .filter(ModelInfo::healthy)
             .findFirst()
             .map(ModelInfo::modelName)
             .orElseThrow();
     }
 }
-</code></pre></div>
-<h3>2.3 精细化限流</h3>
+</code></pre></div><h3>2.3 精细化限流</h3>
 <p>按租户、用户、模型三个维度进行精细化限流。使用 Redis + Lua 脚本实现滑动窗口算法。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
-public class RateLimiterService {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">RateLimiterService</span> {
 
-    private final RedisTemplate&lt;String, String&gt; redis;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> RedisTemplate&lt;String, String&gt; redis;
 
-    public RateLimiterService(RedisTemplate&lt;String, String&gt; redis) {
-        this.redis = redis;
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">RateLimiterService</span><span class="hljs-params">(RedisTemplate&lt;String, String&gt; redis)</span> {
+        <span class="hljs-built_in">this</span>.redis = redis;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 检查是否允许请求。
-     * @param tenantId 租户ID
-     * @param userId 用户ID
-     * @param model 模型名
-     * @return true=允许, false=限流
-     */
-    public boolean tryAcquire(String tenantId, String userId, String model) {
-        // 三级限流：租户级 → 用户级 → 模型级
-        return checkLimit(&quot;tenant:&quot; + tenantId, getTenantLimit(tenantId))
-            &amp;&amp; checkLimit(&quot;user:&quot; + tenantId + &quot;:&quot; + userId, getUserLimit(userId))
-            &amp;&amp; checkLimit(&quot;model:&quot; + tenantId + &quot;:&quot; + model, getModelLimit(model));
+     * <span class="hljs-doctag">@param</span> tenantId 租户ID
+     * <span class="hljs-doctag">@param</span> userId 用户ID
+     * <span class="hljs-doctag">@param</span> model 模型名
+     * <span class="hljs-doctag">@return</span> true=允许, false=限流
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">tryAcquire</span><span class="hljs-params">(String tenantId, String userId, String model)</span> {
+        <span class="hljs-comment">// 三级限流：租户级 → 用户级 → 模型级</span>
+        <span class="hljs-keyword">return</span> checkLimit(<span class="hljs-string">"tenant:"</span> + tenantId, getTenantLimit(tenantId))
+            &amp;&amp; checkLimit(<span class="hljs-string">"user:"</span> + tenantId + <span class="hljs-string">":"</span> + userId, getUserLimit(userId))
+            &amp;&amp; checkLimit(<span class="hljs-string">"model:"</span> + tenantId + <span class="hljs-string">":"</span> + model, getModelLimit(model));
     }
 
-    private boolean checkLimit(String key, RateLimitConfig config) {
-        var now = Instant.now().toEpochMilli();
-        var windowStart = now - config.windowMs();
+    <span class="hljs-keyword">private</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">checkLimit</span><span class="hljs-params">(String key, RateLimitConfig config)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">now</span> <span class="hljs-operator">=</span> Instant.now().toEpochMilli();
+        <span class="hljs-type">var</span> <span class="hljs-variable">windowStart</span> <span class="hljs-operator">=</span> now - config.windowMs();
 
-        // Lua 脚本：原子性地移除过期记录 + 计数 + 添加新记录
-        var script = &quot;&quot;&quot;
-            redis.call(&#39;ZREMRANGEBYSCORE&#39;, KEYS[1], 0, ARGV[1])
-            local count = redis.call(&#39;ZCARD&#39;, KEYS[1])
+        <span class="hljs-comment">// Lua 脚本：原子性地移除过期记录 + 计数 + 添加新记录</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">script</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
+            redis.call('ZREMRANGEBYSCORE', KEYS[1], 0, ARGV[1])
+            local count = redis.call('ZCARD', KEYS[1])
             if count &lt; tonumber(ARGV[2]) then
-                redis.call(&#39;ZADD&#39;, KEYS[1], ARGV[3], ARGV[3])
-                redis.call(&#39;EXPIRE&#39;, KEYS[1], ARGV[4])
+                redis.call('ZADD', KEYS[1], ARGV[3], ARGV[3])
+                redis.call('EXPIRE', KEYS[1], ARGV[4])
                 return 1
             end
             return 0
-            &quot;&quot;&quot;;
+            """</span>;
 
-        var result = redis.execute(
+        <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> redis.execute(
             RedisScript.of(script, Long.class),
             List.of(key),
             String.valueOf(windowStart),
             String.valueOf(config.maxRequests()),
             String.valueOf(now),
-            String.valueOf(config.windowMs() / 1000)
+            String.valueOf(config.windowMs() / <span class="hljs-number">1000</span>)
         );
-        return result == 1L;
+        <span class="hljs-keyword">return</span> result == <span class="hljs-number">1L</span>;
     }
 
-    public record RateLimitConfig(int maxRequests, long windowMs) {}
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">RateLimitConfig</span><span class="hljs-params">(<span class="hljs-type">int</span> maxRequests, <span class="hljs-type">long</span> windowMs)</span> {}
 }
-</code></pre></div>
-<h3>2.4 API Key 管理（Key Vault）</h3>
+</code></pre></div><h3>2.4 API Key 管理（Key Vault）</h3>
 <p>API Key 必须安全存储，支持轮换和按模型隔离。使用 Vault 或加密数据库存储。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
-public class ApiKeyVault {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ApiKeyVault</span> {
 
-    private final Map&lt;String, EncryptedKeyStore&gt; keyStore = new ConcurrentHashMap&lt;&gt;();
-    private final ScheduledExecutorService scheduler =
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Map&lt;String, EncryptedKeyStore&gt; keyStore = <span class="hljs-keyword">new</span> <span class="hljs-title class_">ConcurrentHashMap</span>&lt;&gt;();
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">ScheduledExecutorService</span> <span class="hljs-variable">scheduler</span> <span class="hljs-operator">=</span>
         Executors.newSingleThreadScheduledExecutor();
 
-    public record EncryptedKeyStore(
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">EncryptedKeyStore</span><span class="hljs-params">(
         String encryptedKey,           // AES-256-GCM 加密的 Key
         Instant createdAt,
         Instant expiresAt,
         Set&lt;String&gt; allowedModels,      // 该 Key 允许访问的模型
-        boolean active
-    ) {}
+        <span class="hljs-type">boolean</span> active
+    )</span> {}
 
-    /**
+    <span class="hljs-comment">/**
      * 注册一个加密的 API Key
-     */
-    public void registerKey(String keyId, String plainKey,
-                            Set&lt;String&gt; allowedModels, Duration ttl) {
-        var encrypted = AesGcmUtil.encrypt(plainKey);
-        var store = new EncryptedKeyStore(
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">registerKey</span><span class="hljs-params">(String keyId, String plainKey,
+                            Set&lt;String&gt; allowedModels, Duration ttl)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">encrypted</span> <span class="hljs-operator">=</span> AesGcmUtil.encrypt(plainKey);
+        <span class="hljs-type">var</span> <span class="hljs-variable">store</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">EncryptedKeyStore</span>(
             encrypted, Instant.now(), Instant.now().plus(ttl),
-            allowedModels, true
+            allowedModels, <span class="hljs-literal">true</span>
         );
         keyStore.put(keyId, store);
 
-        // 到期自动失效
+        <span class="hljs-comment">// 到期自动失效</span>
         scheduler.schedule(() -&gt; deactivateKey(keyId),
             ttl.toMillis(), TimeUnit.MILLISECONDS);
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 获取解密后的 Key。如果 Key 过期或不支持该模型则返回 empty。
-     */
-    public Optional&lt;String&gt; getDecryptedKey(String keyId, String model) {
-        var store = keyStore.get(keyId);
-        if (store == null || !store.active()
+     */</span>
+    <span class="hljs-keyword">public</span> Optional&lt;String&gt; <span class="hljs-title function_">getDecryptedKey</span><span class="hljs-params">(String keyId, String model)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">store</span> <span class="hljs-operator">=</span> keyStore.get(keyId);
+        <span class="hljs-keyword">if</span> (store == <span class="hljs-literal">null</span> || !store.active()
                 || Instant.now().isAfter(store.expiresAt())) {
-            return Optional.empty();
+            <span class="hljs-keyword">return</span> Optional.empty();
         }
-        if (!store.allowedModels().contains(model)
-                &amp;&amp; !store.allowedModels().contains(&quot;*&quot;)) {
-            return Optional.empty();
+        <span class="hljs-keyword">if</span> (!store.allowedModels().contains(model)
+                &amp;&amp; !store.allowedModels().contains(<span class="hljs-string">"*"</span>)) {
+            <span class="hljs-keyword">return</span> Optional.empty();
         }
-        return Optional.of(AesGcmUtil.decrypt(store.encryptedKey()));
+        <span class="hljs-keyword">return</span> Optional.of(AesGcmUtil.decrypt(store.encryptedKey()));
     }
 
-    /** Key 轮换：注册新 Key，延迟停用旧 Key（给进行中的请求时间完成） */
-    public void rotateKey(String oldKeyId, String newKeyId,
-                          String newPlainKey, Set&lt;String&gt; allowedModels) {
-        registerKey(newKeyId, newPlainKey, allowedModels, Duration.ofDays(30));
-        scheduler.schedule(() -&gt; deactivateKey(oldKeyId), 5, TimeUnit.MINUTES);
+    <span class="hljs-comment">/** Key 轮换：注册新 Key，延迟停用旧 Key（给进行中的请求时间完成） */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">rotateKey</span><span class="hljs-params">(String oldKeyId, String newKeyId,
+                          String newPlainKey, Set&lt;String&gt; allowedModels)</span> {
+        registerKey(newKeyId, newPlainKey, allowedModels, Duration.ofDays(<span class="hljs-number">30</span>));
+        scheduler.schedule(() -&gt; deactivateKey(oldKeyId), <span class="hljs-number">5</span>, TimeUnit.MINUTES);
     }
 
-    public void deactivateKey(String keyId) {
-        var store = keyStore.get(keyId);
-        if (store != null) {
-            keyStore.put(keyId, new EncryptedKeyStore(store.encryptedKey(),
-                store.createdAt(), store.expiresAt(), store.allowedModels(), false));
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">deactivateKey</span><span class="hljs-params">(String keyId)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">store</span> <span class="hljs-operator">=</span> keyStore.get(keyId);
+        <span class="hljs-keyword">if</span> (store != <span class="hljs-literal">null</span>) {
+            keyStore.put(keyId, <span class="hljs-keyword">new</span> <span class="hljs-title class_">EncryptedKeyStore</span>(store.encryptedKey(),
+                store.createdAt(), store.expiresAt(), store.allowedModels(), <span class="hljs-literal">false</span>));
         }
     }
 }
-</code></pre></div>
-<h3>2.5 多租户配额管理</h3>
+</code></pre></div><h3>2.5 多租户配额管理</h3>
 <p>每个租户有独立的 Token 预算和日限额，支持硬限制（拒绝）和软限制（告警但放行）。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
-public class TenantQuotaService {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">TenantQuotaService</span> {
 
-    private final RedisTemplate&lt;String, String&gt; redis;
-    private final MeterRegistry meterRegistry;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> RedisTemplate&lt;String, String&gt; redis;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> MeterRegistry meterRegistry;
 
-    public record QuotaConfig(
-        long dailyTokenLimit,       // 日Token上限
-        long monthlyTokenLimit,     // 月Token上限
-        int maxConcurrentRequests,  // 最大并发
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">QuotaConfig</span><span class="hljs-params">(
+        <span class="hljs-type">long</span> dailyTokenLimit,       // 日Token上限
+        <span class="hljs-type">long</span> monthlyTokenLimit,     // 月Token上限
+        <span class="hljs-type">int</span> maxConcurrentRequests,  // 最大并发
         QuotaMode mode             // HARD / SOFT
-    ) {}
+    )</span> {}
 
-    public enum QuotaMode { HARD, SOFT }
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">enum</span> <span class="hljs-title class_">QuotaMode</span> { HARD, SOFT }
 
-    private static final String DAILY_KEY = &quot;quota:daily:%s:%s&quot;;   // tenant:date
-    private static final String MONTHLY_KEY = &quot;quota:monthly:%s:%s&quot;;
-    private static final String CONCURRENT_KEY = &quot;quota:concurrent:%s&quot;;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">String</span> <span class="hljs-variable">DAILY_KEY</span> <span class="hljs-operator">=</span> <span class="hljs-string">"quota:daily:%s:%s"</span>;   <span class="hljs-comment">// tenant:date</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">String</span> <span class="hljs-variable">MONTHLY_KEY</span> <span class="hljs-operator">=</span> <span class="hljs-string">"quota:monthly:%s:%s"</span>;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">String</span> <span class="hljs-variable">CONCURRENT_KEY</span> <span class="hljs-operator">=</span> <span class="hljs-string">"quota:concurrent:%s"</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 预扣配额。返回 QuotaResult 表示是否允许。
-     */
-    public QuotaResult reserve(String tenantId, int estimatedTokens) {
-        var config = getQuotaConfig(tenantId);
-        var today = LocalDate.now().format(DateTimeFormatter.ISO_DATE);
-        var month = YearMonth.now().toString();
+     */</span>
+    <span class="hljs-keyword">public</span> QuotaResult <span class="hljs-title function_">reserve</span><span class="hljs-params">(String tenantId, <span class="hljs-type">int</span> estimatedTokens)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">config</span> <span class="hljs-operator">=</span> getQuotaConfig(tenantId);
+        <span class="hljs-type">var</span> <span class="hljs-variable">today</span> <span class="hljs-operator">=</span> LocalDate.now().format(DateTimeFormatter.ISO_DATE);
+        <span class="hljs-type">var</span> <span class="hljs-variable">month</span> <span class="hljs-operator">=</span> YearMonth.now().toString();
 
-        var dailyUsed = getUsed(DAILY_KEY.formatted(tenantId, today));
-        var monthlyUsed = getUsed(MONTHLY_KEY.formatted(tenantId, month));
+        <span class="hljs-type">var</span> <span class="hljs-variable">dailyUsed</span> <span class="hljs-operator">=</span> getUsed(DAILY_KEY.formatted(tenantId, today));
+        <span class="hljs-type">var</span> <span class="hljs-variable">monthlyUsed</span> <span class="hljs-operator">=</span> getUsed(MONTHLY_KEY.formatted(tenantId, month));
 
-        if (dailyUsed + estimatedTokens &gt; config.dailyTokenLimit()) {
-            if (config.mode() == QuotaMode.HARD) {
-                return new QuotaResult(false, dailyUsed, config.dailyTokenLimit(),
-                    &quot;Daily quota exceeded&quot;);
+        <span class="hljs-keyword">if</span> (dailyUsed + estimatedTokens &gt; config.dailyTokenLimit()) {
+            <span class="hljs-keyword">if</span> (config.mode() == QuotaMode.HARD) {
+                <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">QuotaResult</span>(<span class="hljs-literal">false</span>, dailyUsed, config.dailyTokenLimit(),
+                    <span class="hljs-string">"Daily quota exceeded"</span>);
             }
-            // SOFT 模式：记录告警但放行
-            meterRegistry.counter(&quot;quota.soft_limit.hit&quot;,
-                &quot;tenant&quot;, tenantId, &quot;type&quot;, &quot;daily&quot;).increment();
+            <span class="hljs-comment">// SOFT 模式：记录告警但放行</span>
+            meterRegistry.counter(<span class="hljs-string">"quota.soft_limit.hit"</span>,
+                <span class="hljs-string">"tenant"</span>, tenantId, <span class="hljs-string">"type"</span>, <span class="hljs-string">"daily"</span>).increment();
         }
-        if (monthlyUsed + estimatedTokens &gt; config.monthlyTokenLimit()) {
-            if (config.mode() == QuotaMode.HARD) {
-                return new QuotaResult(false, monthlyUsed, config.monthlyTokenLimit(),
-                    &quot;Monthly quota exceeded&quot;);
+        <span class="hljs-keyword">if</span> (monthlyUsed + estimatedTokens &gt; config.monthlyTokenLimit()) {
+            <span class="hljs-keyword">if</span> (config.mode() == QuotaMode.HARD) {
+                <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">QuotaResult</span>(<span class="hljs-literal">false</span>, monthlyUsed, config.monthlyTokenLimit(),
+                    <span class="hljs-string">"Monthly quota exceeded"</span>);
             }
         }
 
-        return new QuotaResult(true, dailyUsed, config.dailyTokenLimit(), null);
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">QuotaResult</span>(<span class="hljs-literal">true</span>, dailyUsed, config.dailyTokenLimit(), <span class="hljs-literal">null</span>);
     }
 
-    /** 实际消费后确认 */
-    public void confirm(String tenantId, int actualTokens) {
-        var today = LocalDate.now().format(DateTimeFormatter.ISO_DATE);
+    <span class="hljs-comment">/** 实际消费后确认 */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">confirm</span><span class="hljs-params">(String tenantId, <span class="hljs-type">int</span> actualTokens)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">today</span> <span class="hljs-operator">=</span> LocalDate.now().format(DateTimeFormatter.ISO_DATE);
         redis.opsForValue().increment(DAILY_KEY.formatted(tenantId, today), actualTokens);
         redis.opsForValue().increment(
             MONTHLY_KEY.formatted(tenantId, YearMonth.now().toString()), actualTokens);
     }
 
-    private long getUsed(String key) {
-        var val = redis.opsForValue().get(key);
-        return val != null ? Long.parseLong(val) : 0;
+    <span class="hljs-keyword">private</span> <span class="hljs-type">long</span> <span class="hljs-title function_">getUsed</span><span class="hljs-params">(String key)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">val</span> <span class="hljs-operator">=</span> redis.opsForValue().get(key);
+        <span class="hljs-keyword">return</span> val != <span class="hljs-literal">null</span> ? Long.parseLong(val) : <span class="hljs-number">0</span>;
     }
 }
-</code></pre></div>
-<h3>2.6 多层缓存策略</h3>
+</code></pre></div><h3>2.6 多层缓存策略</h3>
 <p>两级缓存：精确匹配缓存（L1）和语义缓存（L2）。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
-public class GatewayCacheService {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">GatewayCacheService</span> {
 
-    private final Cache&lt;String, String&gt; exactMatchCache;      // Caffeine L1
-    private final RedisTemplate&lt;String, byte[]&gt; redis;         // Redis 语义缓存
-    private final VectorStore vectorStore;                     // PGVector/Redis Stack
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Cache&lt;String, String&gt; exactMatchCache;      <span class="hljs-comment">// Caffeine L1</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> RedisTemplate&lt;String, <span class="hljs-type">byte</span>[]&gt; redis;         <span class="hljs-comment">// Redis 语义缓存</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> VectorStore vectorStore;                     <span class="hljs-comment">// PGVector/Redis Stack</span>
 
-    public GatewayCacheService() {
-        this.exactMatchCache = Caffeine.newBuilder()
-            .maximumSize(10_000)
-            .expireAfterWrite(Duration.ofHours(1))
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">GatewayCacheService</span><span class="hljs-params">()</span> {
+        <span class="hljs-built_in">this</span>.exactMatchCache = Caffeine.newBuilder()
+            .maximumSize(<span class="hljs-number">10_000</span>)
+            .expireAfterWrite(Duration.ofHours(<span class="hljs-number">1</span>))
             .recordStats()
             .build();
     }
 
-    /**
+    <span class="hljs-comment">/**
      * L1: 精确匹配缓存。对相同请求内容直接返回缓存结果。
-     */
-    public Optional&lt;String&gt; getExactMatch(String cacheKey) {
-        return Optional.ofNullable(exactMatchCache.getIfPresent(cacheKey));
+     */</span>
+    <span class="hljs-keyword">public</span> Optional&lt;String&gt; <span class="hljs-title function_">getExactMatch</span><span class="hljs-params">(String cacheKey)</span> {
+        <span class="hljs-keyword">return</span> Optional.ofNullable(exactMatchCache.getIfPresent(cacheKey));
     }
 
-    public void putExactMatch(String cacheKey, String response) {
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">putExactMatch</span><span class="hljs-params">(String cacheKey, String response)</span> {
         exactMatchCache.put(cacheKey, response);
     }
 
-    /**
+    <span class="hljs-comment">/**
      * L2: 语义缓存。使用向量相似度匹配语义相近的历史请求。
      * 注意：语义缓存仅适用于对话类请求，不适用于有工具调用的请求。
-     */
-    public Optional&lt;String&gt; getSemanticMatch(String userMessage, double threshold) {
-        // 1. 将用户消息向量化
-        var queryEmbedding = embeddingClient.embed(userMessage);
+     */</span>
+    <span class="hljs-keyword">public</span> Optional&lt;String&gt; <span class="hljs-title function_">getSemanticMatch</span><span class="hljs-params">(String userMessage, <span class="hljs-type">double</span> threshold)</span> {
+        <span class="hljs-comment">// 1. 将用户消息向量化</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">queryEmbedding</span> <span class="hljs-operator">=</span> embeddingClient.embed(userMessage);
 
-        // 2. 在 Redis 中搜索最相似的历史请求
-        var results = vectorStore.similaritySearch(
+        <span class="hljs-comment">// 2. 在 Redis 中搜索最相似的历史请求</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">results</span> <span class="hljs-operator">=</span> vectorStore.similaritySearch(
             SearchRequest.query(queryEmbedding)
-                .withTopK(1)
+                .withTopK(<span class="hljs-number">1</span>)
                 .withSimilarityThreshold(threshold)
         );
 
-        if (!results.isEmpty() &amp;&amp; results.getFirst().getScore() &gt;= threshold) {
-            // 3. 从 Redis 获取对应的缓存响应
-            var cacheId = results.getFirst().getId();
-            var cached = redis.opsForValue().get(&quot;semantic:cache:&quot; + cacheId);
-            if (cached != null) {
-                return Optional.of(new String(cached, StandardCharsets.UTF_8));
+        <span class="hljs-keyword">if</span> (!results.isEmpty() &amp;&amp; results.getFirst().getScore() &gt;= threshold) {
+            <span class="hljs-comment">// 3. 从 Redis 获取对应的缓存响应</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">cacheId</span> <span class="hljs-operator">=</span> results.getFirst().getId();
+            <span class="hljs-type">var</span> <span class="hljs-variable">cached</span> <span class="hljs-operator">=</span> redis.opsForValue().get(<span class="hljs-string">"semantic:cache:"</span> + cacheId);
+            <span class="hljs-keyword">if</span> (cached != <span class="hljs-literal">null</span>) {
+                <span class="hljs-keyword">return</span> Optional.of(<span class="hljs-keyword">new</span> <span class="hljs-title class_">String</span>(cached, StandardCharsets.UTF_8));
             }
         }
-        return Optional.empty();
+        <span class="hljs-keyword">return</span> Optional.empty();
     }
 
-    public void putSemanticMatch(String cacheId, String userMessage,
-                                  String response, List&lt;Double&gt; embedding) {
-        // 存储向量和响应
-        var doc = new Document(cacheId, userMessage, Map.of());
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">putSemanticMatch</span><span class="hljs-params">(String cacheId, String userMessage,
+                                  String response, List&lt;Double&gt; embedding)</span> {
+        <span class="hljs-comment">// 存储向量和响应</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">doc</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Document</span>(cacheId, userMessage, Map.of());
         vectorStore.add(List.of(doc));
-        // 存储响应体
-        redis.opsForValue().set(&quot;semantic:cache:&quot; + cacheId,
-            response.getBytes(StandardCharsets.UTF_8), Duration.ofHours(2));
+        <span class="hljs-comment">// 存储响应体</span>
+        redis.opsForValue().set(<span class="hljs-string">"semantic:cache:"</span> + cacheId,
+            response.getBytes(StandardCharsets.UTF_8), Duration.ofHours(<span class="hljs-number">2</span>));
     }
 }
-</code></pre></div>
-<h2>三、Prompt 管理平台</h2>
+</code></pre></div><h2>三、Prompt 管理平台</h2>
 <h3>3.1 模板引擎</h3>
 <p>支持变量占位符、条件渲染和循环的 Prompt 模板引擎。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
-public class PromptTemplateEngine {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">PromptTemplateEngine</span> {
 
-    /**
+    <span class="hljs-comment">/**
      * 渲染模板。
      * 支持语法：
      *   {{variable}}              — 变量替换
      *   {% if condition %}...{% endif %}  — 条件渲染
      *   {% for item in list %}...{% endfor %} — 循环
-     */
-    public String render(String template, Map&lt;String, Object&gt; context) {
-        var result = replaceVariables(template, context);
+     */</span>
+    <span class="hljs-keyword">public</span> String <span class="hljs-title function_">render</span><span class="hljs-params">(String template, Map&lt;String, Object&gt; context)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> replaceVariables(template, context);
         result = processIfBlocks(result, context);
         result = processForLoops(result, context);
-        return result.trim();
+        <span class="hljs-keyword">return</span> result.trim();
     }
 
-    private String replaceVariables(String template, Map&lt;String, Object&gt; context) {
-        var pattern = Pattern.compile(&quot;\\{\\{\\s*(\\S+?)\\s*\\}\\}&quot;);
-        var matcher = pattern.matcher(template);
-        var sb = new StringBuilder();
-        while (matcher.find()) {
-            var varName = matcher.group(1);
-            var value = resolveNestedValue(context, varName);
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">replaceVariables</span><span class="hljs-params">(String template, Map&lt;String, Object&gt; context)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">pattern</span> <span class="hljs-operator">=</span> Pattern.compile(<span class="hljs-string">"\\{\\{\\s*(\\S+?)\\s*\\}\\}"</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">matcher</span> <span class="hljs-operator">=</span> pattern.matcher(template);
+        <span class="hljs-type">var</span> <span class="hljs-variable">sb</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>();
+        <span class="hljs-keyword">while</span> (matcher.find()) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">varName</span> <span class="hljs-operator">=</span> matcher.group(<span class="hljs-number">1</span>);
+            <span class="hljs-type">var</span> <span class="hljs-variable">value</span> <span class="hljs-operator">=</span> resolveNestedValue(context, varName);
             matcher.appendReplacement(sb,
-                Matcher.quoteReplacement(value != null ? value.toString() : &quot;&quot;));
+                Matcher.quoteReplacement(value != <span class="hljs-literal">null</span> ? value.toString() : <span class="hljs-string">""</span>));
         }
         matcher.appendTail(sb);
-        return sb.toString();
+        <span class="hljs-keyword">return</span> sb.toString();
     }
 
-    private String processIfBlocks(String template, Map&lt;String, Object&gt; context) {
-        var pattern = Pattern.compile(
-            &quot;\\{%\\s*if\\s+(\\S+)\\s*%\\}(.*?)\\{%\\s*endif\\s*%\\}&quot;, Pattern.DOTALL);
-        var matcher = pattern.matcher(template);
-        var sb = new StringBuilder();
-        while (matcher.find()) {
-            var condition = matcher.group(1);
-            var body = matcher.group(2);
-            var value = resolveNestedValue(context, condition);
-            var replacement = isTruthy(value) ? body : &quot;&quot;;
-            // 递归处理 body 中的嵌套模板
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">processIfBlocks</span><span class="hljs-params">(String template, Map&lt;String, Object&gt; context)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">pattern</span> <span class="hljs-operator">=</span> Pattern.compile(
+            <span class="hljs-string">"\\{%\\s*if\\s+(\\S+)\\s*%\\}(.*?)\\{%\\s*endif\\s*%\\}"</span>, Pattern.DOTALL);
+        <span class="hljs-type">var</span> <span class="hljs-variable">matcher</span> <span class="hljs-operator">=</span> pattern.matcher(template);
+        <span class="hljs-type">var</span> <span class="hljs-variable">sb</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>();
+        <span class="hljs-keyword">while</span> (matcher.find()) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">condition</span> <span class="hljs-operator">=</span> matcher.group(<span class="hljs-number">1</span>);
+            <span class="hljs-type">var</span> <span class="hljs-variable">body</span> <span class="hljs-operator">=</span> matcher.group(<span class="hljs-number">2</span>);
+            <span class="hljs-type">var</span> <span class="hljs-variable">value</span> <span class="hljs-operator">=</span> resolveNestedValue(context, condition);
+            <span class="hljs-type">var</span> <span class="hljs-variable">replacement</span> <span class="hljs-operator">=</span> isTruthy(value) ? body : <span class="hljs-string">""</span>;
+            <span class="hljs-comment">// 递归处理 body 中的嵌套模板</span>
             replacement = render(replacement, context);
             matcher.appendReplacement(sb, Matcher.quoteReplacement(replacement));
         }
         matcher.appendTail(sb);
-        return sb.toString();
+        <span class="hljs-keyword">return</span> sb.toString();
     }
 
-    private String processForLoops(String template, Map&lt;String, Object&gt; context) {
-        var pattern = Pattern.compile(
-            &quot;\\{%\\s*for\\s+(\\S+)\\s+in\\s+(\\S+)\\s*%\\}(.*?)\\{%\\s*endfor\\s*%\\}&quot;,
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">processForLoops</span><span class="hljs-params">(String template, Map&lt;String, Object&gt; context)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">pattern</span> <span class="hljs-operator">=</span> Pattern.compile(
+            <span class="hljs-string">"\\{%\\s*for\\s+(\\S+)\\s+in\\s+(\\S+)\\s*%\\}(.*?)\\{%\\s*endfor\\s*%\\}"</span>,
             Pattern.DOTALL);
-        var matcher = pattern.matcher(template);
-        var sb = new StringBuilder();
-        while (matcher.find()) {
-            var itemName = matcher.group(1);
-            var listName = matcher.group(2);
-            var body = matcher.group(3);
-            var listValue = context.get(listName);
+        <span class="hljs-type">var</span> <span class="hljs-variable">matcher</span> <span class="hljs-operator">=</span> pattern.matcher(template);
+        <span class="hljs-type">var</span> <span class="hljs-variable">sb</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>();
+        <span class="hljs-keyword">while</span> (matcher.find()) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">itemName</span> <span class="hljs-operator">=</span> matcher.group(<span class="hljs-number">1</span>);
+            <span class="hljs-type">var</span> <span class="hljs-variable">listName</span> <span class="hljs-operator">=</span> matcher.group(<span class="hljs-number">2</span>);
+            <span class="hljs-type">var</span> <span class="hljs-variable">body</span> <span class="hljs-operator">=</span> matcher.group(<span class="hljs-number">3</span>);
+            <span class="hljs-type">var</span> <span class="hljs-variable">listValue</span> <span class="hljs-operator">=</span> context.get(listName);
 
-            var replacement = new StringBuilder();
-            if (listValue instanceof List&lt;?&gt; list) {
-                for (var item : list) {
-                    var itemContext = new HashMap&lt;&gt;(context);
+            <span class="hljs-type">var</span> <span class="hljs-variable">replacement</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>();
+            <span class="hljs-keyword">if</span> (listValue <span class="hljs-keyword">instanceof</span> List&lt;?&gt; list) {
+                <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> item : list) {
+                    <span class="hljs-type">var</span> <span class="hljs-variable">itemContext</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">HashMap</span>&lt;&gt;(context);
                     itemContext.put(itemName, item);
                     replacement.append(render(body, itemContext));
                 }
@@ -577,85 +566,84 @@ public class PromptTemplateEngine {
             matcher.appendReplacement(sb, Matcher.quoteReplacement(replacement.toString()));
         }
         matcher.appendTail(sb);
-        return sb.toString();
+        <span class="hljs-keyword">return</span> sb.toString();
     }
 
-    private Object resolveNestedValue(Map&lt;String, Object&gt; context, String path) {
-        var parts = path.split(&quot;\\.&quot;);
-        Object current = context;
-        for (var part : parts) {
-            if (current instanceof Map&lt;?, ?&gt; map) {
+    <span class="hljs-keyword">private</span> Object <span class="hljs-title function_">resolveNestedValue</span><span class="hljs-params">(Map&lt;String, Object&gt; context, String path)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">parts</span> <span class="hljs-operator">=</span> path.split(<span class="hljs-string">"\\."</span>);
+        <span class="hljs-type">Object</span> <span class="hljs-variable">current</span> <span class="hljs-operator">=</span> context;
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> part : parts) {
+            <span class="hljs-keyword">if</span> (current <span class="hljs-keyword">instanceof</span> Map&lt;?, ?&gt; map) {
                 current = map.get(part);
-            } else {
-                return null;
+            } <span class="hljs-keyword">else</span> {
+                <span class="hljs-keyword">return</span> <span class="hljs-literal">null</span>;
             }
         }
-        return current;
+        <span class="hljs-keyword">return</span> current;
     }
 
-    private boolean isTruthy(Object value) {
-        if (value == null) return false;
-        if (value instanceof Boolean b) return b;
-        if (value instanceof String s) return !s.isEmpty();
-        if (value instanceof Number n) return n.doubleValue() != 0;
-        if (value instanceof Collection&lt;?&gt; c) return !c.isEmpty();
-        return true;
+    <span class="hljs-keyword">private</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">isTruthy</span><span class="hljs-params">(Object value)</span> {
+        <span class="hljs-keyword">if</span> (value == <span class="hljs-literal">null</span>) <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+        <span class="hljs-keyword">if</span> (value <span class="hljs-keyword">instanceof</span> Boolean b) <span class="hljs-keyword">return</span> b;
+        <span class="hljs-keyword">if</span> (value <span class="hljs-keyword">instanceof</span> String s) <span class="hljs-keyword">return</span> !s.isEmpty();
+        <span class="hljs-keyword">if</span> (value <span class="hljs-keyword">instanceof</span> Number n) <span class="hljs-keyword">return</span> n.doubleValue() != <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">if</span> (value <span class="hljs-keyword">instanceof</span> Collection&lt;?&gt; c) <span class="hljs-keyword">return</span> !c.isEmpty();
+        <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
     }
 }
-</code></pre></div>
-<h3>3.2 版本控制</h3>
+</code></pre></div><h3>3.2 版本控制</h3>
 <p>实现 Git-like 的 Prompt 版本控制和 Diff 功能。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Entity
-@Table(name = &quot;prompt_versions&quot;)
-public class PromptVersion {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Entity</span>
+<span class="hljs-meta">@Table(name = "prompt_versions")</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">PromptVersion</span> {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private String id;
+    <span class="hljs-meta">@Id</span>
+    <span class="hljs-meta">@GeneratedValue(strategy = GenerationType.UUID)</span>
+    <span class="hljs-keyword">private</span> String id;
 
-    private String promptId;           // Prompt 逻辑 ID
-    private int version;               // 递增版本号
-    private String parentVersionId;    // 父版本ID（实现版本链）
+    <span class="hljs-keyword">private</span> String promptId;           <span class="hljs-comment">// Prompt 逻辑 ID</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-type">int</span> version;               <span class="hljs-comment">// 递增版本号</span>
+    <span class="hljs-keyword">private</span> String parentVersionId;    <span class="hljs-comment">// 父版本ID（实现版本链）</span>
 
-    @Column(columnDefinition = &quot;TEXT&quot;)
-    private String template;           // Prompt 模板内容
+    <span class="hljs-meta">@Column(columnDefinition = "TEXT")</span>
+    <span class="hljs-keyword">private</span> String template;           <span class="hljs-comment">// Prompt 模板内容</span>
 
-    @Column(columnDefinition = &quot;JSON&quot;)
-    private String parameters;         // 模型参数 JSON
+    <span class="hljs-meta">@Column(columnDefinition = "JSON")</span>
+    <span class="hljs-keyword">private</span> String parameters;         <span class="hljs-comment">// 模型参数 JSON</span>
 
-    private String createdBy;
-    private Instant createdAt;
+    <span class="hljs-keyword">private</span> String createdBy;
+    <span class="hljs-keyword">private</span> Instant createdAt;
 
-    @Enumerated(EnumType.STRING)
-    private PromptStatus status;       // DRAFT, REVIEWING, PUBLISHED, ARCHIVED
+    <span class="hljs-meta">@Enumerated(EnumType.STRING)</span>
+    <span class="hljs-keyword">private</span> PromptStatus status;       <span class="hljs-comment">// DRAFT, REVIEWING, PUBLISHED, ARCHIVED</span>
 
-    @Column(columnDefinition = &quot;TEXT&quot;)
-    private String changelog;          // 变更说明
+    <span class="hljs-meta">@Column(columnDefinition = "TEXT")</span>
+    <span class="hljs-keyword">private</span> String changelog;          <span class="hljs-comment">// 变更说明</span>
 
-    // getters, setters, constructors 省略
+    <span class="hljs-comment">// getters, setters, constructors 省略</span>
 }
 
-public enum PromptStatus { DRAFT, REVIEWING, PUBLISHED, ARCHIVED }
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">enum</span> <span class="hljs-title class_">PromptStatus</span> { DRAFT, REVIEWING, PUBLISHED, ARCHIVED }
 
-@Service
-public class PromptVersionService {
+<span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">PromptVersionService</span> {
 
-    private final PromptVersionRepository repo;
-    private final PromptTemplateEngine engine;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> PromptVersionRepository repo;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> PromptTemplateEngine engine;
 
-    /**
+    <span class="hljs-comment">/**
      * 创建新版本
-     */
-    public PromptVersion createVersion(String promptId, String template,
+     */</span>
+    <span class="hljs-keyword">public</span> PromptVersion <span class="hljs-title function_">createVersion</span><span class="hljs-params">(String promptId, String template,
                                         String parameters, String changelog,
-                                        String createdBy) {
-        var latestVersion = repo.findTopByPromptIdOrderByVersionDesc(promptId);
-        var newVersion = latestVersion != null ? latestVersion.getVersion() + 1 : 1;
+                                        String createdBy)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">latestVersion</span> <span class="hljs-operator">=</span> repo.findTopByPromptIdOrderByVersionDesc(promptId);
+        <span class="hljs-type">var</span> <span class="hljs-variable">newVersion</span> <span class="hljs-operator">=</span> latestVersion != <span class="hljs-literal">null</span> ? latestVersion.getVersion() + <span class="hljs-number">1</span> : <span class="hljs-number">1</span>;
 
-        var pv = new PromptVersion();
+        <span class="hljs-type">var</span> <span class="hljs-variable">pv</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">PromptVersion</span>();
         pv.setPromptId(promptId);
         pv.setVersion(newVersion);
-        pv.setParentVersionId(latestVersion != null ? latestVersion.getId() : null);
+        pv.setParentVersionId(latestVersion != <span class="hljs-literal">null</span> ? latestVersion.getId() : <span class="hljs-literal">null</span>);
         pv.setTemplate(template);
         pv.setParameters(parameters);
         pv.setChangelog(changelog);
@@ -663,126 +651,125 @@ public class PromptVersionService {
         pv.setCreatedAt(Instant.now());
         pv.setStatus(PromptStatus.DRAFT);
 
-        return repo.save(pv);
+        <span class="hljs-keyword">return</span> repo.save(pv);
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 获取两个版本之间的 Diff（行级对比）
-     */
-    public VersionDiff diff(String versionId1, String versionId2) {
-        var v1 = repo.findById(versionId1).orElseThrow();
-        var v2 = repo.findById(versionId2).orElseThrow();
+     */</span>
+    <span class="hljs-keyword">public</span> VersionDiff <span class="hljs-title function_">diff</span><span class="hljs-params">(String versionId1, String versionId2)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">v1</span> <span class="hljs-operator">=</span> repo.findById(versionId1).orElseThrow();
+        <span class="hljs-type">var</span> <span class="hljs-variable">v2</span> <span class="hljs-operator">=</span> repo.findById(versionId2).orElseThrow();
 
-        var lines1 = v1.getTemplate().split(&quot;\n&quot;);
-        var lines2 = v2.getTemplate().split(&quot;\n&quot;);
+        <span class="hljs-type">var</span> <span class="hljs-variable">lines1</span> <span class="hljs-operator">=</span> v1.getTemplate().split(<span class="hljs-string">"\n"</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">lines2</span> <span class="hljs-operator">=</span> v2.getTemplate().split(<span class="hljs-string">"\n"</span>);
 
-        var diffResult = computeLineDiff(lines1, lines2);
+        <span class="hljs-type">var</span> <span class="hljs-variable">diffResult</span> <span class="hljs-operator">=</span> computeLineDiff(lines1, lines2);
 
-        return new VersionDiff(
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">VersionDiff</span>(
             v1.getVersion(), v2.getVersion(),
             v1.getCreatedAt(), v2.getCreatedAt(),
             diffResult.additions(), diffResult.deletions(), diffResult.modifications()
         );
     }
 
-    private DiffResult computeLineDiff(String[] oldLines, String[] newLines) {
-        List&lt;DiffLine&gt; additions = new ArrayList&lt;&gt;();
-        List&lt;DiffLine&gt; deletions = new ArrayList&lt;&gt;();
-        List&lt;DiffModification&gt; modifications = new ArrayList&lt;&gt;();
+    <span class="hljs-keyword">private</span> DiffResult <span class="hljs-title function_">computeLineDiff</span><span class="hljs-params">(String[] oldLines, String[] newLines)</span> {
+        List&lt;DiffLine&gt; additions = <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;&gt;();
+        List&lt;DiffLine&gt; deletions = <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;&gt;();
+        List&lt;DiffModification&gt; modifications = <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;&gt;();
 
-        // 使用 LCS 算法计算行级 Diff
-        var lcs = longestCommonSubsequence(oldLines, newLines);
+        <span class="hljs-comment">// 使用 LCS 算法计算行级 Diff</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">lcs</span> <span class="hljs-operator">=</span> longestCommonSubsequence(oldLines, newLines);
 
-        int i = 0, j = 0, k = 0;
-        while (i &lt; oldLines.length || j &lt; newLines.length) {
-            if (k &lt; lcs.size()) {
-                while (i &lt; oldLines.length &amp;&amp; !oldLines[i].equals(lcs.get(k))) {
-                    deletions.add(new DiffLine(i + 1, oldLines[i]));
+        <span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>, j = <span class="hljs-number">0</span>, k = <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">while</span> (i &lt; oldLines.length || j &lt; newLines.length) {
+            <span class="hljs-keyword">if</span> (k &lt; lcs.size()) {
+                <span class="hljs-keyword">while</span> (i &lt; oldLines.length &amp;&amp; !oldLines[i].equals(lcs.get(k))) {
+                    deletions.add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">DiffLine</span>(i + <span class="hljs-number">1</span>, oldLines[i]));
                     i++;
                 }
-                while (j &lt; newLines.length &amp;&amp; !newLines[j].equals(lcs.get(k))) {
-                    additions.add(new DiffLine(j + 1, newLines[j]));
+                <span class="hljs-keyword">while</span> (j &lt; newLines.length &amp;&amp; !newLines[j].equals(lcs.get(k))) {
+                    additions.add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">DiffLine</span>(j + <span class="hljs-number">1</span>, newLines[j]));
                     j++;
                 }
                 i++; j++; k++;
-            } else {
-                while (i &lt; oldLines.length) {
-                    deletions.add(new DiffLine(i + 1, oldLines[i]));
+            } <span class="hljs-keyword">else</span> {
+                <span class="hljs-keyword">while</span> (i &lt; oldLines.length) {
+                    deletions.add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">DiffLine</span>(i + <span class="hljs-number">1</span>, oldLines[i]));
                     i++;
                 }
-                while (j &lt; newLines.length) {
-                    additions.add(new DiffLine(j + 1, newLines[j]));
+                <span class="hljs-keyword">while</span> (j &lt; newLines.length) {
+                    additions.add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">DiffLine</span>(j + <span class="hljs-number">1</span>, newLines[j]));
                     j++;
                 }
             }
         }
 
-        return new DiffResult(additions, deletions, modifications);
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">DiffResult</span>(additions, deletions, modifications);
     }
 
-    private List&lt;String&gt; longestCommonSubsequence(String[] a, String[] b) {
-        int m = a.length, n = b.length;
-        int[][] dp = new int[m + 1][n + 1];
-        for (int i = 1; i &lt;= m; i++) {
-            for (int j = 1; j &lt;= n; j++) {
-                if (a[i - 1].equals(b[j - 1])) {
-                    dp[i][j] = dp[i - 1][j - 1] + 1;
-                } else {
-                    dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+    <span class="hljs-keyword">private</span> List&lt;String&gt; <span class="hljs-title function_">longestCommonSubsequence</span><span class="hljs-params">(String[] a, String[] b)</span> {
+        <span class="hljs-type">int</span> <span class="hljs-variable">m</span> <span class="hljs-operator">=</span> a.length, n = b.length;
+        <span class="hljs-type">int</span>[][] dp = <span class="hljs-keyword">new</span> <span class="hljs-title class_">int</span>[m + <span class="hljs-number">1</span>][n + <span class="hljs-number">1</span>];
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">1</span>; i &lt;= m; i++) {
+            <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">j</span> <span class="hljs-operator">=</span> <span class="hljs-number">1</span>; j &lt;= n; j++) {
+                <span class="hljs-keyword">if</span> (a[i - <span class="hljs-number">1</span>].equals(b[j - <span class="hljs-number">1</span>])) {
+                    dp[i][j] = dp[i - <span class="hljs-number">1</span>][j - <span class="hljs-number">1</span>] + <span class="hljs-number">1</span>;
+                } <span class="hljs-keyword">else</span> {
+                    dp[i][j] = Math.max(dp[i - <span class="hljs-number">1</span>][j], dp[i][j - <span class="hljs-number">1</span>]);
                 }
             }
         }
-        // 回溯构建 LCS
-        var lcs = new ArrayList&lt;String&gt;();
-        int i = m, j = n;
-        while (i &gt; 0 &amp;&amp; j &gt; 0) {
-            if (a[i - 1].equals(b[j - 1])) {
-                lcs.addFirst(a[i - 1]);
+        <span class="hljs-comment">// 回溯构建 LCS</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">lcs</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;String&gt;();
+        <span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> m, j = n;
+        <span class="hljs-keyword">while</span> (i &gt; <span class="hljs-number">0</span> &amp;&amp; j &gt; <span class="hljs-number">0</span>) {
+            <span class="hljs-keyword">if</span> (a[i - <span class="hljs-number">1</span>].equals(b[j - <span class="hljs-number">1</span>])) {
+                lcs.addFirst(a[i - <span class="hljs-number">1</span>]);
                 i--; j--;
-            } else if (dp[i - 1][j] &gt; dp[i][j - 1]) {
+            } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (dp[i - <span class="hljs-number">1</span>][j] &gt; dp[i][j - <span class="hljs-number">1</span>]) {
                 i--;
-            } else {
+            } <span class="hljs-keyword">else</span> {
                 j--;
             }
         }
-        return lcs;
+        <span class="hljs-keyword">return</span> lcs;
     }
 
-    /** 回滚到指定版本（创建新版本，内容来自历史版本） */
-    public PromptVersion rollback(String promptId, int targetVersion, String createdBy) {
-        var target = repo.findByPromptIdAndVersion(promptId, targetVersion)
-            .orElseThrow(() -&gt; new IllegalArgumentException(
-                &quot;Version %d not found&quot;.formatted(targetVersion)));
-        return createVersion(promptId, target.getTemplate(), target.getParameters(),
-            &quot;Rollback to version &quot; + targetVersion, createdBy);
+    <span class="hljs-comment">/** 回滚到指定版本（创建新版本，内容来自历史版本） */</span>
+    <span class="hljs-keyword">public</span> PromptVersion <span class="hljs-title function_">rollback</span><span class="hljs-params">(String promptId, <span class="hljs-type">int</span> targetVersion, String createdBy)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">target</span> <span class="hljs-operator">=</span> repo.findByPromptIdAndVersion(promptId, targetVersion)
+            .orElseThrow(() -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">IllegalArgumentException</span>(
+                <span class="hljs-string">"Version %d not found"</span>.formatted(targetVersion)));
+        <span class="hljs-keyword">return</span> createVersion(promptId, target.getTemplate(), target.getParameters(),
+            <span class="hljs-string">"Rollback to version "</span> + targetVersion, createdBy);
     }
 }
-</code></pre></div>
-<h3>3.3 环境绑定 + A/B 测试 + 灰度发布</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
-public class PromptDeploymentService {
+</code></pre></div><h3>3.3 环境绑定 + A/B 测试 + 灰度发布</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">PromptDeploymentService</span> {
 
-    private final PromptVersionRepository versionRepo;
-    private final PromptDeploymentRepository deploymentRepo;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> PromptVersionRepository versionRepo;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> PromptDeploymentRepository deploymentRepo;
 
-    /**
+    <span class="hljs-comment">/**
      * 环境绑定：不同环境使用不同的模型参数。
      * dev 环境：temperature=0.9, maxTokens=500（快速测试）
      * staging 环境：temperature=0.7, maxTokens=2000
      * prod 环境：temperature=0.3, maxTokens=4096
-     */
-    public record EnvironmentConfig(
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">EnvironmentConfig</span><span class="hljs-params">(
         String env,                    // dev, staging, prod
         String promptVersionId,
         String modelName,
-        double temperature,
-        int maxTokens,
+        <span class="hljs-type">double</span> temperature,
+        <span class="hljs-type">int</span> maxTokens,
         Map&lt;String, Object&gt; extraParams
-    ) {}
+    )</span> {}
 
-    public void bindEnvironment(String promptId, String env,
-                                 EnvironmentConfig config) {
-        var deployment = new PromptDeployment();
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">bindEnvironment</span><span class="hljs-params">(String promptId, String env,
+                                 EnvironmentConfig config)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">deployment</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">PromptDeployment</span>();
         deployment.setPromptId(promptId);
         deployment.setEnvironment(env);
         deployment.setPromptVersionId(config.promptVersionId());
@@ -790,23 +777,23 @@ public class PromptDeploymentService {
         deployment.setTemperature(config.temperature());
         deployment.setMaxTokens(config.maxTokens());
         deployment.setExtraParams(toJson(config.extraParams()));
-        deployment.setTrafficPercent(100);  // 非 A/B 测试时 100%
+        deployment.setTrafficPercent(<span class="hljs-number">100</span>);  <span class="hljs-comment">// 非 A/B 测试时 100%</span>
         deployment.setStatus(DeploymentStatus.ACTIVE);
         deploymentRepo.save(deployment);
     }
 
-    /**
+    <span class="hljs-comment">/**
      * A/B 测试：配置多个变体的流量配比。
      * 通过此方法，将流量按比例分配给不同 Prompt 版本，收集效果指标后比较。
-     */
-    public void startAbTest(String promptId, String environment,
-                             List&lt;AbVariant&gt; variants) {
-        if (variants.stream().mapToInt(AbVariant::trafficPercent).sum() != 100) {
-            throw new IllegalArgumentException(&quot;Traffic percentages must sum to 100&quot;);
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">startAbTest</span><span class="hljs-params">(String promptId, String environment,
+                             List&lt;AbVariant&gt; variants)</span> {
+        <span class="hljs-keyword">if</span> (variants.stream().mapToInt(AbVariant::trafficPercent).sum() != <span class="hljs-number">100</span>) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">IllegalArgumentException</span>(<span class="hljs-string">"Traffic percentages must sum to 100"</span>);
         }
 
-        for (var variant : variants) {
-            var deployment = new PromptDeployment();
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> variant : variants) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">deployment</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">PromptDeployment</span>();
             deployment.setPromptId(promptId);
             deployment.setEnvironment(environment);
             deployment.setPromptVersionId(variant.promptVersionId());
@@ -817,253 +804,251 @@ public class PromptDeploymentService {
         }
     }
 
-    public record AbVariant(
-        String variantName,          // 如 &quot;control&quot;, &quot;variant-a&quot;
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">AbVariant</span><span class="hljs-params">(
+        String variantName,          // 如 "control", "variant-a"
         String promptVersionId,
-        int trafficPercent           // 0-100
-    ) {}
+        <span class="hljs-type">int</span> trafficPercent           // 0-100
+    )</span> {}
 
-    /**
+    <span class="hljs-comment">/**
      * A/B 测试结论：比较各变体的效果指标，选出优胜者。
      * 指标包括：用户点赞率、任务完成率、平均延迟等。
-     */
-    public AbTestResult concludeAbTest(String promptId, String environment,
-                                        Map&lt;String, Double&gt; variantScores) {
-        var best = variantScores.entrySet().stream()
+     */</span>
+    <span class="hljs-keyword">public</span> AbTestResult <span class="hljs-title function_">concludeAbTest</span><span class="hljs-params">(String promptId, String environment,
+                                        Map&lt;String, Double&gt; variantScores)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">best</span> <span class="hljs-operator">=</span> variantScores.entrySet().stream()
             .max(Map.Entry.comparingByValue())
             .orElseThrow();
 
-        // 优胜变体获得 100% 流量
-        var winningDeployment = deploymentRepo
+        <span class="hljs-comment">// 优胜变体获得 100% 流量</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">winningDeployment</span> <span class="hljs-operator">=</span> deploymentRepo
             .findByPromptIdAndEnvironmentAndVariantName(
                 promptId, environment, best.getKey());
-        winningDeployment.setTrafficPercent(100);
+        winningDeployment.setTrafficPercent(<span class="hljs-number">100</span>);
         winningDeployment.setStatus(DeploymentStatus.ACTIVE);
         deploymentRepo.save(winningDeployment);
 
-        // 其他变体下线
+        <span class="hljs-comment">// 其他变体下线</span>
         deploymentRepo.findByPromptIdAndEnvironment(promptId, environment)
             .stream()
             .filter(d -&gt; !d.getVariantName().equals(best.getKey()))
             .forEach(d -&gt; {
                 d.setStatus(DeploymentStatus.INACTIVE);
-                d.setTrafficPercent(0);
+                d.setTrafficPercent(<span class="hljs-number">0</span>);
                 deploymentRepo.save(d);
             });
 
-        return new AbTestResult(best.getKey(), best.getValue(), Instant.now());
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">AbTestResult</span>(best.getKey(), best.getValue(), Instant.now());
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 灰度发布流程：
      * 10% → 观察 (15min) → 50% → 观察 (15min) → 100%
      * 任意阶段出现问题自动回滚。
-     */
-    public void canaryRelease(String promptId, String environment,
-                               String newVersionId, CanaryListener listener) {
-        var stages = List.of(10, 50, 100);
-        var stageTime = Duration.ofMinutes(15);
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">canaryRelease</span><span class="hljs-params">(String promptId, String environment,
+                               String newVersionId, CanaryListener listener)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">stages</span> <span class="hljs-operator">=</span> List.of(<span class="hljs-number">10</span>, <span class="hljs-number">50</span>, <span class="hljs-number">100</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">stageTime</span> <span class="hljs-operator">=</span> Duration.ofMinutes(<span class="hljs-number">15</span>);
 
-        for (var stage : stages) {
-            // 更新新版本流量占比
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> stage : stages) {
+            <span class="hljs-comment">// 更新新版本流量占比</span>
             updateTrafficSplit(promptId, environment, newVersionId, stage);
 
-            // 通知观察者
+            <span class="hljs-comment">// 通知观察者</span>
             listener.onStageChange(promptId, environment, stage);
 
-            try {
-                // 等待观察期，期间如果监听器返回false则回滚
-                var healthy = listener.observe(promptId, environment, stageTime);
-                if (!healthy) {
+            <span class="hljs-keyword">try</span> {
+                <span class="hljs-comment">// 等待观察期，期间如果监听器返回false则回滚</span>
+                <span class="hljs-type">var</span> <span class="hljs-variable">healthy</span> <span class="hljs-operator">=</span> listener.observe(promptId, environment, stageTime);
+                <span class="hljs-keyword">if</span> (!healthy) {
                     rollbackCanary(promptId, environment, newVersionId);
-                    return;
+                    <span class="hljs-keyword">return</span>;
                 }
-            } catch (InterruptedException e) {
+            } <span class="hljs-keyword">catch</span> (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 rollbackCanary(promptId, environment, newVersionId);
-                return;
+                <span class="hljs-keyword">return</span>;
             }
         }
 
-        // 灰度完成，全量切换
+        <span class="hljs-comment">// 灰度完成，全量切换</span>
         listener.onCanaryComplete(promptId, environment, newVersionId);
     }
 
-    private void rollbackCanary(String promptId, String environment,
-                                 String newVersionId) {
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">rollbackCanary</span><span class="hljs-params">(String promptId, String environment,
+                                 String newVersionId)</span> {
         deploymentRepo.findByPromptIdAndEnvironmentAndPromptVersionId(
                 promptId, environment, newVersionId)
             .forEach(d -&gt; {
-                d.setTrafficPercent(0);
+                d.setTrafficPercent(<span class="hljs-number">0</span>);
                 d.setStatus(DeploymentStatus.INACTIVE);
                 deploymentRepo.save(d);
             });
-        // 恢复旧版本 100% 流量
+        <span class="hljs-comment">// 恢复旧版本 100% 流量</span>
         deploymentRepo.findByPromptIdAndEnvironment(promptId, environment)
             .stream()
             .filter(d -&gt; d.getStatus() == DeploymentStatus.ACTIVE)
             .forEach(d -&gt; {
-                d.setTrafficPercent(100);
+                d.setTrafficPercent(<span class="hljs-number">100</span>);
                 deploymentRepo.save(d);
             });
     }
 }
-</code></pre></div>
-<h3>3.4 Prompt 依赖关系图</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
-public class PromptDependencyGraph {
+</code></pre></div><h3>3.4 Prompt 依赖关系图</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">PromptDependencyGraph</span> {
 
-    private final PromptVersionRepository versionRepo;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> PromptVersionRepository versionRepo;
 
-    /**
+    <span class="hljs-comment">/**
      * 构建 Prompt 依赖关系图。
-     * 依赖关系由模板中的 {% import &quot;prompt://xxx&quot; %} 指令定义。
-     */
-    public DependencyGraph buildGraph(String promptId) {
-        var graph = new DependencyGraph(promptId);
-        var visited = new HashSet&lt;String&gt;();
-        var importPattern = Pattern.compile(&quot;\\{%\\s*import\\s+\&quot;prompt://(.+?)\&quot;\\s*%\\}&quot;);
+     * 依赖关系由模板中的 {% import "prompt://xxx" %} 指令定义。
+     */</span>
+    <span class="hljs-keyword">public</span> DependencyGraph <span class="hljs-title function_">buildGraph</span><span class="hljs-params">(String promptId)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">graph</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">DependencyGraph</span>(promptId);
+        <span class="hljs-type">var</span> <span class="hljs-variable">visited</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">HashSet</span>&lt;String&gt;();
+        <span class="hljs-type">var</span> <span class="hljs-variable">importPattern</span> <span class="hljs-operator">=</span> Pattern.compile(<span class="hljs-string">"\\{%\\s*import\\s+\"prompt://(.+?)\"\\s*%\\}"</span>);
 
         buildGraphRecursive(promptId, graph, visited, importPattern);
-        return graph;
+        <span class="hljs-keyword">return</span> graph;
     }
 
-    private void buildGraphRecursive(String promptId, DependencyGraph graph,
-                                      Set&lt;String&gt; visited, Pattern importPattern) {
-        if (!visited.add(promptId)) return; // 防止循环依赖
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">buildGraphRecursive</span><span class="hljs-params">(String promptId, DependencyGraph graph,
+                                      Set&lt;String&gt; visited, Pattern importPattern)</span> {
+        <span class="hljs-keyword">if</span> (!visited.add(promptId)) <span class="hljs-keyword">return</span>; <span class="hljs-comment">// 防止循环依赖</span>
 
-        var latestVersion = versionRepo
+        <span class="hljs-type">var</span> <span class="hljs-variable">latestVersion</span> <span class="hljs-operator">=</span> versionRepo
             .findTopByPromptIdOrderByVersionDesc(promptId);
-        if (latestVersion == null) return;
+        <span class="hljs-keyword">if</span> (latestVersion == <span class="hljs-literal">null</span>) <span class="hljs-keyword">return</span>;
 
-        var template = latestVersion.getTemplate();
-        var matcher = importPattern.matcher(template);
+        <span class="hljs-type">var</span> <span class="hljs-variable">template</span> <span class="hljs-operator">=</span> latestVersion.getTemplate();
+        <span class="hljs-type">var</span> <span class="hljs-variable">matcher</span> <span class="hljs-operator">=</span> importPattern.matcher(template);
 
-        while (matcher.find()) {
-            var importedPromptId = matcher.group(1);
+        <span class="hljs-keyword">while</span> (matcher.find()) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">importedPromptId</span> <span class="hljs-operator">=</span> matcher.group(<span class="hljs-number">1</span>);
             graph.addEdge(promptId, importedPromptId);
             buildGraphRecursive(importedPromptId, graph, visited, importPattern);
         }
     }
 
-    public static class DependencyGraph {
-        private final String rootPromptId;
-        private final Map&lt;String, Set&lt;String&gt;&gt; adjacency = new HashMap&lt;&gt;();
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">DependencyGraph</span> {
+        <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> String rootPromptId;
+        <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Map&lt;String, Set&lt;String&gt;&gt; adjacency = <span class="hljs-keyword">new</span> <span class="hljs-title class_">HashMap</span>&lt;&gt;();
 
-        // 检测循环依赖
-        public boolean hasCycle() {
-            var visiting = new HashSet&lt;String&gt;();
-            var visited = new HashSet&lt;String&gt;();
-            for (var node : adjacency.keySet()) {
-                if (hasCycleDfs(node, visiting, visited)) return true;
+        <span class="hljs-comment">// 检测循环依赖</span>
+        <span class="hljs-keyword">public</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">hasCycle</span><span class="hljs-params">()</span> {
+            <span class="hljs-type">var</span> <span class="hljs-variable">visiting</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">HashSet</span>&lt;String&gt;();
+            <span class="hljs-type">var</span> <span class="hljs-variable">visited</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">HashSet</span>&lt;String&gt;();
+            <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> node : adjacency.keySet()) {
+                <span class="hljs-keyword">if</span> (hasCycleDfs(node, visiting, visited)) <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
             }
-            return false;
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
         }
 
-        private boolean hasCycleDfs(String node, Set&lt;String&gt; visiting,
-                                     Set&lt;String&gt; visited) {
-            if (visiting.contains(node)) return true;
-            if (visited.contains(node)) return false;
+        <span class="hljs-keyword">private</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">hasCycleDfs</span><span class="hljs-params">(String node, Set&lt;String&gt; visiting,
+                                     Set&lt;String&gt; visited)</span> {
+            <span class="hljs-keyword">if</span> (visiting.contains(node)) <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
+            <span class="hljs-keyword">if</span> (visited.contains(node)) <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
             visiting.add(node);
-            for (var neighbor : adjacency.getOrDefault(node, Set.of())) {
-                if (hasCycleDfs(neighbor, visiting, visited)) return true;
+            <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> neighbor : adjacency.getOrDefault(node, Set.of())) {
+                <span class="hljs-keyword">if</span> (hasCycleDfs(neighbor, visiting, visited)) <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
             }
             visiting.remove(node);
             visited.add(node);
-            return false;
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
         }
     }
 }
-</code></pre></div>
-<h2>四、完整网关服务整合</h2>
+</code></pre></div><h2>四、完整网关服务整合</h2>
 <p>将路由、限流、密钥管理、缓存整合为一个完整的 <code>ModelGatewayService</code>。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
-public class ModelGatewayService {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ModelGatewayService</span> {
 
-    private final Map&lt;String, ModelAdapter&gt; adapters;
-    private final RoutingStrategy routingStrategy;
-    private final RateLimiterService rateLimiter;
-    private final ApiKeyVault keyVault;
-    private final TenantQuotaService quotaService;
-    private final GatewayCacheService cacheService;
-    private final MeterRegistry meterRegistry;
-    private final Tracer tracer; // OpenTelemetry
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Map&lt;String, ModelAdapter&gt; adapters;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> RoutingStrategy routingStrategy;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> RateLimiterService rateLimiter;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> ApiKeyVault keyVault;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> TenantQuotaService quotaService;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> GatewayCacheService cacheService;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> MeterRegistry meterRegistry;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Tracer tracer; <span class="hljs-comment">// OpenTelemetry</span>
 
-    public ModelGatewayService(List&lt;ModelAdapter&gt; adapterList,
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">ModelGatewayService</span><span class="hljs-params">(List&lt;ModelAdapter&gt; adapterList,
                                 RoutingStrategy routingStrategy,
                                 RateLimiterService rateLimiter,
                                 ApiKeyVault keyVault,
                                 TenantQuotaService quotaService,
                                 GatewayCacheService cacheService,
                                 MeterRegistry meterRegistry,
-                                Tracer tracer) {
-        this.adapters = adapterList.stream()
+                                Tracer tracer)</span> {
+        <span class="hljs-built_in">this</span>.adapters = adapterList.stream()
             .flatMap(a -&gt; a.supportedModels().stream()
                 .map(m -&gt; Map.entry(m, a)))
             .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue));
-        this.routingStrategy = routingStrategy;
-        this.rateLimiter = rateLimiter;
-        this.keyVault = keyVault;
-        this.quotaService = quotaService;
-        this.cacheService = cacheService;
-        this.meterRegistry = meterRegistry;
-        this.tracer = tracer;
+        <span class="hljs-built_in">this</span>.routingStrategy = routingStrategy;
+        <span class="hljs-built_in">this</span>.rateLimiter = rateLimiter;
+        <span class="hljs-built_in">this</span>.keyVault = keyVault;
+        <span class="hljs-built_in">this</span>.quotaService = quotaService;
+        <span class="hljs-built_in">this</span>.cacheService = cacheService;
+        <span class="hljs-built_in">this</span>.meterRegistry = meterRegistry;
+        <span class="hljs-built_in">this</span>.tracer = tracer;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 核心方法：处理统一聊天请求。
      * 执行流程：缓存检查 → 限流 → 配额 → 路由 → 调用 → 记录指标
-     */
-    public UnifiedChatResponse chat(UnifiedChatRequest request) {
-        var tenantId = (String) request.metadata().getOrDefault(&quot;tenantId&quot;, &quot;default&quot;);
-        var userId = (String) request.metadata().getOrDefault(&quot;userId&quot;, &quot;anonymous&quot;);
-        var traceId = (String) request.metadata().getOrDefault(&quot;traceId&quot;,
+     */</span>
+    <span class="hljs-keyword">public</span> UnifiedChatResponse <span class="hljs-title function_">chat</span><span class="hljs-params">(UnifiedChatRequest request)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">tenantId</span> <span class="hljs-operator">=</span> (String) request.metadata().getOrDefault(<span class="hljs-string">"tenantId"</span>, <span class="hljs-string">"default"</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">userId</span> <span class="hljs-operator">=</span> (String) request.metadata().getOrDefault(<span class="hljs-string">"userId"</span>, <span class="hljs-string">"anonymous"</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">traceId</span> <span class="hljs-operator">=</span> (String) request.metadata().getOrDefault(<span class="hljs-string">"traceId"</span>,
             UUID.randomUUID().toString());
 
-        // 构建 Span
-        var span = tracer.spanBuilder(&quot;gateway.chat&quot;)
-            .setAttribute(&quot;tenant.id&quot;, tenantId)
-            .setAttribute(&quot;user.id&quot;, userId)
-            .setAttribute(&quot;trace.id&quot;, traceId)
+        <span class="hljs-comment">// 构建 Span</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">span</span> <span class="hljs-operator">=</span> tracer.spanBuilder(<span class="hljs-string">"gateway.chat"</span>)
+            .setAttribute(<span class="hljs-string">"tenant.id"</span>, tenantId)
+            .setAttribute(<span class="hljs-string">"user.id"</span>, userId)
+            .setAttribute(<span class="hljs-string">"trace.id"</span>, traceId)
             .startSpan();
 
-        try (var scope = span.makeCurrent()) {
-            // Step 1: 缓存检查（L1 精确匹配）
-            var cacheKey = buildCacheKey(request);
-            var cached = cacheService.getExactMatch(cacheKey);
-            if (cached.isPresent()) {
-                meterRegistry.counter(&quot;gateway.cache.hit&quot;, &quot;level&quot;, &quot;L1&quot;).increment();
-                span.setAttribute(&quot;cache.hit&quot;, true);
-                return new UnifiedChatResponse(cached.get(), null, null, true);
+        <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">scope</span> <span class="hljs-operator">=</span> span.makeCurrent()) {
+            <span class="hljs-comment">// Step 1: 缓存检查（L1 精确匹配）</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">cacheKey</span> <span class="hljs-operator">=</span> buildCacheKey(request);
+            <span class="hljs-type">var</span> <span class="hljs-variable">cached</span> <span class="hljs-operator">=</span> cacheService.getExactMatch(cacheKey);
+            <span class="hljs-keyword">if</span> (cached.isPresent()) {
+                meterRegistry.counter(<span class="hljs-string">"gateway.cache.hit"</span>, <span class="hljs-string">"level"</span>, <span class="hljs-string">"L1"</span>).increment();
+                span.setAttribute(<span class="hljs-string">"cache.hit"</span>, <span class="hljs-literal">true</span>);
+                <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">UnifiedChatResponse</span>(cached.get(), <span class="hljs-literal">null</span>, <span class="hljs-literal">null</span>, <span class="hljs-literal">true</span>);
             }
 
-            // Step 2: 限流检查
-            if (!rateLimiter.tryAcquire(tenantId, userId, request.model())) {
-                meterRegistry.counter(&quot;gateway.rate_limited&quot;,
-                    &quot;tenant&quot;, tenantId).increment();
-                throw new RateLimitExceededException(&quot;Rate limit exceeded&quot;);
+            <span class="hljs-comment">// Step 2: 限流检查</span>
+            <span class="hljs-keyword">if</span> (!rateLimiter.tryAcquire(tenantId, userId, request.model())) {
+                meterRegistry.counter(<span class="hljs-string">"gateway.rate_limited"</span>,
+                    <span class="hljs-string">"tenant"</span>, tenantId).increment();
+                <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RateLimitExceededException</span>(<span class="hljs-string">"Rate limit exceeded"</span>);
             }
 
-            // Step 3: 配额检查
-            var quotaResult = quotaService.reserve(tenantId, 0);
-            if (!quotaResult.allowed()) {
-                throw new QuotaExceededException(quotaResult.message());
+            <span class="hljs-comment">// Step 3: 配额检查</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">quotaResult</span> <span class="hljs-operator">=</span> quotaService.reserve(tenantId, <span class="hljs-number">0</span>);
+            <span class="hljs-keyword">if</span> (!quotaResult.allowed()) {
+                <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">QuotaExceededException</span>(quotaResult.message());
             }
 
-            // Step 4: 路由
-            var candidates = adapters.keySet().stream()
-                .map(m -&gt; new ModelInfo(m, ModelCapability.GENERAL, 0.0, 0, true))
+            <span class="hljs-comment">// Step 4: 路由</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">candidates</span> <span class="hljs-operator">=</span> adapters.keySet().stream()
+                .map(m -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">ModelInfo</span>(m, ModelCapability.GENERAL, <span class="hljs-number">0.0</span>, <span class="hljs-number">0</span>, <span class="hljs-literal">true</span>))
                 .toList();
-            var targetModel = routingStrategy.route(request, candidates);
+            <span class="hljs-type">var</span> <span class="hljs-variable">targetModel</span> <span class="hljs-operator">=</span> routingStrategy.route(request, candidates);
 
-            // Step 5: 获取解密后的 Key
-            var keyId = targetModel + &quot;-key&quot;;
-            var apiKey = keyVault.getDecryptedKey(keyId, targetModel)
-                .orElseThrow(() -&gt; new KeyNotFoundException(
-                    &quot;No valid API key for model: &quot; + targetModel));
+            <span class="hljs-comment">// Step 5: 获取解密后的 Key</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">keyId</span> <span class="hljs-operator">=</span> targetModel + <span class="hljs-string">"-key"</span>;
+            <span class="hljs-type">var</span> <span class="hljs-variable">apiKey</span> <span class="hljs-operator">=</span> keyVault.getDecryptedKey(keyId, targetModel)
+                .orElseThrow(() -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">KeyNotFoundException</span>(
+                    <span class="hljs-string">"No valid API key for model: "</span> + targetModel));
 
-            // Step 6: 调用适配器
-            var adaptedRequest = new UnifiedChatRequest(
+            <span class="hljs-comment">// Step 6: 调用适配器</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">adaptedRequest</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">UnifiedChatRequest</span>(
                 targetModel,
                 request.messages(),
                 request.temperature(),
@@ -1071,35 +1056,34 @@ public class ModelGatewayService {
                 request.tools(),
                 request.metadata()
             );
-            var adapter = adapters.get(targetModel);
-            var response = adapter.chat(adaptedRequest);
+            <span class="hljs-type">var</span> <span class="hljs-variable">adapter</span> <span class="hljs-operator">=</span> adapters.get(targetModel);
+            <span class="hljs-type">var</span> <span class="hljs-variable">response</span> <span class="hljs-operator">=</span> adapter.chat(adaptedRequest);
 
-            // Step 7: 更新缓存
+            <span class="hljs-comment">// Step 7: 更新缓存</span>
             cacheService.putExactMatch(cacheKey, response.content());
 
-            // Step 8: 记录指标和 Token 消耗
-            meterRegistry.counter(&quot;gateway.request&quot;,
-                &quot;model&quot;, targetModel,
-                &quot;tenant&quot;, tenantId).increment();
-            span.setAttribute(&quot;model.target&quot;, targetModel);
+            <span class="hljs-comment">// Step 8: 记录指标和 Token 消耗</span>
+            meterRegistry.counter(<span class="hljs-string">"gateway.request"</span>,
+                <span class="hljs-string">"model"</span>, targetModel,
+                <span class="hljs-string">"tenant"</span>, tenantId).increment();
+            span.setAttribute(<span class="hljs-string">"model.target"</span>, targetModel);
 
-            return response;
+            <span class="hljs-keyword">return</span> response;
 
-        } finally {
+        } <span class="hljs-keyword">finally</span> {
             span.end();
         }
     }
 
-    private String buildCacheKey(UnifiedChatRequest request) {
-        var content = request.messages().stream()
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">buildCacheKey</span><span class="hljs-params">(UnifiedChatRequest request)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">content</span> <span class="hljs-operator">=</span> request.messages().stream()
             .map(UnifiedMessage::content)
-            .collect(Collectors.joining(&quot;|&quot;));
-        return request.model() + &quot;:&quot; +
+            .collect(Collectors.joining(<span class="hljs-string">"|"</span>));
+        <span class="hljs-keyword">return</span> request.model() + <span class="hljs-string">":"</span> +
             Hashing.sha256().hashString(content, StandardCharsets.UTF_8);
     }
 }
-</code></pre></div>
-<h2>五、最佳实践与常见问题</h2>
+</code></pre></div><h2>五、最佳实践与常见问题</h2>
 <h3>最佳实践</h3>
 <ol>
 <li><strong>网关层无状态</strong>：所有状态（限流计数、配额、缓存）存放在 Redis，网关实例可水平扩展。</li>
@@ -1116,426 +1100,423 @@ A: 设置较高的相似度阈值（建议 0.92+），并且仅对无工具调�
 <p><strong>Q: A/B 测试需要多少样本量才显著？</strong>
 A: 取决于效应量大小。一般建议每个变体至少 1000 次有效请求后再做统计检验。可使用卡方检验或 t 检验判断显著性。</p>
 <p><strong>Q: 限流算法为什么选择滑动窗口而非漏桶/令牌桶？</strong>
-A: 滑动窗口更适合 API 限流场景——可以精确控制&quot;最近 N 秒内最多 M 次请求&quot;，避免固定窗口的边界突发问题。对于 Token 级别的限流，则使用令牌桶更合理。</p>
+A: 滑动窗口更适合 API 限流场景——可以精确控制"最近 N 秒内最多 M 次请求"，避免固定窗口的边界突发问题。对于 Token 级别的限流，则使用令牌桶更合理。</p>
 <p><strong>Q: API Key 如何安全存储？</strong>
 A: 生产环境必须使用 HashiCorp Vault 或云厂商的 KMS。密钥在内存中解密后立即使用，不落盘、不记日志。定期轮换（建议 30 天）。每个 Key 绑定特定模型，遵循最小权限原则。</p>
 <h2>Prompt Cache分层策略</h2>
 <p>AI 应用中，Prompt 是最大的 Token 消耗来源之一。系统 Prompt（instructions）往往在每次请求中重复发送，造成 API 费用的巨大浪费。引入多层缓存策略可以将重复 Prompt 的边际成本降至接近零。</p>
 <p><strong>三层缓存架构</strong>：</p>
 <p><strong>L1 — 精确匹配缓存</strong>（本地内存，Caffeine Cache）：适合完全相同的 Prompt 调用。使用 Prompt 文本的 MD5 哈希作为 Key，存储完整的 API Response。TTL 设为 1 小时，因为即使 Prompt 相同，模型输出也可能因服务端更新而变化。命中率取决于业务场景——客服场景（话术标准化）可达 40-60%；创意写作场景低于 5%。</p>
-<p><strong>L2 — 语义缓存</strong>（Redis Vector Search）：适合近义但不完全相同的 Prompt。将历史 Prompt 通过嵌入模型向量化后存入 Redis，当新请求到达时做向量相似度搜索（cosine similarity &gt; 0.95 视为命中）。例如&quot;帮我总结这篇文章&quot;和&quot;请把这篇文档总结一下&quot;可以命中同一缓存。但要注意——语义相似不保证答案也相似（温度参数不同时尤其），必须额外校验 Response 的适用性。</p>
-<p><strong>L3 — 厂商侧缓存</strong>（Provider-side Cache）：Anthropic 的 Prompt Caching 和 OpenAI 的 Automatic Caching 在服务端缓存 Prompt 前缀。例如系统指令 3000 Token，每次请求只按 10% 计费。使用方式：Anthropic 在消息中标注 <code>cache_control: {&quot;type&quot;: &quot;ephemeral&quot;}</code>；OpenAI 对重复前缀自动识别缓存。厂商缓存无需自建基础设施，但跨会话共享能力有限。</p>
+<p><strong>L2 — 语义缓存</strong>（Redis Vector Search）：适合近义但不完全相同的 Prompt。将历史 Prompt 通过嵌入模型向量化后存入 Redis，当新请求到达时做向量相似度搜索（cosine similarity &gt; 0.95 视为命中）。例如"帮我总结这篇文章"和"请把这篇文档总结一下"可以命中同一缓存。但要注意——语义相似不保证答案也相似（温度参数不同时尤其），必须额外校验 Response 的适用性。</p>
+<p><strong>L3 — 厂商侧缓存</strong>（Provider-side Cache）：Anthropic 的 Prompt Caching 和 OpenAI 的 Automatic Caching 在服务端缓存 Prompt 前缀。例如系统指令 3000 Token，每次请求只按 10% 计费。使用方式：Anthropic 在消息中标注 <code>cache_control: {"type": "ephemeral"}</code>；OpenAI 对重复前缀自动识别缓存。厂商缓存无需自建基础设施，但跨会话共享能力有限。</p>
 <p><strong>分层决策</strong>：L1 最快（&lt;1ms）、最便宜，但命中率低；L2 命中率高但有语义漂移风险；L3 零维护但受厂商限制。实际使用中，三层组合使用——先查 L1，未命中查 L2，最后交给 L3。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// JDK 25 + Spring Boot 4.x — 三层 Prompt Cache 实现
-import com.github.benmanes.caffeine.cache.Cache;
-import com.github.benmanes.caffeine.cache.Caffeine;
-import redis.clients.jedis.UnifiedJedis;
-import java.security.MessageDigest;
-import java.time.Duration;
-import java.util.*;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// JDK 25 + Spring Boot 4.x — 三层 Prompt Cache 实现</span>
+<span class="hljs-keyword">import</span> com.github.benmanes.caffeine.cache.Cache;
+<span class="hljs-keyword">import</span> com.github.benmanes.caffeine.cache.Caffeine;
+<span class="hljs-keyword">import</span> redis.clients.jedis.UnifiedJedis;
+<span class="hljs-keyword">import</span> java.security.MessageDigest;
+<span class="hljs-keyword">import</span> java.time.Duration;
+<span class="hljs-keyword">import</span> java.util.*;
 
-public class PromptCacheHierarchy {
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">PromptCacheHierarchy</span> {
 
-    private final Cache&lt;String, CachedResponse&gt; l1Cache = Caffeine.newBuilder()
-            .maximumSize(10_000)
-            .expireAfterWrite(Duration.ofHours(1))
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Cache&lt;String, CachedResponse&gt; l1Cache = Caffeine.newBuilder()
+            .maximumSize(<span class="hljs-number">10_000</span>)
+            .expireAfterWrite(Duration.ofHours(<span class="hljs-number">1</span>))
             .recordStats()
             .build();
 
-    private final UnifiedJedis redis;
-    private final EmbeddingService embeddingService;
-    private static final double SEMANTIC_THRESHOLD = 0.95;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> UnifiedJedis redis;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> EmbeddingService embeddingService;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">double</span> <span class="hljs-variable">SEMANTIC_THRESHOLD</span> <span class="hljs-operator">=</span> <span class="hljs-number">0.95</span>;
 
-    public PromptCacheHierarchy(UnifiedJedis redis, EmbeddingService embeddingService) {
-        this.redis = redis;
-        this.embeddingService = embeddingService;
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">PromptCacheHierarchy</span><span class="hljs-params">(UnifiedJedis redis, EmbeddingService embeddingService)</span> {
+        <span class="hljs-built_in">this</span>.redis = redis;
+        <span class="hljs-built_in">this</span>.embeddingService = embeddingService;
     }
 
-    public record CachedResponse(String prompt, String response,
-                                  long timestamp, double temperature) {}
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">CachedResponse</span><span class="hljs-params">(String prompt, String response,
+                                  <span class="hljs-type">long</span> timestamp, <span class="hljs-type">double</span> temperature)</span> {}
 
-    /**
+    <span class="hljs-comment">/**
      * 三层级联缓存查询
-     */
-    public Optional&lt;CachedResponse&gt; get(String prompt, double temperature) {
-        var md5Key = md5(prompt + &quot;:&quot; + temperature);
+     */</span>
+    <span class="hljs-keyword">public</span> Optional&lt;CachedResponse&gt; <span class="hljs-title function_">get</span><span class="hljs-params">(String prompt, <span class="hljs-type">double</span> temperature)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">md5Key</span> <span class="hljs-operator">=</span> md5(prompt + <span class="hljs-string">":"</span> + temperature);
 
-        // L1: 精确匹配
-        var l1Result = l1Cache.getIfPresent(md5Key);
-        if (l1Result != null) {
-            recordCacheHit(&quot;L1&quot;, md5Key);
-            return Optional.of(l1Result);
+        <span class="hljs-comment">// L1: 精确匹配</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">l1Result</span> <span class="hljs-operator">=</span> l1Cache.getIfPresent(md5Key);
+        <span class="hljs-keyword">if</span> (l1Result != <span class="hljs-literal">null</span>) {
+            recordCacheHit(<span class="hljs-string">"L1"</span>, md5Key);
+            <span class="hljs-keyword">return</span> Optional.of(l1Result);
         }
 
-        // L2: 语义缓存
-        var promptVector = embeddingService.embed(prompt);
-        var results = redis.ftSearch(&quot;idx:prompt_cache&quot;,
-                &quot;*=&gt;[KNN 1 @vector $vec AS score]&quot;,
+        <span class="hljs-comment">// L2: 语义缓存</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">promptVector</span> <span class="hljs-operator">=</span> embeddingService.embed(prompt);
+        <span class="hljs-type">var</span> <span class="hljs-variable">results</span> <span class="hljs-operator">=</span> redis.ftSearch(<span class="hljs-string">"idx:prompt_cache"</span>,
+                <span class="hljs-string">"*=&gt;[KNN 1 @vector $vec AS score]"</span>,
                 redis.ftSearchParams()
-                    .addParam(&quot;vec&quot;, vectorToBytes(promptVector))
-                    .dialect(2));
+                    .addParam(<span class="hljs-string">"vec"</span>, vectorToBytes(promptVector))
+                    .dialect(<span class="hljs-number">2</span>));
 
-        if (!results.getDocuments().isEmpty()) {
-            var doc = results.getDocuments().get(0);
-            double score = Double.parseDouble(doc.getString(&quot;__score&quot;));
-            if (score &gt;= SEMANTIC_THRESHOLD) {
-                recordCacheHit(&quot;L2&quot;, doc.getId());
-                var cached = new CachedResponse(
-                        doc.getString(&quot;prompt&quot;),
-                        doc.getString(&quot;response&quot;),
-                        Long.parseLong(doc.getString(&quot;timestamp&quot;)),
-                        Double.parseDouble(doc.getString(&quot;temperature&quot;)));
-                l1Cache.put(md5Key, cached); // 回填 L1
-                return Optional.of(cached);
+        <span class="hljs-keyword">if</span> (!results.getDocuments().isEmpty()) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">doc</span> <span class="hljs-operator">=</span> results.getDocuments().get(<span class="hljs-number">0</span>);
+            <span class="hljs-type">double</span> <span class="hljs-variable">score</span> <span class="hljs-operator">=</span> Double.parseDouble(doc.getString(<span class="hljs-string">"__score"</span>));
+            <span class="hljs-keyword">if</span> (score &gt;= SEMANTIC_THRESHOLD) {
+                recordCacheHit(<span class="hljs-string">"L2"</span>, doc.getId());
+                <span class="hljs-type">var</span> <span class="hljs-variable">cached</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">CachedResponse</span>(
+                        doc.getString(<span class="hljs-string">"prompt"</span>),
+                        doc.getString(<span class="hljs-string">"response"</span>),
+                        Long.parseLong(doc.getString(<span class="hljs-string">"timestamp"</span>)),
+                        Double.parseDouble(doc.getString(<span class="hljs-string">"temperature"</span>)));
+                l1Cache.put(md5Key, cached); <span class="hljs-comment">// 回填 L1</span>
+                <span class="hljs-keyword">return</span> Optional.of(cached);
             }
         }
 
-        recordCacheHit(&quot;MISS&quot;, md5Key);
-        return Optional.empty();
+        recordCacheHit(<span class="hljs-string">"MISS"</span>, md5Key);
+        <span class="hljs-keyword">return</span> Optional.empty();
     }
 
-    public void put(String prompt, CachedResponse response) {
-        var md5Key = md5(prompt + &quot;:&quot; + response.temperature());
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">put</span><span class="hljs-params">(String prompt, CachedResponse response)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">md5Key</span> <span class="hljs-operator">=</span> md5(prompt + <span class="hljs-string">":"</span> + response.temperature());
         l1Cache.put(md5Key, response);
 
         Thread.startVirtualThread(() -&gt; {
-            var vector = embeddingService.embed(prompt);
-            redis.hset(&quot;prompt:&quot; + md5Key, Map.of(
-                &quot;prompt&quot;, prompt,
-                &quot;response&quot;, response.response(),
-                &quot;temperature&quot;, String.valueOf(response.temperature()),
-                &quot;timestamp&quot;, String.valueOf(response.timestamp()),
-                &quot;vector&quot;, vectorToBytes(vector)));
+            <span class="hljs-type">var</span> <span class="hljs-variable">vector</span> <span class="hljs-operator">=</span> embeddingService.embed(prompt);
+            redis.hset(<span class="hljs-string">"prompt:"</span> + md5Key, Map.of(
+                <span class="hljs-string">"prompt"</span>, prompt,
+                <span class="hljs-string">"response"</span>, response.response(),
+                <span class="hljs-string">"temperature"</span>, String.valueOf(response.temperature()),
+                <span class="hljs-string">"timestamp"</span>, String.valueOf(response.timestamp()),
+                <span class="hljs-string">"vector"</span>, vectorToBytes(vector)));
         });
     }
 
-    private void recordCacheHit(String level, String key) {
-        System.out.println(&quot;[Cache] &quot; + level + &quot; HIT: &quot; + key);
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">recordCacheHit</span><span class="hljs-params">(String level, String key)</span> {
+        System.out.println(<span class="hljs-string">"[Cache] "</span> + level + <span class="hljs-string">" HIT: "</span> + key);
     }
 
-    private String md5(String input) {
-        try {
-            var md = MessageDigest.getInstance(&quot;MD5&quot;);
-            var bytes = md.digest(input.getBytes());
-            var sb = new StringBuilder();
-            for (byte b : bytes) sb.append(String.format(&quot;%02x&quot;, b));
-            return sb.toString();
-        } catch (Exception e) { throw new RuntimeException(e); }
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">md5</span><span class="hljs-params">(String input)</span> {
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-type">var</span> <span class="hljs-variable">md</span> <span class="hljs-operator">=</span> MessageDigest.getInstance(<span class="hljs-string">"MD5"</span>);
+            <span class="hljs-type">var</span> <span class="hljs-variable">bytes</span> <span class="hljs-operator">=</span> md.digest(input.getBytes());
+            <span class="hljs-type">var</span> <span class="hljs-variable">sb</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>();
+            <span class="hljs-keyword">for</span> (<span class="hljs-type">byte</span> b : bytes) sb.append(String.format(<span class="hljs-string">"%02x"</span>, b));
+            <span class="hljs-keyword">return</span> sb.toString();
+        } <span class="hljs-keyword">catch</span> (Exception e) { <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RuntimeException</span>(e); }
     }
 
-    private static byte[] vectorToBytes(float[] vec) {
-        var buf = java.nio.ByteBuffer.allocate(vec.length * 4);
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-type">byte</span>[] vectorToBytes(<span class="hljs-type">float</span>[] vec) {
+        <span class="hljs-type">var</span> <span class="hljs-variable">buf</span> <span class="hljs-operator">=</span> java.nio.ByteBuffer.allocate(vec.length * <span class="hljs-number">4</span>);
         buf.asFloatBuffer().put(vec);
-        return buf.array();
+        <span class="hljs-keyword">return</span> buf.array();
     }
 
-    interface EmbeddingService {
-        float[] embed(String text);
+    <span class="hljs-keyword">interface</span> <span class="hljs-title class_">EmbeddingService</span> {
+        <span class="hljs-type">float</span>[] embed(String text);
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>成本优化策略</h2>
 <p>AI API 调用成本是大规模 AI 应用的主要开销。智能的成本优化不是简单地选择最便宜的模型，而是在任务复杂度、输出质量和调用成本之间找到最优平衡点。</p>
 <p><strong>模型降级策略（Model Tiering）</strong>：不是所有任务都需要旗舰模型。建立三级模型池：（1）高能力模型（Claude Opus 4 / GPT-4o）用于复杂推理、代码生成、数学证明；（2）中等模型（Claude Sonnet 4 / GPT-4o-mini）用于分类、实体提取、摘要；（3）轻量模型（Claude Haiku / GPT-4o-mini）用于情感分析、关键词提取、简单问答。根据任务复杂度自动路由到合适的模型层级。</p>
-<p><strong>降级判据</strong>：简单的分类任务（如&quot;判断这条短信是否垃圾信息&quot;）用 gpt-4o-mini 和 gpt-4o 准确率差异通常 &lt; 1%，但成本相差 10-20 倍。结构化提取任务（如&quot;从合同PDF提取甲乙方名称和金额&quot;）中等模型的表现与旗舰模型接近。只有需要多步推理的任务才必须使用高级模型。</p>
-<p><strong>缓存 ROI 计算</strong>：缓存基础设施有成本（Redis 实例、嵌入模型推理）。以每天 100 万次 API 调用为例——假设 20% 命中 L2 语义缓存，每次节省 $0.01，每天节省 $2,000。Redis + 嵌入推理成本约 $200/天，ROI = 10:1。但需要持续监控缓存的&quot;漂移率&quot;——过期的缓存响应会导致输出质量下降。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// JDK 25 + Spring Boot 4.x — CostOptimizationAdvisor
-import java.util.List;
+<p><strong>降级判据</strong>：简单的分类任务（如"判断这条短信是否垃圾信息"）用 gpt-4o-mini 和 gpt-4o 准确率差异通常 &lt; 1%，但成本相差 10-20 倍。结构化提取任务（如"从合同PDF提取甲乙方名称和金额"）中等模型的表现与旗舰模型接近。只有需要多步推理的任务才必须使用高级模型。</p>
+<p><strong>缓存 ROI 计算</strong>：缓存基础设施有成本（Redis 实例、嵌入模型推理）。以每天 100 万次 API 调用为例——假设 20% 命中 L2 语义缓存，每次节省 $0.01，每天节省 $2,000。Redis + 嵌入推理成本约 $200/天，ROI = 10:1。但需要持续监控缓存的"漂移率"——过期的缓存响应会导致输出质量下降。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// JDK 25 + Spring Boot 4.x — CostOptimizationAdvisor</span>
+<span class="hljs-keyword">import</span> java.util.List;
 
-public class CostOptimizationAdvisor {
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">CostOptimizationAdvisor</span> {
 
-    public enum TaskComplexity { SIMPLE, MODERATE, COMPLEX }
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">enum</span> <span class="hljs-title class_">TaskComplexity</span> { SIMPLE, MODERATE, COMPLEX }
 
-    record ModelTier(String name, double costPer1kTokens, int capabilityScore) {}
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">ModelTier</span><span class="hljs-params">(String name, <span class="hljs-type">double</span> costPer1kTokens, <span class="hljs-type">int</span> capabilityScore)</span> {}
 
-    private static final List&lt;ModelTier&gt; TIERS = List.of(
-        new ModelTier(&quot;claude-sonnet-4-20250514&quot;, 0.003, 95),
-        new ModelTier(&quot;gpt-4o&quot;,                  0.0025, 92),
-        new ModelTier(&quot;gpt-4o-mini&quot;,             0.00015, 75),
-        new ModelTier(&quot;claude-haiku-3-5&quot;,        0.0008, 65)
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> List&lt;ModelTier&gt; TIERS = List.of(
+        <span class="hljs-keyword">new</span> <span class="hljs-title class_">ModelTier</span>(<span class="hljs-string">"claude-sonnet-4-20250514"</span>, <span class="hljs-number">0.003</span>, <span class="hljs-number">95</span>),
+        <span class="hljs-keyword">new</span> <span class="hljs-title class_">ModelTier</span>(<span class="hljs-string">"gpt-4o"</span>,                  <span class="hljs-number">0.0025</span>, <span class="hljs-number">92</span>),
+        <span class="hljs-keyword">new</span> <span class="hljs-title class_">ModelTier</span>(<span class="hljs-string">"gpt-4o-mini"</span>,             <span class="hljs-number">0.00015</span>, <span class="hljs-number">75</span>),
+        <span class="hljs-keyword">new</span> <span class="hljs-title class_">ModelTier</span>(<span class="hljs-string">"claude-haiku-3-5"</span>,        <span class="hljs-number">0.0008</span>, <span class="hljs-number">65</span>)
     );
 
-    public record Recommendation(ModelTier model,
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">Recommendation</span><span class="hljs-params">(ModelTier model,
                                   TaskComplexity complexity,
-                                  double estimatedCost,
-                                  String reasoning) {}
+                                  <span class="hljs-type">double</span> estimatedCost,
+                                  String reasoning)</span> {}
 
-    /**
+    <span class="hljs-comment">/**
      * 分析任务描述，评估其复杂度并推荐最优模型
-     */
-    public Recommendation analyze(String taskDescription) {
-        var complexity = assessComplexity(taskDescription);
-        var recommendedModel = selectModel(complexity);
-        var estimatedTokens = estimateTokens(taskDescription, complexity);
-        var cost = (estimatedTokens / 1000.0) * recommendedModel.costPer1kTokens();
+     */</span>
+    <span class="hljs-keyword">public</span> Recommendation <span class="hljs-title function_">analyze</span><span class="hljs-params">(String taskDescription)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">complexity</span> <span class="hljs-operator">=</span> assessComplexity(taskDescription);
+        <span class="hljs-type">var</span> <span class="hljs-variable">recommendedModel</span> <span class="hljs-operator">=</span> selectModel(complexity);
+        <span class="hljs-type">var</span> <span class="hljs-variable">estimatedTokens</span> <span class="hljs-operator">=</span> estimateTokens(taskDescription, complexity);
+        <span class="hljs-type">var</span> <span class="hljs-variable">cost</span> <span class="hljs-operator">=</span> (estimatedTokens / <span class="hljs-number">1000.0</span>) * recommendedModel.costPer1kTokens();
 
-        return new Recommendation(
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Recommendation</span>(
             recommendedModel, complexity, cost,
-            &quot;任务复杂度[%s] → 推荐[%s]：%s能力匹配，预估成本$%.4f&quot;
+            <span class="hljs-string">"任务复杂度[%s] → 推荐[%s]：%s能力匹配，预估成本$%.4f"</span>
                 .formatted(complexity, recommendedModel.name(),
-                    recommendedModel.capabilityScore() &gt;= 90 ? &quot;高&quot; : &quot;中&quot;, cost));
+                    recommendedModel.capabilityScore() &gt;= <span class="hljs-number">90</span> ? <span class="hljs-string">"高"</span> : <span class="hljs-string">"中"</span>, cost));
     }
 
-    private TaskComplexity assessComplexity(String task) {
-        var lower = task.toLowerCase();
+    <span class="hljs-keyword">private</span> TaskComplexity <span class="hljs-title function_">assessComplexity</span><span class="hljs-params">(String task)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">lower</span> <span class="hljs-operator">=</span> task.toLowerCase();
 
-        var complexKeywords = List.of(
-            &quot;证明&quot;, &quot;推理&quot;, &quot;分析&quot;, &quot;设计架构&quot;, &quot;生成代码&quot;,
-            &quot;多步骤&quot;, &quot;数学&quot;, &quot;逻辑&quot;);
-        long complexHits = complexKeywords.stream()
+        <span class="hljs-type">var</span> <span class="hljs-variable">complexKeywords</span> <span class="hljs-operator">=</span> List.of(
+            <span class="hljs-string">"证明"</span>, <span class="hljs-string">"推理"</span>, <span class="hljs-string">"分析"</span>, <span class="hljs-string">"设计架构"</span>, <span class="hljs-string">"生成代码"</span>,
+            <span class="hljs-string">"多步骤"</span>, <span class="hljs-string">"数学"</span>, <span class="hljs-string">"逻辑"</span>);
+        <span class="hljs-type">long</span> <span class="hljs-variable">complexHits</span> <span class="hljs-operator">=</span> complexKeywords.stream()
                 .filter(lower::contains).count();
 
-        var simpleKeywords = List.of(
-            &quot;分类&quot;, &quot;提取&quot;, &quot;总结&quot;, &quot;摘要&quot;, &quot;判断&quot;, &quot;是/否&quot;,
-            &quot;关键词&quot;, &quot;情感&quot;, &quot;翻译&quot;, &quot;格式化&quot;);
-        long simpleHits = simpleKeywords.stream()
+        <span class="hljs-type">var</span> <span class="hljs-variable">simpleKeywords</span> <span class="hljs-operator">=</span> List.of(
+            <span class="hljs-string">"分类"</span>, <span class="hljs-string">"提取"</span>, <span class="hljs-string">"总结"</span>, <span class="hljs-string">"摘要"</span>, <span class="hljs-string">"判断"</span>, <span class="hljs-string">"是/否"</span>,
+            <span class="hljs-string">"关键词"</span>, <span class="hljs-string">"情感"</span>, <span class="hljs-string">"翻译"</span>, <span class="hljs-string">"格式化"</span>);
+        <span class="hljs-type">long</span> <span class="hljs-variable">simpleHits</span> <span class="hljs-operator">=</span> simpleKeywords.stream()
                 .filter(lower::contains).count();
 
-        if (complexHits &gt;= 2) return TaskComplexity.COMPLEX;
-        if (simpleHits &gt;= 2) return TaskComplexity.SIMPLE;
-        return TaskComplexity.MODERATE;
+        <span class="hljs-keyword">if</span> (complexHits &gt;= <span class="hljs-number">2</span>) <span class="hljs-keyword">return</span> TaskComplexity.COMPLEX;
+        <span class="hljs-keyword">if</span> (simpleHits &gt;= <span class="hljs-number">2</span>) <span class="hljs-keyword">return</span> TaskComplexity.SIMPLE;
+        <span class="hljs-keyword">return</span> TaskComplexity.MODERATE;
     }
 
-    private ModelTier selectModel(TaskComplexity complexity) {
-        return switch (complexity) {
-            case SIMPLE -&gt; TIERS.stream()
-                    .filter(m -&gt; m.capabilityScore() &gt;= 60)
+    <span class="hljs-keyword">private</span> ModelTier <span class="hljs-title function_">selectModel</span><span class="hljs-params">(TaskComplexity complexity)</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">switch</span> (complexity) {
+            <span class="hljs-keyword">case</span> SIMPLE -&gt; TIERS.stream()
+                    .filter(m -&gt; m.capabilityScore() &gt;= <span class="hljs-number">60</span>)
                     .min((a, b) -&gt; Double.compare(
                         a.costPer1kTokens(), b.costPer1kTokens()))
                     .orElse(TIERS.getLast());
-            case MODERATE -&gt; TIERS.stream()
-                    .filter(m -&gt; m.capabilityScore() &gt;= 75)
+            <span class="hljs-keyword">case</span> MODERATE -&gt; TIERS.stream()
+                    .filter(m -&gt; m.capabilityScore() &gt;= <span class="hljs-number">75</span>)
                     .min((a, b) -&gt; Double.compare(
                         a.costPer1kTokens(), b.costPer1kTokens()))
-                    .orElse(TIERS.get(1));
-            case COMPLEX -&gt; TIERS.stream()
-                    .filter(m -&gt; m.capabilityScore() &gt;= 90)
+                    .orElse(TIERS.get(<span class="hljs-number">1</span>));
+            <span class="hljs-keyword">case</span> COMPLEX -&gt; TIERS.stream()
+                    .filter(m -&gt; m.capabilityScore() &gt;= <span class="hljs-number">90</span>)
                     .findFirst()
                     .orElse(TIERS.getFirst());
         };
     }
 
-    private int estimateTokens(String task, TaskComplexity complexity) {
-        return switch (complexity) {
-            case SIMPLE -&gt; 500;
-            case MODERATE -&gt; 2000;
-            case COMPLEX -&gt; 5000;
+    <span class="hljs-keyword">private</span> <span class="hljs-type">int</span> <span class="hljs-title function_">estimateTokens</span><span class="hljs-params">(String task, TaskComplexity complexity)</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">switch</span> (complexity) {
+            <span class="hljs-keyword">case</span> SIMPLE -&gt; <span class="hljs-number">500</span>;
+            <span class="hljs-keyword">case</span> MODERATE -&gt; <span class="hljs-number">2000</span>;
+            <span class="hljs-keyword">case</span> COMPLEX -&gt; <span class="hljs-number">5000</span>;
         };
     }
 
-    // 使用示例
-    public static void main(String[] args) {
-        var advisor = new CostOptimizationAdvisor();
+    <span class="hljs-comment">// 使用示例</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">main</span><span class="hljs-params">(String[] args)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">advisor</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">CostOptimizationAdvisor</span>();
 
-        var tasks = List.of(
-            &quot;判断这条评论的情感是正面还是负面&quot;,
-            &quot;从以下合同文本中提取甲乙方的名称、地址和签署日期&quot;,
-            &quot;设计一个支持10万QPS的分布式消息队列的架构方案&quot;
+        <span class="hljs-type">var</span> <span class="hljs-variable">tasks</span> <span class="hljs-operator">=</span> List.of(
+            <span class="hljs-string">"判断这条评论的情感是正面还是负面"</span>,
+            <span class="hljs-string">"从以下合同文本中提取甲乙方的名称、地址和签署日期"</span>,
+            <span class="hljs-string">"设计一个支持10万QPS的分布式消息队列的架构方案"</span>
         );
 
-        for (var task : tasks) {
-            var rec = advisor.analyze(task);
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> task : tasks) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">rec</span> <span class="hljs-operator">=</span> advisor.analyze(task);
             System.out.println(rec.reasoning());
-            System.out.println(&quot;  模型：&quot; + rec.model().name());
-            System.out.println(&quot;  预估成本：$&quot; + String.format(&quot;%.6f&quot;, rec.estimatedCost()));
+            System.out.println(<span class="hljs-string">"  模型："</span> + rec.model().name());
+            System.out.println(<span class="hljs-string">"  预估成本：$"</span> + String.format(<span class="hljs-string">"%.6f"</span>, rec.estimatedCost()));
             System.out.println();
         }
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>预算告警机制</h2>
 <p>在多租户 AI 平台中，没有预算管控的 API 调用是财务灾难的导火索。一个 Prompt 编写不当或 Agent 陷入死循环，可能在数小时内耗尽月度预算。建立多级预算告警机制是生产级 AI 平台的基本要求。</p>
-<p><strong>多级预算告警设计</strong>：设置四级阈值触发不同响应——（1）50%：信息通知（Slack/邮件），提醒关注但不中断服务；（2）80%：警告通知，触发人工审核；（3）95%：严重告警，自动限制非关键服务的调用频率；（4）100%：硬阻断，返回 429（Too Many Requests）并提示&quot;预算已耗尽，请联系管理员&quot;。</p>
-<p><strong>租户级别的预算追踪</strong>：每个租户（业务线、部门、项目）有独立的日预算和月预算。使用滑动窗口算法（Redis Sorted Set）精确追踪消费——每个 API 调用写入 <code>tenant:{id}:usage</code> Sorted Set，score 为调用时间戳，member 为 <code>时间戳:Token数</code>。统计时用 <code>ZCOUNT</code> 查询时间窗口内的调用次数和 Token 总量。滑动窗口避免了固定窗口的&quot;边界双倍计费&quot;问题。</p>
+<p><strong>多级预算告警设计</strong>：设置四级阈值触发不同响应——（1）50%：信息通知（Slack/邮件），提醒关注但不中断服务；（2）80%：警告通知，触发人工审核；（3）95%：严重告警，自动限制非关键服务的调用频率；（4）100%：硬阻断，返回 429（Too Many Requests）并提示"预算已耗尽，请联系管理员"。</p>
+<p><strong>租户级别的预算追踪</strong>：每个租户（业务线、部门、项目）有独立的日预算和月预算。使用滑动窗口算法（Redis Sorted Set）精确追踪消费——每个 API 调用写入 <code>tenant:{id}:usage</code> Sorted Set，score 为调用时间戳，member 为 <code>时间戳:Token数</code>。统计时用 <code>ZCOUNT</code> 查询时间窗口内的调用次数和 Token 总量。滑动窗口避免了固定窗口的"边界双倍计费"问题。</p>
 <p><strong>Webhook 通知机制</strong>：告警不是日志——必须在数秒内触达到人。每个阈值绑定一个 Webhook URL，支持自定义 HTTP Method（POST/PUT）、自定义 Header（如 Authorization）、自定义 Body 模板（使用占位符 <code>{tenantId}</code>、<code>{currentUsage}</code>、<code>{budgetLimit}</code>、<code>{percentage}</code>、<code>{timestamp}</code>）。Webhook 投递失败时重试 3 次，每次间隔指数增长（1s, 5s, 25s）。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// JDK 25 + Spring Boot 4.x — BudgetAlertService with sliding window
-import redis.clients.jedis.UnifiedJedis;
-import java.net.URI;
-import java.net.http.*;
-import java.time.*;
-import java.util.*;
-import java.util.concurrent.*;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// JDK 25 + Spring Boot 4.x — BudgetAlertService with sliding window</span>
+<span class="hljs-keyword">import</span> redis.clients.jedis.UnifiedJedis;
+<span class="hljs-keyword">import</span> java.net.URI;
+<span class="hljs-keyword">import</span> java.net.http.*;
+<span class="hljs-keyword">import</span> java.time.*;
+<span class="hljs-keyword">import</span> java.util.*;
+<span class="hljs-keyword">import</span> java.util.concurrent.*;
 
-public class BudgetAlertService {
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">BudgetAlertService</span> {
 
-    public enum AlertLevel {
-        INFO(0.50, &quot;预算使用达50%&quot;, false),
-        WARNING(0.80, &quot;预算使用达80%，请关注&quot;, false),
-        CRITICAL(0.95, &quot;预算使用达95%，即将耗尽&quot;, true),
-        BLOCKED(1.00, &quot;预算已耗尽，已自动阻断&quot;, true);
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">enum</span> <span class="hljs-title class_">AlertLevel</span> {
+        INFO(<span class="hljs-number">0.50</span>, <span class="hljs-string">"预算使用达50%"</span>, <span class="hljs-literal">false</span>),
+        WARNING(<span class="hljs-number">0.80</span>, <span class="hljs-string">"预算使用达80%，请关注"</span>, <span class="hljs-literal">false</span>),
+        CRITICAL(<span class="hljs-number">0.95</span>, <span class="hljs-string">"预算使用达95%，即将耗尽"</span>, <span class="hljs-literal">true</span>),
+        BLOCKED(<span class="hljs-number">1.00</span>, <span class="hljs-string">"预算已耗尽，已自动阻断"</span>, <span class="hljs-literal">true</span>);
 
-        final double threshold;
-        final String message;
-        final boolean autoBlock;
+        <span class="hljs-keyword">final</span> <span class="hljs-type">double</span> threshold;
+        <span class="hljs-keyword">final</span> String message;
+        <span class="hljs-keyword">final</span> <span class="hljs-type">boolean</span> autoBlock;
 
-        AlertLevel(double threshold, String message, boolean autoBlock) {
-            this.threshold = threshold; this.message = message;
-            this.autoBlock = autoBlock;
+        AlertLevel(<span class="hljs-type">double</span> threshold, String message, <span class="hljs-type">boolean</span> autoBlock) {
+            <span class="hljs-built_in">this</span>.threshold = threshold; <span class="hljs-built_in">this</span>.message = message;
+            <span class="hljs-built_in">this</span>.autoBlock = autoBlock;
         }
     }
 
-    record TenantBudget(String tenantId, double dailyLimit,
-                        double monthlyLimit, String webhookUrl) {}
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">TenantBudget</span><span class="hljs-params">(String tenantId, <span class="hljs-type">double</span> dailyLimit,
+                        <span class="hljs-type">double</span> monthlyLimit, String webhookUrl)</span> {}
 
-    record UsageSnapshot(String tenantId, double dailyUsed,
-                         double monthlyUsed, double dailyLimit, double monthlyLimit) {
-        double dailyPercentage() { return dailyUsed / dailyLimit; }
-        double monthlyPercentage() { return monthlyUsed / monthlyLimit; }
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">UsageSnapshot</span><span class="hljs-params">(String tenantId, <span class="hljs-type">double</span> dailyUsed,
+                         <span class="hljs-type">double</span> monthlyUsed, <span class="hljs-type">double</span> dailyLimit, <span class="hljs-type">double</span> monthlyLimit)</span> {
+        <span class="hljs-type">double</span> <span class="hljs-title function_">dailyPercentage</span><span class="hljs-params">()</span> { <span class="hljs-keyword">return</span> dailyUsed / dailyLimit; }
+        <span class="hljs-type">double</span> <span class="hljs-title function_">monthlyPercentage</span><span class="hljs-params">()</span> { <span class="hljs-keyword">return</span> monthlyUsed / monthlyLimit; }
     }
 
-    private final UnifiedJedis redis;
-    private final HttpClient httpClient = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(5)).build();
-    private final Map&lt;String, AlertLevel&gt; lastAlertLevel = new ConcurrentHashMap&lt;&gt;();
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> UnifiedJedis redis;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">HttpClient</span> <span class="hljs-variable">httpClient</span> <span class="hljs-operator">=</span> HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(<span class="hljs-number">5</span>)).build();
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Map&lt;String, AlertLevel&gt; lastAlertLevel = <span class="hljs-keyword">new</span> <span class="hljs-title class_">ConcurrentHashMap</span>&lt;&gt;();
 
-    public BudgetAlertService(UnifiedJedis redis) {
-        this.redis = redis;
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">BudgetAlertService</span><span class="hljs-params">(UnifiedJedis redis)</span> {
+        <span class="hljs-built_in">this</span>.redis = redis;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 记录一次 API 调用并触发预算检查
-     */
-    public void recordUsage(String tenantId, int tokensUsed) {
-        long now = System.currentTimeMillis();
-        var member = now + &quot;:&quot; + tokensUsed;
-        redis.zadd(&quot;tenant:&quot; + tenantId + &quot;:usage&quot;, now, member);
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">recordUsage</span><span class="hljs-params">(String tenantId, <span class="hljs-type">int</span> tokensUsed)</span> {
+        <span class="hljs-type">long</span> <span class="hljs-variable">now</span> <span class="hljs-operator">=</span> System.currentTimeMillis();
+        <span class="hljs-type">var</span> <span class="hljs-variable">member</span> <span class="hljs-operator">=</span> now + <span class="hljs-string">":"</span> + tokensUsed;
+        redis.zadd(<span class="hljs-string">"tenant:"</span> + tenantId + <span class="hljs-string">":usage"</span>, now, member);
 
-        redis.zremrangeByScore(&quot;tenant:&quot; + tenantId + &quot;:usage&quot;,
-                0, now - Duration.ofDays(30).toMillis());
+        redis.zremrangeByScore(<span class="hljs-string">"tenant:"</span> + tenantId + <span class="hljs-string">":usage"</span>,
+                <span class="hljs-number">0</span>, now - Duration.ofDays(<span class="hljs-number">30</span>).toMillis());
 
         checkBudget(tenantId);
     }
 
-    public UsageSnapshot checkBudget(String tenantId) {
-        var budget = getTenantBudget(tenantId);
-        if (budget == null) return null;
+    <span class="hljs-keyword">public</span> UsageSnapshot <span class="hljs-title function_">checkBudget</span><span class="hljs-params">(String tenantId)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">budget</span> <span class="hljs-operator">=</span> getTenantBudget(tenantId);
+        <span class="hljs-keyword">if</span> (budget == <span class="hljs-literal">null</span>) <span class="hljs-keyword">return</span> <span class="hljs-literal">null</span>;
 
-        var snapshot = getUsageSnapshot(tenantId, budget);
-        var newLevel = evaluateAlertLevel(snapshot);
-        var oldLevel = lastAlertLevel.get(tenantId);
+        <span class="hljs-type">var</span> <span class="hljs-variable">snapshot</span> <span class="hljs-operator">=</span> getUsageSnapshot(tenantId, budget);
+        <span class="hljs-type">var</span> <span class="hljs-variable">newLevel</span> <span class="hljs-operator">=</span> evaluateAlertLevel(snapshot);
+        <span class="hljs-type">var</span> <span class="hljs-variable">oldLevel</span> <span class="hljs-operator">=</span> lastAlertLevel.get(tenantId);
 
-        if (newLevel != null &amp;&amp; (oldLevel == null ||
+        <span class="hljs-keyword">if</span> (newLevel != <span class="hljs-literal">null</span> &amp;&amp; (oldLevel == <span class="hljs-literal">null</span> ||
                 newLevel.ordinal() &gt; oldLevel.ordinal())) {
             triggerAlert(tenantId, snapshot, newLevel);
             lastAlertLevel.put(tenantId, newLevel);
         }
 
-        return snapshot;
+        <span class="hljs-keyword">return</span> snapshot;
     }
 
-    private AlertLevel evaluateAlertLevel(UsageSnapshot snapshot) {
-        for (var level : AlertLevel.values()) {
-            if (snapshot.dailyPercentage() &gt;= level.threshold ||
+    <span class="hljs-keyword">private</span> AlertLevel <span class="hljs-title function_">evaluateAlertLevel</span><span class="hljs-params">(UsageSnapshot snapshot)</span> {
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> level : AlertLevel.values()) {
+            <span class="hljs-keyword">if</span> (snapshot.dailyPercentage() &gt;= level.threshold ||
                     snapshot.monthlyPercentage() &gt;= level.threshold) {
-                return level;
+                <span class="hljs-keyword">return</span> level;
             }
         }
-        return null;
+        <span class="hljs-keyword">return</span> <span class="hljs-literal">null</span>;
     }
 
-    private UsageSnapshot getUsageSnapshot(String tenantId, TenantBudget budget) {
-        long now = System.currentTimeMillis();
-        long dayStart = LocalDate.now().atStartOfDay(ZoneId.systemDefault())
+    <span class="hljs-keyword">private</span> UsageSnapshot <span class="hljs-title function_">getUsageSnapshot</span><span class="hljs-params">(String tenantId, TenantBudget budget)</span> {
+        <span class="hljs-type">long</span> <span class="hljs-variable">now</span> <span class="hljs-operator">=</span> System.currentTimeMillis();
+        <span class="hljs-type">long</span> <span class="hljs-variable">dayStart</span> <span class="hljs-operator">=</span> LocalDate.now().atStartOfDay(ZoneId.systemDefault())
                 .toInstant().toEpochMilli();
-        long monthStart = LocalDate.now().withDayOfMonth(1)
+        <span class="hljs-type">long</span> <span class="hljs-variable">monthStart</span> <span class="hljs-operator">=</span> LocalDate.now().withDayOfMonth(<span class="hljs-number">1</span>)
                 .atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
 
-        var dailyMembers = redis.zrangeByScore(
-                &quot;tenant:&quot; + tenantId + &quot;:usage&quot;, dayStart, now);
-        double dailyTokens = dailyMembers.stream()
-                .mapToLong(m -&gt; Long.parseLong(m.split(&quot;:&quot;)[1])).sum();
+        <span class="hljs-type">var</span> <span class="hljs-variable">dailyMembers</span> <span class="hljs-operator">=</span> redis.zrangeByScore(
+                <span class="hljs-string">"tenant:"</span> + tenantId + <span class="hljs-string">":usage"</span>, dayStart, now);
+        <span class="hljs-type">double</span> <span class="hljs-variable">dailyTokens</span> <span class="hljs-operator">=</span> dailyMembers.stream()
+                .mapToLong(m -&gt; Long.parseLong(m.split(<span class="hljs-string">":"</span>)[<span class="hljs-number">1</span>])).sum();
 
-        var monthlyMembers = redis.zrangeByScore(
-                &quot;tenant:&quot; + tenantId + &quot;:usage&quot;, monthStart, now);
-        double monthlyTokens = monthlyMembers.stream()
-                .mapToLong(m -&gt; Long.parseLong(m.split(&quot;:&quot;)[1])).sum();
+        <span class="hljs-type">var</span> <span class="hljs-variable">monthlyMembers</span> <span class="hljs-operator">=</span> redis.zrangeByScore(
+                <span class="hljs-string">"tenant:"</span> + tenantId + <span class="hljs-string">":usage"</span>, monthStart, now);
+        <span class="hljs-type">double</span> <span class="hljs-variable">monthlyTokens</span> <span class="hljs-operator">=</span> monthlyMembers.stream()
+                .mapToLong(m -&gt; Long.parseLong(m.split(<span class="hljs-string">":"</span>)[<span class="hljs-number">1</span>])).sum();
 
-        return new UsageSnapshot(tenantId, dailyTokens, monthlyTokens,
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">UsageSnapshot</span>(tenantId, dailyTokens, monthlyTokens,
                 budget.dailyLimit(), budget.monthlyLimit());
     }
 
-    private void triggerAlert(String tenantId, UsageSnapshot snapshot,
-                               AlertLevel level) {
-        var budget = getTenantBudget(tenantId);
-        var webhookBody = &quot;&quot;&quot;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">triggerAlert</span><span class="hljs-params">(String tenantId, UsageSnapshot snapshot,
+                               AlertLevel level)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">budget</span> <span class="hljs-operator">=</span> getTenantBudget(tenantId);
+        <span class="hljs-type">var</span> <span class="hljs-variable">webhookBody</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
             {
-              &quot;tenantId&quot;: &quot;%s&quot;,
-              &quot;alertLevel&quot;: &quot;%s&quot;,
-              &quot;alertMessage&quot;: &quot;%s&quot;,
-              &quot;dailyUsage&quot;: %.0f,
-              &quot;dailyLimit&quot;: %.0f,
-              &quot;dailyPercentage&quot;: %.1f%%,
-              &quot;monthlyUsage&quot;: %.0f,
-              &quot;monthlyLimit&quot;: %.0f,
-              &quot;monthlyPercentage&quot;: %.1f%%,
-              &quot;timestamp&quot;: &quot;%s&quot;
+              "tenantId": "%s",
+              "alertLevel": "%s",
+              "alertMessage": "%s",
+              "dailyUsage": %.0f,
+              "dailyLimit": %.0f,
+              "dailyPercentage": %.1f%%,
+              "monthlyUsage": %.0f,
+              "monthlyLimit": %.0f,
+              "monthlyPercentage": %.1f%%,
+              "timestamp": "%s"
             }
-            &quot;&quot;&quot;.formatted(tenantId, level.name(), level.message,
+            """</span>.formatted(tenantId, level.name(), level.message,
                 snapshot.dailyUsed(), snapshot.dailyLimit(),
-                snapshot.dailyPercentage() * 100,
+                snapshot.dailyPercentage() * <span class="hljs-number">100</span>,
                 snapshot.monthlyUsed(), snapshot.monthlyLimit(),
-                snapshot.monthlyPercentage() * 100,
+                snapshot.monthlyPercentage() * <span class="hljs-number">100</span>,
                 Instant.now().toString());
 
         Thread.startVirtualThread(() -&gt; sendWebhookWithRetry(
-                budget.webhookUrl(), webhookBody, 3));
+                budget.webhookUrl(), webhookBody, <span class="hljs-number">3</span>));
 
-        if (level.autoBlock) {
-            System.err.println(&quot;[BUDGET BLOCK] 租户 &quot; + tenantId + &quot; 已被自动阻断！&quot;);
+        <span class="hljs-keyword">if</span> (level.autoBlock) {
+            System.err.println(<span class="hljs-string">"[BUDGET BLOCK] 租户 "</span> + tenantId + <span class="hljs-string">" 已被自动阻断！"</span>);
         }
     }
 
-    private void sendWebhookWithRetry(String url, String body, int retries) {
-        for (int i = 0; i &lt;= retries; i++) {
-            try {
-                var request = HttpRequest.newBuilder()
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">sendWebhookWithRetry</span><span class="hljs-params">(String url, String body, <span class="hljs-type">int</span> retries)</span> {
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt;= retries; i++) {
+            <span class="hljs-keyword">try</span> {
+                <span class="hljs-type">var</span> <span class="hljs-variable">request</span> <span class="hljs-operator">=</span> HttpRequest.newBuilder()
                         .uri(URI.create(url))
-                        .header(&quot;Content-Type&quot;, &quot;application/json&quot;)
+                        .header(<span class="hljs-string">"Content-Type"</span>, <span class="hljs-string">"application/json"</span>)
                         .POST(HttpRequest.BodyPublishers.ofString(body))
-                        .timeout(Duration.ofSeconds(10))
+                        .timeout(Duration.ofSeconds(<span class="hljs-number">10</span>))
                         .build();
-                var response = httpClient.send(request,
+                <span class="hljs-type">var</span> <span class="hljs-variable">response</span> <span class="hljs-operator">=</span> httpClient.send(request,
                         HttpResponse.BodyHandlers.ofString());
-                if (response.statusCode() &lt; 300) return;
-            } catch (Exception e) {
-                if (i &lt; retries) {
-                    try { Thread.sleep((long) Math.pow(5, i) * 1000); }
-                    catch (InterruptedException ignored) {}
+                <span class="hljs-keyword">if</span> (response.statusCode() &lt; <span class="hljs-number">300</span>) <span class="hljs-keyword">return</span>;
+            } <span class="hljs-keyword">catch</span> (Exception e) {
+                <span class="hljs-keyword">if</span> (i &lt; retries) {
+                    <span class="hljs-keyword">try</span> { Thread.sleep((<span class="hljs-type">long</span>) Math.pow(<span class="hljs-number">5</span>, i) * <span class="hljs-number">1000</span>); }
+                    <span class="hljs-keyword">catch</span> (InterruptedException ignored) {}
                 }
             }
         }
-        System.err.println(&quot;[WEBHOOK FAILED] 告警通知投递失败: &quot; + url);
+        System.err.println(<span class="hljs-string">"[WEBHOOK FAILED] 告警通知投递失败: "</span> + url);
     }
 
-    private TenantBudget getTenantBudget(String tenantId) {
-        return new TenantBudget(tenantId,
-                100_000,    // 日预算：100K tokens
-                3_000_000,  // 月预算：3M tokens
-                &quot;https://hooks.slack.com/services/xxx&quot;);
+    <span class="hljs-keyword">private</span> TenantBudget <span class="hljs-title function_">getTenantBudget</span><span class="hljs-params">(String tenantId)</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">TenantBudget</span>(tenantId,
+                <span class="hljs-number">100_000</span>,    <span class="hljs-comment">// 日预算：100K tokens</span>
+                <span class="hljs-number">3_000_000</span>,  <span class="hljs-comment">// 月预算：3M tokens</span>
+                <span class="hljs-string">"https://hooks.slack.com/services/xxx"</span>);
     }
 
-    // 使用示例
-    public static void main(String[] args) {
-        var service = new BudgetAlertService(null);
-        var tenantId = &quot;insurance-dept&quot;;
+    <span class="hljs-comment">// 使用示例</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">main</span><span class="hljs-params">(String[] args)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">service</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">BudgetAlertService</span>(<span class="hljs-literal">null</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">tenantId</span> <span class="hljs-operator">=</span> <span class="hljs-string">"insurance-dept"</span>;
 
-        for (int i = 0; i &lt; 500; i++) {
-            service.recordUsage(tenantId, 200);
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; <span class="hljs-number">500</span>; i++) {
+            service.recordUsage(tenantId, <span class="hljs-number">200</span>);
         }
 
-        var snapshot = service.checkBudget(tenantId);
-        System.out.printf(&quot;日使用率: %.1f%% | 月使用率: %.1f%%%n&quot;,
-                snapshot.dailyPercentage() * 100,
-                snapshot.monthlyPercentage() * 100);
+        <span class="hljs-type">var</span> <span class="hljs-variable">snapshot</span> <span class="hljs-operator">=</span> service.checkBudget(tenantId);
+        System.out.printf(<span class="hljs-string">"日使用率: %.1f%% | 月使用率: %.1f%%%n"</span>,
+                snapshot.dailyPercentage() * <span class="hljs-number">100</span>,
+                snapshot.monthlyPercentage() * <span class="hljs-number">100</span>);
     }
 }
-</code></pre></div>
-<p>预算告警不是&quot;锦上添花&quot;——它是生产级 AI 平台的财务安全保障。在 Agent 自动执行任务的场景中，一个失控的 ReAct 循环可能在 10 分钟内消耗数万 Token。没有预算熔断机制，就会在月底收到一张令人震惊的账单。实施建议：日预算从宽、月预算从严，给短时间内的突发流量留有余地，但对月度总量严格管控。</p>
+</code></pre></div><p>预算告警不是"锦上添花"——它是生产级 AI 平台的财务安全保障。在 Agent 自动执行任务的场景中，一个失控的 ReAct 循环可能在 10 分钟内消耗数万 Token。没有预算熔断机制，就会在月底收到一张令人震惊的账单。实施建议：日预算从宽、月预算从严，给短时间内的突发流量留有余地，但对月度总量严格管控。</p>
 <hr>
 <h2>九、总结</h2>
 <p>本文介绍了企业级 AI 模型网关和 Prompt 管理平台的完整设计思路和 Spring 实现。模型网关提供了协议统一、智能路由、精细化限流、密钥安全管理和多层缓存等能力，是 AI 基础设施的关键组件。Prompt 管理平台通过模板引擎、版本控制、环境绑定和 A/B 测试，让 Prompt 成为可管理、可追踪、可优化的工程资产。</p>
 <p>完整的演示代码位于配套 GitHub 仓库，包含单元测试和集成测试。生产部署时需替换内存实现为 Redis/数据库持久化，并接入监控和告警体系。</p>
-</div>
+</body></html></div>
 </article>

@@ -1,139 +1,138 @@
 
-<article class="kb-entry" data-path="/10-AI数据工程/数据治理/10-元数据管理与数据治理">
+<article class="kb-entry" data-path="/10-AI数据工程">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=10">10-AI数据工程</a></div>
     <h1>元数据管理与数据治理：从Schema设计到多租户隔离</h1>
-    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#metadata</span><span class="badge badge-tag">#data-governance</span><span class="badge badge-tag">#simhash</span><span class="badge badge-tag">#pii</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#metadata</span><span class="badge badge-tag">#data-governance</span><span class="badge badge-tag">#simhash</span><span class="badge badge-tag">#pii</span><span class="badge badge-tag">#acl</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://www.anthropic.com/news/contextual-retrieval" target="_blank" rel="noopener" class="source-link" title="Anthropic Contextual Retrieval — 元数据在RAG中的作用">Anthropic Contextual Retrieval — 元数据在RAG中的作用</a><a href="https://en.wikipedia.org/wiki/SimHash" target="_blank" rel="noopener" class="source-link" title="SimHash — 相似哈希算法原理">SimHash — 相似哈希算法原理</a><a href="https://en.wikipedia.org/wiki/MinHash" target="_blank" rel="noopener" class="source-link" title="MinHash — 最小哈希算法">MinHash — 最小哈希算法</a><a href="https://www.openpolicyagent.org/docs/latest/" target="_blank" rel="noopener" class="source-link" title="Open Policy Agent — 策略即代码">Open Policy Agent — 策略即代码</a><a href="https://debezium.io/documentation/reference/stable/" target="_blank" rel="noopener" class="source-link" title="Debezium CDC 官方文档">Debezium CDC 官方文档</a></small></div>
   </div>
-  <div class="entry-body"><h1>元数据管理与数据治理：从Schema设计到多租户隔离</h1>
+  <div class="entry-body"><html><head></head><body><h1>元数据管理与数据治理：从Schema设计到多租户隔离</h1>
 <h2>概述</h2>
-<p>在AI数据工程中，元数据不仅是&quot;关于数据的数据&quot;，它是整个管道的粘合剂，将文档解析、切片、索引、检索、权限控制、版本管理串联为一体。数据治理则确保数据的质量、安全和合规贯穿整个生命周期。本文从Metadata Schema设计出发，覆盖内容指纹去重、ACL权限继承、PII脱敏、删除传播、版本管理、CDC增量更新到多租户隔离的全链路治理方案。</p>
+<p>在AI数据工程中，元数据不仅是"关于数据的数据"，它是整个管道的粘合剂，将文档解析、切片、索引、检索、权限控制、版本管理串联为一体。数据治理则确保数据的质量、安全和合规贯穿整个生命周期。本文从Metadata Schema设计出发，覆盖内容指纹去重、ACL权限继承、PII脱敏、删除传播、版本管理、CDC增量更新到多租户隔离的全链路治理方案。</p>
 <hr>
 <h2>一、Metadata Schema设计</h2>
 <h3>1.1 Schema分层</h3>
 <p>Metadata Schema分为三层：必需层、业务层、技术层。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- PostgreSQL Metadata Schema 完整定义
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-sql"><span class="hljs-comment">-- PostgreSQL Metadata Schema 完整定义</span>
 
--- ============ 文档表 ============
-CREATE TABLE documents (
-    -- 必需字段：任何文档都必须有
-    document_id     UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    source_uri      TEXT NOT NULL,                    -- 文件路径/S3 URI/数据库记录
-    content_hash    VARCHAR(64) NOT NULL,             -- SHA-256 原始内容哈希
-    content_length  BIGINT NOT NULL,                  -- 原始字节数
-    mime_type       VARCHAR(127),                     -- MIME类型
-    file_name       VARCHAR(512),                     -- 原始文件名
+<span class="hljs-comment">-- ============ 文档表 ============</span>
+<span class="hljs-keyword">CREATE TABLE</span> documents (
+    <span class="hljs-comment">-- 必需字段：任何文档都必须有</span>
+    document_id     UUID <span class="hljs-keyword">PRIMARY KEY</span> <span class="hljs-keyword">DEFAULT</span> gen_random_uuid(),
+    source_uri      TEXT <span class="hljs-keyword">NOT NULL</span>,                    <span class="hljs-comment">-- 文件路径/S3 URI/数据库记录</span>
+    content_hash    <span class="hljs-type">VARCHAR</span>(<span class="hljs-number">64</span>) <span class="hljs-keyword">NOT NULL</span>,             <span class="hljs-comment">-- SHA-256 原始内容哈希</span>
+    content_length  <span class="hljs-type">BIGINT</span> <span class="hljs-keyword">NOT NULL</span>,                  <span class="hljs-comment">-- 原始字节数</span>
+    mime_type       <span class="hljs-type">VARCHAR</span>(<span class="hljs-number">127</span>),                     <span class="hljs-comment">-- MIME类型</span>
+    file_name       <span class="hljs-type">VARCHAR</span>(<span class="hljs-number">512</span>),                     <span class="hljs-comment">-- 原始文件名</span>
 
-    -- 业务字段：根据实际场景选择性填充
-    title           VARCHAR(1024),                    -- 文档标题
-    author          VARCHAR(256),                     -- 作者/创建者
-    department      VARCHAR(256),                     -- 所属部门
-    category        VARCHAR(256),                     -- 分类（如：技术文档/制度/报告）
-    tags            TEXT[],                            -- 标签数组
-    version         VARCHAR(64) DEFAULT &#39;1.0&#39;,        -- 文档版本
-    language        VARCHAR(10) DEFAULT &#39;zh&#39;,         -- 语言代码
-    access_level    VARCHAR(32) DEFAULT &#39;internal&#39;,   -- public/internal/confidential/secret
-    tenant_id       VARCHAR(128) NOT NULL,            -- 多租户隔离
-    status          VARCHAR(32) DEFAULT &#39;active&#39;,     -- active/archived/deleted
-    expires_at      TIMESTAMPTZ,                      -- 访问有效期（临时文档）
+    <span class="hljs-comment">-- 业务字段：根据实际场景选择性填充</span>
+    title           <span class="hljs-type">VARCHAR</span>(<span class="hljs-number">1024</span>),                    <span class="hljs-comment">-- 文档标题</span>
+    author          <span class="hljs-type">VARCHAR</span>(<span class="hljs-number">256</span>),                     <span class="hljs-comment">-- 作者/创建者</span>
+    department      <span class="hljs-type">VARCHAR</span>(<span class="hljs-number">256</span>),                     <span class="hljs-comment">-- 所属部门</span>
+    category        <span class="hljs-type">VARCHAR</span>(<span class="hljs-number">256</span>),                     <span class="hljs-comment">-- 分类（如：技术文档/制度/报告）</span>
+    tags            TEXT[],                            <span class="hljs-comment">-- 标签数组</span>
+    version         <span class="hljs-type">VARCHAR</span>(<span class="hljs-number">64</span>) <span class="hljs-keyword">DEFAULT</span> <span class="hljs-string">'1.0'</span>,        <span class="hljs-comment">-- 文档版本</span>
+    <span class="hljs-keyword">language</span>        <span class="hljs-type">VARCHAR</span>(<span class="hljs-number">10</span>) <span class="hljs-keyword">DEFAULT</span> <span class="hljs-string">'zh'</span>,         <span class="hljs-comment">-- 语言代码</span>
+    access_level    <span class="hljs-type">VARCHAR</span>(<span class="hljs-number">32</span>) <span class="hljs-keyword">DEFAULT</span> <span class="hljs-string">'internal'</span>,   <span class="hljs-comment">-- public/internal/confidential/secret</span>
+    tenant_id       <span class="hljs-type">VARCHAR</span>(<span class="hljs-number">128</span>) <span class="hljs-keyword">NOT NULL</span>,            <span class="hljs-comment">-- 多租户隔离</span>
+    status          <span class="hljs-type">VARCHAR</span>(<span class="hljs-number">32</span>) <span class="hljs-keyword">DEFAULT</span> <span class="hljs-string">'active'</span>,     <span class="hljs-comment">-- active/archived/deleted</span>
+    expires_at      TIMESTAMPTZ,                      <span class="hljs-comment">-- 访问有效期（临时文档）</span>
 
-    -- 技术字段：管道的运营数据
-    parser_name         VARCHAR(128),                 -- 使用的解析器
-    parser_version      VARCHAR(32),                  -- 解析器版本
-    parse_duration_ms   BIGINT,                       -- 解析耗时
-    parse_error         TEXT,                         -- 解析错误信息
+    <span class="hljs-comment">-- 技术字段：管道的运营数据</span>
+    parser_name         <span class="hljs-type">VARCHAR</span>(<span class="hljs-number">128</span>),                 <span class="hljs-comment">-- 使用的解析器</span>
+    parser_version      <span class="hljs-type">VARCHAR</span>(<span class="hljs-number">32</span>),                  <span class="hljs-comment">-- 解析器版本</span>
+    parse_duration_ms   <span class="hljs-type">BIGINT</span>,                       <span class="hljs-comment">-- 解析耗时</span>
+    parse_error         TEXT,                         <span class="hljs-comment">-- 解析错误信息</span>
 
-    -- 时间戳
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    ingested_at     TIMESTAMPTZ NOT NULL DEFAULT now() -- 数据入库时间
+    <span class="hljs-comment">-- 时间戳</span>
+    created_at      TIMESTAMPTZ <span class="hljs-keyword">NOT NULL</span> <span class="hljs-keyword">DEFAULT</span> now(),
+    updated_at      TIMESTAMPTZ <span class="hljs-keyword">NOT NULL</span> <span class="hljs-keyword">DEFAULT</span> now(),
+    ingested_at     TIMESTAMPTZ <span class="hljs-keyword">NOT NULL</span> <span class="hljs-keyword">DEFAULT</span> now() <span class="hljs-comment">-- 数据入库时间</span>
 );
 
--- ============ 切片表 ============
-CREATE TABLE chunks (
-    chunk_id        UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    document_id     UUID NOT NULL REFERENCES documents(document_id) ON DELETE CASCADE,
-    chunk_index     INT NOT NULL,                     -- 在文档中的序号
-    total_chunks    INT NOT NULL,                     -- 文档总chunk数
+<span class="hljs-comment">-- ============ 切片表 ============</span>
+<span class="hljs-keyword">CREATE TABLE</span> chunks (
+    chunk_id        UUID <span class="hljs-keyword">PRIMARY KEY</span> <span class="hljs-keyword">DEFAULT</span> gen_random_uuid(),
+    document_id     UUID <span class="hljs-keyword">NOT NULL</span> <span class="hljs-keyword">REFERENCES</span> documents(document_id) <span class="hljs-keyword">ON</span> <span class="hljs-keyword">DELETE</span> CASCADE,
+    chunk_index     <span class="hljs-type">INT</span> <span class="hljs-keyword">NOT NULL</span>,                     <span class="hljs-comment">-- 在文档中的序号</span>
+    total_chunks    <span class="hljs-type">INT</span> <span class="hljs-keyword">NOT NULL</span>,                     <span class="hljs-comment">-- 文档总chunk数</span>
 
-    -- 内容
-    content         TEXT NOT NULL,                    -- 切片文本
-    content_hash    VARCHAR(64) NOT NULL,             -- 切片内容SHA-256
-    char_count      INT NOT NULL,                     -- 字符数
-    token_count     INT NOT NULL,                     -- 估算Token数
+    <span class="hljs-comment">-- 内容</span>
+    content         TEXT <span class="hljs-keyword">NOT NULL</span>,                    <span class="hljs-comment">-- 切片文本</span>
+    content_hash    <span class="hljs-type">VARCHAR</span>(<span class="hljs-number">64</span>) <span class="hljs-keyword">NOT NULL</span>,             <span class="hljs-comment">-- 切片内容SHA-256</span>
+    char_count      <span class="hljs-type">INT</span> <span class="hljs-keyword">NOT NULL</span>,                     <span class="hljs-comment">-- 字符数</span>
+    token_count     <span class="hljs-type">INT</span> <span class="hljs-keyword">NOT NULL</span>,                     <span class="hljs-comment">-- 估算Token数</span>
 
-    -- 定位信息
-    char_start      INT,                              -- 原始文档字符起始位置
-    char_end        INT,                              -- 原始文档字符结束位置
-    page_number     INT,                              -- PDF页码
-    section_path    TEXT,                             -- 章节路径（如&quot;第3章 &gt; 3.2节&quot;）
+    <span class="hljs-comment">-- 定位信息</span>
+    char_start      <span class="hljs-type">INT</span>,                              <span class="hljs-comment">-- 原始文档字符起始位置</span>
+    char_end        <span class="hljs-type">INT</span>,                              <span class="hljs-comment">-- 原始文档字符结束位置</span>
+    page_number     <span class="hljs-type">INT</span>,                              <span class="hljs-comment">-- PDF页码</span>
+    section_path    TEXT,                             <span class="hljs-comment">-- 章节路径（如"第3章 &gt; 3.2节"）</span>
 
-    -- 切片策略
-    chunking_strategy   VARCHAR(128),                 -- fixed_size/paragraph/recursive/semantic/code_aware
-    chunk_size_config   INT,                          -- 配置的chunk_size
-    overlap_config      INT,                          -- 配置的overlap
+    <span class="hljs-comment">-- 切片策略</span>
+    chunking_strategy   <span class="hljs-type">VARCHAR</span>(<span class="hljs-number">128</span>),                 <span class="hljs-comment">-- fixed_size/paragraph/recursive/semantic/code_aware</span>
+    chunk_size_config   <span class="hljs-type">INT</span>,                          <span class="hljs-comment">-- 配置的chunk_size</span>
+    overlap_config      <span class="hljs-type">INT</span>,                          <span class="hljs-comment">-- 配置的overlap</span>
 
-    -- Embedding
-    embedding_model     VARCHAR(128),                 -- 如 bge-large-zh-v1.5
-    embedding_version   VARCHAR(32),                  -- 模型版本
-    embedding_dim       INT,                          -- 向量维度
-    embedding_status    VARCHAR(32) DEFAULT &#39;pending&#39;,-- pending/embedded/failed
+    <span class="hljs-comment">-- Embedding</span>
+    embedding_model     <span class="hljs-type">VARCHAR</span>(<span class="hljs-number">128</span>),                 <span class="hljs-comment">-- 如 bge-large-zh-v1.5</span>
+    embedding_version   <span class="hljs-type">VARCHAR</span>(<span class="hljs-number">32</span>),                  <span class="hljs-comment">-- 模型版本</span>
+    embedding_dim       <span class="hljs-type">INT</span>,                          <span class="hljs-comment">-- 向量维度</span>
+    embedding_status    <span class="hljs-type">VARCHAR</span>(<span class="hljs-number">32</span>) <span class="hljs-keyword">DEFAULT</span> <span class="hljs-string">'pending'</span>,<span class="hljs-comment">-- pending/embedded/failed</span>
 
-    -- 权限继承
-    access_level    VARCHAR(32),                      -- 继承自documents
-    tenant_id       VARCHAR(128) NOT NULL,            -- 继承自documents
+    <span class="hljs-comment">-- 权限继承</span>
+    access_level    <span class="hljs-type">VARCHAR</span>(<span class="hljs-number">32</span>),                      <span class="hljs-comment">-- 继承自documents</span>
+    tenant_id       <span class="hljs-type">VARCHAR</span>(<span class="hljs-number">128</span>) <span class="hljs-keyword">NOT NULL</span>,            <span class="hljs-comment">-- 继承自documents</span>
 
-    -- 状态
-    status          VARCHAR(32) DEFAULT &#39;active&#39;,     -- active/outdated/deleted
-    previous_chunk_id UUID,                          -- 版本链：更新后的旧chunk引用
+    <span class="hljs-comment">-- 状态</span>
+    status          <span class="hljs-type">VARCHAR</span>(<span class="hljs-number">32</span>) <span class="hljs-keyword">DEFAULT</span> <span class="hljs-string">'active'</span>,     <span class="hljs-comment">-- active/outdated/deleted</span>
+    previous_chunk_id UUID,                          <span class="hljs-comment">-- 版本链：更新后的旧chunk引用</span>
 
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT now(),
-    updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+    created_at      TIMESTAMPTZ <span class="hljs-keyword">NOT NULL</span> <span class="hljs-keyword">DEFAULT</span> now(),
+    updated_at      TIMESTAMPTZ <span class="hljs-keyword">NOT NULL</span> <span class="hljs-keyword">DEFAULT</span> now()
 );
 
--- ============ 向量索引表 (pgvector) ============
-CREATE TABLE chunk_embeddings (
-    id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    chunk_id        UUID NOT NULL REFERENCES chunks(chunk_id) ON DELETE CASCADE,
-    embedding       vector(1024),                     -- 向量字段（维度取决于模型）
-    model_name      VARCHAR(128),
-    model_version   VARCHAR(32),
-    created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+<span class="hljs-comment">-- ============ 向量索引表 (pgvector) ============</span>
+<span class="hljs-keyword">CREATE TABLE</span> chunk_embeddings (
+    id              UUID <span class="hljs-keyword">PRIMARY KEY</span> <span class="hljs-keyword">DEFAULT</span> gen_random_uuid(),
+    chunk_id        UUID <span class="hljs-keyword">NOT NULL</span> <span class="hljs-keyword">REFERENCES</span> chunks(chunk_id) <span class="hljs-keyword">ON</span> <span class="hljs-keyword">DELETE</span> CASCADE,
+    embedding       vector(<span class="hljs-number">1024</span>),                     <span class="hljs-comment">-- 向量字段（维度取决于模型）</span>
+    model_name      <span class="hljs-type">VARCHAR</span>(<span class="hljs-number">128</span>),
+    model_version   <span class="hljs-type">VARCHAR</span>(<span class="hljs-number">32</span>),
+    created_at      TIMESTAMPTZ <span class="hljs-keyword">NOT NULL</span> <span class="hljs-keyword">DEFAULT</span> now()
 );
 
--- 关键索引
-CREATE INDEX idx_documents_tenant ON documents(tenant_id);
-CREATE INDEX idx_documents_content_hash ON documents(content_hash);
-CREATE INDEX idx_documents_category ON documents(category);
-CREATE INDEX idx_documents_status ON documents(status);
-CREATE INDEX idx_documents_access_level ON documents(access_level);
+<span class="hljs-comment">-- 关键索引</span>
+<span class="hljs-keyword">CREATE</span> INDEX idx_documents_tenant <span class="hljs-keyword">ON</span> documents(tenant_id);
+<span class="hljs-keyword">CREATE</span> INDEX idx_documents_content_hash <span class="hljs-keyword">ON</span> documents(content_hash);
+<span class="hljs-keyword">CREATE</span> INDEX idx_documents_category <span class="hljs-keyword">ON</span> documents(category);
+<span class="hljs-keyword">CREATE</span> INDEX idx_documents_status <span class="hljs-keyword">ON</span> documents(status);
+<span class="hljs-keyword">CREATE</span> INDEX idx_documents_access_level <span class="hljs-keyword">ON</span> documents(access_level);
 
-CREATE INDEX idx_chunks_document ON chunks(document_id);
-CREATE INDEX idx_chunks_tenant ON chunks(tenant_id);
-CREATE INDEX idx_chunks_status ON chunks(status);
-CREATE INDEX idx_chunks_embedding_status ON chunks(embedding_status);
-CREATE INDEX idx_chunks_content_hash ON chunks(content_hash);
+<span class="hljs-keyword">CREATE</span> INDEX idx_chunks_document <span class="hljs-keyword">ON</span> chunks(document_id);
+<span class="hljs-keyword">CREATE</span> INDEX idx_chunks_tenant <span class="hljs-keyword">ON</span> chunks(tenant_id);
+<span class="hljs-keyword">CREATE</span> INDEX idx_chunks_status <span class="hljs-keyword">ON</span> chunks(status);
+<span class="hljs-keyword">CREATE</span> INDEX idx_chunks_embedding_status <span class="hljs-keyword">ON</span> chunks(embedding_status);
+<span class="hljs-keyword">CREATE</span> INDEX idx_chunks_content_hash <span class="hljs-keyword">ON</span> chunks(content_hash);
 
--- HNSW索引（向量检索加速）
-CREATE INDEX idx_chunk_embeddings_hnsw ON chunk_embeddings
-    USING hnsw (embedding vector_cosine_ops)
-    WITH (m = 16, ef_construction = 200);
-</code></pre></div>
-<h3>1.2 Java Metadata Model</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.time.Instant;
-import java.util.Map;
-import java.util.UUID;
+<span class="hljs-comment">-- HNSW索引（向量检索加速）</span>
+<span class="hljs-keyword">CREATE</span> INDEX idx_chunk_embeddings_hnsw <span class="hljs-keyword">ON</span> chunk_embeddings
+    <span class="hljs-keyword">USING</span> hnsw (embedding vector_cosine_ops)
+    <span class="hljs-keyword">WITH</span> (m <span class="hljs-operator">=</span> <span class="hljs-number">16</span>, ef_construction <span class="hljs-operator">=</span> <span class="hljs-number">200</span>);
+</code></pre></div><h3>1.2 Java Metadata Model</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> java.time.Instant;
+<span class="hljs-keyword">import</span> java.util.Map;
+<span class="hljs-keyword">import</span> java.util.UUID;
 
-/**
+<span class="hljs-comment">/**
  * 不可变Metadata模型（使用Record）
- */
-public record DocumentMetadata(
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">DocumentMetadata</span><span class="hljs-params">(
     // 必需字段
     UUID documentId,
     String sourceUri,
     String contentHash,      // SHA-256
-    long contentLength,
+    <span class="hljs-type">long</span> contentLength,
     String mimeType,
     String fileName,
 
@@ -152,71 +151,71 @@ public record DocumentMetadata(
     // 技术字段
     String parserName,
     String parserVersion,
-    long parseDurationMs,
+    <span class="hljs-type">long</span> parseDurationMs,
     String parseError,
 
     // 时间戳
     Instant createdAt,
     Instant updatedAt,
     Instant ingestedAt
-) {
-    public enum AccessLevel {
+)</span> {
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">enum</span> <span class="hljs-title class_">AccessLevel</span> {
         PUBLIC, INTERNAL, CONFIDENTIAL, SECRET;
 
-        public static AccessLevel fromString(String s) {
-            return valueOf(s.toUpperCase());
+        <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> AccessLevel <span class="hljs-title function_">fromString</span><span class="hljs-params">(String s)</span> {
+            <span class="hljs-keyword">return</span> valueOf(s.toUpperCase());
         }
     }
 
-    public enum DocumentStatus {
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">enum</span> <span class="hljs-title class_">DocumentStatus</span> {
         ACTIVE, ARCHIVED, DELETED
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 构建器模式 — 处理大量可选字段
-     */
-    public static class Builder {
-        private UUID documentId = UUID.randomUUID();
-        private String sourceUri;
-        private String contentHash;
-        private long contentLength;
-        private String mimeType = &quot;application/octet-stream&quot;;
-        private String fileName;
-        private String title;
-        private String author;
-        private String department;
-        private String category;
-        private java.util.List&lt;String&gt; tags = java.util.List.of();
-        private String version = &quot;1.0&quot;;
-        private String language = &quot;zh&quot;;
-        private AccessLevel accessLevel = AccessLevel.INTERNAL;
-        private String tenantId;
-        private DocumentStatus status = DocumentStatus.ACTIVE;
-        private String parserName;
-        private String parserVersion;
-        private long parseDurationMs;
-        private String parseError;
-        private Instant createdAt = Instant.now();
-        private Instant updatedAt = Instant.now();
-        private Instant ingestedAt = Instant.now();
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">Builder</span> {
+        <span class="hljs-keyword">private</span> <span class="hljs-type">UUID</span> <span class="hljs-variable">documentId</span> <span class="hljs-operator">=</span> UUID.randomUUID();
+        <span class="hljs-keyword">private</span> String sourceUri;
+        <span class="hljs-keyword">private</span> String contentHash;
+        <span class="hljs-keyword">private</span> <span class="hljs-type">long</span> contentLength;
+        <span class="hljs-keyword">private</span> <span class="hljs-type">String</span> <span class="hljs-variable">mimeType</span> <span class="hljs-operator">=</span> <span class="hljs-string">"application/octet-stream"</span>;
+        <span class="hljs-keyword">private</span> String fileName;
+        <span class="hljs-keyword">private</span> String title;
+        <span class="hljs-keyword">private</span> String author;
+        <span class="hljs-keyword">private</span> String department;
+        <span class="hljs-keyword">private</span> String category;
+        <span class="hljs-keyword">private</span> java.util.List&lt;String&gt; tags = java.util.List.of();
+        <span class="hljs-keyword">private</span> <span class="hljs-type">String</span> <span class="hljs-variable">version</span> <span class="hljs-operator">=</span> <span class="hljs-string">"1.0"</span>;
+        <span class="hljs-keyword">private</span> <span class="hljs-type">String</span> <span class="hljs-variable">language</span> <span class="hljs-operator">=</span> <span class="hljs-string">"zh"</span>;
+        <span class="hljs-keyword">private</span> <span class="hljs-type">AccessLevel</span> <span class="hljs-variable">accessLevel</span> <span class="hljs-operator">=</span> AccessLevel.INTERNAL;
+        <span class="hljs-keyword">private</span> String tenantId;
+        <span class="hljs-keyword">private</span> <span class="hljs-type">DocumentStatus</span> <span class="hljs-variable">status</span> <span class="hljs-operator">=</span> DocumentStatus.ACTIVE;
+        <span class="hljs-keyword">private</span> String parserName;
+        <span class="hljs-keyword">private</span> String parserVersion;
+        <span class="hljs-keyword">private</span> <span class="hljs-type">long</span> parseDurationMs;
+        <span class="hljs-keyword">private</span> String parseError;
+        <span class="hljs-keyword">private</span> <span class="hljs-type">Instant</span> <span class="hljs-variable">createdAt</span> <span class="hljs-operator">=</span> Instant.now();
+        <span class="hljs-keyword">private</span> <span class="hljs-type">Instant</span> <span class="hljs-variable">updatedAt</span> <span class="hljs-operator">=</span> Instant.now();
+        <span class="hljs-keyword">private</span> <span class="hljs-type">Instant</span> <span class="hljs-variable">ingestedAt</span> <span class="hljs-operator">=</span> Instant.now();
 
-        public Builder sourceUri(String v) { this.sourceUri = v; return this; }
-        public Builder contentHash(String v) { this.contentHash = v; return this; }
-        public Builder contentLength(long v) { this.contentLength = v; return this; }
-        public Builder mimeType(String v) { this.mimeType = v; return this; }
-        public Builder fileName(String v) { this.fileName = v; return this; }
-        public Builder title(String v) { this.title = v; return this; }
-        public Builder author(String v) { this.author = v; return this; }
-        public Builder department(String v) { this.department = v; return this; }
-        public Builder category(String v) { this.category = v; return this; }
-        public Builder tags(java.util.List&lt;String&gt; v) { this.tags = v; return this; }
-        public Builder accessLevel(AccessLevel v) { this.accessLevel = v; return this; }
-        public Builder tenantId(String v) { this.tenantId = v; return this; }
-        public Builder parserName(String v) { this.parserName = v; return this; }
-        public Builder parserVersion(String v) { this.parserVersion = v; return this; }
+        <span class="hljs-keyword">public</span> Builder <span class="hljs-title function_">sourceUri</span><span class="hljs-params">(String v)</span> { <span class="hljs-built_in">this</span>.sourceUri = v; <span class="hljs-keyword">return</span> <span class="hljs-built_in">this</span>; }
+        <span class="hljs-keyword">public</span> Builder <span class="hljs-title function_">contentHash</span><span class="hljs-params">(String v)</span> { <span class="hljs-built_in">this</span>.contentHash = v; <span class="hljs-keyword">return</span> <span class="hljs-built_in">this</span>; }
+        <span class="hljs-keyword">public</span> Builder <span class="hljs-title function_">contentLength</span><span class="hljs-params">(<span class="hljs-type">long</span> v)</span> { <span class="hljs-built_in">this</span>.contentLength = v; <span class="hljs-keyword">return</span> <span class="hljs-built_in">this</span>; }
+        <span class="hljs-keyword">public</span> Builder <span class="hljs-title function_">mimeType</span><span class="hljs-params">(String v)</span> { <span class="hljs-built_in">this</span>.mimeType = v; <span class="hljs-keyword">return</span> <span class="hljs-built_in">this</span>; }
+        <span class="hljs-keyword">public</span> Builder <span class="hljs-title function_">fileName</span><span class="hljs-params">(String v)</span> { <span class="hljs-built_in">this</span>.fileName = v; <span class="hljs-keyword">return</span> <span class="hljs-built_in">this</span>; }
+        <span class="hljs-keyword">public</span> Builder <span class="hljs-title function_">title</span><span class="hljs-params">(String v)</span> { <span class="hljs-built_in">this</span>.title = v; <span class="hljs-keyword">return</span> <span class="hljs-built_in">this</span>; }
+        <span class="hljs-keyword">public</span> Builder <span class="hljs-title function_">author</span><span class="hljs-params">(String v)</span> { <span class="hljs-built_in">this</span>.author = v; <span class="hljs-keyword">return</span> <span class="hljs-built_in">this</span>; }
+        <span class="hljs-keyword">public</span> Builder <span class="hljs-title function_">department</span><span class="hljs-params">(String v)</span> { <span class="hljs-built_in">this</span>.department = v; <span class="hljs-keyword">return</span> <span class="hljs-built_in">this</span>; }
+        <span class="hljs-keyword">public</span> Builder <span class="hljs-title function_">category</span><span class="hljs-params">(String v)</span> { <span class="hljs-built_in">this</span>.category = v; <span class="hljs-keyword">return</span> <span class="hljs-built_in">this</span>; }
+        <span class="hljs-keyword">public</span> Builder <span class="hljs-title function_">tags</span><span class="hljs-params">(java.util.List&lt;String&gt; v)</span> { <span class="hljs-built_in">this</span>.tags = v; <span class="hljs-keyword">return</span> <span class="hljs-built_in">this</span>; }
+        <span class="hljs-keyword">public</span> Builder <span class="hljs-title function_">accessLevel</span><span class="hljs-params">(AccessLevel v)</span> { <span class="hljs-built_in">this</span>.accessLevel = v; <span class="hljs-keyword">return</span> <span class="hljs-built_in">this</span>; }
+        <span class="hljs-keyword">public</span> Builder <span class="hljs-title function_">tenantId</span><span class="hljs-params">(String v)</span> { <span class="hljs-built_in">this</span>.tenantId = v; <span class="hljs-keyword">return</span> <span class="hljs-built_in">this</span>; }
+        <span class="hljs-keyword">public</span> Builder <span class="hljs-title function_">parserName</span><span class="hljs-params">(String v)</span> { <span class="hljs-built_in">this</span>.parserName = v; <span class="hljs-keyword">return</span> <span class="hljs-built_in">this</span>; }
+        <span class="hljs-keyword">public</span> Builder <span class="hljs-title function_">parserVersion</span><span class="hljs-params">(String v)</span> { <span class="hljs-built_in">this</span>.parserVersion = v; <span class="hljs-keyword">return</span> <span class="hljs-built_in">this</span>; }
 
-        public DocumentMetadata build() {
-            return new DocumentMetadata(
+        <span class="hljs-keyword">public</span> DocumentMetadata <span class="hljs-title function_">build</span><span class="hljs-params">()</span> {
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">DocumentMetadata</span>(
                 documentId, sourceUri, contentHash, contentLength, mimeType, fileName,
                 title, author, department, category, tags, version, language,
                 accessLevel, tenantId, status,
@@ -226,10 +225,9 @@ public record DocumentMetadata(
         }
     }
 
-    public static Builder builder() { return new Builder(); }
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> Builder <span class="hljs-title function_">builder</span><span class="hljs-params">()</span> { <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Builder</span>(); }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>二、内容指纹与去重</h2>
 <h3>2.1 SimHash算法</h3>
 <p><strong>原理</strong>：SimHash是一种局部敏感哈希(LSH)，相似的文档产生相似的哈希值。</p>
@@ -242,946 +240,932 @@ public record DocumentMetadata(
 <li><strong>汉明距离</strong>：两个SimHash异或后1的个数，≤3视为近似重复</li>
 </ol>
 <p><strong>Java实现</strong>：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.math.BigInteger;
-import java.security.MessageDigest;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.stream.IntStream;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> java.math.BigInteger;
+<span class="hljs-keyword">import</span> java.security.MessageDigest;
+<span class="hljs-keyword">import</span> java.util.ArrayList;
+<span class="hljs-keyword">import</span> java.util.List;
+<span class="hljs-keyword">import</span> java.util.stream.IntStream;
 
-public class SimHashService {
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">SimHashService</span> {
 
-    private final int hashBits;     // 64 or 128
-    private final int threshold;    // 汉明距离阈值，典型值3
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">int</span> hashBits;     <span class="hljs-comment">// 64 or 128</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">int</span> threshold;    <span class="hljs-comment">// 汉明距离阈值，典型值3</span>
 
-    public SimHashService(int hashBits, int threshold) {
-        this.hashBits = hashBits;
-        this.threshold = threshold;
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">SimHashService</span><span class="hljs-params">(<span class="hljs-type">int</span> hashBits, <span class="hljs-type">int</span> threshold)</span> {
+        <span class="hljs-built_in">this</span>.hashBits = hashBits;
+        <span class="hljs-built_in">this</span>.threshold = threshold;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 计算文档的SimHash值
-     */
-    public BigInteger computeSimHash(String text) {
-        // 1. 分词（中文使用n-gram或结巴分词）
-        var tokens = tokenize(text);
+     */</span>
+    <span class="hljs-keyword">public</span> BigInteger <span class="hljs-title function_">computeSimHash</span><span class="hljs-params">(String text)</span> {
+        <span class="hljs-comment">// 1. 分词（中文使用n-gram或结巴分词）</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">tokens</span> <span class="hljs-operator">=</span> tokenize(text);
 
-        // 2. 对每个token计算哈希
-        var tokenHashes = tokens.stream()
-            .map(this::hashToken)
+        <span class="hljs-comment">// 2. 对每个token计算哈希</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">tokenHashes</span> <span class="hljs-operator">=</span> tokens.stream()
+            .map(<span class="hljs-built_in">this</span>::hashToken)
             .toList();
 
-        // 3. 加权合并（每位：1→+weight, 0→-weight）
-        var weights = new int[hashBits];
-        for (int i = 0; i &lt; tokenHashes.size(); i++) {
-            var hash = tokenHashes.get(i);
-            var weight = 1; // 可替换为TF-IDF权重
-            for (int j = 0; j &lt; hashBits; j++) {
-                if (hash.testBit(j)) {
+        <span class="hljs-comment">// 3. 加权合并（每位：1→+weight, 0→-weight）</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">weights</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">int</span>[hashBits];
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; tokenHashes.size(); i++) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">hash</span> <span class="hljs-operator">=</span> tokenHashes.get(i);
+            <span class="hljs-type">var</span> <span class="hljs-variable">weight</span> <span class="hljs-operator">=</span> <span class="hljs-number">1</span>; <span class="hljs-comment">// 可替换为TF-IDF权重</span>
+            <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">j</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; j &lt; hashBits; j++) {
+                <span class="hljs-keyword">if</span> (hash.testBit(j)) {
                     weights[j] += weight;
-                } else {
+                } <span class="hljs-keyword">else</span> {
                     weights[j] -= weight;
                 }
             }
         }
 
-        // 4. 降维
-        var simHash = BigInteger.ZERO;
-        for (int i = 0; i &lt; hashBits; i++) {
-            if (weights[i] &gt; 0) {
+        <span class="hljs-comment">// 4. 降维</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">simHash</span> <span class="hljs-operator">=</span> BigInteger.ZERO;
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; hashBits; i++) {
+            <span class="hljs-keyword">if</span> (weights[i] &gt; <span class="hljs-number">0</span>) {
                 simHash = simHash.setBit(i);
             }
         }
 
-        return simHash;
+        <span class="hljs-keyword">return</span> simHash;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 计算两个SimHash的汉明距离
      * 汉明距离 = 异或后1的个数
-     */
-    public int hammingDistance(BigInteger hash1, BigInteger hash2) {
-        return hash1.xor(hash2).bitCount();
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-type">int</span> <span class="hljs-title function_">hammingDistance</span><span class="hljs-params">(BigInteger hash1, BigInteger hash2)</span> {
+        <span class="hljs-keyword">return</span> hash1.xor(hash2).bitCount();
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 判断两个文档是否近似重复
-     */
-    public boolean isDuplicate(String text1, String text2) {
-        var hash1 = computeSimHash(text1);
-        var hash2 = computeSimHash(text2);
-        return hammingDistance(hash1, hash2) &lt;= threshold;
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">isDuplicate</span><span class="hljs-params">(String text1, String text2)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">hash1</span> <span class="hljs-operator">=</span> computeSimHash(text1);
+        <span class="hljs-type">var</span> <span class="hljs-variable">hash2</span> <span class="hljs-operator">=</span> computeSimHash(text2);
+        <span class="hljs-keyword">return</span> hammingDistance(hash1, hash2) &lt;= threshold;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 分段SimHash：将hashBits位切分为若干段
      * 如果两文档的任意一段完全匹配，则可能是近似重复
      * 这是海量文档快速查重的核心技巧
-     */
-    public record SegmentKey(int segmentIndex, int segmentValue) {}
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">SegmentKey</span><span class="hljs-params">(<span class="hljs-type">int</span> segmentIndex, <span class="hljs-type">int</span> segmentValue)</span> {}
 
-    public List&lt;SegmentKey&gt; computeSegmentKeys(BigInteger simHash, int numSegments) {
-        var keys = new ArrayList&lt;SegmentKey&gt;();
-        var bitsPerSegment = hashBits / numSegments;
+    <span class="hljs-keyword">public</span> List&lt;SegmentKey&gt; <span class="hljs-title function_">computeSegmentKeys</span><span class="hljs-params">(BigInteger simHash, <span class="hljs-type">int</span> numSegments)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">keys</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;SegmentKey&gt;();
+        <span class="hljs-type">var</span> <span class="hljs-variable">bitsPerSegment</span> <span class="hljs-operator">=</span> hashBits / numSegments;
 
-        for (int i = 0; i &lt; numSegments; i++) {
-            var mask = BigInteger.ONE.shiftLeft(bitsPerSegment).subtract(BigInteger.ONE);
-            var segmentValue = simHash.shiftRight(i * bitsPerSegment).and(mask).intValue();
-            keys.add(new SegmentKey(i, segmentValue));
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; numSegments; i++) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">mask</span> <span class="hljs-operator">=</span> BigInteger.ONE.shiftLeft(bitsPerSegment).subtract(BigInteger.ONE);
+            <span class="hljs-type">var</span> <span class="hljs-variable">segmentValue</span> <span class="hljs-operator">=</span> simHash.shiftRight(i * bitsPerSegment).and(mask).intValue();
+            keys.add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">SegmentKey</span>(i, segmentValue));
         }
 
-        return keys;
+        <span class="hljs-keyword">return</span> keys;
     }
 
-    private List&lt;String&gt; tokenize(String text) {
-        // 简化的中文分词：按字/词切分
-        // 生产环境应使用结巴分词或HanLP
-        var tokens = new ArrayList&lt;String&gt;();
-        // 3-gram 字符级分词（中文SimHash常用）
-        for (int i = 0; i &lt; text.length() - 2; i++) {
-            tokens.add(text.substring(i, i + 3));
+    <span class="hljs-keyword">private</span> List&lt;String&gt; <span class="hljs-title function_">tokenize</span><span class="hljs-params">(String text)</span> {
+        <span class="hljs-comment">// 简化的中文分词：按字/词切分</span>
+        <span class="hljs-comment">// 生产环境应使用结巴分词或HanLP</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">tokens</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;String&gt;();
+        <span class="hljs-comment">// 3-gram 字符级分词（中文SimHash常用）</span>
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; text.length() - <span class="hljs-number">2</span>; i++) {
+            tokens.add(text.substring(i, i + <span class="hljs-number">3</span>));
         }
-        // 也加入单字和双字
-        for (int i = 0; i &lt; text.length(); i++) {
+        <span class="hljs-comment">// 也加入单字和双字</span>
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; text.length(); i++) {
             tokens.add(String.valueOf(text.charAt(i)));
         }
-        return tokens;
+        <span class="hljs-keyword">return</span> tokens;
     }
 
-    private BigInteger hashToken(String token) {
-        try {
-            var md = MessageDigest.getInstance(&quot;MD5&quot;);
-            var digest = md.digest(token.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            // 取前(hashBits/8)个字节
-            var bytes = new byte[hashBits / 8];
-            System.arraycopy(digest, 0, bytes, 0, bytes.length);
-            return new BigInteger(1, bytes);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
+    <span class="hljs-keyword">private</span> BigInteger <span class="hljs-title function_">hashToken</span><span class="hljs-params">(String token)</span> {
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-type">var</span> <span class="hljs-variable">md</span> <span class="hljs-operator">=</span> MessageDigest.getInstance(<span class="hljs-string">"MD5"</span>);
+            <span class="hljs-type">var</span> <span class="hljs-variable">digest</span> <span class="hljs-operator">=</span> md.digest(token.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            <span class="hljs-comment">// 取前(hashBits/8)个字节</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">bytes</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">byte</span>[hashBits / <span class="hljs-number">8</span>];
+            System.arraycopy(digest, <span class="hljs-number">0</span>, bytes, <span class="hljs-number">0</span>, bytes.length);
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">BigInteger</span>(<span class="hljs-number">1</span>, bytes);
+        } <span class="hljs-keyword">catch</span> (Exception e) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RuntimeException</span>(e);
         }
     }
 }
-</code></pre></div>
-<h3>2.2 MinHash算法</h3>
+</code></pre></div><h3>2.2 MinHash算法</h3>
 <p>MinHash适用于长文本去重，基于Jaccard相似度。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.util.ArrayList;
-import java.util.HashSet;
-import java.util.List;
-import java.util.PriorityQueue;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> java.util.ArrayList;
+<span class="hljs-keyword">import</span> java.util.HashSet;
+<span class="hljs-keyword">import</span> java.util.List;
+<span class="hljs-keyword">import</span> java.util.PriorityQueue;
 
-public class MinHashService {
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">MinHashService</span> {
 
-    private final int numHashes;      // 哈希函数数量，典型值128-256
-    private final long[] hashSeeds;   // 随机种子
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">int</span> numHashes;      <span class="hljs-comment">// 哈希函数数量，典型值128-256</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">long</span>[] hashSeeds;   <span class="hljs-comment">// 随机种子</span>
 
-    public MinHashService(int numHashes) {
-        this.numHashes = numHashes;
-        this.hashSeeds = new long[numHashes];
-        var random = new java.util.Random(42); // 固定种子确保一致性
-        for (int i = 0; i &lt; numHashes; i++) {
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">MinHashService</span><span class="hljs-params">(<span class="hljs-type">int</span> numHashes)</span> {
+        <span class="hljs-built_in">this</span>.numHashes = numHashes;
+        <span class="hljs-built_in">this</span>.hashSeeds = <span class="hljs-keyword">new</span> <span class="hljs-title class_">long</span>[numHashes];
+        <span class="hljs-type">var</span> <span class="hljs-variable">random</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">java</span>.util.Random(<span class="hljs-number">42</span>); <span class="hljs-comment">// 固定种子确保一致性</span>
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; numHashes; i++) {
             hashSeeds[i] = random.nextLong();
         }
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 计算文档的MinHash签名
-     */
-    public long[] computeMinHash(String text) {
-        var tokens = tokenize(text); // 返回shingle集合
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-type">long</span>[] computeMinHash(String text) {
+        <span class="hljs-type">var</span> <span class="hljs-variable">tokens</span> <span class="hljs-operator">=</span> tokenize(text); <span class="hljs-comment">// 返回shingle集合</span>
 
-        var signature = new long[numHashes];
-        for (int i = 0; i &lt; numHashes; i++) {
-            long minHash = Long.MAX_VALUE;
-            for (var token : tokens) {
-                var hash = murmurHash64(token, hashSeeds[i]);
-                if (hash &lt; minHash) {
+        <span class="hljs-type">var</span> <span class="hljs-variable">signature</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">long</span>[numHashes];
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; numHashes; i++) {
+            <span class="hljs-type">long</span> <span class="hljs-variable">minHash</span> <span class="hljs-operator">=</span> Long.MAX_VALUE;
+            <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> token : tokens) {
+                <span class="hljs-type">var</span> <span class="hljs-variable">hash</span> <span class="hljs-operator">=</span> murmurHash64(token, hashSeeds[i]);
+                <span class="hljs-keyword">if</span> (hash &lt; minHash) {
                     minHash = hash;
                 }
             }
             signature[i] = minHash;
         }
 
-        return signature;
+        <span class="hljs-keyword">return</span> signature;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * Jaccard相似度估计 = 签名中匹配的比例
-     */
-    public double estimateJaccard(long[] sig1, long[] sig2) {
-        int matches = 0;
-        for (int i = 0; i &lt; sig1.length; i++) {
-            if (sig1[i] == sig2[i]) {
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-type">double</span> <span class="hljs-title function_">estimateJaccard</span><span class="hljs-params">(<span class="hljs-type">long</span>[] sig1, <span class="hljs-type">long</span>[] sig2)</span> {
+        <span class="hljs-type">int</span> <span class="hljs-variable">matches</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; sig1.length; i++) {
+            <span class="hljs-keyword">if</span> (sig1[i] == sig2[i]) {
                 matches++;
             }
         }
-        return (double) matches / sig1.length;
+        <span class="hljs-keyword">return</span> (<span class="hljs-type">double</span>) matches / sig1.length;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * LSH分桶：将签名分为b个band，每个band有r行
      * 如果两个文档的任意一个band完全匹配，则认为是候选重复
-     */
-    public record BandKey(int bandIndex, int bandHash) {}
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">BandKey</span><span class="hljs-params">(<span class="hljs-type">int</span> bandIndex, <span class="hljs-type">int</span> bandHash)</span> {}
 
-    public List&lt;BandKey&gt; computeBandKeys(long[] signature, int bands) {
-        var rowsPerBand = signature.length / bands;
-        var keys = new ArrayList&lt;BandKey&gt;();
+    <span class="hljs-keyword">public</span> List&lt;BandKey&gt; <span class="hljs-title function_">computeBandKeys</span><span class="hljs-params">(<span class="hljs-type">long</span>[] signature, <span class="hljs-type">int</span> bands)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">rowsPerBand</span> <span class="hljs-operator">=</span> signature.length / bands;
+        <span class="hljs-type">var</span> <span class="hljs-variable">keys</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;BandKey&gt;();
 
-        for (int b = 0; b &lt; bands; b++) {
-            var bandHash = 0;
-            for (int r = 0; r &lt; rowsPerBand; r++) {
-                bandHash = 31 * bandHash + Long.hashCode(signature[b * rowsPerBand + r]);
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">b</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; b &lt; bands; b++) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">bandHash</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+            <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">r</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; r &lt; rowsPerBand; r++) {
+                bandHash = <span class="hljs-number">31</span> * bandHash + Long.hashCode(signature[b * rowsPerBand + r]);
             }
-            keys.add(new BandKey(b, bandHash));
+            keys.add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">BandKey</span>(b, bandHash));
         }
 
-        return keys;
+        <span class="hljs-keyword">return</span> keys;
     }
 
-    private List&lt;String&gt; tokenize(String text) {
-        // 生成 word-shingles（3-5个词一组）
-        var words = text.split(&quot;\\s+&quot;);
-        var shingles = new HashSet&lt;String&gt;();
-        for (int i = 0; i &lt; words.length - 2; i++) {
-            shingles.add(String.join(&quot; &quot;,
-                java.util.Arrays.copyOfRange(words, i, Math.min(i + 3, words.length))
+    <span class="hljs-keyword">private</span> List&lt;String&gt; <span class="hljs-title function_">tokenize</span><span class="hljs-params">(String text)</span> {
+        <span class="hljs-comment">// 生成 word-shingles（3-5个词一组）</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">words</span> <span class="hljs-operator">=</span> text.split(<span class="hljs-string">"\\s+"</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">shingles</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">HashSet</span>&lt;String&gt;();
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; words.length - <span class="hljs-number">2</span>; i++) {
+            shingles.add(String.join(<span class="hljs-string">" "</span>,
+                java.util.Arrays.copyOfRange(words, i, Math.min(i + <span class="hljs-number">3</span>, words.length))
             ));
         }
-        return new ArrayList&lt;&gt;(shingles);
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;&gt;(shingles);
     }
 
-    private long murmurHash64(String data, long seed) {
-        // MurmurHash 64-bit 实现（简化版）
-        var bytes = data.getBytes(java.nio.charset.StandardCharsets.UTF_8);
-        long h = seed ^ (bytes.length * 0xc6a4a7935bd1e995L);
+    <span class="hljs-keyword">private</span> <span class="hljs-type">long</span> <span class="hljs-title function_">murmurHash64</span><span class="hljs-params">(String data, <span class="hljs-type">long</span> seed)</span> {
+        <span class="hljs-comment">// MurmurHash 64-bit 实现（简化版）</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">bytes</span> <span class="hljs-operator">=</span> data.getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        <span class="hljs-type">long</span> <span class="hljs-variable">h</span> <span class="hljs-operator">=</span> seed ^ (bytes.length * <span class="hljs-number">0xc6a4a7935bd1e995L</span>);
 
-        for (int i = 0; i &lt; bytes.length; i += 8) {
-            long k = 0;
-            for (int j = 0; j &lt; 8 &amp;&amp; (i + j) &lt; bytes.length; j++) {
-                k |= ((long) (bytes[i + j] &amp; 0xFF)) &lt;&lt; (j * 8);
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; bytes.length; i += <span class="hljs-number">8</span>) {
+            <span class="hljs-type">long</span> <span class="hljs-variable">k</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+            <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">j</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; j &lt; <span class="hljs-number">8</span> &amp;&amp; (i + j) &lt; bytes.length; j++) {
+                k |= ((<span class="hljs-type">long</span>) (bytes[i + j] &amp; <span class="hljs-number">0xFF</span>)) &lt;&lt; (j * <span class="hljs-number">8</span>);
             }
-            k *= 0xc6a4a7935bd1e995L;
-            k = Long.rotateRight(k, 47);
-            k *= 0xc6a4a7935bd1e995L;
+            k *= <span class="hljs-number">0xc6a4a7935bd1e995L</span>;
+            k = Long.rotateRight(k, <span class="hljs-number">47</span>);
+            k *= <span class="hljs-number">0xc6a4a7935bd1e995L</span>;
             h ^= k;
-            h = Long.rotateRight(h, 47);
-            h = h * 5 + 0x52dce729;
+            h = Long.rotateRight(h, <span class="hljs-number">47</span>);
+            h = h * <span class="hljs-number">5</span> + <span class="hljs-number">0x52dce729</span>;
         }
 
-        h ^= h &gt;&gt;&gt; 33;
-        h *= 0xff51afd7ed558ccdL;
-        h ^= h &gt;&gt;&gt; 33;
-        h *= 0xc4ceb9fe1a85ec53L;
-        h ^= h &gt;&gt;&gt; 33;
+        h ^= h &gt;&gt;&gt; <span class="hljs-number">33</span>;
+        h *= <span class="hljs-number">0xff51afd7ed558ccdL</span>;
+        h ^= h &gt;&gt;&gt; <span class="hljs-number">33</span>;
+        h *= <span class="hljs-number">0xc4ceb9fe1a85ec53L</span>;
+        h ^= h &gt;&gt;&gt; <span class="hljs-number">33</span>;
 
-        return h;
+        <span class="hljs-keyword">return</span> h;
     }
 }
-</code></pre></div>
-<h3>2.3 实际去重流程</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import javax.sql.DataSource;
-import java.sql.*;
-import java.math.BigInteger;
+</code></pre></div><h3>2.3 实际去重流程</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> javax.sql.DataSource;
+<span class="hljs-keyword">import</span> java.sql.*;
+<span class="hljs-keyword">import</span> java.math.BigInteger;
 
-public class DeduplicationService {
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">DeduplicationService</span> {
 
-    private final SimHashService simHashService;
-    private final DataSource dataSource;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> SimHashService simHashService;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> DataSource dataSource;
 
-    public DeduplicationService(SimHashService simHashService, DataSource dataSource) {
-        this.simHashService = simHashService;
-        this.dataSource = dataSource;
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">DeduplicationService</span><span class="hljs-params">(SimHashService simHashService, DataSource dataSource)</span> {
+        <span class="hljs-built_in">this</span>.simHashService = simHashService;
+        <span class="hljs-built_in">this</span>.dataSource = dataSource;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 新文档入库的完整去重流程
-     * @return 如果文档是重复的，返回已存在的document_id；否则返回null
-     */
-    public record DedupResult(boolean isDuplicate, String existingDocumentId) {}
+     * <span class="hljs-doctag">@return</span> 如果文档是重复的，返回已存在的document_id；否则返回null
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">DedupResult</span><span class="hljs-params">(<span class="hljs-type">boolean</span> isDuplicate, String existingDocumentId)</span> {}
 
-    public DedupResult checkAndDedup(String documentContent, String documentId) {
-        var simHash = simHashService.computeSimHash(documentContent);
+    <span class="hljs-keyword">public</span> DedupResult <span class="hljs-title function_">checkAndDedup</span><span class="hljs-params">(String documentContent, String documentId)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">simHash</span> <span class="hljs-operator">=</span> simHashService.computeSimHash(documentContent);
 
-        // 1. 精确哈希匹配（SHA-256）— O(1)
-        var contentHash = sha256(documentContent);
-        if (existsByContentHash(contentHash)) {
-            var existingId = getDocumentIdByHash(contentHash);
-            return new DedupResult(true, existingId);
+        <span class="hljs-comment">// 1. 精确哈希匹配（SHA-256）— O(1)</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">contentHash</span> <span class="hljs-operator">=</span> sha256(documentContent);
+        <span class="hljs-keyword">if</span> (existsByContentHash(contentHash)) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">existingId</span> <span class="hljs-operator">=</span> getDocumentIdByHash(contentHash);
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">DedupResult</span>(<span class="hljs-literal">true</span>, existingId);
         }
 
-        // 2. SimHash模糊匹配 — 查询分段索引
-        var segmentKeys = simHashService.computeSegmentKeys(simHash, 4);
-        var candidates = queryBySegmentKeys(segmentKeys);
+        <span class="hljs-comment">// 2. SimHash模糊匹配 — 查询分段索引</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">segmentKeys</span> <span class="hljs-operator">=</span> simHashService.computeSegmentKeys(simHash, <span class="hljs-number">4</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">candidates</span> <span class="hljs-operator">=</span> queryBySegmentKeys(segmentKeys);
 
-        for (var candidate : candidates) {
-            var distance = simHashService.hammingDistance(
-                simHash, new BigInteger(candidate.simHash, 16)
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> candidate : candidates) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">distance</span> <span class="hljs-operator">=</span> simHashService.hammingDistance(
+                simHash, <span class="hljs-keyword">new</span> <span class="hljs-title class_">BigInteger</span>(candidate.simHash, <span class="hljs-number">16</span>)
             );
-            if (distance &lt;= 3) {
-                return new DedupResult(true, candidate.documentId);
+            <span class="hljs-keyword">if</span> (distance &lt;= <span class="hljs-number">3</span>) {
+                <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">DedupResult</span>(<span class="hljs-literal">true</span>, candidate.documentId);
             }
         }
 
-        // 3. 不是重复文档，存储SimHash和分段索引
+        <span class="hljs-comment">// 3. 不是重复文档，存储SimHash和分段索引</span>
         storeSimHash(documentId, simHash, segmentKeys, contentHash);
-        return new DedupResult(false, null);
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">DedupResult</span>(<span class="hljs-literal">false</span>, <span class="hljs-literal">null</span>);
     }
 
-    private String sha256(String content) {
-        try {
-            var md = java.security.MessageDigest.getInstance(&quot;SHA-256&quot;);
-            var digest = md.digest(content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            return javax.xml.bind.DatatypeConverter.printHexBinary(digest);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">sha256</span><span class="hljs-params">(String content)</span> {
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-type">var</span> <span class="hljs-variable">md</span> <span class="hljs-operator">=</span> java.security.MessageDigest.getInstance(<span class="hljs-string">"SHA-256"</span>);
+            <span class="hljs-type">var</span> <span class="hljs-variable">digest</span> <span class="hljs-operator">=</span> md.digest(content.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            <span class="hljs-keyword">return</span> javax.xml.bind.DatatypeConverter.printHexBinary(digest);
+        } <span class="hljs-keyword">catch</span> (Exception e) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RuntimeException</span>(e);
         }
     }
 
-    private boolean existsByContentHash(String hash) {
-        try (var conn = dataSource.getConnection();
-             var stmt = conn.prepareStatement(
-                 &quot;SELECT 1 FROM document_fingerprints WHERE content_hash = ?&quot;)) {
-            stmt.setString(1, hash);
-            try (var rs = stmt.executeQuery()) {
-                return rs.next();
+    <span class="hljs-keyword">private</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">existsByContentHash</span><span class="hljs-params">(String hash)</span> {
+        <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">conn</span> <span class="hljs-operator">=</span> dataSource.getConnection();
+             <span class="hljs-type">var</span> <span class="hljs-variable">stmt</span> <span class="hljs-operator">=</span> conn.prepareStatement(
+                 <span class="hljs-string">"SELECT 1 FROM document_fingerprints WHERE content_hash = ?"</span>)) {
+            stmt.setString(<span class="hljs-number">1</span>, hash);
+            <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">rs</span> <span class="hljs-operator">=</span> stmt.executeQuery()) {
+                <span class="hljs-keyword">return</span> rs.next();
             }
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
+        } <span class="hljs-keyword">catch</span> (SQLException e) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RuntimeException</span>(e);
         }
     }
 
-    private String getDocumentIdByHash(String hash) {
-        try (var conn = dataSource.getConnection();
-             var stmt = conn.prepareStatement(
-                 &quot;SELECT document_id FROM document_fingerprints WHERE content_hash = ?&quot;)) {
-            stmt.setString(1, hash);
-            try (var rs = stmt.executeQuery()) {
-                return rs.next() ? rs.getString(&quot;document_id&quot;) : null;
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">getDocumentIdByHash</span><span class="hljs-params">(String hash)</span> {
+        <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">conn</span> <span class="hljs-operator">=</span> dataSource.getConnection();
+             <span class="hljs-type">var</span> <span class="hljs-variable">stmt</span> <span class="hljs-operator">=</span> conn.prepareStatement(
+                 <span class="hljs-string">"SELECT document_id FROM document_fingerprints WHERE content_hash = ?"</span>)) {
+            stmt.setString(<span class="hljs-number">1</span>, hash);
+            <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">rs</span> <span class="hljs-operator">=</span> stmt.executeQuery()) {
+                <span class="hljs-keyword">return</span> rs.next() ? rs.getString(<span class="hljs-string">"document_id"</span>) : <span class="hljs-literal">null</span>;
             }
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
+        } <span class="hljs-keyword">catch</span> (SQLException e) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RuntimeException</span>(e);
         }
     }
 
-    private record CandidateDoc(String documentId, String simHash) {}
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">CandidateDoc</span><span class="hljs-params">(String documentId, String simHash)</span> {}
 
-    private List&lt;CandidateDoc&gt; queryBySegmentKeys(List&lt;SimHashService.SegmentKey&gt; keys) {
-        var results = new ArrayList&lt;CandidateDoc&gt;();
-        try (var conn = dataSource.getConnection();
-             var stmt = conn.prepareStatement(
-                 &quot;SELECT DISTINCT d.document_id, d.simhash FROM document_fingerprints d &quot; +
-                 &quot;JOIN simhash_segments s ON d.document_id = s.document_id &quot; +
-                 &quot;WHERE s.segment_index = ? AND s.segment_value = ?&quot;)) {
+    <span class="hljs-keyword">private</span> List&lt;CandidateDoc&gt; <span class="hljs-title function_">queryBySegmentKeys</span><span class="hljs-params">(List&lt;SimHashService.SegmentKey&gt; keys)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">results</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;CandidateDoc&gt;();
+        <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">conn</span> <span class="hljs-operator">=</span> dataSource.getConnection();
+             <span class="hljs-type">var</span> <span class="hljs-variable">stmt</span> <span class="hljs-operator">=</span> conn.prepareStatement(
+                 <span class="hljs-string">"SELECT DISTINCT d.document_id, d.simhash FROM document_fingerprints d "</span> +
+                 <span class="hljs-string">"JOIN simhash_segments s ON d.document_id = s.document_id "</span> +
+                 <span class="hljs-string">"WHERE s.segment_index = ? AND s.segment_value = ?"</span>)) {
 
-            for (var key : keys) {
-                stmt.setInt(1, key.segmentIndex());
-                stmt.setInt(2, key.segmentValue());
-                try (var rs = stmt.executeQuery()) {
-                    while (rs.next()) {
-                        results.add(new CandidateDoc(
-                            rs.getString(&quot;document_id&quot;),
-                            rs.getString(&quot;simhash&quot;)
+            <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> key : keys) {
+                stmt.setInt(<span class="hljs-number">1</span>, key.segmentIndex());
+                stmt.setInt(<span class="hljs-number">2</span>, key.segmentValue());
+                <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">rs</span> <span class="hljs-operator">=</span> stmt.executeQuery()) {
+                    <span class="hljs-keyword">while</span> (rs.next()) {
+                        results.add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">CandidateDoc</span>(
+                            rs.getString(<span class="hljs-string">"document_id"</span>),
+                            rs.getString(<span class="hljs-string">"simhash"</span>)
                         ));
                     }
                 }
             }
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
+        } <span class="hljs-keyword">catch</span> (SQLException e) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RuntimeException</span>(e);
         }
-        return results;
+        <span class="hljs-keyword">return</span> results;
     }
 
-    private void storeSimHash(String documentId, BigInteger simHash,
-                               List&lt;SimHashService.SegmentKey&gt; segments, String contentHash) {
-        try (var conn = dataSource.getConnection()) {
-            conn.setAutoCommit(false);
-            try {
-                // 主表
-                try (var stmt = conn.prepareStatement(
-                    &quot;INSERT INTO document_fingerprints (document_id, simhash, content_hash) VALUES (?, ?, ?)&quot;)) {
-                    stmt.setString(1, documentId);
-                    stmt.setString(2, simHash.toString(16));
-                    stmt.setString(3, contentHash);
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">storeSimHash</span><span class="hljs-params">(String documentId, BigInteger simHash,
+                               List&lt;SimHashService.SegmentKey&gt; segments, String contentHash)</span> {
+        <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">conn</span> <span class="hljs-operator">=</span> dataSource.getConnection()) {
+            conn.setAutoCommit(<span class="hljs-literal">false</span>);
+            <span class="hljs-keyword">try</span> {
+                <span class="hljs-comment">// 主表</span>
+                <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">stmt</span> <span class="hljs-operator">=</span> conn.prepareStatement(
+                    <span class="hljs-string">"INSERT INTO document_fingerprints (document_id, simhash, content_hash) VALUES (?, ?, ?)"</span>)) {
+                    stmt.setString(<span class="hljs-number">1</span>, documentId);
+                    stmt.setString(<span class="hljs-number">2</span>, simHash.toString(<span class="hljs-number">16</span>));
+                    stmt.setString(<span class="hljs-number">3</span>, contentHash);
                     stmt.executeUpdate();
                 }
-                // 分段索引
-                try (var stmt = conn.prepareStatement(
-                    &quot;INSERT INTO simhash_segments (document_id, segment_index, segment_value) VALUES (?, ?, ?)&quot;)) {
-                    for (var seg : segments) {
-                        stmt.setString(1, documentId);
-                        stmt.setInt(2, seg.segmentIndex());
-                        stmt.setInt(3, seg.segmentValue());
+                <span class="hljs-comment">// 分段索引</span>
+                <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">stmt</span> <span class="hljs-operator">=</span> conn.prepareStatement(
+                    <span class="hljs-string">"INSERT INTO simhash_segments (document_id, segment_index, segment_value) VALUES (?, ?, ?)"</span>)) {
+                    <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> seg : segments) {
+                        stmt.setString(<span class="hljs-number">1</span>, documentId);
+                        stmt.setInt(<span class="hljs-number">2</span>, seg.segmentIndex());
+                        stmt.setInt(<span class="hljs-number">3</span>, seg.segmentValue());
                         stmt.addBatch();
                     }
                     stmt.executeBatch();
                 }
                 conn.commit();
-            } catch (SQLException e) {
+            } <span class="hljs-keyword">catch</span> (SQLException e) {
                 conn.rollback();
-                throw e;
+                <span class="hljs-keyword">throw</span> e;
             }
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
+        } <span class="hljs-keyword">catch</span> (SQLException e) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RuntimeException</span>(e);
         }
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>三、ACL权限继承</h2>
 <h3>3.1 文档到切片的权限传播</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">/**
  * ACL权限传播器：确保文档的访问控制被正确传递到所有切片
- */
-public class AclPropagator {
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">AclPropagator</span> {
 
-    private final DataSource dataSource;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> DataSource dataSource;
 
-    public AclPropagator(DataSource dataSource) {
-        this.dataSource = dataSource;
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">AclPropagator</span><span class="hljs-params">(DataSource dataSource)</span> {
+        <span class="hljs-built_in">this</span>.dataSource = dataSource;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 当文档权限变更时，同步更新所有关联切片
-     */
-    public void propagateDocumentAcl(String documentId) {
-        try (var conn = dataSource.getConnection();
-             var stmt = conn.prepareStatement(&quot;&quot;&quot;
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">propagateDocumentAcl</span><span class="hljs-params">(String documentId)</span> {
+        <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">conn</span> <span class="hljs-operator">=</span> dataSource.getConnection();
+             <span class="hljs-type">var</span> <span class="hljs-variable">stmt</span> <span class="hljs-operator">=</span> conn.prepareStatement(<span class="hljs-string">"""
                  UPDATE chunks
                  SET access_level = d.access_level, updated_at = now()
                  FROM documents d
                  WHERE chunks.document_id = d.document_id
                    AND chunks.document_id = ?::uuid
-                 &quot;&quot;&quot;)) {
-            stmt.setString(1, documentId);
-            var updated = stmt.executeUpdate();
-            // 记录审计日志
-            auditLog(documentId, &quot;ACL propagated to &quot; + updated + &quot; chunks&quot;);
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
+                 """</span>)) {
+            stmt.setString(<span class="hljs-number">1</span>, documentId);
+            <span class="hljs-type">var</span> <span class="hljs-variable">updated</span> <span class="hljs-operator">=</span> stmt.executeUpdate();
+            <span class="hljs-comment">// 记录审计日志</span>
+            auditLog(documentId, <span class="hljs-string">"ACL propagated to "</span> + updated + <span class="hljs-string">" chunks"</span>);
+        } <span class="hljs-keyword">catch</span> (SQLException e) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RuntimeException</span>(e);
         }
     }
 }
-</code></pre></div>
-<h3>3.2 检索时权限过滤</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+</code></pre></div><h3>3.2 检索时权限过滤</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">/**
  * 权限感知的向量检索 — 在SQL层面过滤无权访问的文档
- */
-public class AclAwareRetrievalService {
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">AclAwareRetrievalService</span> {
 
-    private final DataSource dataSource;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> DataSource dataSource;
 
-    /**
+    <span class="hljs-comment">/**
      * 带ACL过滤的向量相似度检索
-     * @param embedding 查询向量
-     * @param userAccessLevels 用户有权访问的access_level列表
-     * @param topK 返回结果数量
-     */
-    public record AclSearchResult(String chunkId, String content,
-                                   double similarity, String accessLevel) {}
+     * <span class="hljs-doctag">@param</span> embedding 查询向量
+     * <span class="hljs-doctag">@param</span> userAccessLevels 用户有权访问的access_level列表
+     * <span class="hljs-doctag">@param</span> topK 返回结果数量
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">AclSearchResult</span><span class="hljs-params">(String chunkId, String content,
+                                   <span class="hljs-type">double</span> similarity, String accessLevel)</span> {}
 
-    public List&lt;AclSearchResult&gt; searchWithAcl(
-            float[] embedding, List&lt;String&gt; userAccessLevels, int topK) {
+    <span class="hljs-keyword">public</span> List&lt;AclSearchResult&gt; <span class="hljs-title function_">searchWithAcl</span><span class="hljs-params">(
+            <span class="hljs-type">float</span>[] embedding, List&lt;String&gt; userAccessLevels, <span class="hljs-type">int</span> topK)</span> {
 
-        // 将access_level列表转为SQL IN子句参数
-        var placeholders = userAccessLevels.stream()
-            .map(l -&gt; &quot;?&quot;).collect(java.util.stream.Collectors.joining(&quot;,&quot;));
+        <span class="hljs-comment">// 将access_level列表转为SQL IN子句参数</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">placeholders</span> <span class="hljs-operator">=</span> userAccessLevels.stream()
+            .map(l -&gt; <span class="hljs-string">"?"</span>).collect(java.util.stream.Collectors.joining(<span class="hljs-string">","</span>));
 
-        var sql = &quot;&quot;&quot;
+        <span class="hljs-type">var</span> <span class="hljs-variable">sql</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
             SELECT c.chunk_id, c.content,
                    1 - (e.embedding &lt;=&gt; ?::vector) AS similarity,
                    c.access_level
             FROM chunk_embeddings e
             JOIN chunks c ON e.chunk_id = c.chunk_id
             WHERE c.access_level IN (%s)
-              AND c.status = &#39;active&#39;
+              AND c.status = 'active'
             ORDER BY e.embedding &lt;=&gt; ?::vector
             LIMIT ?
-            &quot;&quot;&quot;.formatted(placeholders);
+            """</span>.formatted(placeholders);
 
-        try (var conn = dataSource.getConnection();
-             var stmt = conn.prepareStatement(sql)) {
+        <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">conn</span> <span class="hljs-operator">=</span> dataSource.getConnection();
+             <span class="hljs-type">var</span> <span class="hljs-variable">stmt</span> <span class="hljs-operator">=</span> conn.prepareStatement(sql)) {
 
-            // 设置查询向量（第一个和倒数第二个参数）
-            var vectorStr = &quot;[&quot; + java.util.Arrays.stream(embedding)
-                .mapToObj(f -&gt; String.format(&quot;%.6f&quot;, f))
-                .collect(java.util.stream.Collectors.joining(&quot;,&quot;)) + &quot;]&quot;;
-            stmt.setString(1, vectorStr);
+            <span class="hljs-comment">// 设置查询向量（第一个和倒数第二个参数）</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">vectorStr</span> <span class="hljs-operator">=</span> <span class="hljs-string">"["</span> + java.util.Arrays.stream(embedding)
+                .mapToObj(f -&gt; String.format(<span class="hljs-string">"%.6f"</span>, f))
+                .collect(java.util.stream.Collectors.joining(<span class="hljs-string">","</span>)) + <span class="hljs-string">"]"</span>;
+            stmt.setString(<span class="hljs-number">1</span>, vectorStr);
 
-            // 设置access_level过滤值
-            int paramIndex = 2;
-            for (var level : userAccessLevels) {
+            <span class="hljs-comment">// 设置access_level过滤值</span>
+            <span class="hljs-type">int</span> <span class="hljs-variable">paramIndex</span> <span class="hljs-operator">=</span> <span class="hljs-number">2</span>;
+            <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> level : userAccessLevels) {
                 stmt.setString(paramIndex++, level);
             }
 
-            // 设置查询向量（用于排序）
+            <span class="hljs-comment">// 设置查询向量（用于排序）</span>
             stmt.setString(paramIndex++, vectorStr);
             stmt.setInt(paramIndex, topK);
 
-            var results = new ArrayList&lt;AclSearchResult&gt;();
-            try (var rs = stmt.executeQuery()) {
-                while (rs.next()) {
-                    results.add(new AclSearchResult(
-                        rs.getString(&quot;chunk_id&quot;),
-                        rs.getString(&quot;content&quot;),
-                        rs.getDouble(&quot;similarity&quot;),
-                        rs.getString(&quot;access_level&quot;)
+            <span class="hljs-type">var</span> <span class="hljs-variable">results</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;AclSearchResult&gt;();
+            <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">rs</span> <span class="hljs-operator">=</span> stmt.executeQuery()) {
+                <span class="hljs-keyword">while</span> (rs.next()) {
+                    results.add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">AclSearchResult</span>(
+                        rs.getString(<span class="hljs-string">"chunk_id"</span>),
+                        rs.getString(<span class="hljs-string">"content"</span>),
+                        rs.getDouble(<span class="hljs-string">"similarity"</span>),
+                        rs.getString(<span class="hljs-string">"access_level"</span>)
                     ));
                 }
             }
-            return results;
+            <span class="hljs-keyword">return</span> results;
 
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
+        } <span class="hljs-keyword">catch</span> (SQLException e) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RuntimeException</span>(e);
         }
     }
 }
-</code></pre></div>
-<h3>3.3 OPA (Open Policy Agent) 集成</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
+</code></pre></div><h3>3.3 OPA (Open Policy Agent) 集成</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> java.net.URI;
+<span class="hljs-keyword">import</span> java.net.http.HttpClient;
+<span class="hljs-keyword">import</span> java.net.http.HttpRequest;
+<span class="hljs-keyword">import</span> java.net.http.HttpResponse;
 
-/**
+<span class="hljs-comment">/**
  * OPA集成 — 将权限决策委托给OPA策略引擎
- */
-public class OpaPolicyService {
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">OpaPolicyService</span> {
 
-    private final HttpClient client = HttpClient.newHttpClient();
-    private final String opaUrl; // http://localhost:8181
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">HttpClient</span> <span class="hljs-variable">client</span> <span class="hljs-operator">=</span> HttpClient.newHttpClient();
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> String opaUrl; <span class="hljs-comment">// http://localhost:8181</span>
 
-    public OpaPolicyService(String opaUrl) {
-        this.opaUrl = opaUrl;
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">OpaPolicyService</span><span class="hljs-params">(String opaUrl)</span> {
+        <span class="hljs-built_in">this</span>.opaUrl = opaUrl;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 查询用户是否有权限访问指定文档
-     */
-    public boolean canAccess(String userId, String documentId, String action) {
-        var input = &quot;&quot;&quot;
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">canAccess</span><span class="hljs-params">(String userId, String documentId, String action)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">input</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
             {
-                &quot;input&quot;: {
-                    &quot;user_id&quot;: &quot;%s&quot;,
-                    &quot;document_id&quot;: &quot;%s&quot;,
-                    &quot;action&quot;: &quot;%s&quot;
+                "input": {
+                    "user_id": "%s",
+                    "document_id": "%s",
+                    "action": "%s"
                 }
             }
-            &quot;&quot;&quot;.formatted(userId, documentId, action);
+            """</span>.formatted(userId, documentId, action);
 
-        try {
-            var request = HttpRequest.newBuilder()
-                .uri(URI.create(opaUrl + &quot;/v1/data/rag/access/allow&quot;))
-                .header(&quot;Content-Type&quot;, &quot;application/json&quot;)
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-type">var</span> <span class="hljs-variable">request</span> <span class="hljs-operator">=</span> HttpRequest.newBuilder()
+                .uri(URI.create(opaUrl + <span class="hljs-string">"/v1/data/rag/access/allow"</span>))
+                .header(<span class="hljs-string">"Content-Type"</span>, <span class="hljs-string">"application/json"</span>)
                 .POST(HttpRequest.BodyPublishers.ofString(input))
                 .build();
 
-            var response = client.send(request, HttpResponse.BodyHandlers.ofString());
-            // OPA返回 {&quot;result&quot;: true/false}
-            var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            var root = mapper.readTree(response.body());
-            return root.path(&quot;result&quot;).asBoolean(false);
+            <span class="hljs-type">var</span> <span class="hljs-variable">response</span> <span class="hljs-operator">=</span> client.send(request, HttpResponse.BodyHandlers.ofString());
+            <span class="hljs-comment">// OPA返回 {"result": true/false}</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">mapper</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">com</span>.fasterxml.jackson.databind.ObjectMapper();
+            <span class="hljs-type">var</span> <span class="hljs-variable">root</span> <span class="hljs-operator">=</span> mapper.readTree(response.body());
+            <span class="hljs-keyword">return</span> root.path(<span class="hljs-string">"result"</span>).asBoolean(<span class="hljs-literal">false</span>);
 
-        } catch (Exception e) {
-            // 无法连接OPA时的默认策略：拒绝访问（安全优先）
-            return false;
+        } <span class="hljs-keyword">catch</span> (Exception e) {
+            <span class="hljs-comment">// 无法连接OPA时的默认策略：拒绝访问（安全优先）</span>
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
         }
     }
 }
-</code></pre></div>
-<p>OPA Rego策略示例（<code>rag_policy.rego</code>）：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">rego</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-rego">package rag.access
+</code></pre></div><p>OPA Rego策略示例（<code>rag_policy.rego</code>）：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">rego</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-rego"><span class="hljs-title">package</span> rag.access
 
-default allow = false
+<span class="hljs-keyword">default</span> allow = false
 
-# 内部文档：所有登录用户可读
-allow {
-    input.action == &quot;read&quot;
-    data.documents[input.document_id].access_level == &quot;internal&quot;
+<span class="hljs-meta"># 内部文档：所有登录用户可读</span>
+<span class="hljs-title">allow</span> {
+    input.action == <span class="hljs-string">"read"</span>
+    <span class="hljs-class"><span class="hljs-keyword">data</span>.documents[input.document_id].access_level == "internal"</span>
 }
 
-# 机密文档：同部门可读
-allow {
-    input.action == &quot;read&quot;
-    data.documents[input.document_id].access_level == &quot;confidential&quot;
-    data.users[input.user_id].department == data.documents[input.document_id].department
+<span class="hljs-meta"># 机密文档：同部门可读</span>
+<span class="hljs-title">allow</span> {
+    input.action == <span class="hljs-string">"read"</span>
+    <span class="hljs-class"><span class="hljs-keyword">data</span>.documents[input.document_id].access_level == "confidential"</span>
+    <span class="hljs-class"><span class="hljs-keyword">data</span>.users[input.user_id].department == <span class="hljs-keyword">data</span>.documents[input.document_id].department</span>
 }
 
-# 秘密文档：仅指定用户可读
-allow {
-    input.action == &quot;read&quot;
-    data.documents[input.document_id].access_level == &quot;secret&quot;
-    data.documents[input.document_id].authorized_users[_] == input.user_id
+<span class="hljs-meta"># 秘密文档：仅指定用户可读</span>
+<span class="hljs-title">allow</span> {
+    input.action == <span class="hljs-string">"read"</span>
+    <span class="hljs-class"><span class="hljs-keyword">data</span>.documents[input.document_id].access_level == "secret"</span>
+    <span class="hljs-class"><span class="hljs-keyword">data</span>.documents[input.document_id].authorized_users[_] == input.user_id</span>
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>四、PII识别与脱敏</h2>
 <h3>4.1 正则模式识别</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.util.ArrayList;
-import java.util.List;
-import java.util.regex.Pattern;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> java.util.ArrayList;
+<span class="hljs-keyword">import</span> java.util.List;
+<span class="hljs-keyword">import</span> java.util.regex.Pattern;
 
-public class PiiDetector {
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">PiiDetector</span> {
 
-    public record PiiMatch(String type, String value, int start, int end,
-                           String maskedValue, double confidence) {}
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">PiiMatch</span><span class="hljs-params">(String type, String value, <span class="hljs-type">int</span> start, <span class="hljs-type">int</span> end,
+                           String maskedValue, <span class="hljs-type">double</span> confidence)</span> {}
 
-    // PII正则模式库
-    private static final List&lt;record PiiPattern(String type, Pattern pattern, String maskPattern,
-                                                  double confidence)&gt; PATTERNS = List.of(
-        new PiiPattern(&quot;身份证&quot;, Pattern.compile(
-            &quot;[1-9]\\d{5}(19|20)\\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\\d|3[01])\\d{3}[\\dXx]&quot;),
-            &quot;**********%s****&quot;, 1.0),
-        new PiiPattern(&quot;手机号&quot;, Pattern.compile(
-            &quot;1[3-9]\\d{9}&quot;), &quot;*******%s&quot;, 0.95),
-        new PiiPattern(&quot;银行卡&quot;, Pattern.compile(
-            &quot;\\d{16,19}&quot;), &quot;****%s&quot;, 0.7),  // 低置信度：需要与上下文验证
-        new PiiPattern(&quot;邮箱&quot;, Pattern.compile(
-            &quot;[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}&quot;),
-            &quot;***@%s&quot;, 0.95),
-        new PiiPattern(&quot;IP地址&quot;, Pattern.compile(
-            &quot;\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b&quot;),
-            &quot;***.***.***.***&quot;, 0.8),
-        new PiiPattern(&quot;车牌号&quot;, Pattern.compile(
-            &quot;[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤川青藏琼][A-Z][A-HJ-NP-Z0-9]{4,5}[A-HJ-NP-Z0-9挂学警港澳]&quot;),
-            &quot;**%s&quot;, 0.9)
+    <span class="hljs-comment">// PII正则模式库</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> List&lt;<span class="hljs-keyword">record</span> <span class="hljs-title class_">PiiPattern</span><span class="hljs-params">(String type, Pattern pattern, String maskPattern,
+                                                  <span class="hljs-type">double</span> confidence)</span>&gt; PATTERNS = List.of(
+        <span class="hljs-keyword">new</span> <span class="hljs-title class_">PiiPattern</span>(<span class="hljs-string">"身份证"</span>, Pattern.compile(
+            <span class="hljs-string">"[1-9]\\d{5}(19|20)\\d{2}(0[1-9]|1[0-2])(0[1-9]|[12]\\d|3[01])\\d{3}[\\dXx]"</span>),
+            <span class="hljs-string">"**********%s****"</span>, <span class="hljs-number">1.0</span>),
+        <span class="hljs-keyword">new</span> <span class="hljs-title class_">PiiPattern</span>(<span class="hljs-string">"手机号"</span>, Pattern.compile(
+            <span class="hljs-string">"1[3-9]\\d{9}"</span>), <span class="hljs-string">"*******%s"</span>, <span class="hljs-number">0.95</span>),
+        <span class="hljs-keyword">new</span> <span class="hljs-title class_">PiiPattern</span>(<span class="hljs-string">"银行卡"</span>, Pattern.compile(
+            <span class="hljs-string">"\\d{16,19}"</span>), <span class="hljs-string">"****%s"</span>, <span class="hljs-number">0.7</span>),  <span class="hljs-comment">// 低置信度：需要与上下文验证</span>
+        <span class="hljs-keyword">new</span> <span class="hljs-title class_">PiiPattern</span>(<span class="hljs-string">"邮箱"</span>, Pattern.compile(
+            <span class="hljs-string">"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}"</span>),
+            <span class="hljs-string">"***@%s"</span>, <span class="hljs-number">0.95</span>),
+        <span class="hljs-keyword">new</span> <span class="hljs-title class_">PiiPattern</span>(<span class="hljs-string">"IP地址"</span>, Pattern.compile(
+            <span class="hljs-string">"\\b(?:\\d{1,3}\\.){3}\\d{1,3}\\b"</span>),
+            <span class="hljs-string">"***.***.***.***"</span>, <span class="hljs-number">0.8</span>),
+        <span class="hljs-keyword">new</span> <span class="hljs-title class_">PiiPattern</span>(<span class="hljs-string">"车牌号"</span>, Pattern.compile(
+            <span class="hljs-string">"[京津沪渝冀豫云辽黑湘皖鲁新苏浙赣鄂桂甘晋蒙陕吉闽贵粤川青藏琼][A-Z][A-HJ-NP-Z0-9]{4,5}[A-HJ-NP-Z0-9挂学警港澳]"</span>),
+            <span class="hljs-string">"**%s"</span>, <span class="hljs-number">0.9</span>)
     );
 
-    /**
+    <span class="hljs-comment">/**
      * 扫描文本中的所有PII
-     */
-    public List&lt;PiiMatch&gt; detect(String text) {
-        var matches = new ArrayList&lt;PiiMatch&gt;();
+     */</span>
+    <span class="hljs-keyword">public</span> List&lt;PiiMatch&gt; <span class="hljs-title function_">detect</span><span class="hljs-params">(String text)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">matches</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;PiiMatch&gt;();
 
-        for (var pp : PATTERNS) {
-            var matcher = pp.pattern().matcher(text);
-            while (matcher.find()) {
-                var original = matcher.group();
-                var masked = switch (pp.type()) {
-                    case &quot;身份证&quot; -&gt; maskIdCard(original);
-                    case &quot;手机号&quot; -&gt; maskPhone(original);
-                    case &quot;银行卡&quot; -&gt; maskBankCard(original);
-                    case &quot;邮箱&quot; -&gt; maskEmail(original);
-                    case &quot;IP地址&quot; -&gt; &quot;***.***.***.***&quot;;
-                    default -&gt; &quot;***&quot;;
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> pp : PATTERNS) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">matcher</span> <span class="hljs-operator">=</span> pp.pattern().matcher(text);
+            <span class="hljs-keyword">while</span> (matcher.find()) {
+                <span class="hljs-type">var</span> <span class="hljs-variable">original</span> <span class="hljs-operator">=</span> matcher.group();
+                <span class="hljs-type">var</span> <span class="hljs-variable">masked</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">switch</span> (pp.type()) {
+                    <span class="hljs-keyword">case</span> <span class="hljs-string">"身份证"</span> -&gt; maskIdCard(original);
+                    <span class="hljs-keyword">case</span> <span class="hljs-string">"手机号"</span> -&gt; maskPhone(original);
+                    <span class="hljs-keyword">case</span> <span class="hljs-string">"银行卡"</span> -&gt; maskBankCard(original);
+                    <span class="hljs-keyword">case</span> <span class="hljs-string">"邮箱"</span> -&gt; maskEmail(original);
+                    <span class="hljs-keyword">case</span> <span class="hljs-string">"IP地址"</span> -&gt; <span class="hljs-string">"***.***.***.***"</span>;
+                    <span class="hljs-keyword">default</span> -&gt; <span class="hljs-string">"***"</span>;
                 };
-                matches.add(new PiiMatch(
+                matches.add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">PiiMatch</span>(
                     pp.type(), original, matcher.start(), matcher.end(), masked, pp.confidence()
                 ));
             }
         }
 
-        // 合并重叠匹配（取更具体的）
-        return mergeOverlapping(matches);
+        <span class="hljs-comment">// 合并重叠匹配（取更具体的）</span>
+        <span class="hljs-keyword">return</span> mergeOverlapping(matches);
     }
 
-    private String maskIdCard(String id) {
-        return id.substring(0, 6) + &quot;********&quot; + id.substring(14);
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">maskIdCard</span><span class="hljs-params">(String id)</span> {
+        <span class="hljs-keyword">return</span> id.substring(<span class="hljs-number">0</span>, <span class="hljs-number">6</span>) + <span class="hljs-string">"********"</span> + id.substring(<span class="hljs-number">14</span>);
     }
 
-    private String maskPhone(String phone) {
-        return phone.substring(0, 3) + &quot;****&quot; + phone.substring(7);
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">maskPhone</span><span class="hljs-params">(String phone)</span> {
+        <span class="hljs-keyword">return</span> phone.substring(<span class="hljs-number">0</span>, <span class="hljs-number">3</span>) + <span class="hljs-string">"****"</span> + phone.substring(<span class="hljs-number">7</span>);
     }
 
-    private String maskBankCard(String card) {
-        return &quot;****&quot; + card.substring(card.length() - 4);
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">maskBankCard</span><span class="hljs-params">(String card)</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-string">"****"</span> + card.substring(card.length() - <span class="hljs-number">4</span>);
     }
 
-    private String maskEmail(String email) {
-        int atIdx = email.indexOf(&#39;@&#39;);
-        return email.charAt(0) + &quot;***&quot; + email.substring(atIdx);
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">maskEmail</span><span class="hljs-params">(String email)</span> {
+        <span class="hljs-type">int</span> <span class="hljs-variable">atIdx</span> <span class="hljs-operator">=</span> email.indexOf(<span class="hljs-string">'@'</span>);
+        <span class="hljs-keyword">return</span> email.charAt(<span class="hljs-number">0</span>) + <span class="hljs-string">"***"</span> + email.substring(atIdx);
     }
 
-    private List&lt;PiiMatch&gt; mergeOverlapping(List&lt;PiiMatch&gt; matches) {
-        // 按start排序，去重叠
+    <span class="hljs-keyword">private</span> List&lt;PiiMatch&gt; <span class="hljs-title function_">mergeOverlapping</span><span class="hljs-params">(List&lt;PiiMatch&gt; matches)</span> {
+        <span class="hljs-comment">// 按start排序，去重叠</span>
         matches.sort((a, b) -&gt; Integer.compare(a.start(), b.start()));
-        var merged = new ArrayList&lt;PiiMatch&gt;();
-        for (var m : matches) {
-            if (merged.isEmpty() || m.start() &gt;= merged.getLast().end()) {
+        <span class="hljs-type">var</span> <span class="hljs-variable">merged</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;PiiMatch&gt;();
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> m : matches) {
+            <span class="hljs-keyword">if</span> (merged.isEmpty() || m.start() &gt;= merged.getLast().end()) {
                 merged.add(m);
-            } else if (m.confidence() &gt; merged.getLast().confidence()) {
-                merged.set(merged.size() - 1, m); // 替换为更高置信度的
+            } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (m.confidence() &gt; merged.getLast().confidence()) {
+                merged.set(merged.size() - <span class="hljs-number">1</span>, m); <span class="hljs-comment">// 替换为更高置信度的</span>
             }
         }
-        return merged;
+        <span class="hljs-keyword">return</span> merged;
     }
 }
-</code></pre></div>
-<h3>4.2 NER模型识别</h3>
+</code></pre></div><h3>4.2 NER模型识别</h3>
 <p>对于正则无法覆盖的PII（姓名、组织机构、地址），使用NER模型：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">/**
  * 基于NER的PII识别 — 调用本地或远程NER模型
- */
-public class NerPiiDetector {
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">NerPiiDetector</span> {
 
-    private final PiiDetector regexDetector = new PiiDetector();
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">PiiDetector</span> <span class="hljs-variable">regexDetector</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">PiiDetector</span>();
 
-    public interface NerService {
-        record Entity(String text, String type, double confidence, int start, int end) {}
-        List&lt;Entity&gt; extractEntities(String text);
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">NerService</span> {
+        <span class="hljs-keyword">record</span> <span class="hljs-title class_">Entity</span><span class="hljs-params">(String text, String type, <span class="hljs-type">double</span> confidence, <span class="hljs-type">int</span> start, <span class="hljs-type">int</span> end)</span> {}
+        List&lt;Entity&gt; <span class="hljs-title function_">extractEntities</span><span class="hljs-params">(String text)</span>;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 脱敏策略枚举
-     */
-    public enum MaskingStrategy {
-        REPLACE,        // 替换为 ***
-        GENERALIZE,     // 泛化（北京→华北）
-        PSEUDONYMIZE,   // 假名化（张三→用户A）
-        K_ANONYMIZE     // k-匿名化
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">enum</span> <span class="hljs-title class_">MaskingStrategy</span> {
+        REPLACE,        <span class="hljs-comment">// 替换为 ***</span>
+        GENERALIZE,     <span class="hljs-comment">// 泛化（北京→华北）</span>
+        PSEUDONYMIZE,   <span class="hljs-comment">// 假名化（张三→用户A）</span>
+        K_ANONYMIZE     <span class="hljs-comment">// k-匿名化</span>
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 完整的PII检测与脱敏
-     */
-    public String mask(String text, MaskingStrategy strategy) {
-        var masked = text;
+     */</span>
+    <span class="hljs-keyword">public</span> String <span class="hljs-title function_">mask</span><span class="hljs-params">(String text, MaskingStrategy strategy)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">masked</span> <span class="hljs-operator">=</span> text;
 
-        // 1. 正则模式脱敏（高置信度，直接替换）
-        var regexMatches = regexDetector.detect(text);
-        for (int i = regexMatches.size() - 1; i &gt;= 0; i--) {
-            var m = regexMatches.get(i);
-            masked = masked.substring(0, m.start()) + m.maskedValue() + masked.substring(m.end());
+        <span class="hljs-comment">// 1. 正则模式脱敏（高置信度，直接替换）</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">regexMatches</span> <span class="hljs-operator">=</span> regexDetector.detect(text);
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> regexMatches.size() - <span class="hljs-number">1</span>; i &gt;= <span class="hljs-number">0</span>; i--) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">m</span> <span class="hljs-operator">=</span> regexMatches.get(i);
+            masked = masked.substring(<span class="hljs-number">0</span>, m.start()) + m.maskedValue() + masked.substring(m.end());
         }
 
-        // 2. NER脱敏（人名/地名/机构名）
-        // 根据策略选择脱敏方式
-        // 实现略...
+        <span class="hljs-comment">// 2. NER脱敏（人名/地名/机构名）</span>
+        <span class="hljs-comment">// 根据策略选择脱敏方式</span>
+        <span class="hljs-comment">// 实现略...</span>
 
-        return masked;
+        <span class="hljs-keyword">return</span> masked;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 泛化策略 — 将精确值替换为更宽泛的分类
-     */
-    public String generalize(String text) {
-        return text
-            .replaceAll(&quot;北京市|天津市|上海市|重庆市|河北省|山西省&quot;, &quot;华北地区&quot;)
-            .replaceAll(&quot;广东省|广西|海南省|福建省&quot;, &quot;华南地区&quot;)
-            .replaceAll(&quot;江苏省|浙江省|安徽省|江西省|山东省&quot;, &quot;华东地区&quot;)
-            // ... 更多泛化规则
+     */</span>
+    <span class="hljs-keyword">public</span> String <span class="hljs-title function_">generalize</span><span class="hljs-params">(String text)</span> {
+        <span class="hljs-keyword">return</span> text
+            .replaceAll(<span class="hljs-string">"北京市|天津市|上海市|重庆市|河北省|山西省"</span>, <span class="hljs-string">"华北地区"</span>)
+            .replaceAll(<span class="hljs-string">"广东省|广西|海南省|福建省"</span>, <span class="hljs-string">"华南地区"</span>)
+            .replaceAll(<span class="hljs-string">"江苏省|浙江省|安徽省|江西省|山东省"</span>, <span class="hljs-string">"华东地区"</span>)
+            <span class="hljs-comment">// ... 更多泛化规则</span>
             ;
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>五、删除传播 (Cascade Delete)</h2>
 <h3>5.1 同步级联删除</h3>
 <p>PostgreSQL的<code>ON DELETE CASCADE</code>处理数据库层面的级联删除。对于向量索引（pgvector），需要额外处理：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class CascadeDeleteService {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">CascadeDeleteService</span> {
 
-    private final DataSource dataSource;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> DataSource dataSource;
 
-    /**
+    <span class="hljs-comment">/**
      * 删除文档及其所有切片、Embedding、相关索引
-     */
-    public void deleteDocument(String documentId) {
-        try (var conn = dataSource.getConnection()) {
-            conn.setAutoCommit(false);
-            try {
-                // 1. 删除向量索引（先删子表）
-                try (var stmt = conn.prepareStatement(
-                    &quot;DELETE FROM chunk_embeddings WHERE chunk_id IN &quot; +
-                    &quot;(SELECT chunk_id FROM chunks WHERE document_id = ?::uuid)&quot;)) {
-                    stmt.setString(1, documentId);
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">deleteDocument</span><span class="hljs-params">(String documentId)</span> {
+        <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">conn</span> <span class="hljs-operator">=</span> dataSource.getConnection()) {
+            conn.setAutoCommit(<span class="hljs-literal">false</span>);
+            <span class="hljs-keyword">try</span> {
+                <span class="hljs-comment">// 1. 删除向量索引（先删子表）</span>
+                <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">stmt</span> <span class="hljs-operator">=</span> conn.prepareStatement(
+                    <span class="hljs-string">"DELETE FROM chunk_embeddings WHERE chunk_id IN "</span> +
+                    <span class="hljs-string">"(SELECT chunk_id FROM chunks WHERE document_id = ?::uuid)"</span>)) {
+                    stmt.setString(<span class="hljs-number">1</span>, documentId);
                     stmt.executeUpdate();
                 }
 
-                // 2. 删除切片
-                try (var stmt = conn.prepareStatement(
-                    &quot;DELETE FROM chunks WHERE document_id = ?::uuid&quot;)) {
-                    stmt.setString(1, documentId);
+                <span class="hljs-comment">// 2. 删除切片</span>
+                <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">stmt</span> <span class="hljs-operator">=</span> conn.prepareStatement(
+                    <span class="hljs-string">"DELETE FROM chunks WHERE document_id = ?::uuid"</span>)) {
+                    stmt.setString(<span class="hljs-number">1</span>, documentId);
                     stmt.executeUpdate();
                 }
 
-                // 3. 删除文档
-                try (var stmt = conn.prepareStatement(
-                    &quot;DELETE FROM documents WHERE document_id = ?::uuid&quot;)) {
-                    stmt.setString(1, documentId);
+                <span class="hljs-comment">// 3. 删除文档</span>
+                <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">stmt</span> <span class="hljs-operator">=</span> conn.prepareStatement(
+                    <span class="hljs-string">"DELETE FROM documents WHERE document_id = ?::uuid"</span>)) {
+                    stmt.setString(<span class="hljs-number">1</span>, documentId);
                     stmt.executeUpdate();
                 }
 
                 conn.commit();
-            } catch (SQLException e) {
+            } <span class="hljs-keyword">catch</span> (SQLException e) {
                 conn.rollback();
-                throw e;
+                <span class="hljs-keyword">throw</span> e;
             }
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
+        } <span class="hljs-keyword">catch</span> (SQLException e) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RuntimeException</span>(e);
         }
     }
 }
-</code></pre></div>
-<h3>5.2 异步事件驱动删除</h3>
+</code></pre></div><h3>5.2 异步事件驱动删除</h3>
 <p>在大规模系统中，同步删除可能阻塞。使用Kafka消息异步处理：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.kafka.core.KafkaTemplate;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> org.springframework.kafka.core.KafkaTemplate;
 
-public class AsyncCascadeDeleteService {
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">AsyncCascadeDeleteService</span> {
 
-    private final KafkaTemplate&lt;String, String&gt; kafkaTemplate;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> KafkaTemplate&lt;String, String&gt; kafkaTemplate;
 
-    public record DocumentDeleteEvent(String documentId, String tenantId,
-                                       java.time.Instant timestamp, String requestId) {}
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">DocumentDeleteEvent</span><span class="hljs-params">(String documentId, String tenantId,
+                                       java.time.Instant timestamp, String requestId)</span> {}
 
-    public void requestDelete(String documentId, String tenantId) {
-        // 1. 标记文档状态为 deleted（软删除，立即可见）
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">requestDelete</span><span class="hljs-params">(String documentId, String tenantId)</span> {
+        <span class="hljs-comment">// 1. 标记文档状态为 deleted（软删除，立即可见）</span>
         markAsDeleted(documentId);
 
-        // 2. 发送删除事件
-        var event = new DocumentDeleteEvent(
+        <span class="hljs-comment">// 2. 发送删除事件</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">event</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">DocumentDeleteEvent</span>(
             documentId, tenantId, java.time.Instant.now(), java.util.UUID.randomUUID().toString()
         );
-        kafkaTemplate.send(&quot;document-delete-events&quot;, documentId, toJson(event));
+        kafkaTemplate.send(<span class="hljs-string">"document-delete-events"</span>, documentId, toJson(event));
     }
 
-    @org.springframework.kafka.annotation.KafkaListener(topics = &quot;document-delete-events&quot;)
-    public void handleDeleteEvent(String eventJson) {
-        var event = fromJson(eventJson, DocumentDeleteEvent.class);
-        // 3. 异步执行级联删除
-        // - 删除向量索引（可能很慢）
-        // - 删除Elasticsearch索引文档
-        // - 删除对象存储中的源文件
-        // - 清理缓存
+    <span class="hljs-meta">@org</span>.springframework.kafka.annotation.KafkaListener(topics = <span class="hljs-string">"document-delete-events"</span>)
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">handleDeleteEvent</span><span class="hljs-params">(String eventJson)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">event</span> <span class="hljs-operator">=</span> fromJson(eventJson, DocumentDeleteEvent.class);
+        <span class="hljs-comment">// 3. 异步执行级联删除</span>
+        <span class="hljs-comment">// - 删除向量索引（可能很慢）</span>
+        <span class="hljs-comment">// - 删除Elasticsearch索引文档</span>
+        <span class="hljs-comment">// - 删除对象存储中的源文件</span>
+        <span class="hljs-comment">// - 清理缓存</span>
         deleteVectorIndex(event.documentId());
         deleteFromElasticsearch(event.documentId());
         deleteSourceFile(event.documentId());
     }
 
-    private String toJson(Object obj) {
-        try {
-            return new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(obj);
-        } catch (Exception e) { throw new RuntimeException(e); }
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">toJson</span><span class="hljs-params">(Object obj)</span> {
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">com</span>.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(obj);
+        } <span class="hljs-keyword">catch</span> (Exception e) { <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RuntimeException</span>(e); }
     }
 
-    private &lt;T&gt; T fromJson(String json, Class&lt;T&gt; clazz) {
-        try {
-            return new com.fasterxml.jackson.databind.ObjectMapper().readValue(json, clazz);
-        } catch (Exception e) { throw new RuntimeException(e); }
+    <span class="hljs-keyword">private</span> &lt;T&gt; T <span class="hljs-title function_">fromJson</span><span class="hljs-params">(String json, Class&lt;T&gt; clazz)</span> {
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">com</span>.fasterxml.jackson.databind.ObjectMapper().readValue(json, clazz);
+        } <span class="hljs-keyword">catch</span> (Exception e) { <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RuntimeException</span>(e); }
     }
 
-    private void markAsDeleted(String docId) { /* UPDATE documents SET status=&#39;deleted&#39; */ }
-    private void deleteVectorIndex(String docId) { /* pgvector清理 */ }
-    private void deleteFromElasticsearch(String docId) { /* ES文档删除 */ }
-    private void deleteSourceFile(String docId) { /* S3/MinIO文件删除 */ }
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">markAsDeleted</span><span class="hljs-params">(String docId)</span> { <span class="hljs-comment">/* UPDATE documents SET status='deleted' */</span> }
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">deleteVectorIndex</span><span class="hljs-params">(String docId)</span> { <span class="hljs-comment">/* pgvector清理 */</span> }
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">deleteFromElasticsearch</span><span class="hljs-params">(String docId)</span> { <span class="hljs-comment">/* ES文档删除 */</span> }
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">deleteSourceFile</span><span class="hljs-params">(String docId)</span> { <span class="hljs-comment">/* S3/MinIO文件删除 */</span> }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>六、版本管理</h2>
 <p>文档更新时的完整流程：</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>旧文档 → 标记旧切片为outdated → 重新解析 → 重新切片 → 重新Embedding
      → 新向量索引 → 验证通过 → 删除旧向量索引 → 归档旧切片
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class VersionManagementService {
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">VersionManagementService</span> {
 
-    private final DataSource dataSource;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> DataSource dataSource;
 
-    /**
+    <span class="hljs-comment">/**
      * 文档版本更新
-     */
-    public void updateDocument(String documentId, String newContent) {
-        try (var conn = dataSource.getConnection()) {
-            conn.setAutoCommit(false);
-            try {
-                // 1. 旧切片标记为outdated（保留用于回滚）
-                try (var stmt = conn.prepareStatement(
-                    &quot;UPDATE chunks SET status = &#39;outdated&#39;, updated_at = now() &quot; +
-                    &quot;WHERE document_id = ?::uuid AND status = &#39;active&#39;&quot;)) {
-                    stmt.setString(1, documentId);
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">updateDocument</span><span class="hljs-params">(String documentId, String newContent)</span> {
+        <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">conn</span> <span class="hljs-operator">=</span> dataSource.getConnection()) {
+            conn.setAutoCommit(<span class="hljs-literal">false</span>);
+            <span class="hljs-keyword">try</span> {
+                <span class="hljs-comment">// 1. 旧切片标记为outdated（保留用于回滚）</span>
+                <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">stmt</span> <span class="hljs-operator">=</span> conn.prepareStatement(
+                    <span class="hljs-string">"UPDATE chunks SET status = 'outdated', updated_at = now() "</span> +
+                    <span class="hljs-string">"WHERE document_id = ?::uuid AND status = 'active'"</span>)) {
+                    stmt.setString(<span class="hljs-number">1</span>, documentId);
                     stmt.executeUpdate();
                 }
 
-                // 2. 文档版本递增
-                try (var stmt = conn.prepareStatement(
-                    &quot;UPDATE documents SET version = version + 1, updated_at = now() &quot; +
-                    &quot;WHERE document_id = ?::uuid&quot;)) {
-                    stmt.setString(1, documentId);
+                <span class="hljs-comment">// 2. 文档版本递增</span>
+                <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">stmt</span> <span class="hljs-operator">=</span> conn.prepareStatement(
+                    <span class="hljs-string">"UPDATE documents SET version = version + 1, updated_at = now() "</span> +
+                    <span class="hljs-string">"WHERE document_id = ?::uuid"</span>)) {
+                    stmt.setString(<span class="hljs-number">1</span>, documentId);
                     stmt.executeUpdate();
                 }
 
-                // 3. 创建新切片（使用切片服务）
-                // 4. 对新切片做Embedding
-                // 5. 验证新索引可用
-                // 6. 清理旧向量索引
-                // 7. 归档旧切片
+                <span class="hljs-comment">// 3. 创建新切片（使用切片服务）</span>
+                <span class="hljs-comment">// 4. 对新切片做Embedding</span>
+                <span class="hljs-comment">// 5. 验证新索引可用</span>
+                <span class="hljs-comment">// 6. 清理旧向量索引</span>
+                <span class="hljs-comment">// 7. 归档旧切片</span>
 
                 conn.commit();
-            } catch (Exception e) {
+            } <span class="hljs-keyword">catch</span> (Exception e) {
                 conn.rollback();
-                throw e;
+                <span class="hljs-keyword">throw</span> e;
             }
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
+        } <span class="hljs-keyword">catch</span> (SQLException e) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RuntimeException</span>(e);
         }
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>七、增量更新：CDC (Change Data Capture)</h2>
 <p>使用Debezium监听数据库变更，触发解析-切片-索引管道：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.stereotype.Service;
-import org.springframework.context.event.EventListener;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> org.springframework.stereotype.Service;
+<span class="hljs-keyword">import</span> org.springframework.context.event.EventListener;
 
-@Service
-public class CdcChangeHandler {
+<span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">CdcChangeHandler</span> {
 
-    private final DocumentParserService parserService;
-    private final ChunkingService chunkingService;
-    private final EmbeddingService embeddingService;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> DocumentParserService parserService;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> ChunkingService chunkingService;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> EmbeddingService embeddingService;
 
-    /**
+    <span class="hljs-comment">/**
      * 监听数据库变更事件（由Debezium通过Kafka推送）
-     */
-    public record CdcEvent(
-        String operation,    // &quot;c&quot;(create), &quot;u&quot;(update), &quot;d&quot;(delete), &quot;r&quot;(read/snapshot)
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">CdcEvent</span><span class="hljs-params">(
+        String operation,    // "c"(create)</span>, <span class="hljs-string">"u"</span>(update), <span class="hljs-string">"d"</span>(delete), <span class="hljs-string">"r"</span>(read/snapshot)
         String table,
         String documentId,
         java.util.Map&lt;String, Object&gt; before,
         java.util.Map&lt;String, Object&gt; after,
-        long timestamp
+        <span class="hljs-type">long</span> timestamp
     ) {}
 
-    public void handleCdcEvent(CdcEvent event) {
-        switch (event.operation()) {
-            case &quot;c&quot; -&gt; {
-                // 新文档：完整管道
-                var pipeline = new DocumentPipeline(
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">handleCdcEvent</span><span class="hljs-params">(CdcEvent event)</span> {
+        <span class="hljs-keyword">switch</span> (event.operation()) {
+            <span class="hljs-keyword">case</span> <span class="hljs-string">"c"</span> -&gt; {
+                <span class="hljs-comment">// 新文档：完整管道</span>
+                <span class="hljs-type">var</span> <span class="hljs-variable">pipeline</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">DocumentPipeline</span>(
                     parserService, chunkingService, embeddingService
                 );
                 pipeline.process(event.documentId());
             }
-            case &quot;u&quot; -&gt; {
-                // 更新文档：只处理变化的字段
-                if (contentChanged(event.before(), event.after())) {
-                    var versionService = new VersionManagementService(null);
-                    // versionService.updateDocument(...);
+            <span class="hljs-keyword">case</span> <span class="hljs-string">"u"</span> -&gt; {
+                <span class="hljs-comment">// 更新文档：只处理变化的字段</span>
+                <span class="hljs-keyword">if</span> (contentChanged(event.before(), event.after())) {
+                    <span class="hljs-type">var</span> <span class="hljs-variable">versionService</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">VersionManagementService</span>(<span class="hljs-literal">null</span>);
+                    <span class="hljs-comment">// versionService.updateDocument(...);</span>
                 }
-                if (aclChanged(event.before(), event.after())) {
-                    var aclPropagator = new AclPropagator(null);
+                <span class="hljs-keyword">if</span> (aclChanged(event.before(), event.after())) {
+                    <span class="hljs-type">var</span> <span class="hljs-variable">aclPropagator</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">AclPropagator</span>(<span class="hljs-literal">null</span>);
                     aclPropagator.propagateDocumentAcl(event.documentId());
                 }
             }
-            case &quot;d&quot; -&gt; {
-                // 删除文档：级联清理
-                var deleteService = new CascadeDeleteService(null);
+            <span class="hljs-keyword">case</span> <span class="hljs-string">"d"</span> -&gt; {
+                <span class="hljs-comment">// 删除文档：级联清理</span>
+                <span class="hljs-type">var</span> <span class="hljs-variable">deleteService</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">CascadeDeleteService</span>(<span class="hljs-literal">null</span>);
                 deleteService.deleteDocument(event.documentId());
             }
         }
     }
 
-    private boolean contentChanged(java.util.Map&lt;String, Object&gt; before,
-                                    java.util.Map&lt;String, Object&gt; after) {
-        return !java.util.Objects.equals(
-            before.get(&quot;content_hash&quot;), after.get(&quot;content_hash&quot;)
+    <span class="hljs-keyword">private</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">contentChanged</span><span class="hljs-params">(java.util.Map&lt;String, Object&gt; before,
+                                    java.util.Map&lt;String, Object&gt; after)</span> {
+        <span class="hljs-keyword">return</span> !java.util.Objects.equals(
+            before.get(<span class="hljs-string">"content_hash"</span>), after.get(<span class="hljs-string">"content_hash"</span>)
         );
     }
 
-    private boolean aclChanged(java.util.Map&lt;String, Object&gt; before,
-                                java.util.Map&lt;String, Object&gt; after) {
-        return !java.util.Objects.equals(
-            before.get(&quot;access_level&quot;), after.get(&quot;access_level&quot;)
+    <span class="hljs-keyword">private</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">aclChanged</span><span class="hljs-params">(java.util.Map&lt;String, Object&gt; before,
+                                java.util.Map&lt;String, Object&gt; after)</span> {
+        <span class="hljs-keyword">return</span> !java.util.Objects.equals(
+            before.get(<span class="hljs-string">"access_level"</span>), after.get(<span class="hljs-string">"access_level"</span>)
         );
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>八、多租户数据隔离</h2>
 <h3>三种隔离策略对比</h3>
 <table>
@@ -1217,84 +1201,82 @@ public class CdcChangeHandler {
 </tr>
 </tbody></table>
 <h3>PostgreSQL行级安全实现</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- 启用行级安全
-ALTER TABLE documents ENABLE ROW LEVEL SECURITY;
-ALTER TABLE chunks ENABLE ROW LEVEL SECURITY;
-ALTER TABLE chunk_embeddings ENABLE ROW LEVEL SECURITY;
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-sql"><span class="hljs-comment">-- 启用行级安全</span>
+<span class="hljs-keyword">ALTER TABLE</span> documents ENABLE <span class="hljs-type">ROW</span> LEVEL SECURITY;
+<span class="hljs-keyword">ALTER TABLE</span> chunks ENABLE <span class="hljs-type">ROW</span> LEVEL SECURITY;
+<span class="hljs-keyword">ALTER TABLE</span> chunk_embeddings ENABLE <span class="hljs-type">ROW</span> LEVEL SECURITY;
 
--- 策略：用户只能访问其所属租户的数据
-CREATE POLICY tenant_isolation_documents ON documents
-    FOR ALL
-    USING (tenant_id = current_setting(&#39;app.current_tenant_id&#39;));
+<span class="hljs-comment">-- 策略：用户只能访问其所属租户的数据</span>
+<span class="hljs-keyword">CREATE</span> POLICY tenant_isolation_documents <span class="hljs-keyword">ON</span> documents
+    <span class="hljs-keyword">FOR</span> <span class="hljs-keyword">ALL</span>
+    <span class="hljs-keyword">USING</span> (tenant_id <span class="hljs-operator">=</span> current_setting(<span class="hljs-string">'app.current_tenant_id'</span>));
 
-CREATE POLICY tenant_isolation_chunks ON chunks
-    FOR ALL
-    USING (tenant_id = current_setting(&#39;app.current_tenant_id&#39;));
+<span class="hljs-keyword">CREATE</span> POLICY tenant_isolation_chunks <span class="hljs-keyword">ON</span> chunks
+    <span class="hljs-keyword">FOR</span> <span class="hljs-keyword">ALL</span>
+    <span class="hljs-keyword">USING</span> (tenant_id <span class="hljs-operator">=</span> current_setting(<span class="hljs-string">'app.current_tenant_id'</span>));
 
--- 应用启动时设置租户上下文
--- SET app.current_tenant_id = &#39;tenant_abc&#39;;
-</code></pre></div>
-<h3>Java端租户上下文传递</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+<span class="hljs-comment">-- 应用启动时设置租户上下文</span>
+<span class="hljs-comment">-- SET app.current_tenant_id = 'tenant_abc';</span>
+</code></pre></div><h3>Java端租户上下文传递</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">/**
  * 使用Scoped Values传递租户上下文（JDK 25）
  * 替代传统ThreadLocal
- */
-public class TenantContext {
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">TenantContext</span> {
 
-    public static final ScopedValue&lt;String&gt; TENANT_ID = ScopedValue.newInstance();
-    public static final ScopedValue&lt;String&gt; USER_ID = ScopedValue.newInstance();
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> ScopedValue&lt;String&gt; TENANT_ID = ScopedValue.newInstance();
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> ScopedValue&lt;String&gt; USER_ID = ScopedValue.newInstance();
 
-    /**
+    <span class="hljs-comment">/**
      * 在租户上下文中执行操作
-     */
-    public static &lt;T&gt; T withTenant(String tenantId, java.util.function.Supplier&lt;T&gt; action) {
-        return ScopedValue.where(TENANT_ID, tenantId).call(action::get);
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> &lt;T&gt; T <span class="hljs-title function_">withTenant</span><span class="hljs-params">(String tenantId, java.util.function.Supplier&lt;T&gt; action)</span> {
+        <span class="hljs-keyword">return</span> ScopedValue.where(TENANT_ID, tenantId).call(action::get);
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 通过HikariCP连接池代理设置租户上下文
-     */
-    public static class TenantAwareDataSource implements javax.sql.DataSource {
-        private final javax.sql.DataSource delegate;
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">TenantAwareDataSource</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">javax</span>.sql.DataSource {
+        <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> javax.sql.DataSource delegate;
 
-        public TenantAwareDataSource(javax.sql.DataSource delegate) {
-            this.delegate = delegate;
+        <span class="hljs-keyword">public</span> <span class="hljs-title function_">TenantAwareDataSource</span><span class="hljs-params">(javax.sql.DataSource delegate)</span> {
+            <span class="hljs-built_in">this</span>.delegate = delegate;
         }
 
-        @Override
-        public java.sql.Connection getConnection() throws java.sql.SQLException {
-            var conn = delegate.getConnection();
-            var tenantId = TENANT_ID.orElse(&quot;default&quot;);
-            try (var stmt = conn.createStatement()) {
-                stmt.execute(&quot;SET app.current_tenant_id = &#39;&quot; + tenantId + &quot;&#39;&quot;);
+        <span class="hljs-meta">@Override</span>
+        <span class="hljs-keyword">public</span> java.sql.Connection <span class="hljs-title function_">getConnection</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> java.sql.SQLException {
+            <span class="hljs-type">var</span> <span class="hljs-variable">conn</span> <span class="hljs-operator">=</span> delegate.getConnection();
+            <span class="hljs-type">var</span> <span class="hljs-variable">tenantId</span> <span class="hljs-operator">=</span> TENANT_ID.orElse(<span class="hljs-string">"default"</span>);
+            <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">stmt</span> <span class="hljs-operator">=</span> conn.createStatement()) {
+                stmt.execute(<span class="hljs-string">"SET app.current_tenant_id = '"</span> + tenantId + <span class="hljs-string">"'"</span>);
             }
-            return conn;
+            <span class="hljs-keyword">return</span> conn;
         }
 
-        @Override
-        public java.sql.Connection getConnection(String username, String password)
-                throws java.sql.SQLException {
-            var conn = delegate.getConnection(username, password);
-            var tenantId = TENANT_ID.orElse(&quot;default&quot;);
-            try (var stmt = conn.createStatement()) {
-                stmt.execute(&quot;SET app.current_tenant_id = &#39;&quot; + tenantId + &quot;&#39;&quot;);
+        <span class="hljs-meta">@Override</span>
+        <span class="hljs-keyword">public</span> java.sql.Connection <span class="hljs-title function_">getConnection</span><span class="hljs-params">(String username, String password)</span>
+                <span class="hljs-keyword">throws</span> java.sql.SQLException {
+            <span class="hljs-type">var</span> <span class="hljs-variable">conn</span> <span class="hljs-operator">=</span> delegate.getConnection(username, password);
+            <span class="hljs-type">var</span> <span class="hljs-variable">tenantId</span> <span class="hljs-operator">=</span> TENANT_ID.orElse(<span class="hljs-string">"default"</span>);
+            <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">stmt</span> <span class="hljs-operator">=</span> conn.createStatement()) {
+                stmt.execute(<span class="hljs-string">"SET app.current_tenant_id = '"</span> + tenantId + <span class="hljs-string">"'"</span>);
             }
-            return conn;
+            <span class="hljs-keyword">return</span> conn;
         }
 
-        // 委托其他接口方法...
-        @Override public java.io.PrintWriter getLogWriter() throws java.sql.SQLException { return delegate.getLogWriter(); }
-        @Override public void setLogWriter(java.io.PrintWriter out) throws java.sql.SQLException { delegate.setLogWriter(out); }
-        @Override public void setLoginTimeout(int seconds) throws java.sql.SQLException { delegate.setLoginTimeout(seconds); }
-        @Override public int getLoginTimeout() throws java.sql.SQLException { return delegate.getLoginTimeout(); }
-        @Override public java.util.logging.Logger getParentLogger() { return delegate.getParentLogger(); }
-        @Override public &lt;T&gt; T unwrap(Class&lt;T&gt; iface) throws java.sql.SQLException { return delegate.unwrap(iface); }
-        @Override public boolean isWrapperFor(Class&lt;?&gt; iface) throws java.sql.SQLException { return delegate.isWrapperFor(iface); }
-        // 注意：这不是完整实现，生产环境建议使用connection proxy
+        <span class="hljs-comment">// 委托其他接口方法...</span>
+        <span class="hljs-meta">@Override</span> <span class="hljs-keyword">public</span> java.io.PrintWriter <span class="hljs-title function_">getLogWriter</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> java.sql.SQLException { <span class="hljs-keyword">return</span> delegate.getLogWriter(); }
+        <span class="hljs-meta">@Override</span> <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">setLogWriter</span><span class="hljs-params">(java.io.PrintWriter out)</span> <span class="hljs-keyword">throws</span> java.sql.SQLException { delegate.setLogWriter(out); }
+        <span class="hljs-meta">@Override</span> <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">setLoginTimeout</span><span class="hljs-params">(<span class="hljs-type">int</span> seconds)</span> <span class="hljs-keyword">throws</span> java.sql.SQLException { delegate.setLoginTimeout(seconds); }
+        <span class="hljs-meta">@Override</span> <span class="hljs-keyword">public</span> <span class="hljs-type">int</span> <span class="hljs-title function_">getLoginTimeout</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> java.sql.SQLException { <span class="hljs-keyword">return</span> delegate.getLoginTimeout(); }
+        <span class="hljs-meta">@Override</span> <span class="hljs-keyword">public</span> java.util.logging.Logger <span class="hljs-title function_">getParentLogger</span><span class="hljs-params">()</span> { <span class="hljs-keyword">return</span> delegate.getParentLogger(); }
+        <span class="hljs-meta">@Override</span> <span class="hljs-keyword">public</span> &lt;T&gt; T <span class="hljs-title function_">unwrap</span><span class="hljs-params">(Class&lt;T&gt; iface)</span> <span class="hljs-keyword">throws</span> java.sql.SQLException { <span class="hljs-keyword">return</span> delegate.unwrap(iface); }
+        <span class="hljs-meta">@Override</span> <span class="hljs-keyword">public</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">isWrapperFor</span><span class="hljs-params">(Class&lt;?&gt; iface)</span> <span class="hljs-keyword">throws</span> java.sql.SQLException { <span class="hljs-keyword">return</span> delegate.isWrapperFor(iface); }
+        <span class="hljs-comment">// 注意：这不是完整实现，生产环境建议使用connection proxy</span>
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>九、最佳实践</h2>
 <ol>
 <li><strong>Schema设计分层</strong>：必需/业务/技术三层分离，不同角色关注不同层</li>
@@ -1317,64 +1299,64 @@ public class TenantContext {
 <h2>九、数据血缘追踪</h2>
 <p>数据血缘（Data Lineage）在 AI 数据工程中是全链路可追溯性的基石。不同于传统 ETL 的表级血缘，RAG 和 AI 场景需要记录从原始文件到最终检索答案的完整链路：SourceFile → Document Parsing → Chunking → Embedding → Vector Index → Search Query → Answer。每一跳（Hop）都需要记录输入哈希、输出哈希、处理时间戳和处理器版本。</p>
 <p>血缘追踪的核心价值体现在两个典型场景：</p>
-<p><strong>场景一：Embedding 模型升级</strong>。当团队决定从 <code>text-embedding-3-small</code> 升级到 <code>text-embedding-3-large</code> 时，需要识别所有受影响的 Chunk。通过血缘模型查询 <code>processor_type = &quot;EMBEDDING&quot; AND model_version = &quot;text-embedding-3-small&quot;</code>，可以精确获得需要重新 Embedding 的 Chunk 列表，避免全量重建的高昂成本。</p>
-<p><strong>场景二：源文件删除的级联清理</strong>。当用户从知识库中移除某个来源文件时，需要级联删除其产生的所有衍生数据（Documents、Chunks、Embeddings、索引条目）。没有血缘追踪，这要么是危险的硬删除，要么会产生大量&quot;孤儿数据&quot;占用存储和污染检索结果。</p>
+<p><strong>场景一：Embedding 模型升级</strong>。当团队决定从 <code>text-embedding-3-small</code> 升级到 <code>text-embedding-3-large</code> 时，需要识别所有受影响的 Chunk。通过血缘模型查询 <code>processor_type = "EMBEDDING" AND model_version = "text-embedding-3-small"</code>，可以精确获得需要重新 Embedding 的 Chunk 列表，避免全量重建的高昂成本。</p>
+<p><strong>场景二：源文件删除的级联清理</strong>。当用户从知识库中移除某个来源文件时，需要级联删除其产生的所有衍生数据（Documents、Chunks、Embeddings、索引条目）。没有血缘追踪，这要么是危险的硬删除，要么会产生大量"孤儿数据"占用存储和污染检索结果。</p>
 <p>血缘模型的数据结构建议：</p>
 <ul>
 <li><code>lineage_node</code>: 节点表，记录 source_file / document / chunk / embedding / query / answer 等各类型节点</li>
 <li><code>lineage_edge</code>: 边表，记录 FROM → TO 关系，附带 process_type 和 process_version</li>
 <li>每个节点存储 <code>content_hash</code>（SHA-256）和 <code>created_at</code></li>
 </ul>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// JDK 25 + Spring Boot 4.x: 数据血缘追踪服务
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Service;
-import java.security.MessageDigest;
-import java.time.Instant;
-import java.util.*;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// JDK 25 + Spring Boot 4.x: 数据血缘追踪服务</span>
+<span class="hljs-keyword">import</span> org.springframework.jdbc.core.JdbcTemplate;
+<span class="hljs-keyword">import</span> org.springframework.stereotype.Service;
+<span class="hljs-keyword">import</span> java.security.MessageDigest;
+<span class="hljs-keyword">import</span> java.time.Instant;
+<span class="hljs-keyword">import</span> java.util.*;
 
-@Service
-public class BloodLineageTracker {
-    private final JdbcTemplate jdbc;
+<span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">BloodLineageTracker</span> {
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> JdbcTemplate jdbc;
 
-    public BloodLineageTracker(JdbcTemplate jdbc) {
-        this.jdbc = jdbc;
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">BloodLineageTracker</span><span class="hljs-params">(JdbcTemplate jdbc)</span> {
+        <span class="hljs-built_in">this</span>.jdbc = jdbc;
     }
 
-    // 记录一个处理步骤，返回新节点ID
-    public UUID recordStep(String parentNodeId, String nodeType,
-                           String content, String processorType, String processorVersion) {
-        var newNodeId = UUID.randomUUID();
-        var contentHash = sha256(content);
+    <span class="hljs-comment">// 记录一个处理步骤，返回新节点ID</span>
+    <span class="hljs-keyword">public</span> UUID <span class="hljs-title function_">recordStep</span><span class="hljs-params">(String parentNodeId, String nodeType,
+                           String content, String processorType, String processorVersion)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">newNodeId</span> <span class="hljs-operator">=</span> UUID.randomUUID();
+        <span class="hljs-type">var</span> <span class="hljs-variable">contentHash</span> <span class="hljs-operator">=</span> sha256(content);
 
-        // 插入血缘节点
-        jdbc.update(&quot;&quot;&quot;
+        <span class="hljs-comment">// 插入血缘节点</span>
+        jdbc.update(<span class="hljs-string">"""
             INSERT INTO lineage_node (id, node_type, content_hash, processor_type,
                                       processor_version, created_at)
             VALUES (?, ?, ?, ?, ?, ?)
-            &quot;&quot;&quot;, newNodeId, nodeType, contentHash, processorType,
+            """</span>, newNodeId, nodeType, contentHash, processorType,
                   processorVersion, Instant.now());
 
-        // 建立父节点 → 当前节点的血缘边
-        if (parentNodeId != null) {
-            jdbc.update(&quot;&quot;&quot;
+        <span class="hljs-comment">// 建立父节点 → 当前节点的血缘边</span>
+        <span class="hljs-keyword">if</span> (parentNodeId != <span class="hljs-literal">null</span>) {
+            jdbc.update(<span class="hljs-string">"""
                 INSERT INTO lineage_edge (from_node_id, to_node_id, process_type, process_version)
                 VALUES (?, ?, ?, ?)
-                &quot;&quot;&quot;, UUID.fromString(parentNodeId), newNodeId, processorType, processorVersion);
+                """</span>, UUID.fromString(parentNodeId), newNodeId, processorType, processorVersion);
         }
-        return newNodeId;
+        <span class="hljs-keyword">return</span> newNodeId;
     }
 
-    // 查询受影响的节点：当 processor 版本变化时，找出需要重建的节点
-    public List&lt;UUID&gt; findAffectedNodes(String processorType, String oldVersion) {
-        return jdbc.queryForList(&quot;&quot;&quot;
+    <span class="hljs-comment">// 查询受影响的节点：当 processor 版本变化时，找出需要重建的节点</span>
+    <span class="hljs-keyword">public</span> List&lt;UUID&gt; <span class="hljs-title function_">findAffectedNodes</span><span class="hljs-params">(String processorType, String oldVersion)</span> {
+        <span class="hljs-keyword">return</span> jdbc.queryForList(<span class="hljs-string">"""
             SELECT id FROM lineage_node
             WHERE processor_type = ? AND processor_version = ?
-            &quot;&quot;&quot;, UUID.class, processorType, oldVersion);
+            """</span>, UUID.class, processorType, oldVersion);
     }
 
-    // 级联删除：从源节点出发，递归删除所有下游节点
-    public int cascadeDelete(UUID sourceNodeId) {
-        return jdbc.update(&quot;&quot;&quot;
+    <span class="hljs-comment">// 级联删除：从源节点出发，递归删除所有下游节点</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-type">int</span> <span class="hljs-title function_">cascadeDelete</span><span class="hljs-params">(UUID sourceNodeId)</span> {
+        <span class="hljs-keyword">return</span> jdbc.update(<span class="hljs-string">"""
             WITH RECURSIVE descendants AS (
                 SELECT to_node_id AS id FROM lineage_edge WHERE from_node_id = ?
                 UNION ALL
@@ -1382,24 +1364,23 @@ public class BloodLineageTracker {
                 JOIN descendants d ON e.from_node_id = d.id
             )
             DELETE FROM lineage_node WHERE id IN (SELECT id FROM descendants)
-            &quot;&quot;&quot;, sourceNodeId);
+            """</span>, sourceNodeId);
     }
 
-    private String sha256(String content) {
-        try {
-            var md = MessageDigest.getInstance(&quot;SHA-256&quot;);
-            var digest = md.digest(content.getBytes());
-            return HexFormat.of().formatHex(digest);
-        } catch (Exception e) { throw new RuntimeException(e); }
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">sha256</span><span class="hljs-params">(String content)</span> {
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-type">var</span> <span class="hljs-variable">md</span> <span class="hljs-operator">=</span> MessageDigest.getInstance(<span class="hljs-string">"SHA-256"</span>);
+            <span class="hljs-type">var</span> <span class="hljs-variable">digest</span> <span class="hljs-operator">=</span> md.digest(content.getBytes());
+            <span class="hljs-keyword">return</span> HexFormat.of().formatHex(digest);
+        } <span class="hljs-keyword">catch</span> (Exception e) { <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RuntimeException</span>(e); }
     }
 }
-</code></pre></div>
-<h2>相关条目</h2>
+</code></pre></div><h2>相关条目</h2>
 <ul>
-<li><a href="#/10-AI数据工程/文档处理/10-切片策略深度剖析" class="cross-ref" data-ref="10-切片策略深度剖析">10-切片策略深度剖析</a> — 切片策略与元数据集成</li>
-<li><a href="#/15-AI安全与治理/15-AI安全全面防护体系" class="cross-ref" data-ref="15-AI安全全面防护体系">15-AI安全全面防护体系</a> — AI安全与数据治理</li>
-<li><a href="#/11-检索与RAG/检索技术/11-向量检索与混合检索" class="cross-ref" data-ref="11-向量检索与混合检索">11-向量检索与混合检索</a> — 权限感知检索</li>
-<li><a href="#/04-数据与中间件/数据库与缓存/04-PostgreSQL与pgvector深度解析" class="cross-ref" data-ref="04-PostgreSQL与pgvector深度解析">04-PostgreSQL与pgvector深度解析</a> — PostgreSQL pgvector 索引管理</li>
+<li><a href="#/10-AI数据工程/文档处理/10-切片策略深度剖析" class="cross-ref">10-切片策略深度剖析</a> — 切片策略与元数据集成</li>
+<li><a href="#/15-AI安全与治理/15-AI安全全面防护体系" class="cross-ref">15-AI安全全面防护体系</a> — AI安全与数据治理</li>
+<li><a href="#/11-检索与RAG/检索技术/11-向量检索与混合检索" class="cross-ref">11-向量检索与混合检索</a> — 权限感知检索</li>
+<li><a href="#/04-数据与中间件/数据库与缓存/04-PostgreSQL与pgvector深度解析" class="cross-ref">04-PostgreSQL与pgvector深度解析</a> — PostgreSQL pgvector 索引管理</li>
 </ul>
-</div>
+</body></html></div>
 </article>

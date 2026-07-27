@@ -1,19 +1,19 @@
 
-<article class="kb-entry" data-path="/11-检索与RAG/RAG实现/11-完整RAG流水线实现">
+<article class="kb-entry" data-path="/11-检索与RAG">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=11">11-检索与RAG</a></div>
     <h1>完整企业RAG流水线Java实现：从文档到答案的端到端系统</h1>
-    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#rag</span><span class="badge badge-tag">#spring-ai</span><span class="badge badge-tag">#pgvector</span><span class="badge badge-tag">#elasticsearch</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#rag</span><span class="badge badge-tag">#spring-ai</span><span class="badge badge-tag">#pgvector</span><span class="badge badge-tag">#elasticsearch</span><span class="badge badge-tag">#end-to-end</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://docs.spring.io/spring-ai/reference/api/chatclient.html" target="_blank" rel="noopener" class="source-link" title="Spring AI ChatClient 官方文档">Spring AI ChatClient 官方文档</a><a href="https://docs.spring.io/spring-ai/reference/api/vectordbs/pgvector.html" target="_blank" rel="noopener" class="source-link" title="Spring AI pgvector 集成文档">Spring AI pgvector 集成文档</a><a href="https://docs.spring.io/spring-ai/reference/api/etl-pipeline.html" target="_blank" rel="noopener" class="source-link" title="Spring AI ETL Pipeline 文档">Spring AI ETL Pipeline 文档</a><a href="https://testcontainers.com/guides/" target="_blank" rel="noopener" class="source-link" title="Testcontainers 官方指南 — 集成测试">Testcontainers 官方指南 — 集成测试</a></small></div>
   </div>
-  <div class="entry-body"><h1>完整企业RAG流水线Java实现：从文档到答案的端到端系统</h1>
+  <div class="entry-body"><html><head></head><body><h1>完整企业RAG流水线Java实现：从文档到答案的端到端系统</h1>
 <h2>概述</h2>
 <p>本文构建一个完整的企业级RAG流水线，使用Spring AI 2.x + PostgreSQL pgvector + Elasticsearch技术栈，实现从文档加载到答案生成的端到端处理。涵盖文档处理流水线（DocumentPipelineService）、检索服务（RetrievalService）、Query改写（QueryRewriterService）、重排服务（RerankerService）和完整的RAG问答服务（RAGService）。同时包含基于Testcontainers的完整集成测试和性能监控埋点。</p>
 <hr>
 <h2>一、系统架构</h2>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌─────────────────────────────────────────────────────────────┐
 │                         API 层                              │
-│  POST /api/documents/ingest    POST /api/rag/ask            │
+│  <span class="hljs-keyword">POST</span> /api/documents/ingest    <span class="hljs-keyword">POST</span> /api/rag/ask            │
 └──────────────┬──────────────────────┬──────────────────────┘
                │                      │
 ┌──────────────▼──────────────────────▼──────────────────────┐
@@ -22,7 +22,7 @@
 └──────┬──────────┬──────────┬──────────┬────────────────────┘
        │          │          │          │
 ┌──────▼──┐ ┌─────▼───┐ ┌───▼────┐ ┌──▼──────────┐
-│Query    │ │Retrieval│ │Reranker│ │Context       │
+│<span class="hljs-keyword">Query</span>    │ │Retrieval│ │Reranker│ │Context       │
 │Rewriter │ │Service  │ │Service │ │Arranger      │
 └─────────┘ └────┬────┘ └────────┘ └──────────────┘
                  │
@@ -30,326 +30,323 @@
     │            │            │
 ┌───▼────┐ ┌────▼────┐ ┌─────▼──────┐
 │pgvector│ │Elastic- │ │Metadata    │
-│ (HNSW) │ │search   │ │Filter Logic│
+│ (HNSW) │ │<span class="hljs-keyword">search</span>   │ │Filter Logic│
 └────────┘ └─────────┘ └────────────┘
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>二、Maven项目配置</h2>
-<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
-&lt;project xmlns=&quot;http://maven.apache.org/POM/4.0.0&quot;
-         xmlns:xsi=&quot;http://www.w3.org/2001/XMLSchema-instance&quot;
-         xsi:schemaLocation=&quot;http://maven.apache.org/POM/4.0.0
-         https://maven.apache.org/xsd/maven-4.0.0.xsd&quot;&gt;
-    &lt;modelVersion&gt;4.0.0&lt;/modelVersion&gt;
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-xml"><span class="hljs-meta">&lt;?xml version=<span class="hljs-string">"1.0"</span> encoding=<span class="hljs-string">"UTF-8"</span>?&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">project</span> <span class="hljs-attr">xmlns</span>=<span class="hljs-string">"http://maven.apache.org/POM/4.0.0"</span>
+         <span class="hljs-attr">xmlns:xsi</span>=<span class="hljs-string">"http://www.w3.org/2001/XMLSchema-instance"</span>
+         <span class="hljs-attr">xsi:schemaLocation</span>=<span class="hljs-string">"http://maven.apache.org/POM/4.0.0
+         https://maven.apache.org/xsd/maven-4.0.0.xsd"</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">modelVersion</span>&gt;</span>4.0.0<span class="hljs-tag">&lt;/<span class="hljs-name">modelVersion</span>&gt;</span>
 
-    &lt;parent&gt;
-        &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
-        &lt;artifactId&gt;spring-boot-starter-parent&lt;/artifactId&gt;
-        &lt;version&gt;4.0.0&lt;/version&gt;
-    &lt;/parent&gt;
+    <span class="hljs-tag">&lt;<span class="hljs-name">parent</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.boot<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-boot-starter-parent<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">version</span>&gt;</span>4.0.0<span class="hljs-tag">&lt;/<span class="hljs-name">version</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">parent</span>&gt;</span>
 
-    &lt;groupId&gt;com.example&lt;/groupId&gt;
-    &lt;artifactId&gt;rag-pipeline&lt;/artifactId&gt;
-    &lt;version&gt;1.0.0&lt;/version&gt;
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>com.example<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>rag-pipeline<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">version</span>&gt;</span>1.0.0<span class="hljs-tag">&lt;/<span class="hljs-name">version</span>&gt;</span>
 
-    &lt;properties&gt;
-        &lt;java.version&gt;25&lt;/java.version&gt;
-        &lt;spring-ai.version&gt;2.0.0&lt;/spring-ai.version&gt;
-        &lt;testcontainers.version&gt;2.0.0&lt;/testcontainers.version&gt;
-    &lt;/properties&gt;
+    <span class="hljs-tag">&lt;<span class="hljs-name">properties</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">java.version</span>&gt;</span>25<span class="hljs-tag">&lt;/<span class="hljs-name">java.version</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">spring-ai.version</span>&gt;</span>2.0.0<span class="hljs-tag">&lt;/<span class="hljs-name">spring-ai.version</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">testcontainers.version</span>&gt;</span>2.0.0<span class="hljs-tag">&lt;/<span class="hljs-name">testcontainers.version</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">properties</span>&gt;</span>
 
-    &lt;dependencies&gt;
-        &lt;!-- Spring Boot --&gt;
-        &lt;dependency&gt;
-            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
-            &lt;artifactId&gt;spring-boot-starter-web&lt;/artifactId&gt;
-        &lt;/dependency&gt;
-        &lt;dependency&gt;
-            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
-            &lt;artifactId&gt;spring-boot-starter-actuator&lt;/artifactId&gt;
-        &lt;/dependency&gt;
+    <span class="hljs-tag">&lt;<span class="hljs-name">dependencies</span>&gt;</span>
+        <span class="hljs-comment">&lt;!-- Spring Boot --&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.boot<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-boot-starter-web<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.boot<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-boot-starter-actuator<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
 
-        &lt;!-- Spring AI --&gt;
-        &lt;dependency&gt;
-            &lt;groupId&gt;org.springframework.ai&lt;/groupId&gt;
-            &lt;artifactId&gt;spring-ai-openai-spring-boot-starter&lt;/artifactId&gt;
-        &lt;/dependency&gt;
-        &lt;dependency&gt;
-            &lt;groupId&gt;org.springframework.ai&lt;/groupId&gt;
-            &lt;artifactId&gt;spring-ai-pgvector-store-spring-boot-starter&lt;/artifactId&gt;
-        &lt;/dependency&gt;
-        &lt;dependency&gt;
-            &lt;groupId&gt;org.springframework.ai&lt;/groupId&gt;
-            &lt;artifactId&gt;spring-ai-elasticsearch-store-spring-boot-starter&lt;/artifactId&gt;
-        &lt;/dependency&gt;
-        &lt;dependency&gt;
-            &lt;groupId&gt;org.springframework.ai&lt;/groupId&gt;
-            &lt;artifactId&gt;spring-ai-tika-document-reader&lt;/artifactId&gt;
-        &lt;/dependency&gt;
+        <span class="hljs-comment">&lt;!-- Spring AI --&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.ai<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-ai-openai-spring-boot-starter<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.ai<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-ai-pgvector-store-spring-boot-starter<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.ai<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-ai-elasticsearch-store-spring-boot-starter<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.ai<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-ai-tika-document-reader<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
 
-        &lt;!-- PostgreSQL + pgvector --&gt;
-        &lt;dependency&gt;
-            &lt;groupId&gt;org.postgresql&lt;/groupId&gt;
-            &lt;artifactId&gt;postgresql&lt;/artifactId&gt;
-        &lt;/dependency&gt;
-        &lt;dependency&gt;
-            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
-            &lt;artifactId&gt;spring-boot-starter-jdbc&lt;/artifactId&gt;
-        &lt;/dependency&gt;
+        <span class="hljs-comment">&lt;!-- PostgreSQL + pgvector --&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.postgresql<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>postgresql<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.boot<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-boot-starter-jdbc<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
 
-        &lt;!-- Elasticsearch --&gt;
-        &lt;dependency&gt;
-            &lt;groupId&gt;co.elastic.clients&lt;/groupId&gt;
-            &lt;artifactId&gt;elasticsearch-java&lt;/artifactId&gt;
-        &lt;/dependency&gt;
+        <span class="hljs-comment">&lt;!-- Elasticsearch --&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>co.elastic.clients<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>elasticsearch-java<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
 
-        &lt;!-- Observability --&gt;
-        &lt;dependency&gt;
-            &lt;groupId&gt;io.micrometer&lt;/groupId&gt;
-            &lt;artifactId&gt;micrometer-tracing-bridge-brave&lt;/artifactId&gt;
-        &lt;/dependency&gt;
-        &lt;dependency&gt;
-            &lt;groupId&gt;io.micrometer&lt;/groupId&gt;
-            &lt;artifactId&gt;micrometer-registry-prometheus&lt;/artifactId&gt;
-        &lt;/dependency&gt;
+        <span class="hljs-comment">&lt;!-- Observability --&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>io.micrometer<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>micrometer-tracing-bridge-brave<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>io.micrometer<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>micrometer-registry-prometheus<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
 
-        &lt;!-- Testing --&gt;
-        &lt;dependency&gt;
-            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
-            &lt;artifactId&gt;spring-boot-starter-test&lt;/artifactId&gt;
-            &lt;scope&gt;test&lt;/scope&gt;
-        &lt;/dependency&gt;
-        &lt;dependency&gt;
-            &lt;groupId&gt;org.testcontainers&lt;/groupId&gt;
-            &lt;artifactId&gt;testcontainers&lt;/artifactId&gt;
-            &lt;scope&gt;test&lt;/scope&gt;
-        &lt;/dependency&gt;
-        &lt;dependency&gt;
-            &lt;groupId&gt;org.testcontainers&lt;/groupId&gt;
-            &lt;artifactId&gt;postgresql&lt;/artifactId&gt;
-            &lt;scope&gt;test&lt;/scope&gt;
-        &lt;/dependency&gt;
-        &lt;dependency&gt;
-            &lt;groupId&gt;org.testcontainers&lt;/groupId&gt;
-            &lt;artifactId&gt;elasticsearch&lt;/artifactId&gt;
-            &lt;scope&gt;test&lt;/scope&gt;
-        &lt;/dependency&gt;
-    &lt;/dependencies&gt;
-&lt;/project&gt;
-</code></pre></div>
-<hr>
+        <span class="hljs-comment">&lt;!-- Testing --&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.boot<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-boot-starter-test<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">scope</span>&gt;</span>test<span class="hljs-tag">&lt;/<span class="hljs-name">scope</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.testcontainers<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>testcontainers<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">scope</span>&gt;</span>test<span class="hljs-tag">&lt;/<span class="hljs-name">scope</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.testcontainers<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>postgresql<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">scope</span>&gt;</span>test<span class="hljs-tag">&lt;/<span class="hljs-name">scope</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.testcontainers<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>elasticsearch<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">scope</span>&gt;</span>test<span class="hljs-tag">&lt;/<span class="hljs-name">scope</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">dependencies</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">project</span>&gt;</span>
+</code></pre></div><hr>
 <h2>三、配置文件</h2>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># application.yml
-spring:
-  application:
-    name: rag-pipeline
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-comment"># application.yml</span>
+<span class="hljs-attr">spring:</span>
+  <span class="hljs-attr">application:</span>
+    <span class="hljs-attr">name:</span> <span class="hljs-string">rag-pipeline</span>
 
-  # PostgreSQL + pgvector
-  datasource:
-    url: jdbc:postgresql://localhost:5432/rag_knowledge
-    username: rag_user
-    password: ${DB_PASSWORD}
-    hikari:
-      maximum-pool-size: 20
-      minimum-idle: 5
+  <span class="hljs-comment"># PostgreSQL + pgvector</span>
+  <span class="hljs-attr">datasource:</span>
+    <span class="hljs-attr">url:</span> <span class="hljs-string">jdbc:postgresql://localhost:5432/rag_knowledge</span>
+    <span class="hljs-attr">username:</span> <span class="hljs-string">rag_user</span>
+    <span class="hljs-attr">password:</span> <span class="hljs-string">${DB_PASSWORD}</span>
+    <span class="hljs-attr">hikari:</span>
+      <span class="hljs-attr">maximum-pool-size:</span> <span class="hljs-number">20</span>
+      <span class="hljs-attr">minimum-idle:</span> <span class="hljs-number">5</span>
 
-  # Elasticsearch
-  elasticsearch:
-    uris: http://localhost:9200
-    username: ${ES_USERNAME:}
-    password: ${ES_PASSWORD:}
+  <span class="hljs-comment"># Elasticsearch</span>
+  <span class="hljs-attr">elasticsearch:</span>
+    <span class="hljs-attr">uris:</span> <span class="hljs-string">http://localhost:9200</span>
+    <span class="hljs-attr">username:</span> <span class="hljs-string">${ES_USERNAME:}</span>
+    <span class="hljs-attr">password:</span> <span class="hljs-string">${ES_PASSWORD:}</span>
 
-  # AI配置
-  ai:
-    openai:
-      api-key: ${OPENAI_API_KEY}
-      chat:
-        options:
-          model: gpt-4o-mini
-          temperature: 0.1
-          max-tokens: 2048
-      embedding:
-        options:
-          model: text-embedding-3-small
+  <span class="hljs-comment"># AI配置</span>
+  <span class="hljs-attr">ai:</span>
+    <span class="hljs-attr">openai:</span>
+      <span class="hljs-attr">api-key:</span> <span class="hljs-string">${OPENAI_API_KEY}</span>
+      <span class="hljs-attr">chat:</span>
+        <span class="hljs-attr">options:</span>
+          <span class="hljs-attr">model:</span> <span class="hljs-string">gpt-4o-mini</span>
+          <span class="hljs-attr">temperature:</span> <span class="hljs-number">0.1</span>
+          <span class="hljs-attr">max-tokens:</span> <span class="hljs-number">2048</span>
+      <span class="hljs-attr">embedding:</span>
+        <span class="hljs-attr">options:</span>
+          <span class="hljs-attr">model:</span> <span class="hljs-string">text-embedding-3-small</span>
 
-    # pgvector向量存储
-    vectorstore:
-      pgvector:
-        initialize-schema: true
-        dimensions: 1536  # text-embedding-3-small 的维度
-        index-type: hnsw
-        hnsw:
-          m: 16
-          ef-construction: 200
+    <span class="hljs-comment"># pgvector向量存储</span>
+    <span class="hljs-attr">vectorstore:</span>
+      <span class="hljs-attr">pgvector:</span>
+        <span class="hljs-attr">initialize-schema:</span> <span class="hljs-literal">true</span>
+        <span class="hljs-attr">dimensions:</span> <span class="hljs-number">1536</span>  <span class="hljs-comment"># text-embedding-3-small 的维度</span>
+        <span class="hljs-attr">index-type:</span> <span class="hljs-string">hnsw</span>
+        <span class="hljs-attr">hnsw:</span>
+          <span class="hljs-attr">m:</span> <span class="hljs-number">16</span>
+          <span class="hljs-attr">ef-construction:</span> <span class="hljs-number">200</span>
 
-# RAG配置
-rag:
-  retrieval:
-    top-k: 20           # 混合检索返回数量
-    rerank-top-k: 5     # 重排后返回数量
-    bm25-weight: 0.3    # BM25在混合检索中的权重
-    vector-weight: 0.7  # 向量在混合检索中的权重
-    rrf-k: 60           # RRF平滑参数
-    min-relevance: 0.2  # 重排后最低相关性阈值
+<span class="hljs-comment"># RAG配置</span>
+<span class="hljs-attr">rag:</span>
+  <span class="hljs-attr">retrieval:</span>
+    <span class="hljs-attr">top-k:</span> <span class="hljs-number">20</span>           <span class="hljs-comment"># 混合检索返回数量</span>
+    <span class="hljs-attr">rerank-top-k:</span> <span class="hljs-number">5</span>     <span class="hljs-comment"># 重排后返回数量</span>
+    <span class="hljs-attr">bm25-weight:</span> <span class="hljs-number">0.3</span>    <span class="hljs-comment"># BM25在混合检索中的权重</span>
+    <span class="hljs-attr">vector-weight:</span> <span class="hljs-number">0.7</span>  <span class="hljs-comment"># 向量在混合检索中的权重</span>
+    <span class="hljs-attr">rrf-k:</span> <span class="hljs-number">60</span>           <span class="hljs-comment"># RRF平滑参数</span>
+    <span class="hljs-attr">min-relevance:</span> <span class="hljs-number">0.2</span>  <span class="hljs-comment"># 重排后最低相关性阈值</span>
 
-  chunking:
-    default-size: 1024  # 默认切片大小（字符数）
-    default-overlap: 200
-    min-chunk-size: 100
-    max-chunk-size: 2048
+  <span class="hljs-attr">chunking:</span>
+    <span class="hljs-attr">default-size:</span> <span class="hljs-number">1024</span>  <span class="hljs-comment"># 默认切片大小（字符数）</span>
+    <span class="hljs-attr">default-overlap:</span> <span class="hljs-number">200</span>
+    <span class="hljs-attr">min-chunk-size:</span> <span class="hljs-number">100</span>
+    <span class="hljs-attr">max-chunk-size:</span> <span class="hljs-number">2048</span>
 
-  embedding:
-    batch-size: 20      # 批处理大小
-    rate-limit-per-second: 10
+  <span class="hljs-attr">embedding:</span>
+    <span class="hljs-attr">batch-size:</span> <span class="hljs-number">20</span>      <span class="hljs-comment"># 批处理大小</span>
+    <span class="hljs-attr">rate-limit-per-second:</span> <span class="hljs-number">10</span>
 
-# 监控
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,metrics,prometheus
-  metrics:
-    export:
-      prometheus:
-        enabled: true
-</code></pre></div>
-<hr>
+<span class="hljs-comment"># 监控</span>
+<span class="hljs-attr">management:</span>
+  <span class="hljs-attr">endpoints:</span>
+    <span class="hljs-attr">web:</span>
+      <span class="hljs-attr">exposure:</span>
+        <span class="hljs-attr">include:</span> <span class="hljs-string">health,metrics,prometheus</span>
+  <span class="hljs-attr">metrics:</span>
+    <span class="hljs-attr">export:</span>
+      <span class="hljs-attr">prometheus:</span>
+        <span class="hljs-attr">enabled:</span> <span class="hljs-literal">true</span>
+</code></pre></div><hr>
 <h2>四、DocumentPipelineService — 文档处理流水线</h2>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.rag.pipeline;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">package</span> com.example.rag.pipeline;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.ai.document.Document;
-import org.springframework.ai.reader.tika.TikaDocumentReader;
-import org.springframework.ai.transformer.splitter.TokenTextSplitter;
-import org.springframework.ai.vectorstore.VectorStore;
-import org.springframework.core.io.InputStreamResource;
-import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+<span class="hljs-keyword">import</span> org.slf4j.Logger;
+<span class="hljs-keyword">import</span> org.slf4j.LoggerFactory;
+<span class="hljs-keyword">import</span> org.springframework.ai.document.Document;
+<span class="hljs-keyword">import</span> org.springframework.ai.reader.tika.TikaDocumentReader;
+<span class="hljs-keyword">import</span> org.springframework.ai.transformer.splitter.TokenTextSplitter;
+<span class="hljs-keyword">import</span> org.springframework.ai.vectorstore.VectorStore;
+<span class="hljs-keyword">import</span> org.springframework.core.io.InputStreamResource;
+<span class="hljs-keyword">import</span> org.springframework.stereotype.Service;
+<span class="hljs-keyword">import</span> org.springframework.transaction.annotation.Transactional;
 
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.*;
+<span class="hljs-keyword">import</span> java.io.InputStream;
+<span class="hljs-keyword">import</span> java.nio.file.Files;
+<span class="hljs-keyword">import</span> java.nio.file.Path;
+<span class="hljs-keyword">import</span> java.util.*;
 
-@Service
-public class DocumentPipelineService {
+<span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">DocumentPipelineService</span> {
 
-    private static final Logger log = LoggerFactory.getLogger(DocumentPipelineService.class);
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">Logger</span> <span class="hljs-variable">log</span> <span class="hljs-operator">=</span> LoggerFactory.getLogger(DocumentPipelineService.class);
 
-    private final VectorStore vectorStore;
-    private final JdbcTemplate jdbcTemplate;
-    private final MeterRegistry meterRegistry;
-    private final int chunkSize;
-    private final int chunkOverlap;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> VectorStore vectorStore;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> JdbcTemplate jdbcTemplate;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> MeterRegistry meterRegistry;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">int</span> chunkSize;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">int</span> chunkOverlap;
 
-    public DocumentPipelineService(
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">DocumentPipelineService</span><span class="hljs-params">(
             VectorStore vectorStore,
             JdbcTemplate jdbcTemplate,
             MeterRegistry meterRegistry,
-            @Value(&quot;${rag.chunking.default-size:1024}&quot;) int chunkSize,
-            @Value(&quot;${rag.chunking.default-overlap:200}&quot;) int chunkOverlap) {
-        this.vectorStore = vectorStore;
-        this.jdbcTemplate = jdbcTemplate;
-        this.meterRegistry = meterRegistry;
-        this.chunkSize = chunkSize;
-        this.chunkOverlap = chunkOverlap;
+            <span class="hljs-meta">@Value("${rag.chunking.default-size:1024}")</span> <span class="hljs-type">int</span> chunkSize,
+            <span class="hljs-meta">@Value("${rag.chunking.default-overlap:200}")</span> <span class="hljs-type">int</span> chunkOverlap)</span> {
+        <span class="hljs-built_in">this</span>.vectorStore = vectorStore;
+        <span class="hljs-built_in">this</span>.jdbcTemplate = jdbcTemplate;
+        <span class="hljs-built_in">this</span>.meterRegistry = meterRegistry;
+        <span class="hljs-built_in">this</span>.chunkSize = chunkSize;
+        <span class="hljs-built_in">this</span>.chunkOverlap = chunkOverlap;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 完整的文档处理流水线
      * 加载 → 解析 → 清洗 → 切片 → Embedding → 索引
-     */
-    @Transactional
-    public record IngestionResult(
+     */</span>
+    <span class="hljs-meta">@Transactional</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">IngestionResult</span><span class="hljs-params">(
         String documentId,
         String fileName,
-        int chunkCount,
-        long parseTimeMs,
-        long chunkTimeMs,
-        long embedTimeMs,
-        long totalTimeMs,
+        <span class="hljs-type">int</span> chunkCount,
+        <span class="hljs-type">long</span> parseTimeMs,
+        <span class="hljs-type">long</span> chunkTimeMs,
+        <span class="hljs-type">long</span> embedTimeMs,
+        <span class="hljs-type">long</span> totalTimeMs,
         List&lt;String&gt; errors
-    ) {}
+    )</span> {}
 
-    public IngestionResult ingestDocument(Path filePath) throws Exception {
-        var totalStart = System.currentTimeMillis();
-        var errors = new ArrayList&lt;String&gt;();
-        var documentId = UUID.randomUUID().toString();
+    <span class="hljs-keyword">public</span> IngestionResult <span class="hljs-title function_">ingestDocument</span><span class="hljs-params">(Path filePath)</span> <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-type">var</span> <span class="hljs-variable">totalStart</span> <span class="hljs-operator">=</span> System.currentTimeMillis();
+        <span class="hljs-type">var</span> <span class="hljs-variable">errors</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;String&gt;();
+        <span class="hljs-type">var</span> <span class="hljs-variable">documentId</span> <span class="hljs-operator">=</span> UUID.randomUUID().toString();
 
-        try {
-            // Step 1: 文档解析（计时）
-            var parseStart = System.currentTimeMillis();
-            var rawDoc = parseDocument(filePath);
-            var parseTime = System.currentTimeMillis() - parseStart;
-            meterRegistry.timer(&quot;rag.ingestion.parse&quot;).record(parseTime, java.util.concurrent.TimeUnit.MILLISECONDS);
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-comment">// Step 1: 文档解析（计时）</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">parseStart</span> <span class="hljs-operator">=</span> System.currentTimeMillis();
+            <span class="hljs-type">var</span> <span class="hljs-variable">rawDoc</span> <span class="hljs-operator">=</span> parseDocument(filePath);
+            <span class="hljs-type">var</span> <span class="hljs-variable">parseTime</span> <span class="hljs-operator">=</span> System.currentTimeMillis() - parseStart;
+            meterRegistry.timer(<span class="hljs-string">"rag.ingestion.parse"</span>).record(parseTime, java.util.concurrent.TimeUnit.MILLISECONDS);
 
-            if (rawDoc == null) {
-                throw new RuntimeException(&quot;Failed to parse document: &quot; + filePath);
+            <span class="hljs-keyword">if</span> (rawDoc == <span class="hljs-literal">null</span>) {
+                <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RuntimeException</span>(<span class="hljs-string">"Failed to parse document: "</span> + filePath);
             }
 
-            // Step 2: 文本清洗
-            var cleanedText = cleanDocument(rawDoc.getContent());
+            <span class="hljs-comment">// Step 2: 文本清洗</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">cleanedText</span> <span class="hljs-operator">=</span> cleanDocument(rawDoc.getContent());
             rawDoc = Document.builder()
                 .id(documentId)
                 .content(cleanedText)
                 .metadata(rawDoc.getMetadata())
                 .build();
 
-            // Step 3: 切片
-            var chunkStart = System.currentTimeMillis();
-            var chunks = chunkDocument(rawDoc);
-            var chunkTime = System.currentTimeMillis() - chunkStart;
-            meterRegistry.timer(&quot;rag.ingestion.chunk&quot;).record(chunkTime, java.util.concurrent.TimeUnit.MILLISECONDS);
+            <span class="hljs-comment">// Step 3: 切片</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">chunkStart</span> <span class="hljs-operator">=</span> System.currentTimeMillis();
+            <span class="hljs-type">var</span> <span class="hljs-variable">chunks</span> <span class="hljs-operator">=</span> chunkDocument(rawDoc);
+            <span class="hljs-type">var</span> <span class="hljs-variable">chunkTime</span> <span class="hljs-operator">=</span> System.currentTimeMillis() - chunkStart;
+            meterRegistry.timer(<span class="hljs-string">"rag.ingestion.chunk"</span>).record(chunkTime, java.util.concurrent.TimeUnit.MILLISECONDS);
 
-            // Step 4: 存储元数据到PostgreSQL
+            <span class="hljs-comment">// Step 4: 存储元数据到PostgreSQL</span>
             storeDocumentMetadata(documentId, filePath, rawDoc.getMetadata(), chunks.size());
 
-            // Step 5: Embedding + 索引（向量存储）
-            var embedStart = System.currentTimeMillis();
+            <span class="hljs-comment">// Step 5: Embedding + 索引（向量存储）</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">embedStart</span> <span class="hljs-operator">=</span> System.currentTimeMillis();
             indexChunks(chunks);
-            var embedTime = System.currentTimeMillis() - embedStart;
-            meterRegistry.timer(&quot;rag.ingestion.embed&quot;).record(embedTime, java.util.concurrent.TimeUnit.MILLISECONDS);
+            <span class="hljs-type">var</span> <span class="hljs-variable">embedTime</span> <span class="hljs-operator">=</span> System.currentTimeMillis() - embedStart;
+            meterRegistry.timer(<span class="hljs-string">"rag.ingestion.embed"</span>).record(embedTime, java.util.concurrent.TimeUnit.MILLISECONDS);
 
-            // Step 6: 可选 — 索引到Elasticsearch（BM25检索）
+            <span class="hljs-comment">// Step 6: 可选 — 索引到Elasticsearch（BM25检索）</span>
             indexToElasticsearch(chunks);
 
-            var totalTime = System.currentTimeMillis() - totalStart;
-            meterRegistry.counter(&quot;rag.ingestion.documents.total&quot;, &quot;status&quot;, &quot;success&quot;).increment();
-            meterRegistry.gauge(&quot;rag.ingestion.chunks.per.document&quot;, chunks.size());
+            <span class="hljs-type">var</span> <span class="hljs-variable">totalTime</span> <span class="hljs-operator">=</span> System.currentTimeMillis() - totalStart;
+            meterRegistry.counter(<span class="hljs-string">"rag.ingestion.documents.total"</span>, <span class="hljs-string">"status"</span>, <span class="hljs-string">"success"</span>).increment();
+            meterRegistry.gauge(<span class="hljs-string">"rag.ingestion.chunks.per.document"</span>, chunks.size());
 
-            return new IngestionResult(
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">IngestionResult</span>(
                 documentId, filePath.getFileName().toString(),
                 chunks.size(), parseTime, chunkTime, embedTime, totalTime, errors
             );
 
-        } catch (Exception e) {
+        } <span class="hljs-keyword">catch</span> (Exception e) {
             errors.add(e.getMessage());
-            meterRegistry.counter(&quot;rag.ingestion.documents.total&quot;, &quot;status&quot;, &quot;failed&quot;).increment();
-            throw e;
+            meterRegistry.counter(<span class="hljs-string">"rag.ingestion.documents.total"</span>, <span class="hljs-string">"status"</span>, <span class="hljs-string">"failed"</span>).increment();
+            <span class="hljs-keyword">throw</span> e;
         }
     }
 
-    /**
+    <span class="hljs-comment">/**
      * Tika文档解析
-     */
-    private Document parseDocument(Path filePath) throws Exception {
-        try (var inputStream = Files.newInputStream(filePath)) {
-            var reader = new TikaDocumentReader(new InputStreamResource(inputStream));
-            var documents = reader.read();
+     */</span>
+    <span class="hljs-keyword">private</span> Document <span class="hljs-title function_">parseDocument</span><span class="hljs-params">(Path filePath)</span> <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">inputStream</span> <span class="hljs-operator">=</span> Files.newInputStream(filePath)) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">reader</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">TikaDocumentReader</span>(<span class="hljs-keyword">new</span> <span class="hljs-title class_">InputStreamResource</span>(inputStream));
+            <span class="hljs-type">var</span> <span class="hljs-variable">documents</span> <span class="hljs-operator">=</span> reader.read();
 
-            if (documents.isEmpty()) return null;
+            <span class="hljs-keyword">if</span> (documents.isEmpty()) <span class="hljs-keyword">return</span> <span class="hljs-literal">null</span>;
 
-            var doc = documents.getFirst();
-            // 增强元数据
-            var metadata = new HashMap&lt;&gt;(doc.getMetadata());
-            metadata.put(&quot;source_uri&quot;, filePath.toUri().toString());
-            metadata.put(&quot;file_name&quot;, filePath.getFileName().toString());
-            metadata.put(&quot;file_size&quot;, String.valueOf(Files.size(filePath)));
-            metadata.put(&quot;mime_type&quot;, Files.probeContentType(filePath));
-            metadata.put(&quot;ingested_at&quot;, java.time.Instant.now().toString());
+            <span class="hljs-type">var</span> <span class="hljs-variable">doc</span> <span class="hljs-operator">=</span> documents.getFirst();
+            <span class="hljs-comment">// 增强元数据</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">metadata</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">HashMap</span>&lt;&gt;(doc.getMetadata());
+            metadata.put(<span class="hljs-string">"source_uri"</span>, filePath.toUri().toString());
+            metadata.put(<span class="hljs-string">"file_name"</span>, filePath.getFileName().toString());
+            metadata.put(<span class="hljs-string">"file_size"</span>, String.valueOf(Files.size(filePath)));
+            metadata.put(<span class="hljs-string">"mime_type"</span>, Files.probeContentType(filePath));
+            metadata.put(<span class="hljs-string">"ingested_at"</span>, java.time.Instant.now().toString());
 
-            return Document.builder()
+            <span class="hljs-keyword">return</span> Document.builder()
                 .id(doc.getId())
                 .content(doc.getContent())
                 .metadata(metadata)
@@ -357,355 +354,353 @@ public class DocumentPipelineService {
         }
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 文本清洗
-     */
-    private String cleanDocument(String content) {
-        if (content == null || content.isBlank()) return &quot;&quot;;
+     */</span>
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">cleanDocument</span><span class="hljs-params">(String content)</span> {
+        <span class="hljs-keyword">if</span> (content == <span class="hljs-literal">null</span> || content.isBlank()) <span class="hljs-keyword">return</span> <span class="hljs-string">""</span>;
 
-        return content
-            .replace(&quot;\r\n&quot;, &quot;\n&quot;)           // Windows换行统一
-            .replaceAll(&quot;\n{4,}&quot;, &quot;\n\n\n&quot;)  // 多余空行合并
-            .replaceAll(&quot; +\n&quot;, &quot;\n&quot;)        // 行尾空格去除
-            .replaceAll(&quot;\t&quot;, &quot;    &quot;)        // Tab转空格
-            .replaceAll(&quot;[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F]&quot;, &quot;&quot;) // 控制字符去除
+        <span class="hljs-keyword">return</span> content
+            .replace(<span class="hljs-string">"\r\n"</span>, <span class="hljs-string">"\n"</span>)           <span class="hljs-comment">// Windows换行统一</span>
+            .replaceAll(<span class="hljs-string">"\n{4,}"</span>, <span class="hljs-string">"\n\n\n"</span>)  <span class="hljs-comment">// 多余空行合并</span>
+            .replaceAll(<span class="hljs-string">" +\n"</span>, <span class="hljs-string">"\n"</span>)        <span class="hljs-comment">// 行尾空格去除</span>
+            .replaceAll(<span class="hljs-string">"\t"</span>, <span class="hljs-string">"    "</span>)        <span class="hljs-comment">// Tab转空格</span>
+            .replaceAll(<span class="hljs-string">"[\\x00-\\x08\\x0B\\x0C\\x0E-\\x1F]"</span>, <span class="hljs-string">""</span>) <span class="hljs-comment">// 控制字符去除</span>
             .trim();
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 智能切片（TokenTextSplitter = 递归字符切片思想）
-     */
-    private List&lt;Document&gt; chunkDocument(Document doc) {
-        var splitter = TokenTextSplitter.builder()
+     */</span>
+    <span class="hljs-keyword">private</span> List&lt;Document&gt; <span class="hljs-title function_">chunkDocument</span><span class="hljs-params">(Document doc)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">splitter</span> <span class="hljs-operator">=</span> TokenTextSplitter.builder()
             .withChunkSize(chunkSize)
             .withChunkOverlap(chunkOverlap)
-            .withMinChunkSize(100)
-            .withMaxChunkSize(2048)
+            .withMinChunkSize(<span class="hljs-number">100</span>)
+            .withMaxChunkSize(<span class="hljs-number">2048</span>)
             .build();
 
-        var chunks = splitter.apply(List.of(doc));
+        <span class="hljs-type">var</span> <span class="hljs-variable">chunks</span> <span class="hljs-operator">=</span> splitter.apply(List.of(doc));
 
-        // 为每个chunk附加元数据
-        for (int i = 0; i &lt; chunks.size(); i++) {
-            var chunk = chunks.get(i);
-            chunk.getMetadata().put(&quot;chunk_index&quot;, String.valueOf(i));
-            chunk.getMetadata().put(&quot;total_chunks&quot;, String.valueOf(chunks.size()));
-            chunk.getMetadata().put(&quot;document_id&quot;, doc.getId());
-            chunk.getMetadata().put(&quot;chunk_id&quot;, UUID.randomUUID().toString());
-            chunk.getMetadata().put(&quot;chunk_created_at&quot;, java.time.Instant.now().toString());
+        <span class="hljs-comment">// 为每个chunk附加元数据</span>
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; chunks.size(); i++) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">chunk</span> <span class="hljs-operator">=</span> chunks.get(i);
+            chunk.getMetadata().put(<span class="hljs-string">"chunk_index"</span>, String.valueOf(i));
+            chunk.getMetadata().put(<span class="hljs-string">"total_chunks"</span>, String.valueOf(chunks.size()));
+            chunk.getMetadata().put(<span class="hljs-string">"document_id"</span>, doc.getId());
+            chunk.getMetadata().put(<span class="hljs-string">"chunk_id"</span>, UUID.randomUUID().toString());
+            chunk.getMetadata().put(<span class="hljs-string">"chunk_created_at"</span>, java.time.Instant.now().toString());
         }
 
-        return chunks;
+        <span class="hljs-keyword">return</span> chunks;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 向量索引（Spring AI VectorStore自动处理Embedding+写入）
-     */
-    private void indexChunks(List&lt;Document&gt; chunks) {
-        // Spring AI的VectorStore.add()会：
-        // 1. 对每个Document调用EmbeddingModel
-        // 2. 将Embedding + content + metadata写入pgvector
+     */</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">indexChunks</span><span class="hljs-params">(List&lt;Document&gt; chunks)</span> {
+        <span class="hljs-comment">// Spring AI的VectorStore.add()会：</span>
+        <span class="hljs-comment">// 1. 对每个Document调用EmbeddingModel</span>
+        <span class="hljs-comment">// 2. 将Embedding + content + metadata写入pgvector</span>
         vectorStore.add(chunks);
     }
 
-    /**
+    <span class="hljs-comment">/**
      * Elasticsearch BM25索引
-     */
-    private void indexToElasticsearch(List&lt;Document&gt; chunks) {
-        // 实际实现：批量写入ES用于BM25检索
-        // 略
+     */</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">indexToElasticsearch</span><span class="hljs-params">(List&lt;Document&gt; chunks)</span> {
+        <span class="hljs-comment">// 实际实现：批量写入ES用于BM25检索</span>
+        <span class="hljs-comment">// 略</span>
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 存储文档元数据到PostgreSQL
-     */
-    private void storeDocumentMetadata(String documentId, Path filePath,
-                                        Map&lt;String, Object&gt; metadata, int chunkCount) {
-        jdbcTemplate.update(&quot;&quot;&quot;
+     */</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">storeDocumentMetadata</span><span class="hljs-params">(String documentId, Path filePath,
+                                        Map&lt;String, Object&gt; metadata, <span class="hljs-type">int</span> chunkCount)</span> {
+        jdbcTemplate.update(<span class="hljs-string">"""
             INSERT INTO documents (document_id, source_uri, file_name, mime_type,
                                    file_size, title, chunk_count, status, created_at)
-            VALUES (?, ?, ?, ?, ?::bigint, ?, ?, &#39;active&#39;, now())
+            VALUES (?, ?, ?, ?, ?::bigint, ?, ?, 'active', now())
             ON CONFLICT (document_id) DO UPDATE SET
                 chunk_count = EXCLUDED.chunk_count,
                 updated_at = now()
-            &quot;&quot;&quot;,
+            """</span>,
             UUID.fromString(documentId),
             filePath.toUri().toString(),
             filePath.getFileName().toString(),
-            metadata.getOrDefault(&quot;mime_type&quot;, &quot;application/octet-stream&quot;),
-            metadata.getOrDefault(&quot;file_size&quot;, &quot;0&quot;),
-            metadata.getOrDefault(&quot;file_name&quot;, &quot;Untitled&quot;),
+            metadata.getOrDefault(<span class="hljs-string">"mime_type"</span>, <span class="hljs-string">"application/octet-stream"</span>),
+            metadata.getOrDefault(<span class="hljs-string">"file_size"</span>, <span class="hljs-string">"0"</span>),
+            metadata.getOrDefault(<span class="hljs-string">"file_name"</span>, <span class="hljs-string">"Untitled"</span>),
             chunkCount
         );
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>五、RetrievalService — 检索服务</h2>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.rag.pipeline;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">package</span> com.example.rag.pipeline;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.ai.document.Document;
-import org.springframework.ai.vectorstore.SearchRequest;
-import org.springframework.ai.vectorstore.VectorStore;
-import org.springframework.ai.vectorstore.filter.Filter;
-import org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Service;
+<span class="hljs-keyword">import</span> org.slf4j.Logger;
+<span class="hljs-keyword">import</span> org.slf4j.LoggerFactory;
+<span class="hljs-keyword">import</span> org.springframework.ai.document.Document;
+<span class="hljs-keyword">import</span> org.springframework.ai.vectorstore.SearchRequest;
+<span class="hljs-keyword">import</span> org.springframework.ai.vectorstore.VectorStore;
+<span class="hljs-keyword">import</span> org.springframework.ai.vectorstore.filter.Filter;
+<span class="hljs-keyword">import</span> org.springframework.ai.vectorstore.filter.FilterExpressionBuilder;
+<span class="hljs-keyword">import</span> org.springframework.jdbc.core.JdbcTemplate;
+<span class="hljs-keyword">import</span> org.springframework.stereotype.Service;
 
-import java.util.*;
-import java.util.stream.Collectors;
+<span class="hljs-keyword">import</span> java.util.*;
+<span class="hljs-keyword">import</span> java.util.stream.Collectors;
 
-@Service
-public class RetrievalService {
+<span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">RetrievalService</span> {
 
-    private static final Logger log = LoggerFactory.getLogger(RetrievalService.class);
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">Logger</span> <span class="hljs-variable">log</span> <span class="hljs-operator">=</span> LoggerFactory.getLogger(RetrievalService.class);
 
-    private final VectorStore vectorStore;
-    private final JdbcTemplate jdbcTemplate;
-    private final MeterRegistry meterRegistry;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> VectorStore vectorStore;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> JdbcTemplate jdbcTemplate;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> MeterRegistry meterRegistry;
 
-    public RetrievalService(VectorStore vectorStore, JdbcTemplate jdbcTemplate,
-                            MeterRegistry meterRegistry) {
-        this.vectorStore = vectorStore;
-        this.jdbcTemplate = jdbcTemplate;
-        this.meterRegistry = meterRegistry;
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">RetrievalService</span><span class="hljs-params">(VectorStore vectorStore, JdbcTemplate jdbcTemplate,
+                            MeterRegistry meterRegistry)</span> {
+        <span class="hljs-built_in">this</span>.vectorStore = vectorStore;
+        <span class="hljs-built_in">this</span>.jdbcTemplate = jdbcTemplate;
+        <span class="hljs-built_in">this</span>.meterRegistry = meterRegistry;
     }
 
-    public record RetrievalHit(
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">RetrievalHit</span><span class="hljs-params">(
         String chunkId,
         String documentId,
         String content,
-        double score,             // 向量相似度或BM25分数
-        double rrfScore,          // RRF融合分数
+        <span class="hljs-type">double</span> score,             // 向量相似度或BM25分数
+        <span class="hljs-type">double</span> rrfScore,          // RRF融合分数
         HitSource source,         // VECTOR, BM25, or BOTH
         Map&lt;String, Object&gt; metadata
-    ) {}
+    )</span> {}
 
-    public enum HitSource { VECTOR, BM25, BOTH }
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">enum</span> <span class="hljs-title class_">HitSource</span> { VECTOR, BM25, BOTH }
 
-    /**
+    <span class="hljs-comment">/**
      * 混合检索：向量 + BM25(simulated via ts_rank) + RRF融合
-     */
-    public List&lt;RetrievalHit&gt; hybridSearch(
+     */</span>
+    <span class="hljs-keyword">public</span> List&lt;RetrievalHit&gt; <span class="hljs-title function_">hybridSearch</span><span class="hljs-params">(
             String query,
             String tenantId,
             List&lt;String&gt; accessLevels,
-            int topK) {
+            <span class="hljs-type">int</span> topK)</span> {
 
-        var timer = Timer.start(meterRegistry);
+        <span class="hljs-type">var</span> <span class="hljs-variable">timer</span> <span class="hljs-operator">=</span> Timer.start(meterRegistry);
 
-        // 1. 向量检索 — 使用Spring AI VectorStore
-        var vectorHits = vectorSearch(query, tenantId, accessLevels, topK * 2);
-        meterRegistry.timer(&quot;rag.retrieval.vector&quot;).record(
+        <span class="hljs-comment">// 1. 向量检索 — 使用Spring AI VectorStore</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">vectorHits</span> <span class="hljs-operator">=</span> vectorSearch(query, tenantId, accessLevels, topK * <span class="hljs-number">2</span>);
+        meterRegistry.timer(<span class="hljs-string">"rag.retrieval.vector"</span>).record(
             timer.elapsed(java.util.concurrent.TimeUnit.MILLISECONDS),
             java.util.concurrent.TimeUnit.MILLISECONDS
         );
 
-        // 2. BM25检索 — 使用PostgreSQL ts_rank模拟
-        var bm25Hits = bm25Search(query, tenantId, accessLevels, topK * 2);
-        meterRegistry.timer(&quot;rag.retrieval.bm25&quot;).record(
+        <span class="hljs-comment">// 2. BM25检索 — 使用PostgreSQL ts_rank模拟</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">bm25Hits</span> <span class="hljs-operator">=</span> bm25Search(query, tenantId, accessLevels, topK * <span class="hljs-number">2</span>);
+        meterRegistry.timer(<span class="hljs-string">"rag.retrieval.bm25"</span>).record(
             timer.elapsed(java.util.concurrent.TimeUnit.MILLISECONDS),
             java.util.concurrent.TimeUnit.MILLISECONDS
         );
 
-        // 3. RRF融合
-        var fused = rrfFusion(vectorHits, bm25Hits, 60, topK);
-        meterRegistry.timer(&quot;rag.retrieval.fusion&quot;).record(
+        <span class="hljs-comment">// 3. RRF融合</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">fused</span> <span class="hljs-operator">=</span> rrfFusion(vectorHits, bm25Hits, <span class="hljs-number">60</span>, topK);
+        meterRegistry.timer(<span class="hljs-string">"rag.retrieval.fusion"</span>).record(
             timer.elapsed(java.util.concurrent.TimeUnit.MILLISECONDS),
             java.util.concurrent.TimeUnit.MILLISECONDS
         );
 
-        return fused;
+        <span class="hljs-keyword">return</span> fused;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 向量检索（Spring AI + pgvector）
-     */
-    private List&lt;RetrievalHit&gt; vectorSearch(
-            String query, String tenantId, List&lt;String&gt; accessLevels, int limit) {
+     */</span>
+    <span class="hljs-keyword">private</span> List&lt;RetrievalHit&gt; <span class="hljs-title function_">vectorSearch</span><span class="hljs-params">(
+            String query, String tenantId, List&lt;String&gt; accessLevels, <span class="hljs-type">int</span> limit)</span> {
 
-        // 构建元数据过滤条件
-        var filterExpression = buildFilterExpression(tenantId, accessLevels);
+        <span class="hljs-comment">// 构建元数据过滤条件</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">filterExpression</span> <span class="hljs-operator">=</span> buildFilterExpression(tenantId, accessLevels);
 
-        var request = SearchRequest.builder()
+        <span class="hljs-type">var</span> <span class="hljs-variable">request</span> <span class="hljs-operator">=</span> SearchRequest.builder()
             .query(query)
             .topK(limit)
-            .similarityThreshold(0.5)  // 最低相似度阈值
+            .similarityThreshold(<span class="hljs-number">0.5</span>)  <span class="hljs-comment">// 最低相似度阈值</span>
             .filterExpression(filterExpression)
             .build();
 
-        var results = vectorStore.similaritySearch(request);
+        <span class="hljs-type">var</span> <span class="hljs-variable">results</span> <span class="hljs-operator">=</span> vectorStore.similaritySearch(request);
 
-        return results.stream()
-            .map(doc -&gt; new RetrievalHit(
-                (String) doc.getMetadata().get(&quot;chunk_id&quot;),
-                (String) doc.getMetadata().get(&quot;document_id&quot;),
+        <span class="hljs-keyword">return</span> results.stream()
+            .map(doc -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">RetrievalHit</span>(
+                (String) doc.getMetadata().get(<span class="hljs-string">"chunk_id"</span>),
+                (String) doc.getMetadata().get(<span class="hljs-string">"document_id"</span>),
                 doc.getContent(),
                 doc.getScore(),
-                0, // rrfScore later
+                <span class="hljs-number">0</span>, <span class="hljs-comment">// rrfScore later</span>
                 HitSource.VECTOR,
                 doc.getMetadata()
             ))
             .toList();
     }
 
-    /**
+    <span class="hljs-comment">/**
      * BM25检索（PostgreSQL ts_rank实现）
-     */
-    private List&lt;RetrievalHit&gt; bm25Search(
-            String query, String tenantId, List&lt;String&gt; accessLevels, int limit) {
+     */</span>
+    <span class="hljs-keyword">private</span> List&lt;RetrievalHit&gt; <span class="hljs-title function_">bm25Search</span><span class="hljs-params">(
+            String query, String tenantId, List&lt;String&gt; accessLevels, <span class="hljs-type">int</span> limit)</span> {
 
-        var sql = &quot;&quot;&quot;
+        <span class="hljs-type">var</span> <span class="hljs-variable">sql</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
             SELECT c.chunk_id, c.content, c.document_id,
-                   ts_rank(to_tsvector(&#39;chinese&#39;, c.content),
-                           plainto_tsquery(&#39;chinese&#39;, ?)) AS score,
+                   ts_rank(to_tsvector('chinese', c.content),
+                           plainto_tsquery('chinese', ?)) AS score,
                    c.metadata
             FROM chunks c
-            WHERE to_tsvector(&#39;chinese&#39;, c.content) @@ plainto_tsquery(&#39;chinese&#39;, ?)
-              AND c.status = &#39;active&#39;
+            WHERE to_tsvector('chinese', c.content) @@ plainto_tsquery('chinese', ?)
+              AND c.status = 'active'
               AND c.tenant_id = ?
               AND c.access_level = ANY(?)
             ORDER BY score DESC
             LIMIT ?
-            &quot;&quot;&quot;;
+            """</span>;
 
-        try {
-            return jdbcTemplate.query(sql,
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-keyword">return</span> jdbcTemplate.query(sql,
                 ps -&gt; {
-                    ps.setString(1, query);
-                    ps.setString(2, query);
-                    ps.setString(3, tenantId);
-                    ps.setArray(4, ps.getConnection().createArrayOf(&quot;text&quot;,
+                    ps.setString(<span class="hljs-number">1</span>, query);
+                    ps.setString(<span class="hljs-number">2</span>, query);
+                    ps.setString(<span class="hljs-number">3</span>, tenantId);
+                    ps.setArray(<span class="hljs-number">4</span>, ps.getConnection().createArrayOf(<span class="hljs-string">"text"</span>,
                         accessLevels.toArray()));
-                    ps.setInt(5, limit);
+                    ps.setInt(<span class="hljs-number">5</span>, limit);
                 },
                 (rs, rowNum) -&gt; {
-                    var metadata = new HashMap&lt;String, Object&gt;();
-                    // 从JSON字段解析元数据（简化）
-                    return new RetrievalHit(
-                        rs.getString(&quot;chunk_id&quot;),
-                        rs.getString(&quot;document_id&quot;),
-                        rs.getString(&quot;content&quot;),
-                        rs.getDouble(&quot;score&quot;),
-                        0,
+                    <span class="hljs-type">var</span> <span class="hljs-variable">metadata</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">HashMap</span>&lt;String, Object&gt;();
+                    <span class="hljs-comment">// 从JSON字段解析元数据（简化）</span>
+                    <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RetrievalHit</span>(
+                        rs.getString(<span class="hljs-string">"chunk_id"</span>),
+                        rs.getString(<span class="hljs-string">"document_id"</span>),
+                        rs.getString(<span class="hljs-string">"content"</span>),
+                        rs.getDouble(<span class="hljs-string">"score"</span>),
+                        <span class="hljs-number">0</span>,
                         HitSource.BM25,
                         metadata
                     );
                 }
             );
-        } catch (Exception e) {
-            log.warn(&quot;BM25 search failed: {}&quot;, e.getMessage());
-            return List.of();
+        } <span class="hljs-keyword">catch</span> (Exception e) {
+            log.warn(<span class="hljs-string">"BM25 search failed: {}"</span>, e.getMessage());
+            <span class="hljs-keyword">return</span> List.of();
         }
     }
 
-    /**
+    <span class="hljs-comment">/**
      * RRF融合算法
-     */
-    private List&lt;RetrievalHit&gt; rrfFusion(
+     */</span>
+    <span class="hljs-keyword">private</span> List&lt;RetrievalHit&gt; <span class="hljs-title function_">rrfFusion</span><span class="hljs-params">(
             List&lt;RetrievalHit&gt; vectorHits,
             List&lt;RetrievalHit&gt; bm25Hits,
-            int k, int topK) {
+            <span class="hljs-type">int</span> k, <span class="hljs-type">int</span> topK)</span> {
 
-        var rrfScores = new HashMap&lt;String, RetrievalHit&gt;();
+        <span class="hljs-type">var</span> <span class="hljs-variable">rrfScores</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">HashMap</span>&lt;String, RetrievalHit&gt;();
 
-        // 处理向量检索结果
-        for (int i = 0; i &lt; vectorHits.size(); i++) {
-            var hit = vectorHits.get(i);
-            var rrf = 1.0 / (k + i + 1);
-            rrfScores.put(hit.chunkId(), new RetrievalHit(
+        <span class="hljs-comment">// 处理向量检索结果</span>
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; vectorHits.size(); i++) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">hit</span> <span class="hljs-operator">=</span> vectorHits.get(i);
+            <span class="hljs-type">var</span> <span class="hljs-variable">rrf</span> <span class="hljs-operator">=</span> <span class="hljs-number">1.0</span> / (k + i + <span class="hljs-number">1</span>);
+            rrfScores.put(hit.chunkId(), <span class="hljs-keyword">new</span> <span class="hljs-title class_">RetrievalHit</span>(
                 hit.chunkId(), hit.documentId(), hit.content(),
                 hit.score(), rrf,
                 hit.source(), hit.metadata()
             ));
         }
 
-        // 处理BM25结果，对重叠的chunk累加RRF分数
-        for (int i = 0; i &lt; bm25Hits.size(); i++) {
-            var hit = bm25Hits.get(i);
-            var rrf = 1.0 / (k + i + 1);
+        <span class="hljs-comment">// 处理BM25结果，对重叠的chunk累加RRF分数</span>
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; bm25Hits.size(); i++) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">hit</span> <span class="hljs-operator">=</span> bm25Hits.get(i);
+            <span class="hljs-type">var</span> <span class="hljs-variable">rrf</span> <span class="hljs-operator">=</span> <span class="hljs-number">1.0</span> / (k + i + <span class="hljs-number">1</span>);
 
-            if (rrfScores.containsKey(hit.chunkId())) {
-                // 在两个列表中都有出现 → 标记为BOTH
-                var existing = rrfScores.get(hit.chunkId());
-                rrfScores.put(hit.chunkId(), new RetrievalHit(
+            <span class="hljs-keyword">if</span> (rrfScores.containsKey(hit.chunkId())) {
+                <span class="hljs-comment">// 在两个列表中都有出现 → 标记为BOTH</span>
+                <span class="hljs-type">var</span> <span class="hljs-variable">existing</span> <span class="hljs-operator">=</span> rrfScores.get(hit.chunkId());
+                rrfScores.put(hit.chunkId(), <span class="hljs-keyword">new</span> <span class="hljs-title class_">RetrievalHit</span>(
                     existing.chunkId(), existing.documentId(), existing.content(),
                     existing.score(), existing.rrfScore() + rrf, HitSource.BOTH, existing.metadata()
                 ));
-            } else {
-                rrfScores.put(hit.chunkId(), new RetrievalHit(
+            } <span class="hljs-keyword">else</span> {
+                rrfScores.put(hit.chunkId(), <span class="hljs-keyword">new</span> <span class="hljs-title class_">RetrievalHit</span>(
                     hit.chunkId(), hit.documentId(), hit.content(),
                     hit.score(), rrf, HitSource.BM25, hit.metadata()
                 ));
             }
         }
 
-        // 按RRF分数排序
-        return rrfScores.values().stream()
+        <span class="hljs-comment">// 按RRF分数排序</span>
+        <span class="hljs-keyword">return</span> rrfScores.values().stream()
             .sorted((a, b) -&gt; Double.compare(b.rrfScore(), a.rrfScore()))
             .limit(topK)
             .toList();
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 构建Spring AI Filter Expression（元数据过滤）
-     */
-    private FilterExpression buildFilterExpression(String tenantId, List&lt;String&gt; accessLevels) {
-        var builder = new FilterExpressionBuilder();
+     */</span>
+    <span class="hljs-keyword">private</span> FilterExpression <span class="hljs-title function_">buildFilterExpression</span><span class="hljs-params">(String tenantId, List&lt;String&gt; accessLevels)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">builder</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">FilterExpressionBuilder</span>();
 
-        // tenant_id过滤
-        var filter = builder.eq(&quot;tenant_id&quot;, tenantId);
+        <span class="hljs-comment">// tenant_id过滤</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">filter</span> <span class="hljs-operator">=</span> builder.eq(<span class="hljs-string">"tenant_id"</span>, tenantId);
 
-        // access_level IN (...)
-        if (accessLevels != null &amp;&amp; !accessLevels.isEmpty()) {
-            var accessFilter = builder.in(&quot;access_level&quot;,
-                accessLevels.toArray(new String[0]));
+        <span class="hljs-comment">// access_level IN (...)</span>
+        <span class="hljs-keyword">if</span> (accessLevels != <span class="hljs-literal">null</span> &amp;&amp; !accessLevels.isEmpty()) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">accessFilter</span> <span class="hljs-operator">=</span> builder.in(<span class="hljs-string">"access_level"</span>,
+                accessLevels.toArray(<span class="hljs-keyword">new</span> <span class="hljs-title class_">String</span>[<span class="hljs-number">0</span>]));
             filter = filter.and(accessFilter);
         }
 
-        // status = active
-        filter = filter.and(builder.eq(&quot;status&quot;, &quot;active&quot;));
+        <span class="hljs-comment">// status = active</span>
+        filter = filter.and(builder.eq(<span class="hljs-string">"status"</span>, <span class="hljs-string">"active"</span>));
 
-        return filter;
+        <span class="hljs-keyword">return</span> filter;
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>六、QueryRewriterService — Query改写</h2>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.rag.pipeline;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">package</span> com.example.rag.pipeline;
 
-import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.stereotype.Service;
+<span class="hljs-keyword">import</span> org.springframework.ai.chat.client.ChatClient;
+<span class="hljs-keyword">import</span> org.springframework.stereotype.Service;
 
-import java.util.List;
+<span class="hljs-keyword">import</span> java.util.List;
 
-@Service
-public class QueryRewriterService {
+<span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">QueryRewriterService</span> {
 
-    private final ChatClient chatClient;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> ChatClient chatClient;
 
-    public QueryRewriterService(ChatClient.Builder chatClientBuilder) {
-        this.chatClient = chatClientBuilder.build();
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">QueryRewriterService</span><span class="hljs-params">(ChatClient.Builder chatClientBuilder)</span> {
+        <span class="hljs-built_in">this</span>.chatClient = chatClientBuilder.build();
     }
 
-    /**
+    <span class="hljs-comment">/**
      * Query改写：拼写纠正 + 同义词扩展 + 意图澄清
-     */
-    public record RewrittenQuery(
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">RewrittenQuery</span><span class="hljs-params">(
         String originalQuery,
         String rewrittenQuery,    // 改写后的最终查询
         List&lt;String&gt; expansions,  // 扩展的同义词/相关词
         String intent             // 查询意图
-    ) {}
+    )</span> {}
 
-    public RewrittenQuery rewrite(String query, List&lt;String&gt; conversationHistory) {
-        var historyText = conversationHistory.isEmpty()
-            ? &quot;(无历史)&quot;
-            : String.join(&quot;\n&quot;, conversationHistory);
+    <span class="hljs-keyword">public</span> RewrittenQuery <span class="hljs-title function_">rewrite</span><span class="hljs-params">(String query, List&lt;String&gt; conversationHistory)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">historyText</span> <span class="hljs-operator">=</span> conversationHistory.isEmpty()
+            ? <span class="hljs-string">"(无历史)"</span>
+            : String.join(<span class="hljs-string">"\n"</span>, conversationHistory);
 
-        var prompt = &quot;&quot;&quot;
+        <span class="hljs-type">var</span> <span class="hljs-variable">prompt</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
             你是一个查询改写助手。请分析以下查询，进行以下优化：
 
             1. 拼写纠正：纠正错别字
@@ -719,44 +714,44 @@ public class QueryRewriterService {
 
             请以JSON格式返回（不要代码块标记）：
             {
-              &quot;rewritten_query&quot;: &quot;改写后的查询&quot;,
-              &quot;expansions&quot;: [&quot;扩展词1&quot;, &quot;扩展词2&quot;],
-              &quot;intent&quot;: &quot;意图&quot;
+              "rewritten_query": "改写后的查询",
+              "expansions": ["扩展词1", "扩展词2"],
+              "intent": "意图"
             }
-            &quot;&quot;&quot;.formatted(historyText, query);
+            """</span>.formatted(historyText, query);
 
-        var response = chatClient.prompt().user(prompt).call().content();
-        response = response.replaceAll(&quot;```json\\s*&quot;, &quot;&quot;).replaceAll(&quot;```\\s*&quot;, &quot;&quot;).trim();
+        <span class="hljs-type">var</span> <span class="hljs-variable">response</span> <span class="hljs-operator">=</span> chatClient.prompt().user(prompt).call().content();
+        response = response.replaceAll(<span class="hljs-string">"```json\\s*"</span>, <span class="hljs-string">""</span>).replaceAll(<span class="hljs-string">"```\\s*"</span>, <span class="hljs-string">""</span>).trim();
 
-        try {
-            var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            var root = mapper.readTree(response);
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-type">var</span> <span class="hljs-variable">mapper</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">com</span>.fasterxml.jackson.databind.ObjectMapper();
+            <span class="hljs-type">var</span> <span class="hljs-variable">root</span> <span class="hljs-operator">=</span> mapper.readTree(response);
 
-            var expansions = new java.util.ArrayList&lt;String&gt;();
-            var expansionsNode = root.get(&quot;expansions&quot;);
-            if (expansionsNode != null &amp;&amp; expansionsNode.isArray()) {
-                for (var e : expansionsNode) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">expansions</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">java</span>.util.ArrayList&lt;String&gt;();
+            <span class="hljs-type">var</span> <span class="hljs-variable">expansionsNode</span> <span class="hljs-operator">=</span> root.get(<span class="hljs-string">"expansions"</span>);
+            <span class="hljs-keyword">if</span> (expansionsNode != <span class="hljs-literal">null</span> &amp;&amp; expansionsNode.isArray()) {
+                <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> e : expansionsNode) {
                     expansions.add(e.asText());
                 }
             }
 
-            return new RewrittenQuery(
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RewrittenQuery</span>(
                 query,
-                root.get(&quot;rewritten_query&quot;).asText(),
+                root.get(<span class="hljs-string">"rewritten_query"</span>).asText(),
                 expansions,
-                root.path(&quot;intent&quot;).asText(&quot;unknown&quot;)
+                root.path(<span class="hljs-string">"intent"</span>).asText(<span class="hljs-string">"unknown"</span>)
             );
-        } catch (Exception e) {
-            // 降级：返回原始查询
-            return new RewrittenQuery(query, query, List.of(), &quot;unknown&quot;);
+        } <span class="hljs-keyword">catch</span> (Exception e) {
+            <span class="hljs-comment">// 降级：返回原始查询</span>
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RewrittenQuery</span>(query, query, List.of(), <span class="hljs-string">"unknown"</span>);
         }
     }
 
-    /**
+    <span class="hljs-comment">/**
      * HyDE: 生成假设文档
-     */
-    public String generateHypotheticalAnswer(String query) {
-        var prompt = &quot;&quot;&quot;
+     */</span>
+    <span class="hljs-keyword">public</span> String <span class="hljs-title function_">generateHypotheticalAnswer</span><span class="hljs-params">(String query)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">prompt</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
             请根据以下问题，写一段假设性的回答（约200-300字）。
             不需要真实准确，只需生成一段看起来像是在回答这个问题的文本。
             这将用于改进文档检索。
@@ -764,288 +759,286 @@ public class QueryRewriterService {
             问题：%s
 
             假设回答：
-            &quot;&quot;&quot;.formatted(query);
+            """</span>.formatted(query);
 
-        return chatClient.prompt().user(prompt).call().content();
+        <span class="hljs-keyword">return</span> chatClient.prompt().user(prompt).call().content();
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>七、RerankerService — 重排服务</h2>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.rag.pipeline;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">package</span> com.example.rag.pipeline;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.stereotype.Service;
+<span class="hljs-keyword">import</span> org.slf4j.Logger;
+<span class="hljs-keyword">import</span> org.slf4j.LoggerFactory;
+<span class="hljs-keyword">import</span> org.springframework.beans.factory.annotation.Value;
+<span class="hljs-keyword">import</span> org.springframework.stereotype.Service;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.util.*;
+<span class="hljs-keyword">import</span> java.net.URI;
+<span class="hljs-keyword">import</span> java.net.http.HttpClient;
+<span class="hljs-keyword">import</span> java.net.http.HttpRequest;
+<span class="hljs-keyword">import</span> java.net.http.HttpResponse;
+<span class="hljs-keyword">import</span> java.util.*;
 
-@Service
-public class RerankerService {
+<span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">RerankerService</span> {
 
-    private static final Logger log = LoggerFactory.getLogger(RerankerService.class);
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">Logger</span> <span class="hljs-variable">log</span> <span class="hljs-operator">=</span> LoggerFactory.getLogger(RerankerService.class);
 
-    private final HttpClient httpClient;
-    private final String cohereApiKey;
-    private final String cohereRerankUrl = &quot;https://api.cohere.com/v2/rerank&quot;;
-    private final MeterRegistry meterRegistry;
-    private final double minRelevanceScore;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> HttpClient httpClient;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> String cohereApiKey;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">String</span> <span class="hljs-variable">cohereRerankUrl</span> <span class="hljs-operator">=</span> <span class="hljs-string">"https://api.cohere.com/v2/rerank"</span>;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> MeterRegistry meterRegistry;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">double</span> minRelevanceScore;
 
-    public RerankerService(
-            @Value(&quot;${cohere.api-key:${COHERE_API_KEY:}}&quot;) String cohereApiKey,
-            @Value(&quot;${rag.retrieval.min-relevance:0.2}&quot;) double minRelevanceScore,
-            MeterRegistry meterRegistry) {
-        this.cohereApiKey = cohereApiKey;
-        this.minRelevanceScore = minRelevanceScore;
-        this.meterRegistry = meterRegistry;
-        this.httpClient = HttpClient.newBuilder()
-            .connectTimeout(java.time.Duration.ofSeconds(10))
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">RerankerService</span><span class="hljs-params">(
+            <span class="hljs-meta">@Value("${cohere.api-key:${COHERE_API_KEY:}}")</span> String cohereApiKey,
+            <span class="hljs-meta">@Value("${rag.retrieval.min-relevance:0.2}")</span> <span class="hljs-type">double</span> minRelevanceScore,
+            MeterRegistry meterRegistry)</span> {
+        <span class="hljs-built_in">this</span>.cohereApiKey = cohereApiKey;
+        <span class="hljs-built_in">this</span>.minRelevanceScore = minRelevanceScore;
+        <span class="hljs-built_in">this</span>.meterRegistry = meterRegistry;
+        <span class="hljs-built_in">this</span>.httpClient = HttpClient.newBuilder()
+            .connectTimeout(java.time.Duration.ofSeconds(<span class="hljs-number">10</span>))
             .build();
     }
 
-    public record RerankedChunk(
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">RerankedChunk</span><span class="hljs-params">(
         String chunkId,
         String content,
-        double relevanceScore,
-        int originalRank,
-        int rerankedRank,
+        <span class="hljs-type">double</span> relevanceScore,
+        <span class="hljs-type">int</span> originalRank,
+        <span class="hljs-type">int</span> rerankedRank,
         Map&lt;String, Object&gt; metadata
-    ) {}
+    )</span> {}
 
-    /**
+    <span class="hljs-comment">/**
      * 重排检索结果
-     */
-    public List&lt;RerankedChunk&gt; rerank(
+     */</span>
+    <span class="hljs-keyword">public</span> List&lt;RerankedChunk&gt; <span class="hljs-title function_">rerank</span><span class="hljs-params">(
             String query,
             List&lt;RetrievalService.RetrievalHit&gt; retrievalHits,
-            int topN) {
+            <span class="hljs-type">int</span> topN)</span> {
 
-        var timer = Timer.start(meterRegistry);
+        <span class="hljs-type">var</span> <span class="hljs-variable">timer</span> <span class="hljs-operator">=</span> Timer.start(meterRegistry);
 
-        if (retrievalHits.isEmpty()) return List.of();
+        <span class="hljs-keyword">if</span> (retrievalHits.isEmpty()) <span class="hljs-keyword">return</span> List.of();
 
-        try {
-            // 尝试Cohere Rerank API
-            return rerankWithCohere(query, retrievalHits, topN);
-        } catch (Exception e) {
-            log.warn(&quot;Cohere Rerank failed, falling back to score-based: {}&quot;, e.getMessage());
-            return fallbackRerank(retrievalHits, topN);
-        } finally {
-            meterRegistry.timer(&quot;rag.rerank.duration&quot;).record(
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-comment">// 尝试Cohere Rerank API</span>
+            <span class="hljs-keyword">return</span> rerankWithCohere(query, retrievalHits, topN);
+        } <span class="hljs-keyword">catch</span> (Exception e) {
+            log.warn(<span class="hljs-string">"Cohere Rerank failed, falling back to score-based: {}"</span>, e.getMessage());
+            <span class="hljs-keyword">return</span> fallbackRerank(retrievalHits, topN);
+        } <span class="hljs-keyword">finally</span> {
+            meterRegistry.timer(<span class="hljs-string">"rag.rerank.duration"</span>).record(
                 timer.elapsed(java.util.concurrent.TimeUnit.MILLISECONDS),
                 java.util.concurrent.TimeUnit.MILLISECONDS
             );
         }
     }
 
-    private List&lt;RerankedChunk&gt; rerankWithCohere(
-            String query, List&lt;RetrievalService.RetrievalHit&gt; hits, int topN) throws Exception {
+    <span class="hljs-keyword">private</span> List&lt;RerankedChunk&gt; <span class="hljs-title function_">rerankWithCohere</span><span class="hljs-params">(
+            String query, List&lt;RetrievalService.RetrievalHit&gt; hits, <span class="hljs-type">int</span> topN)</span> <span class="hljs-keyword">throws</span> Exception {
 
-        var documents = hits.stream()
-            .map(h -&gt; h.content().length() &gt; 512
-                ? h.content().substring(0, 512) : h.content())
+        <span class="hljs-type">var</span> <span class="hljs-variable">documents</span> <span class="hljs-operator">=</span> hits.stream()
+            .map(h -&gt; h.content().length() &gt; <span class="hljs-number">512</span>
+                ? h.content().substring(<span class="hljs-number">0</span>, <span class="hljs-number">512</span>) : h.content())
             .toList();
 
-        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-        var requestBody = mapper.createObjectNode();
-        requestBody.put(&quot;model&quot;, &quot;rerank-multilingual-v3.0&quot;);
-        requestBody.put(&quot;query&quot;, query);
-        requestBody.put(&quot;top_n&quot;, topN);
-        requestBody.set(&quot;documents&quot;, mapper.valueToTree(documents));
+        <span class="hljs-type">var</span> <span class="hljs-variable">mapper</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">com</span>.fasterxml.jackson.databind.ObjectMapper();
+        <span class="hljs-type">var</span> <span class="hljs-variable">requestBody</span> <span class="hljs-operator">=</span> mapper.createObjectNode();
+        requestBody.put(<span class="hljs-string">"model"</span>, <span class="hljs-string">"rerank-multilingual-v3.0"</span>);
+        requestBody.put(<span class="hljs-string">"query"</span>, query);
+        requestBody.put(<span class="hljs-string">"top_n"</span>, topN);
+        requestBody.set(<span class="hljs-string">"documents"</span>, mapper.valueToTree(documents));
 
-        var request = HttpRequest.newBuilder()
+        <span class="hljs-type">var</span> <span class="hljs-variable">request</span> <span class="hljs-operator">=</span> HttpRequest.newBuilder()
             .uri(URI.create(cohereRerankUrl))
-            .header(&quot;Content-Type&quot;, &quot;application/json&quot;)
-            .header(&quot;Authorization&quot;, &quot;Bearer &quot; + cohereApiKey)
-            .header(&quot;Accept&quot;, &quot;application/json&quot;)
+            .header(<span class="hljs-string">"Content-Type"</span>, <span class="hljs-string">"application/json"</span>)
+            .header(<span class="hljs-string">"Authorization"</span>, <span class="hljs-string">"Bearer "</span> + cohereApiKey)
+            .header(<span class="hljs-string">"Accept"</span>, <span class="hljs-string">"application/json"</span>)
             .POST(HttpRequest.BodyPublishers.ofString(mapper.writeValueAsString(requestBody)))
             .build();
 
-        var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+        <span class="hljs-type">var</span> <span class="hljs-variable">response</span> <span class="hljs-operator">=</span> httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
-        if (response.statusCode() != 200) {
-            throw new RuntimeException(&quot;Cohere API error: &quot; + response.statusCode());
+        <span class="hljs-keyword">if</span> (response.statusCode() != <span class="hljs-number">200</span>) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RuntimeException</span>(<span class="hljs-string">"Cohere API error: "</span> + response.statusCode());
         }
 
-        var root = mapper.readTree(response.body());
-        var results = root.get(&quot;results&quot;);
+        <span class="hljs-type">var</span> <span class="hljs-variable">root</span> <span class="hljs-operator">=</span> mapper.readTree(response.body());
+        <span class="hljs-type">var</span> <span class="hljs-variable">results</span> <span class="hljs-operator">=</span> root.get(<span class="hljs-string">"results"</span>);
 
-        var reranked = new ArrayList&lt;RerankedChunk&gt;();
-        for (int i = 0; i &lt; results.size(); i++) {
-            var result = results.get(i);
-            var index = result.get(&quot;index&quot;).asInt();
-            var score = result.get(&quot;relevance_score&quot;).asDouble();
+        <span class="hljs-type">var</span> <span class="hljs-variable">reranked</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;RerankedChunk&gt;();
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; results.size(); i++) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> results.get(i);
+            <span class="hljs-type">var</span> <span class="hljs-variable">index</span> <span class="hljs-operator">=</span> result.get(<span class="hljs-string">"index"</span>).asInt();
+            <span class="hljs-type">var</span> <span class="hljs-variable">score</span> <span class="hljs-operator">=</span> result.get(<span class="hljs-string">"relevance_score"</span>).asDouble();
 
-            if (score &lt; minRelevanceScore) continue;
+            <span class="hljs-keyword">if</span> (score &lt; minRelevanceScore) <span class="hljs-keyword">continue</span>;
 
-            var hit = hits.get(index);
-            reranked.add(new RerankedChunk(
+            <span class="hljs-type">var</span> <span class="hljs-variable">hit</span> <span class="hljs-operator">=</span> hits.get(index);
+            reranked.add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">RerankedChunk</span>(
                 hit.chunkId(),
                 hit.content(),
                 score,
-                index + 1,
-                i + 1,
+                index + <span class="hljs-number">1</span>,
+                i + <span class="hljs-number">1</span>,
                 hit.metadata()
             ));
         }
 
-        return reranked;
+        <span class="hljs-keyword">return</span> reranked;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * Fallback重排：基于原始检索分数
-     */
-    private List&lt;RerankedChunk&gt; fallbackRerank(
-            List&lt;RetrievalService.RetrievalHit&gt; hits, int topN) {
-        return hits.stream()
+     */</span>
+    <span class="hljs-keyword">private</span> List&lt;RerankedChunk&gt; <span class="hljs-title function_">fallbackRerank</span><span class="hljs-params">(
+            List&lt;RetrievalService.RetrievalHit&gt; hits, <span class="hljs-type">int</span> topN)</span> {
+        <span class="hljs-keyword">return</span> hits.stream()
             .limit(topN)
-            .map(hit -&gt; new RerankedChunk(
+            .map(hit -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">RerankedChunk</span>(
                 hit.chunkId(), hit.content(),
-                hit.rrfScore() &gt; 0 ? hit.rrfScore() : hit.score(),
-                hits.indexOf(hit) + 1, hits.indexOf(hit) + 1, hit.metadata()
+                hit.rrfScore() &gt; <span class="hljs-number">0</span> ? hit.rrfScore() : hit.score(),
+                hits.indexOf(hit) + <span class="hljs-number">1</span>, hits.indexOf(hit) + <span class="hljs-number">1</span>, hit.metadata()
             ))
             .toList();
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>八、RAGService — 完整的RAG问答服务</h2>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.rag.pipeline;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">package</span> com.example.rag.pipeline;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.stereotype.Service;
+<span class="hljs-keyword">import</span> org.slf4j.Logger;
+<span class="hljs-keyword">import</span> org.slf4j.LoggerFactory;
+<span class="hljs-keyword">import</span> org.springframework.ai.chat.client.ChatClient;
+<span class="hljs-keyword">import</span> org.springframework.stereotype.Service;
 
-import java.util.*;
-import java.util.stream.Collectors;
+<span class="hljs-keyword">import</span> java.util.*;
+<span class="hljs-keyword">import</span> java.util.stream.Collectors;
 
-@Service
-public class RAGService {
+<span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">RAGService</span> {
 
-    private static final Logger log = LoggerFactory.getLogger(RAGService.class);
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">Logger</span> <span class="hljs-variable">log</span> <span class="hljs-operator">=</span> LoggerFactory.getLogger(RAGService.class);
 
-    private final RetrievalService retrievalService;
-    private final QueryRewriterService queryRewriter;
-    private final RerankerService reranker;
-    private final ChatClient chatClient;
-    private final MeterRegistry meterRegistry;
-    private final int retrievalTopK;
-    private final int rerankTopK;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> RetrievalService retrievalService;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> QueryRewriterService queryRewriter;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> RerankerService reranker;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> ChatClient chatClient;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> MeterRegistry meterRegistry;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">int</span> retrievalTopK;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">int</span> rerankTopK;
 
-    public RAGService(
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">RAGService</span><span class="hljs-params">(
             RetrievalService retrievalService,
             QueryRewriterService queryRewriter,
             RerankerService reranker,
             ChatClient.Builder chatClientBuilder,
             MeterRegistry meterRegistry,
-            @Value(&quot;${rag.retrieval.top-k:20}&quot;) int retrievalTopK,
-            @Value(&quot;${rag.retrieval.rerank-top-k:5}&quot;) int rerankTopK) {
-        this.retrievalService = retrievalService;
-        this.queryRewriter = queryRewriter;
-        this.reranker = reranker;
-        this.chatClient = chatClientBuilder.build();
-        this.meterRegistry = meterRegistry;
-        this.retrievalTopK = retrievalTopK;
-        this.rerankTopK = rerankTopK;
+            <span class="hljs-meta">@Value("${rag.retrieval.top-k:20}")</span> <span class="hljs-type">int</span> retrievalTopK,
+            <span class="hljs-meta">@Value("${rag.retrieval.rerank-top-k:5}")</span> <span class="hljs-type">int</span> rerankTopK)</span> {
+        <span class="hljs-built_in">this</span>.retrievalService = retrievalService;
+        <span class="hljs-built_in">this</span>.queryRewriter = queryRewriter;
+        <span class="hljs-built_in">this</span>.reranker = reranker;
+        <span class="hljs-built_in">this</span>.chatClient = chatClientBuilder.build();
+        <span class="hljs-built_in">this</span>.meterRegistry = meterRegistry;
+        <span class="hljs-built_in">this</span>.retrievalTopK = retrievalTopK;
+        <span class="hljs-built_in">this</span>.rerankTopK = rerankTopK;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * RAG问答响应
-     */
-    public record RagResponse(
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">RagResponse</span><span class="hljs-params">(
         String answer,
         List&lt;Citation&gt; citations,
         RagMetrics metrics
-    ) {}
+    )</span> {}
 
-    public record Citation(
-        int index,
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">Citation</span><span class="hljs-params">(
+        <span class="hljs-type">int</span> index,
         String chunkId,
         String sourceTitle,
         String excerpt,     // 引用的原文片段（前200字）
         String sectionPath,
-        double relevanceScore
-    ) {}
+        <span class="hljs-type">double</span> relevanceScore
+    )</span> {}
 
-    public record RagMetrics(
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">RagMetrics</span><span class="hljs-params">(
         String originalQuery,
         String rewrittenQuery,
-        int retrievalCandidates,   // 检索返回数量
-        int rerankedCandidates,    // 重排后数量
-        long retrievalTimeMs,
-        long rerankTimeMs,
-        long generationTimeMs,
-        long totalTimeMs
-    ) {}
+        <span class="hljs-type">int</span> retrievalCandidates,   // 检索返回数量
+        <span class="hljs-type">int</span> rerankedCandidates,    // 重排后数量
+        <span class="hljs-type">long</span> retrievalTimeMs,
+        <span class="hljs-type">long</span> rerankTimeMs,
+        <span class="hljs-type">long</span> generationTimeMs,
+        <span class="hljs-type">long</span> totalTimeMs
+    )</span> {}
 
-    /**
+    <span class="hljs-comment">/**
      * 完整的RAG流程
-     */
-    public RagResponse ask(
+     */</span>
+    <span class="hljs-keyword">public</span> RagResponse <span class="hljs-title function_">ask</span><span class="hljs-params">(
             String query,
             String tenantId,
             List&lt;String&gt; userAccessLevels,
-            List&lt;String&gt; conversationHistory) {
+            List&lt;String&gt; conversationHistory)</span> {
 
-        var totalStart = System.currentTimeMillis();
-        var metrics = new RagMetrics(query, query, 0, 0, 0, 0, 0, 0);
+        <span class="hljs-type">var</span> <span class="hljs-variable">totalStart</span> <span class="hljs-operator">=</span> System.currentTimeMillis();
+        <span class="hljs-type">var</span> <span class="hljs-variable">metrics</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RagMetrics</span>(query, query, <span class="hljs-number">0</span>, <span class="hljs-number">0</span>, <span class="hljs-number">0</span>, <span class="hljs-number">0</span>, <span class="hljs-number">0</span>, <span class="hljs-number">0</span>);
 
-        try {
-            // Phase 1: Query理解与改写
-            var rewritten = queryRewriter.rewrite(query, conversationHistory);
-            var rewrittenQuery = rewritten.rewrittenQuery();
-            metrics = new RagMetrics(query, rewrittenQuery, 0, 0, 0, 0, 0, 0);
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-comment">// Phase 1: Query理解与改写</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">rewritten</span> <span class="hljs-operator">=</span> queryRewriter.rewrite(query, conversationHistory);
+            <span class="hljs-type">var</span> <span class="hljs-variable">rewrittenQuery</span> <span class="hljs-operator">=</span> rewritten.rewrittenQuery();
+            metrics = <span class="hljs-keyword">new</span> <span class="hljs-title class_">RagMetrics</span>(query, rewrittenQuery, <span class="hljs-number">0</span>, <span class="hljs-number">0</span>, <span class="hljs-number">0</span>, <span class="hljs-number">0</span>, <span class="hljs-number">0</span>, <span class="hljs-number">0</span>);
 
-            // Phase 2: 混合检索
-            var retrievalStart = System.currentTimeMillis();
-            var retrievalHits = retrievalService.hybridSearch(
+            <span class="hljs-comment">// Phase 2: 混合检索</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">retrievalStart</span> <span class="hljs-operator">=</span> System.currentTimeMillis();
+            <span class="hljs-type">var</span> <span class="hljs-variable">retrievalHits</span> <span class="hljs-operator">=</span> retrievalService.hybridSearch(
                 rewrittenQuery, tenantId, userAccessLevels, retrievalTopK
             );
-            var retrievalTime = System.currentTimeMillis() - retrievalStart;
+            <span class="hljs-type">var</span> <span class="hljs-variable">retrievalTime</span> <span class="hljs-operator">=</span> System.currentTimeMillis() - retrievalStart;
 
-            if (retrievalHits.isEmpty()) {
-                return new RagResponse(
-                    &quot;抱歉，未找到与您问题相关的文档。&quot;,
+            <span class="hljs-keyword">if</span> (retrievalHits.isEmpty()) {
+                <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RagResponse</span>(
+                    <span class="hljs-string">"抱歉，未找到与您问题相关的文档。"</span>,
                     List.of(),
-                    new RagMetrics(query, rewrittenQuery, 0, 0, retrievalTime, 0, 0,
+                    <span class="hljs-keyword">new</span> <span class="hljs-title class_">RagMetrics</span>(query, rewrittenQuery, <span class="hljs-number">0</span>, <span class="hljs-number">0</span>, retrievalTime, <span class="hljs-number">0</span>, <span class="hljs-number">0</span>,
                         System.currentTimeMillis() - totalStart)
                 );
             }
 
-            // Phase 3: 重排
-            var rerankStart = System.currentTimeMillis();
-            var reranked = reranker.rerank(rewrittenQuery, retrievalHits, rerankTopK);
-            var rerankTime = System.currentTimeMillis() - rerankStart;
+            <span class="hljs-comment">// Phase 3: 重排</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">rerankStart</span> <span class="hljs-operator">=</span> System.currentTimeMillis();
+            <span class="hljs-type">var</span> <span class="hljs-variable">reranked</span> <span class="hljs-operator">=</span> reranker.rerank(rewrittenQuery, retrievalHits, rerankTopK);
+            <span class="hljs-type">var</span> <span class="hljs-variable">rerankTime</span> <span class="hljs-operator">=</span> System.currentTimeMillis() - rerankStart;
 
-            if (reranked.isEmpty()) {
-                return new RagResponse(
-                    &quot;未找到足够相关的文档来回答您的问题，请尝试更具体的提问。&quot;,
+            <span class="hljs-keyword">if</span> (reranked.isEmpty()) {
+                <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RagResponse</span>(
+                    <span class="hljs-string">"未找到足够相关的文档来回答您的问题，请尝试更具体的提问。"</span>,
                     List.of(),
-                    new RagMetrics(query, rewrittenQuery, retrievalHits.size(), 0,
-                        retrievalTime, rerankTime, 0,
+                    <span class="hljs-keyword">new</span> <span class="hljs-title class_">RagMetrics</span>(query, rewrittenQuery, retrievalHits.size(), <span class="hljs-number">0</span>,
+                        retrievalTime, rerankTime, <span class="hljs-number">0</span>,
                         System.currentTimeMillis() - totalStart)
                 );
             }
 
-            // Phase 4: Context组装（对抗Lost in the Middle）
-            var context = buildContext(reranked);
+            <span class="hljs-comment">// Phase 4: Context组装（对抗Lost in the Middle）</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">context</span> <span class="hljs-operator">=</span> buildContext(reranked);
 
-            // Phase 5: LLM生成答案
-            var genStart = System.currentTimeMillis();
-            var answer = generateAnswer(query, context);
-            var genTime = System.currentTimeMillis() - genStart;
+            <span class="hljs-comment">// Phase 5: LLM生成答案</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">genStart</span> <span class="hljs-operator">=</span> System.currentTimeMillis();
+            <span class="hljs-type">var</span> <span class="hljs-variable">answer</span> <span class="hljs-operator">=</span> generateAnswer(query, context);
+            <span class="hljs-type">var</span> <span class="hljs-variable">genTime</span> <span class="hljs-operator">=</span> System.currentTimeMillis() - genStart;
 
-            // Phase 6: 引用提取
-            var citations = buildCitations(reranked);
+            <span class="hljs-comment">// Phase 6: 引用提取</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">citations</span> <span class="hljs-operator">=</span> buildCitations(reranked);
 
-            // 记录指标
-            metrics = new RagMetrics(
+            <span class="hljs-comment">// 记录指标</span>
+            metrics = <span class="hljs-keyword">new</span> <span class="hljs-title class_">RagMetrics</span>(
                 query, rewrittenQuery,
                 retrievalHits.size(), reranked.size(),
                 retrievalTime, rerankTime, genTime,
@@ -1053,56 +1046,56 @@ public class RAGService {
             );
 
             logMetrics(metrics);
-            return new RagResponse(answer, citations, metrics);
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RagResponse</span>(answer, citations, metrics);
 
-        } catch (Exception e) {
-            log.error(&quot;RAG pipeline failed&quot;, e);
-            return new RagResponse(
-                &quot;处理您的问题时出现错误，请稍后重试。&quot;,
+        } <span class="hljs-keyword">catch</span> (Exception e) {
+            log.error(<span class="hljs-string">"RAG pipeline failed"</span>, e);
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RagResponse</span>(
+                <span class="hljs-string">"处理您的问题时出现错误，请稍后重试。"</span>,
                 List.of(),
                 metrics
             );
         }
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 构建Context（对抗Lost in the Middle）
      * 策略：高相关性放开头和结尾
-     */
-    private String buildContext(List&lt;RerankerService.RerankedChunk&gt; chunks) {
-        if (chunks.size() &lt;= 2) {
-            return chunks.stream()
-                .map(c -&gt; &quot;[文档片段]\n&quot; + c.content())
-                .collect(Collectors.joining(&quot;\n\n&quot;));
+     */</span>
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">buildContext</span><span class="hljs-params">(List&lt;RerankerService.RerankedChunk&gt; chunks)</span> {
+        <span class="hljs-keyword">if</span> (chunks.size() &lt;= <span class="hljs-number">2</span>) {
+            <span class="hljs-keyword">return</span> chunks.stream()
+                .map(c -&gt; <span class="hljs-string">"[文档片段]\n"</span> + c.content())
+                .collect(Collectors.joining(<span class="hljs-string">"\n\n"</span>));
         }
 
-        // Lost in the Middle对抗排序
-        var arranged = new ArrayList&lt;&gt;(chunks);
+        <span class="hljs-comment">// Lost in the Middle对抗排序</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">arranged</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;&gt;(chunks);
 
-        // 把第二重要的放到最后（模型最后看到的信息利用最好）
-        if (arranged.size() &gt;= 2) {
-            arranged.remove(1);
-            arranged.add(chunks.get(1));
+        <span class="hljs-comment">// 把第二重要的放到最后（模型最后看到的信息利用最好）</span>
+        <span class="hljs-keyword">if</span> (arranged.size() &gt;= <span class="hljs-number">2</span>) {
+            arranged.remove(<span class="hljs-number">1</span>);
+            arranged.add(chunks.get(<span class="hljs-number">1</span>));
         }
 
-        var builder = new StringBuilder();
-        for (int i = 0; i &lt; arranged.size(); i++) {
-            var chunk = arranged.get(i);
-            builder.append(&quot;[参考资料 %d] (相关度: %.2f)\n&quot;.formatted(i + 1, chunk.relevanceScore()));
-            if (chunk.metadata().get(&quot;section_path&quot;) != null) {
-                builder.append(&quot;来源: %s\n&quot;.formatted(chunk.metadata().get(&quot;section_path&quot;)));
+        <span class="hljs-type">var</span> <span class="hljs-variable">builder</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>();
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; arranged.size(); i++) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">chunk</span> <span class="hljs-operator">=</span> arranged.get(i);
+            builder.append(<span class="hljs-string">"[参考资料 %d] (相关度: %.2f)\n"</span>.formatted(i + <span class="hljs-number">1</span>, chunk.relevanceScore()));
+            <span class="hljs-keyword">if</span> (chunk.metadata().get(<span class="hljs-string">"section_path"</span>) != <span class="hljs-literal">null</span>) {
+                builder.append(<span class="hljs-string">"来源: %s\n"</span>.formatted(chunk.metadata().get(<span class="hljs-string">"section_path"</span>)));
             }
-            builder.append(chunk.content()).append(&quot;\n\n&quot;);
+            builder.append(chunk.content()).append(<span class="hljs-string">"\n\n"</span>);
         }
 
-        return builder.toString();
+        <span class="hljs-keyword">return</span> builder.toString();
     }
 
-    /**
+    <span class="hljs-comment">/**
      * LLM生成答案
-     */
-    private String generateAnswer(String query, String context) {
-        var prompt = &quot;&quot;&quot;
+     */</span>
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">generateAnswer</span><span class="hljs-params">(String query, String context)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">prompt</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
             你是一个专业的知识库问答助手。请根据以下参考资料回答用户的问题。
 
             要求：
@@ -1117,310 +1110,306 @@ public class RAGService {
             用户问题：%s
 
             请回答：
-            &quot;&quot;&quot;.formatted(context, query);
+            """</span>.formatted(context, query);
 
-        return chatClient.prompt()
+        <span class="hljs-keyword">return</span> chatClient.prompt()
             .user(prompt)
             .call()
             .content();
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 构建引用列表
-     */
-    private List&lt;Citation&gt; buildCitations(List&lt;RerankerService.RerankedChunk&gt; chunks) {
-        var citations = new ArrayList&lt;Citation&gt;();
-        for (int i = 0; i &lt; chunks.size(); i++) {
-            var chunk = chunks.get(i);
-            var excerpt = chunk.content().length() &gt; 200
-                ? chunk.content().substring(0, 200) + &quot;...&quot;
+     */</span>
+    <span class="hljs-keyword">private</span> List&lt;Citation&gt; <span class="hljs-title function_">buildCitations</span><span class="hljs-params">(List&lt;RerankerService.RerankedChunk&gt; chunks)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">citations</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;Citation&gt;();
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; chunks.size(); i++) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">chunk</span> <span class="hljs-operator">=</span> chunks.get(i);
+            <span class="hljs-type">var</span> <span class="hljs-variable">excerpt</span> <span class="hljs-operator">=</span> chunk.content().length() &gt; <span class="hljs-number">200</span>
+                ? chunk.content().substring(<span class="hljs-number">0</span>, <span class="hljs-number">200</span>) + <span class="hljs-string">"..."</span>
                 : chunk.content();
 
-            citations.add(new Citation(
-                i + 1,
+            citations.add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">Citation</span>(
+                i + <span class="hljs-number">1</span>,
                 chunk.chunkId(),
-                (String) chunk.metadata().getOrDefault(&quot;file_name&quot;, &quot;未知文档&quot;),
+                (String) chunk.metadata().getOrDefault(<span class="hljs-string">"file_name"</span>, <span class="hljs-string">"未知文档"</span>),
                 excerpt,
-                (String) chunk.metadata().getOrDefault(&quot;section_path&quot;, &quot;&quot;),
+                (String) chunk.metadata().getOrDefault(<span class="hljs-string">"section_path"</span>, <span class="hljs-string">""</span>),
                 chunk.relevanceScore()
             ));
         }
-        return citations;
+        <span class="hljs-keyword">return</span> citations;
     }
 
-    private void logMetrics(RagMetrics metrics) {
-        meterRegistry.timer(&quot;rag.total.duration&quot;).record(
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">logMetrics</span><span class="hljs-params">(RagMetrics metrics)</span> {
+        meterRegistry.timer(<span class="hljs-string">"rag.total.duration"</span>).record(
             metrics.totalTimeMs(), java.util.concurrent.TimeUnit.MILLISECONDS
         );
-        meterRegistry.timer(&quot;rag.retrieval.duration&quot;).record(
+        meterRegistry.timer(<span class="hljs-string">"rag.retrieval.duration"</span>).record(
             metrics.retrievalTimeMs(), java.util.concurrent.TimeUnit.MILLISECONDS
         );
-        meterRegistry.timer(&quot;rag.rerank.duration&quot;).record(
+        meterRegistry.timer(<span class="hljs-string">"rag.rerank.duration"</span>).record(
             metrics.rerankTimeMs(), java.util.concurrent.TimeUnit.MILLISECONDS
         );
-        meterRegistry.timer(&quot;rag.generation.duration&quot;).record(
+        meterRegistry.timer(<span class="hljs-string">"rag.generation.duration"</span>).record(
             metrics.generationTimeMs(), java.util.concurrent.TimeUnit.MILLISECONDS
         );
-        meterRegistry.counter(&quot;rag.queries.total&quot;).increment();
+        meterRegistry.counter(<span class="hljs-string">"rag.queries.total"</span>).increment();
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>九、RAG Controller — REST API</h2>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.rag.api;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">package</span> com.example.rag.api;
 
-import com.example.rag.pipeline.DocumentPipelineService;
-import com.example.rag.pipeline.RAGService;
-import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
+<span class="hljs-keyword">import</span> com.example.rag.pipeline.DocumentPipelineService;
+<span class="hljs-keyword">import</span> com.example.rag.pipeline.RAGService;
+<span class="hljs-keyword">import</span> org.springframework.http.ResponseEntity;
+<span class="hljs-keyword">import</span> org.springframework.web.bind.annotation.*;
+<span class="hljs-keyword">import</span> org.springframework.web.multipart.MultipartFile;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.List;
-import java.util.Map;
+<span class="hljs-keyword">import</span> java.nio.file.Files;
+<span class="hljs-keyword">import</span> java.nio.file.Path;
+<span class="hljs-keyword">import</span> java.util.List;
+<span class="hljs-keyword">import</span> java.util.Map;
 
-@RestController
-@RequestMapping(&quot;/api&quot;)
-public class RagController {
+<span class="hljs-meta">@RestController</span>
+<span class="hljs-meta">@RequestMapping("/api")</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">RagController</span> {
 
-    private final RAGService ragService;
-    private final DocumentPipelineService pipelineService;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> RAGService ragService;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> DocumentPipelineService pipelineService;
 
-    public RagController(RAGService ragService, DocumentPipelineService pipelineService) {
-        this.ragService = ragService;
-        this.pipelineService = pipelineService;
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">RagController</span><span class="hljs-params">(RAGService ragService, DocumentPipelineService pipelineService)</span> {
+        <span class="hljs-built_in">this</span>.ragService = ragService;
+        <span class="hljs-built_in">this</span>.pipelineService = pipelineService;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * RAG问答接口
-     */
-    @PostMapping(&quot;/rag/ask&quot;)
-    public ResponseEntity&lt;Map&lt;String, Object&gt;&gt; ask(@RequestBody AskRequest request) {
-        var response = ragService.ask(
+     */</span>
+    <span class="hljs-meta">@PostMapping("/rag/ask")</span>
+    <span class="hljs-keyword">public</span> ResponseEntity&lt;Map&lt;String, Object&gt;&gt; <span class="hljs-title function_">ask</span><span class="hljs-params">(<span class="hljs-meta">@RequestBody</span> AskRequest request)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">response</span> <span class="hljs-operator">=</span> ragService.ask(
             request.query(),
-            request.tenantId() != null ? request.tenantId() : &quot;default&quot;,
-            request.accessLevels() != null ? request.accessLevels() : List.of(&quot;internal&quot;),
-            request.conversationHistory() != null ? request.conversationHistory() : List.of()
+            request.tenantId() != <span class="hljs-literal">null</span> ? request.tenantId() : <span class="hljs-string">"default"</span>,
+            request.accessLevels() != <span class="hljs-literal">null</span> ? request.accessLevels() : List.of(<span class="hljs-string">"internal"</span>),
+            request.conversationHistory() != <span class="hljs-literal">null</span> ? request.conversationHistory() : List.of()
         );
 
-        return ResponseEntity.ok(Map.of(
-            &quot;answer&quot;, response.answer(),
-            &quot;citations&quot;, response.citations(),
-            &quot;metrics&quot;, response.metrics()
+        <span class="hljs-keyword">return</span> ResponseEntity.ok(Map.of(
+            <span class="hljs-string">"answer"</span>, response.answer(),
+            <span class="hljs-string">"citations"</span>, response.citations(),
+            <span class="hljs-string">"metrics"</span>, response.metrics()
         ));
     }
 
-    public record AskRequest(
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">AskRequest</span><span class="hljs-params">(
         String query,
         String tenantId,
         List&lt;String&gt; accessLevels,
         List&lt;String&gt; conversationHistory
-    ) {}
+    )</span> {}
 
-    /**
+    <span class="hljs-comment">/**
      * 文档上传 + 自动入库
-     */
-    @PostMapping(&quot;/documents/ingest&quot;)
-    public ResponseEntity&lt;Map&lt;String, Object&gt;&gt; ingestDocument(
-            @RequestParam(&quot;file&quot;) MultipartFile file) throws Exception {
+     */</span>
+    <span class="hljs-meta">@PostMapping("/documents/ingest")</span>
+    <span class="hljs-keyword">public</span> ResponseEntity&lt;Map&lt;String, Object&gt;&gt; <span class="hljs-title function_">ingestDocument</span><span class="hljs-params">(
+            <span class="hljs-meta">@RequestParam("file")</span> MultipartFile file)</span> <span class="hljs-keyword">throws</span> Exception {
 
-        // 保存到临时目录
-        var tempDir = Files.createTempDirectory(&quot;rag-ingest-&quot;);
-        var tempFile = tempDir.resolve(file.getOriginalFilename());
+        <span class="hljs-comment">// 保存到临时目录</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">tempDir</span> <span class="hljs-operator">=</span> Files.createTempDirectory(<span class="hljs-string">"rag-ingest-"</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">tempFile</span> <span class="hljs-operator">=</span> tempDir.resolve(file.getOriginalFilename());
         file.transferTo(tempFile.toFile());
 
-        try {
-            var result = pipelineService.ingestDocument(tempFile);
-            return ResponseEntity.ok(Map.of(
-                &quot;document_id&quot;, result.documentId(),
-                &quot;file_name&quot;, result.fileName(),
-                &quot;chunk_count&quot;, result.chunkCount(),
-                &quot;processing_time_ms&quot;, result.totalTimeMs(),
-                &quot;errors&quot;, result.errors()
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> pipelineService.ingestDocument(tempFile);
+            <span class="hljs-keyword">return</span> ResponseEntity.ok(Map.of(
+                <span class="hljs-string">"document_id"</span>, result.documentId(),
+                <span class="hljs-string">"file_name"</span>, result.fileName(),
+                <span class="hljs-string">"chunk_count"</span>, result.chunkCount(),
+                <span class="hljs-string">"processing_time_ms"</span>, result.totalTimeMs(),
+                <span class="hljs-string">"errors"</span>, result.errors()
             ));
-        } finally {
-            // 清理临时文件
+        } <span class="hljs-keyword">finally</span> {
+            <span class="hljs-comment">// 清理临时文件</span>
             Files.deleteIfExists(tempFile);
             Files.deleteIfExists(tempDir);
         }
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 健康检查
-     */
-    @GetMapping(&quot;/health&quot;)
-    public ResponseEntity&lt;Map&lt;String, String&gt;&gt; health() {
-        return ResponseEntity.ok(Map.of(&quot;status&quot;, &quot;UP&quot;, &quot;service&quot;, &quot;rag-pipeline&quot;));
+     */</span>
+    <span class="hljs-meta">@GetMapping("/health")</span>
+    <span class="hljs-keyword">public</span> ResponseEntity&lt;Map&lt;String, String&gt;&gt; <span class="hljs-title function_">health</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">return</span> ResponseEntity.ok(Map.of(<span class="hljs-string">"status"</span>, <span class="hljs-string">"UP"</span>, <span class="hljs-string">"service"</span>, <span class="hljs-string">"rag-pipeline"</span>));
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>十、性能优化配置</h2>
 <h3>10.1 Embedding批量处理</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">/**
  * 批量Embedding优化 — 减少API调用次数
- */
-public class BatchEmbeddingOptimizer {
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">BatchEmbeddingOptimizer</span> {
 
-    @Value(&quot;${rag.embedding.batch-size:20}&quot;)
-    private int batchSize;
+    <span class="hljs-meta">@Value("${rag.embedding.batch-size:20}")</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-type">int</span> batchSize;
 
-    /**
+    <span class="hljs-comment">/**
      * 批量Embedding（调用一次API处理多个文本）
      * 对于OpenAI text-embedding-3-small：一次最多2048个文本
-     */
-    public List&lt;float[]&gt; batchEmbed(List&lt;String&gt; texts) {
-        var batches = new ArrayList&lt;List&lt;String&gt;&gt;();
-        for (int i = 0; i &lt; texts.size(); i += batchSize) {
+     */</span>
+    <span class="hljs-keyword">public</span> List&lt;<span class="hljs-type">float</span>[]&gt; batchEmbed(List&lt;String&gt; texts) {
+        <span class="hljs-type">var</span> <span class="hljs-variable">batches</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;List&lt;String&gt;&gt;();
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; texts.size(); i += batchSize) {
             batches.add(texts.subList(i, Math.min(i + batchSize, texts.size())));
         }
 
-        var allEmbeddings = new ArrayList&lt;float[]&gt;();
+        <span class="hljs-type">var</span> <span class="hljs-variable">allEmbeddings</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;<span class="hljs-type">float</span>[]&gt;();
 
-        for (var batch : batches) {
-            // 使用Spring AI的EmbeddingModel.embedForResponse()
-            // EmbeddingRequest支持批量文本
-            var embeddings = embedBatch(batch);
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> batch : batches) {
+            <span class="hljs-comment">// 使用Spring AI的EmbeddingModel.embedForResponse()</span>
+            <span class="hljs-comment">// EmbeddingRequest支持批量文本</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">embeddings</span> <span class="hljs-operator">=</span> embedBatch(batch);
             allEmbeddings.addAll(embeddings);
         }
 
-        return allEmbeddings;
+        <span class="hljs-keyword">return</span> allEmbeddings;
     }
 
-    private List&lt;float[]&gt; embedBatch(List&lt;String&gt; texts) {
-        // Spring AI EmbeddingModel批量调用
-        // 实际实现使用EmbeddingModel.embed(texts)
-        return List.of();
+    <span class="hljs-keyword">private</span> List&lt;<span class="hljs-type">float</span>[]&gt; embedBatch(List&lt;String&gt; texts) {
+        <span class="hljs-comment">// Spring AI EmbeddingModel批量调用</span>
+        <span class="hljs-comment">// 实际实现使用EmbeddingModel.embed(texts)</span>
+        <span class="hljs-keyword">return</span> List.of();
     }
 }
-</code></pre></div>
-<h3>10.2 连接池配置</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Configuration
-public class DataSourceConfig {
+</code></pre></div><h3>10.2 连接池配置</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Configuration</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">DataSourceConfig</span> {
 
-    @Bean
-    @ConfigurationProperties(&quot;spring.datasource.hikari&quot;)
-    public HikariConfig hikariConfig() {
-        var config = new HikariConfig();
-        config.setMaximumPoolSize(20);
-        config.setMinimumIdle(5);
-        // pgvector查询使用连接后可能需要重置search_path
-        config.setConnectionInitSql(&quot;SET hnsw.ef_search = 100&quot;);
-        return config;
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-meta">@ConfigurationProperties("spring.datasource.hikari")</span>
+    <span class="hljs-keyword">public</span> HikariConfig <span class="hljs-title function_">hikariConfig</span><span class="hljs-params">()</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">config</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">HikariConfig</span>();
+        config.setMaximumPoolSize(<span class="hljs-number">20</span>);
+        config.setMinimumIdle(<span class="hljs-number">5</span>);
+        <span class="hljs-comment">// pgvector查询使用连接后可能需要重置search_path</span>
+        config.setConnectionInitSql(<span class="hljs-string">"SET hnsw.ef_search = 100"</span>);
+        <span class="hljs-keyword">return</span> config;
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>十一、集成测试（Testcontainers）</h2>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.rag;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">package</span> com.example.rag;
 
-import com.example.rag.pipeline.*;
-import org.junit.jupiter.api.*;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.elasticsearch.ElasticsearchContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.utility.DockerImageName;
+<span class="hljs-keyword">import</span> com.example.rag.pipeline.*;
+<span class="hljs-keyword">import</span> org.junit.jupiter.api.*;
+<span class="hljs-keyword">import</span> org.springframework.beans.factory.annotation.Autowired;
+<span class="hljs-keyword">import</span> org.springframework.boot.test.context.SpringBootTest;
+<span class="hljs-keyword">import</span> org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+<span class="hljs-keyword">import</span> org.springframework.test.context.DynamicPropertyRegistry;
+<span class="hljs-keyword">import</span> org.springframework.test.context.DynamicPropertySource;
+<span class="hljs-keyword">import</span> org.testcontainers.containers.PostgreSQLContainer;
+<span class="hljs-keyword">import</span> org.testcontainers.elasticsearch.ElasticsearchContainer;
+<span class="hljs-keyword">import</span> org.testcontainers.junit.jupiter.Container;
+<span class="hljs-keyword">import</span> org.testcontainers.junit.jupiter.Testcontainers;
+<span class="hljs-keyword">import</span> org.testcontainers.utility.DockerImageName;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.util.List;
+<span class="hljs-keyword">import</span> java.nio.file.Files;
+<span class="hljs-keyword">import</span> java.nio.file.Path;
+<span class="hljs-keyword">import</span> java.util.List;
 
-import static org.assertj.core.api.Assertions.assertThat;
+<span class="hljs-keyword">import</span> <span class="hljs-keyword">static</span> org.assertj.core.api.Assertions.assertThat;
 
-@SpringBootTest
-@Testcontainers
-class RagPipelineIntegrationTest {
+<span class="hljs-meta">@SpringBootTest</span>
+<span class="hljs-meta">@Testcontainers</span>
+<span class="hljs-keyword">class</span> <span class="hljs-title class_">RagPipelineIntegrationTest</span> {
 
-    @Container
-    @ServiceConnection
-    static PostgreSQLContainer&lt;?&gt; pgvector = new PostgreSQLContainer&lt;&gt;(
-        DockerImageName.parse(&quot;pgvector/pgvector:pg17&quot;)
-    ).withDatabaseName(&quot;rag_test&quot;)
-     .withUsername(&quot;test&quot;)
-     .withPassword(&quot;test&quot;);
+    <span class="hljs-meta">@Container</span>
+    <span class="hljs-meta">@ServiceConnection</span>
+    <span class="hljs-keyword">static</span> PostgreSQLContainer&lt;?&gt; pgvector = <span class="hljs-keyword">new</span> <span class="hljs-title class_">PostgreSQLContainer</span>&lt;&gt;(
+        DockerImageName.parse(<span class="hljs-string">"pgvector/pgvector:pg17"</span>)
+    ).withDatabaseName(<span class="hljs-string">"rag_test"</span>)
+     .withUsername(<span class="hljs-string">"test"</span>)
+     .withPassword(<span class="hljs-string">"test"</span>);
 
-    @Container
-    @ServiceConnection
-    static ElasticsearchContainer elasticsearch = new ElasticsearchContainer(
-        DockerImageName.parse(&quot;docker.elastic.co/elasticsearch/elasticsearch:9.0.0&quot;)
-    ).withPassword(&quot;test123&quot;);
+    <span class="hljs-meta">@Container</span>
+    <span class="hljs-meta">@ServiceConnection</span>
+    <span class="hljs-keyword">static</span> <span class="hljs-type">ElasticsearchContainer</span> <span class="hljs-variable">elasticsearch</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ElasticsearchContainer</span>(
+        DockerImageName.parse(<span class="hljs-string">"docker.elastic.co/elasticsearch/elasticsearch:9.0.0"</span>)
+    ).withPassword(<span class="hljs-string">"test123"</span>);
 
-    @Autowired
-    private DocumentPipelineService pipelineService;
+    <span class="hljs-meta">@Autowired</span>
+    <span class="hljs-keyword">private</span> DocumentPipelineService pipelineService;
 
-    @Autowired
-    private RAGService ragService;
+    <span class="hljs-meta">@Autowired</span>
+    <span class="hljs-keyword">private</span> RAGService ragService;
 
-    @Test
-    @DisplayName(&quot;完整RAG流水线集成测试&quot;)
-    void testCompleteRagPipeline() throws Exception {
-        // 1. 创建测试文档
-        var docPath = createTestDocument();
+    <span class="hljs-meta">@Test</span>
+    <span class="hljs-meta">@DisplayName("完整RAG流水线集成测试")</span>
+    <span class="hljs-keyword">void</span> <span class="hljs-title function_">testCompleteRagPipeline</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-comment">// 1. 创建测试文档</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">docPath</span> <span class="hljs-operator">=</span> createTestDocument();
 
-        // 2. 文档入库
-        var ingestResult = pipelineService.ingestDocument(docPath);
-        assertThat(ingestResult.chunkCount()).isGreaterThan(0);
+        <span class="hljs-comment">// 2. 文档入库</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">ingestResult</span> <span class="hljs-operator">=</span> pipelineService.ingestDocument(docPath);
+        assertThat(ingestResult.chunkCount()).isGreaterThan(<span class="hljs-number">0</span>);
         assertThat(ingestResult.errors()).isEmpty();
 
-        // 等待索引可查询（给pgvector一点时间）
-        Thread.sleep(500);
+        <span class="hljs-comment">// 等待索引可查询（给pgvector一点时间）</span>
+        Thread.sleep(<span class="hljs-number">500</span>);
 
-        // 3. RAG问答
-        var response = ragService.ask(
-            &quot;什么是Virtual Thread？&quot;,
-            &quot;test_tenant&quot;,
-            List.of(&quot;internal&quot;),
+        <span class="hljs-comment">// 3. RAG问答</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">response</span> <span class="hljs-operator">=</span> ragService.ask(
+            <span class="hljs-string">"什么是Virtual Thread？"</span>,
+            <span class="hljs-string">"test_tenant"</span>,
+            List.of(<span class="hljs-string">"internal"</span>),
             List.of()
         );
 
-        // 4. 验证
+        <span class="hljs-comment">// 4. 验证</span>
         assertThat(response.answer()).isNotBlank();
         assertThat(response.citations()).isNotEmpty();
-        assertThat(response.metrics().retrievalCandidates()).isGreaterThan(0);
-        assertThat(response.metrics().totalTimeMs()).isGreaterThan(0);
+        assertThat(response.metrics().retrievalCandidates()).isGreaterThan(<span class="hljs-number">0</span>);
+        assertThat(response.metrics().totalTimeMs()).isGreaterThan(<span class="hljs-number">0</span>);
 
-        // 清理
+        <span class="hljs-comment">// 清理</span>
         Files.deleteIfExists(docPath);
     }
 
-    @Test
-    @DisplayName(&quot;空知识库查询应返回友好提示&quot;)
-    void testEmptyKnowledgeBase() {
-        var response = ragService.ask(
-            &quot;一个不存在答案的问题&quot;,
-            &quot;empty_tenant&quot;,
-            List.of(&quot;internal&quot;),
+    <span class="hljs-meta">@Test</span>
+    <span class="hljs-meta">@DisplayName("空知识库查询应返回友好提示")</span>
+    <span class="hljs-keyword">void</span> <span class="hljs-title function_">testEmptyKnowledgeBase</span><span class="hljs-params">()</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">response</span> <span class="hljs-operator">=</span> ragService.ask(
+            <span class="hljs-string">"一个不存在答案的问题"</span>,
+            <span class="hljs-string">"empty_tenant"</span>,
+            List.of(<span class="hljs-string">"internal"</span>),
             List.of()
         );
 
         assertThat(response.answer()).isNotBlank();
-        assertThat(response.metrics().retrievalCandidates()).isEqualTo(0);
+        assertThat(response.metrics().retrievalCandidates()).isEqualTo(<span class="hljs-number">0</span>);
     }
 
-    @Test
-    @DisplayName(&quot;权限过滤测试&quot;)
-    void testAccessLevelFiltering() throws Exception {
-        // 入库一个confidential级别的文档
-        // 用只有internal权限的用户查询，不应该返回该文档的内容
-        var response = ragService.ask(
-            &quot;机密信息查询&quot;,
-            &quot;test_tenant&quot;,
-            List.of(&quot;internal&quot;),  // 只有internal权限
+    <span class="hljs-meta">@Test</span>
+    <span class="hljs-meta">@DisplayName("权限过滤测试")</span>
+    <span class="hljs-keyword">void</span> <span class="hljs-title function_">testAccessLevelFiltering</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-comment">// 入库一个confidential级别的文档</span>
+        <span class="hljs-comment">// 用只有internal权限的用户查询，不应该返回该文档的内容</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">response</span> <span class="hljs-operator">=</span> ragService.ask(
+            <span class="hljs-string">"机密信息查询"</span>,
+            <span class="hljs-string">"test_tenant"</span>,
+            List.of(<span class="hljs-string">"internal"</span>),  <span class="hljs-comment">// 只有internal权限</span>
             List.of()
         );
 
         assertThat(response.citations()).isEmpty();
     }
 
-    private Path createTestDocument() throws Exception {
-        var content = &quot;&quot;&quot;
+    <span class="hljs-keyword">private</span> Path <span class="hljs-title function_">createTestDocument</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-type">var</span> <span class="hljs-variable">content</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
             # Java Virtual Thread 介绍
 
             ## 什么是Virtual Thread
@@ -1440,7 +1429,7 @@ class RagPipelineIntegrationTest {
             ```java
             try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
                 executor.submit(() -&gt; {
-                    System.out.println(&quot;Hello from virtual thread!&quot;);
+                    System.out.println("Hello from virtual thread!");
                 });
             }
             ```
@@ -1452,15 +1441,14 @@ class RagPipelineIntegrationTest {
             | 创建成本 | ~1ms | ~1us |
             | 内存占用 | ~1MB | ~1KB |
             | 最大数量 | ~数千 | ~数百万 |
-            &quot;&quot;&quot;;
+            """</span>;
 
-        var tempFile = Files.createTempFile(&quot;test-vt-&quot;, &quot;.md&quot;);
+        <span class="hljs-type">var</span> <span class="hljs-variable">tempFile</span> <span class="hljs-operator">=</span> Files.createTempFile(<span class="hljs-string">"test-vt-"</span>, <span class="hljs-string">".md"</span>);
         Files.writeString(tempFile, content);
-        return tempFile;
+        <span class="hljs-keyword">return</span> tempFile;
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>十二、监控埋点总结</h2>
 <table>
 <thead>
@@ -1547,11 +1535,11 @@ class RagPipelineIntegrationTest {
 </ul>
 <h2>相关条目</h2>
 <ul>
-<li><a href="#/10-AI数据工程/文档处理/10-Java文档解析全景" class="cross-ref" data-ref="10-Java文档解析全景">10-Java文档解析全景</a> — 文档解析阶段</li>
-<li><a href="#/10-AI数据工程/文档处理/10-切片策略深度剖析" class="cross-ref" data-ref="10-切片策略深度剖析">10-切片策略深度剖析</a> — 切片策略</li>
-<li><a href="#/11-检索与RAG/检索技术/11-向量检索与混合检索" class="cross-ref" data-ref="11-向量检索与混合检索">11-向量检索与混合检索</a> — 混合检索</li>
-<li><a href="#/11-检索与RAG/检索技术/11-重排与上下文处理" class="cross-ref" data-ref="11-重排与上下文处理">11-重排与上下文处理</a> — 重排服务</li>
-<li><a href="#/11-检索与RAG/RAG实现/11-高级RAG模式" class="cross-ref" data-ref="11-高级RAG模式">11-高级RAG模式</a> — 高级RAG模式</li>
+<li><a href="#/10-AI数据工程/文档处理/10-Java文档解析全景" class="cross-ref">10-Java文档解析全景</a> — 文档解析阶段</li>
+<li><a href="#/10-AI数据工程/文档处理/10-切片策略深度剖析" class="cross-ref">10-切片策略深度剖析</a> — 切片策略</li>
+<li><a href="#/11-检索与RAG/检索技术/11-向量检索与混合检索" class="cross-ref">11-向量检索与混合检索</a> — 混合检索</li>
+<li><a href="#/11-检索与RAG/检索技术/11-重排与上下文处理" class="cross-ref">11-重排与上下文处理</a> — 重排服务</li>
+<li><a href="#/11-检索与RAG/RAG实现/11-高级RAG模式" class="cross-ref">11-高级RAG模式</a> — 高级RAG模式</li>
 </ul>
-</div>
+</body></html></div>
 </article>

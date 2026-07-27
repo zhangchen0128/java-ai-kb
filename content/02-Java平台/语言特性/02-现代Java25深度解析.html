@@ -1,21 +1,21 @@
 
-<article class="kb-entry" data-path="/02-Java平台/语言特性/02-现代Java25深度解析">
+<article class="kb-entry" data-path="/02-Java平台">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=02">02-Java平台</a></div>
     <h1>Modern Java 25 深度解析</h1>
-    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#modern-java</span><span class="badge badge-tag">#jdk25</span><span class="badge badge-tag">#virtual-threads</span><span class="badge badge-tag">#scoped-values</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#modern-java</span><span class="badge badge-tag">#jdk25</span><span class="badge badge-tag">#virtual-threads</span><span class="badge badge-tag">#scoped-values</span><span class="badge badge-tag">#structured-concurrency</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://openjdk.org/jeps/444" target="_blank" rel="noopener" class="source-link" title="JEP 444: Virtual Threads — final, delivered in JDK 21">JEP 444: Virtual Threads — final, delivered in JDK 21</a><a href="https://openjdk.org/jeps/481" target="_blank" rel="noopener" class="source-link" title="JEP 481: Scoped Values — final">JEP 481: Scoped Values — final</a><a href="https://openjdk.org/jeps/480" target="_blank" rel="noopener" class="source-link" title="JEP 480: Structured Concurrency (Third Preview)">JEP 480: Structured Concurrency (Third Preview)</a><a href="https://openjdk.org/jeps/441" target="_blank" rel="noopener" class="source-link" title="JEP 441: Pattern Matching for switch — final, JDK 21">JEP 441: Pattern Matching for switch — final, JDK 21</a><a href="https://openjdk.org/jeps/440" target="_blank" rel="noopener" class="source-link" title="JEP 440: Record Patterns — final, JDK 21">JEP 440: Record Patterns — final, JDK 21</a><a href="https://openjdk.org/jeps/409" target="_blank" rel="noopener" class="source-link" title="JEP 409: Sealed Classes — final, JDK 17">JEP 409: Sealed Classes — final, JDK 17</a><a href="https://openjdk.org/jeps/395" target="_blank" rel="noopener" class="source-link" title="JEP 395: Records — final, JDK 16">JEP 395: Records — final, JDK 16</a><a href="https://openjdk.org/jeps/465" target="_blank" rel="noopener" class="source-link" title="JEP 465: String Templates (Preview)">JEP 465: String Templates (Preview)</a><a href="https://openjdk.org/jeps/454" target="_blank" rel="noopener" class="source-link" title="JEP 454: Foreign Function &amp; Memory API — final, JDK 22">JEP 454: Foreign Function &amp; Memory API — final, JDK 22</a><a href="https://openjdk.org/jeps/460" target="_blank" rel="noopener" class="source-link" title="JEP 460: Vector API (Seventh Incubator)">JEP 460: Vector API (Seventh Incubator)</a><a href="https://docs.oracle.com/en/java/javase/25/" target="_blank" rel="noopener" class="source-link" title="Oracle JDK 25 official documentation">Oracle JDK 25 official documentation</a><a href="https://inside.java/" target="_blank" rel="noopener" class="source-link" title="Inside Java — official Oracle Java team blog">Inside Java — official Oracle Java team blog</a></small></div>
   </div>
-  <div class="entry-body"><h1>Modern Java 25 深度解析</h1>
+  <div class="entry-body"><html><head></head><body><h1>Modern Java 25 深度解析</h1>
 <h2>概述</h2>
 <p>本文深入剖析 JDK 25 LTS 中的九大核心现代特性，涵盖并发模型变革（Virtual Threads、Scoped Values、Structured Concurrency）、类型系统增强（Record、Sealed Class、Pattern Matching）、以及性能与互操作性提升（String Templates、FFM API、Vector API）。每个特性从其设计动机出发，通过原理分析、可运行代码示例、最佳实践与陷阱警示，构建完整的知识体系。</p>
-<p>JDK 25 标志着 Java 并发模型的一次根本性范式转移：从&quot;操作系统线程 + 异步回调&quot;迁移到&quot;虚拟线程 + 结构化并发&quot;。这是自 Java 5 引入 <code>java.util.concurrent</code> 以来最重大的并发 API 变革。</p>
+<p>JDK 25 标志着 Java 并发模型的一次根本性范式转移：从"操作系统线程 + 异步回调"迁移到"虚拟线程 + 结构化并发"。这是自 Java 5 引入 <code>java.util.concurrent</code> 以来最重大的并发 API 变革。</p>
 <hr>
 <h2>1. Virtual Threads（虚拟线程，JEP 444）</h2>
 <h3>设计动机</h3>
-<p>传统 Java 平台线程（<code>java.lang.Thread</code>）是操作系统线程的 1:1 包装。操作系统线程是昂贵资源——每个线程消耗约 1-2 MB 栈空间，且上下文切换涉及内核态切换。在&quot;每个请求一个线程&quot;的服务器编程模型中，当并发请求数达到数万时，线程数成为吞吐量的硬瓶颈。</p>
+<p>传统 Java 平台线程（<code>java.lang.Thread</code>）是操作系统线程的 1:1 包装。操作系统线程是昂贵资源——每个线程消耗约 1-2 MB 栈空间，且上下文切换涉及内核态切换。在"每个请求一个线程"的服务器编程模型中，当并发请求数达到数万时，线程数成为吞吐量的硬瓶颈。</p>
 <p>历史上，开发者被迫采用异步/响应式编程（CompletableFuture、Reactor、RxJava）来规避线程瓶颈。这些框架将请求处理拆解为异步回调链，虽然提升了吞吐量，但代价巨大：难以调试（堆栈跟踪断裂）、难以观测（span 跨越多个线程）、难以理解（控制流与数据流分离）。</p>
-<p>虚拟线程的设计目标是：<strong>保留&quot;每个请求一个线程&quot;的简单编程模型，同时消除线程数量的可扩展性瓶颈</strong>。</p>
+<p>虚拟线程的设计目标是：<strong>保留"每个请求一个线程"的简单编程模型，同时消除线程数量的可扩展性瓶颈</strong>。</p>
 <h3>核心原理</h3>
 <p>虚拟线程由 JVM 而非操作系统管理。关键机制：</p>
 <ol>
@@ -24,63 +24,59 @@
 <li><p><strong>ForkJoinPool 调度</strong>：虚拟线程的默认调度器是 <code>ForkJoinPool</code>，以 FIFO 模式运行。调度器维护一个工作窃取队列，载体线程从这个队列中获取就绪的虚拟线程。</p>
 </li>
 <li><p><strong>Mount/Unmount 生命周期</strong>：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>VT 创建 → 提交到 scheduler → mount 到 carrier → 执行 → (遇到阻塞)
-→ unmount (carrier 被释放) → continuation 挂起在堆上（仅占用 ~300 bytes 对象）
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>VT 创建 → 提交到 <span class="hljs-keyword">scheduler </span>→ mount 到 carrier → 执行 → (遇到阻塞)
+→ unmount (carrier 被释放) → continuation 挂起在堆上（仅占用 ~<span class="hljs-number">300</span> <span class="hljs-keyword">bytes </span>对象）
 → 阻塞完成 → continuation 重新入队 → mount 到新的 carrier → 继续执行 → 完成
-</code></pre></div>
-</li>
+</code></pre></div></li>
 <li><p><strong>栈存储</strong>：虚拟线程的栈不是预先分配的连续内存区域，而是存储在堆上的 <code>Continuation</code> 对象中的栈帧链（stack chunk）。当栈增长时，分配新的 chunk 对象；栈缩小时，chunk 可以被 GC 回收。这允许 JVM 创建数百万个虚拟线程而不会耗尽内存。</p>
 </li>
 </ol>
 <h3>代码示例</h3>
 <p><strong>传统平台线程 — 每个任务一个线程（无法扩展）：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 旧方式：平台线程池，最大线程数受限于 OS 资源
-var executor = Executors.newFixedThreadPool(200); // 最多 200 并发
-for (int i = 0; i &lt; 100_000; i++) {
-    final int taskId = i;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 旧方式：平台线程池，最大线程数受限于 OS 资源</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">executor</span> <span class="hljs-operator">=</span> Executors.newFixedThreadPool(<span class="hljs-number">200</span>); <span class="hljs-comment">// 最多 200 并发</span>
+<span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; <span class="hljs-number">100_000</span>; i++) {
+    <span class="hljs-keyword">final</span> <span class="hljs-type">int</span> <span class="hljs-variable">taskId</span> <span class="hljs-operator">=</span> i;
     executor.submit(() -&gt; {
-        // 如果这里有阻塞 I/O，200 个线程不够用
+        <span class="hljs-comment">// 如果这里有阻塞 I/O，200 个线程不够用</span>
         doBlockingIO(taskId);
-        return taskId;
+        <span class="hljs-keyword">return</span> taskId;
     });
 }
-</code></pre></div>
-<p><strong>虚拟线程 — 百万并发无压力：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// JDK 25 方式：每个任务一个虚拟线程
-try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
-    var futures = new ArrayList&lt;Future&lt;Integer&gt;&gt;();
-    for (int i = 0; i &lt; 1_000_000; i++) {
-        final int taskId = i;
+</code></pre></div><p><strong>虚拟线程 — 百万并发无压力：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// JDK 25 方式：每个任务一个虚拟线程</span>
+<span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">executor</span> <span class="hljs-operator">=</span> Executors.newVirtualThreadPerTaskExecutor()) {
+    <span class="hljs-type">var</span> <span class="hljs-variable">futures</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;Future&lt;Integer&gt;&gt;();
+    <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; <span class="hljs-number">1_000_000</span>; i++) {
+        <span class="hljs-keyword">final</span> <span class="hljs-type">int</span> <span class="hljs-variable">taskId</span> <span class="hljs-operator">=</span> i;
         futures.add(executor.submit(() -&gt; {
-            Thread.sleep(Duration.ofMillis(100)); // 模拟 I/O 等待
-            return taskId;
+            Thread.sleep(Duration.ofMillis(<span class="hljs-number">100</span>)); <span class="hljs-comment">// 模拟 I/O 等待</span>
+            <span class="hljs-keyword">return</span> taskId;
         }));
     }
-    // 所有 100 万个虚拟线程并发等待，只占用少量载体线程
-    // 载体线程数量 = CPU 核心数（默认）
-    for (var future : futures) {
-        future.get(); // 收集结果
+    <span class="hljs-comment">// 所有 100 万个虚拟线程并发等待，只占用少量载体线程</span>
+    <span class="hljs-comment">// 载体线程数量 = CPU 核心数（默认）</span>
+    <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> future : futures) {
+        future.get(); <span class="hljs-comment">// 收集结果</span>
     }
 }
-</code></pre></div>
-<p><strong>直接创建虚拟线程：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 方式 1：通过 Thread.ofVirtual()
-var vt = Thread.ofVirtual()
-    .name(&quot;my-virtual-thread-&quot;, 1)
+</code></pre></div><p><strong>直接创建虚拟线程：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 方式 1：通过 Thread.ofVirtual()</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">vt</span> <span class="hljs-operator">=</span> Thread.ofVirtual()
+    .name(<span class="hljs-string">"my-virtual-thread-"</span>, <span class="hljs-number">1</span>)
     .start(() -&gt; {
-        System.out.println(&quot;Running in virtual thread: &quot; + Thread.currentThread());
+        System.out.println(<span class="hljs-string">"Running in virtual thread: "</span> + Thread.currentThread());
     });
 vt.join();
 
-// 方式 2：通过 Thread.Builder
-var builder = Thread.ofVirtual()
-    .name(&quot;worker-&quot;)
+<span class="hljs-comment">// 方式 2：通过 Thread.Builder</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">builder</span> <span class="hljs-operator">=</span> Thread.ofVirtual()
+    .name(<span class="hljs-string">"worker-"</span>)
     .uncaughtExceptionHandler((t, e) -&gt; 
-        System.err.println(&quot;Uncaught in &quot; + t.getName() + &quot;: &quot; + e.getMessage()));
-var vt2 = builder.start(() -&gt; processRequest());
+        System.err.println(<span class="hljs-string">"Uncaught in "</span> + t.getName() + <span class="hljs-string">": "</span> + e.getMessage()));
+<span class="hljs-type">var</span> <span class="hljs-variable">vt2</span> <span class="hljs-operator">=</span> builder.start(() -&gt; processRequest());
 vt2.join();
-</code></pre></div>
-<h3>性能基准</h3>
+</code></pre></div><h3>性能基准</h3>
 <p>以下是在 8 核机器上对 100 万个并发任务的近似测试结果：</p>
 <table>
 <thead>
@@ -117,40 +113,38 @@ vt2.join();
 </li>
 </ol>
 <h3>陷阱：Pinning（钉住）</h3>
-<p>虚拟线程最重要的限制是 <strong>pinning</strong>。当虚拟线程执行以下操作时，它会被&quot;钉住&quot;到载体线程，无法 unmount：</p>
+<p>虚拟线程最重要的限制是 <strong>pinning</strong>。当虚拟线程执行以下操作时，它会被"钉住"到载体线程，无法 unmount：</p>
 <ol>
 <li>执行 <code>synchronized</code> 块或方法内的阻塞操作</li>
 <li>调用 native 方法（JNI）</li>
 <li>在 <code>Object.wait()</code> 上等待（而非 <code>LockSupport.park()</code> 或 <code>ReentrantLock</code>）</li>
 </ol>
 <p><strong>pinning 诊断示例：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 危险：synchronized 内阻塞导致 pinning
-var executor = Executors.newVirtualThreadPerTaskExecutor();
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 危险：synchronized 内阻塞导致 pinning</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">executor</span> <span class="hljs-operator">=</span> Executors.newVirtualThreadPerTaskExecutor();
 executor.submit(() -&gt; {
-    synchronized (lock) {           // VT 被 mount 到 carrier A
-        Thread.sleep(10_000);       // 阻塞！但 carrier A 被 pinning 占用
-    }                               // carrier A 在整个 sleep 期间不能服务其他 VT
+    <span class="hljs-keyword">synchronized</span> (lock) {           <span class="hljs-comment">// VT 被 mount 到 carrier A</span>
+        Thread.sleep(<span class="hljs-number">10_000</span>);       <span class="hljs-comment">// 阻塞！但 carrier A 被 pinning 占用</span>
+    }                               <span class="hljs-comment">// carrier A 在整个 sleep 期间不能服务其他 VT</span>
 });
 
-// 安全：使用 ReentrantLock 替代 synchronized
-var reentrantLock = new ReentrantLock();
+<span class="hljs-comment">// 安全：使用 ReentrantLock 替代 synchronized</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">reentrantLock</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ReentrantLock</span>();
 executor.submit(() -&gt; {
-    reentrantLock.lock();           // VT 被 mount 到 carrier A
-    try {
-        Thread.sleep(10_000);       // 阻塞 → VT 从 carrier A unmount
-                                    // carrier A 可以服务其他 VT
-    } finally {
+    reentrantLock.lock();           <span class="hljs-comment">// VT 被 mount 到 carrier A</span>
+    <span class="hljs-keyword">try</span> {
+        Thread.sleep(<span class="hljs-number">10_000</span>);       <span class="hljs-comment">// 阻塞 → VT 从 carrier A unmount</span>
+                                    <span class="hljs-comment">// carrier A 可以服务其他 VT</span>
+    } <span class="hljs-keyword">finally</span> {
         reentrantLock.unlock();
     }
 });
-</code></pre></div>
-<p><strong>诊断 pinning 的系统属性：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># 当虚拟线程被 pinning 时打印堆栈跟踪
+</code></pre></div><p><strong>诊断 pinning 的系统属性：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-comment"># 当虚拟线程被 pinning 时打印堆栈跟踪</span>
 -Djdk.tracePinnedThreads=full
-# 或只打印简短信息
+<span class="hljs-comment"># 或只打印简短信息</span>
 -Djdk.tracePinnedThreads=short
-</code></pre></div>
-<p><strong>pinning 的常见场景和修复：</strong></p>
+</code></pre></div><p><strong>pinning 的常见场景和修复：</strong></p>
 <table>
 <thead>
 <tr>
@@ -191,7 +185,7 @@ executor.submit(() -&gt; {
 <li><strong>不可变性</strong>：一旦创建，<code>ScopedValue</code> 实例不可修改。通过 <code>ScopedValue.where(SV, value).run(() -&gt; {...})</code> 绑定值时，新值只在指定的作用域（lambda）内有效。</li>
 <li><strong>作用域绑定</strong>：<code>run()</code> 方法创建一个有界作用域。进入作用域时绑定值，离开作用域时自动解绑。即使用异常退出，也会正确解绑。</li>
 <li><strong>继承语义</strong>：子虚拟线程自动继承父线程的作用域值（通过 <code>StructuredTaskScope</code>）。</li>
-<li><strong>偏好（preference）语义</strong>：每个 <code>ScopedValue</code> 是一个&quot;偏好&quot;键，在任何给定时间点，一个线程对给定的键最多有一个绑定值。</li>
+<li><strong>偏好（preference）语义</strong>：每个 <code>ScopedValue</code> 是一个"偏好"键，在任何给定时间点，一个线程对给定的键最多有一个绑定值。</li>
 </ul>
 <p><strong>ScopedValue 与 ThreadLocal 的核心差异：</strong></p>
 <table>
@@ -230,71 +224,68 @@ executor.submit(() -&gt; {
 </tbody></table>
 <h3>代码示例</h3>
 <p><strong>声明和使用 ScopedValue：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 声明一个 ScopedValue
-final ScopedValue&lt;User&gt; CURRENT_USER = ScopedValue.newInstance();
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 声明一个 ScopedValue</span>
+<span class="hljs-keyword">final</span> ScopedValue&lt;User&gt; CURRENT_USER = ScopedValue.newInstance();
 
-// 在线程中绑定值
+<span class="hljs-comment">// 在线程中绑定值</span>
 ScopedValue.where(CURRENT_USER, authenticatedUser)
     .run(() -&gt; {
-        // 在此作用域内，CURRENT_USER.get() 返回 authenticatedUser
-        var user = CURRENT_USER.get();
-        System.out.println(&quot;Current user: &quot; + user.name());
+        <span class="hljs-comment">// 在此作用域内，CURRENT_USER.get() 返回 authenticatedUser</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">user</span> <span class="hljs-operator">=</span> CURRENT_USER.get();
+        System.out.println(<span class="hljs-string">"Current user: "</span> + user.name());
         
-        // 可以嵌套绑定（创建新的作用域）
+        <span class="hljs-comment">// 可以嵌套绑定（创建新的作用域）</span>
         ScopedValue.where(CURRENT_USER, adminUser)
             .run(() -&gt; {
-                // 此处 CURRENT_USER.get() 返回 adminUser
-                System.out.println(&quot;Admin override: &quot; + CURRENT_USER.get().name());
+                <span class="hljs-comment">// 此处 CURRENT_USER.get() 返回 adminUser</span>
+                System.out.println(<span class="hljs-string">"Admin override: "</span> + CURRENT_USER.get().name());
             });
-        // 退出嵌套后恢复为 authenticatedUser
-        System.out.println(&quot;Back to: &quot; + CURRENT_USER.get().name());
+        <span class="hljs-comment">// 退出嵌套后恢复为 authenticatedUser</span>
+        System.out.println(<span class="hljs-string">"Back to: "</span> + CURRENT_USER.get().name());
     });
-// 退出 run() 后，CURRENT_USER 未绑定
-// CURRENT_USER.get() 在此处抛出 NoSuchElementException
-</code></pre></div>
-<p><strong>对比：旧 ThreadLocal 方式 vs 新 ScopedValue 方式：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// === 旧方式：ThreadLocal ===
-final ThreadLocal&lt;User&gt; tlUser = new ThreadLocal&lt;&gt;();
-try {
+<span class="hljs-comment">// 退出 run() 后，CURRENT_USER 未绑定</span>
+<span class="hljs-comment">// CURRENT_USER.get() 在此处抛出 NoSuchElementException</span>
+</code></pre></div><p><strong>对比：旧 ThreadLocal 方式 vs 新 ScopedValue 方式：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// === 旧方式：ThreadLocal ===</span>
+<span class="hljs-keyword">final</span> ThreadLocal&lt;User&gt; tlUser = <span class="hljs-keyword">new</span> <span class="hljs-title class_">ThreadLocal</span>&lt;&gt;();
+<span class="hljs-keyword">try</span> {
     tlUser.set(authenticatedUser);
-    handleRequest();    // handleRequest 内部通过 tlUser.get() 获取用户
-} finally {
-    tlUser.remove();    // 必须手动清理！忘了就内存泄漏
+    handleRequest();    <span class="hljs-comment">// handleRequest 内部通过 tlUser.get() 获取用户</span>
+} <span class="hljs-keyword">finally</span> {
+    tlUser.remove();    <span class="hljs-comment">// 必须手动清理！忘了就内存泄漏</span>
 }
 
-// === 新方式：ScopedValue ===
-final ScopedValue&lt;User&gt; svUser = ScopedValue.newInstance();
+<span class="hljs-comment">// === 新方式：ScopedValue ===</span>
+<span class="hljs-keyword">final</span> ScopedValue&lt;User&gt; svUser = ScopedValue.newInstance();
 ScopedValue.where(svUser, authenticatedUser)
-    .run(() -&gt; handleRequest());   // 自动绑定和清理
-</code></pre></div>
-<h3>与结构化并发集成</h3>
+    .run(() -&gt; handleRequest());   <span class="hljs-comment">// 自动绑定和清理</span>
+</code></pre></div><h3>与结构化并发集成</h3>
 <p>Scoped Values 与 <code>StructuredTaskScope</code> 天然配合——子任务自动继承父作用域的值：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">final ScopedValue&lt;String&gt; REQUEST_ID = ScopedValue.newInstance();
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">final</span> ScopedValue&lt;String&gt; REQUEST_ID = ScopedValue.newInstance();
 
 ScopedValue.where(REQUEST_ID, UUID.randomUUID().toString())
     .run(() -&gt; {
-        // 父任务
-        System.out.println(&quot;Parent: &quot; + REQUEST_ID.get());
+        <span class="hljs-comment">// 父任务</span>
+        System.out.println(<span class="hljs-string">"Parent: "</span> + REQUEST_ID.get());
 
-        try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
-            // 子任务 1 — 自动继承 REQUEST_ID
-            var task1 = scope.fork(() -&gt; {
-                System.out.println(&quot;Child 1: &quot; + REQUEST_ID.get()); // 继承父作用域的值
-                return fetchFromDB();
+        <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">scope</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StructuredTaskScope</span>.ShutdownOnFailure()) {
+            <span class="hljs-comment">// 子任务 1 — 自动继承 REQUEST_ID</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">task1</span> <span class="hljs-operator">=</span> scope.fork(() -&gt; {
+                System.out.println(<span class="hljs-string">"Child 1: "</span> + REQUEST_ID.get()); <span class="hljs-comment">// 继承父作用域的值</span>
+                <span class="hljs-keyword">return</span> fetchFromDB();
             });
 
-            // 子任务 2 — 也自动继承
-            var task2 = scope.fork(() -&gt; {
-                System.out.println(&quot;Child 2: &quot; + REQUEST_ID.get()); // 同一个 REQUEST_ID
-                return fetchFromCache();
+            <span class="hljs-comment">// 子任务 2 — 也自动继承</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">task2</span> <span class="hljs-operator">=</span> scope.fork(() -&gt; {
+                System.out.println(<span class="hljs-string">"Child 2: "</span> + REQUEST_ID.get()); <span class="hljs-comment">// 同一个 REQUEST_ID</span>
+                <span class="hljs-keyword">return</span> fetchFromCache();
             });
 
             scope.join().throwIfFailed();
-            // 两个子任务看到的是同一个 REQUEST_ID，无需手动传递
+            <span class="hljs-comment">// 两个子任务看到的是同一个 REQUEST_ID，无需手动传递</span>
         }
     });
-</code></pre></div>
-<h3>最佳实践</h3>
+</code></pre></div><h3>最佳实践</h3>
 <ol>
 <li><strong>ScopedValue 实例应是 static final 字段</strong>：这样确保全局唯一且不可修改。</li>
 <li><strong>一个 ScopedValue 对应一个上下文属性</strong>：不要用一个 ScopedValue 传递多个不相关的值。使用 record 类组合相关值。</li>
@@ -310,7 +301,7 @@ ScopedValue.where(REQUEST_ID, UUID.randomUUID().toString())
 <h3>设计动机</h3>
 <p>传统的并发编程中，任务分叉（fork）和汇合（join）之间没有强制的关系约束。使用 <code>ExecutorService</code> 时：</p>
 <ul>
-<li>子任务可能在其父任务结束后继续运行（&quot;游离线程&quot;）</li>
+<li>子任务可能在其父任务结束后继续运行（"游离线程"）</li>
 <li>错误处理碎片化：一个子任务失败时，其他子任务可能继续执行浪费资源</li>
 <li>取消传播复杂：需要手动跟踪 Future 并逐个调用 <code>cancel()</code></li>
 <li>线程转储中，父子任务的因果关系不清晰</li>
@@ -325,94 +316,89 @@ ScopedValue.where(REQUEST_ID, UUID.randomUUID().toString())
 </ul>
 <h3>代码示例</h3>
 <p><strong>ShutdownOnFailure — 任一失败则全部取消：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 并行调用两个服务获取用户数据，任一个失败则整体失败
-UserProfile fetchUserProfile(long userId) throws ExecutionException, InterruptedException {
-    try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
-        // fork 两个虚拟线程子任务
-        var userFuture = scope.fork(() -&gt; userService.findById(userId));
-        var ordersFuture = scope.fork(() -&gt; orderService.getRecentOrders(userId));
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 并行调用两个服务获取用户数据，任一个失败则整体失败</span>
+UserProfile <span class="hljs-title function_">fetchUserProfile</span><span class="hljs-params">(<span class="hljs-type">long</span> userId)</span> <span class="hljs-keyword">throws</span> ExecutionException, InterruptedException {
+    <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">scope</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StructuredTaskScope</span>.ShutdownOnFailure()) {
+        <span class="hljs-comment">// fork 两个虚拟线程子任务</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">userFuture</span> <span class="hljs-operator">=</span> scope.fork(() -&gt; userService.findById(userId));
+        <span class="hljs-type">var</span> <span class="hljs-variable">ordersFuture</span> <span class="hljs-operator">=</span> scope.fork(() -&gt; orderService.getRecentOrders(userId));
 
-        // 等待所有子任务完成（或任一个失败）
-        scope.join();           // 阻塞直到所有子任务完成或失败
-        scope.throwIfFailed();  // 如果有子任务抛异常，在此处重新抛出
+        <span class="hljs-comment">// 等待所有子任务完成（或任一个失败）</span>
+        scope.join();           <span class="hljs-comment">// 阻塞直到所有子任务完成或失败</span>
+        scope.throwIfFailed();  <span class="hljs-comment">// 如果有子任务抛异常，在此处重新抛出</span>
 
-        // 所有子任务成功完成，合并结果
-        return new UserProfile(userFuture.get(), ordersFuture.get());
+        <span class="hljs-comment">// 所有子任务成功完成，合并结果</span>
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">UserProfile</span>(userFuture.get(), ordersFuture.get());
     }
-    // try-with-resources 确保作用域关闭，所有子任务已完成
+    <span class="hljs-comment">// try-with-resources 确保作用域关闭，所有子任务已完成</span>
 }
-</code></pre></div>
-<p><strong>ShutdownOnSuccess — 任一成功即返回：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 从多个副本查询数据，取最快返回的结果
-String fetchFromReplicas(String key) throws ExecutionException, InterruptedException {
-    try (var scope = new StructuredTaskScope.ShutdownOnSuccess&lt;String&gt;()) {
-        // 并行从三个副本读取
-        scope.fork(() -&gt; readFromReplica(&quot;replica-1&quot;, key));
-        scope.fork(() -&gt; readFromReplica(&quot;replica-2&quot;, key));
-        scope.fork(() -&gt; readFromReplica(&quot;replica-3&quot;, key));
+</code></pre></div><p><strong>ShutdownOnSuccess — 任一成功即返回：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 从多个副本查询数据，取最快返回的结果</span>
+String <span class="hljs-title function_">fetchFromReplicas</span><span class="hljs-params">(String key)</span> <span class="hljs-keyword">throws</span> ExecutionException, InterruptedException {
+    <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">scope</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StructuredTaskScope</span>.ShutdownOnSuccess&lt;String&gt;()) {
+        <span class="hljs-comment">// 并行从三个副本读取</span>
+        scope.fork(() -&gt; readFromReplica(<span class="hljs-string">"replica-1"</span>, key));
+        scope.fork(() -&gt; readFromReplica(<span class="hljs-string">"replica-2"</span>, key));
+        scope.fork(() -&gt; readFromReplica(<span class="hljs-string">"replica-3"</span>, key));
 
-        // 等待任一个成功，其他被自动取消
-        return scope.join().result(); // 返回第一个成功的结果
+        <span class="hljs-comment">// 等待任一个成功，其他被自动取消</span>
+        <span class="hljs-keyword">return</span> scope.join().result(); <span class="hljs-comment">// 返回第一个成功的结果</span>
     }
 }
-</code></pre></div>
-<p><strong>自定义策略：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 自定义：收集所有子任务结果（包括失败的）
-record TaskResult&lt;T&gt;(T value, Throwable error) {
-    boolean isSuccess() { return error == null; }
+</code></pre></div><p><strong>自定义策略：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 自定义：收集所有子任务结果（包括失败的）</span>
+<span class="hljs-keyword">record</span> <span class="hljs-title class_">TaskResult</span>&lt;T&gt;(T value, Throwable error) {
+    <span class="hljs-type">boolean</span> <span class="hljs-title function_">isSuccess</span><span class="hljs-params">()</span> { <span class="hljs-keyword">return</span> error == <span class="hljs-literal">null</span>; }
 }
 
-&lt;T&gt; List&lt;TaskResult&lt;T&gt;&gt; executeAllWithResults(List&lt;Callable&lt;T&gt;&gt; tasks) 
-        throws InterruptedException {
-    try (var scope = new StructuredTaskScope&lt;&gt;()) {
-        var futures = new ArrayList&lt;StructuredTaskScope.Subtask&lt;T&gt;&gt;();
+&lt;T&gt; List&lt;TaskResult&lt;T&gt;&gt; <span class="hljs-title function_">executeAllWithResults</span><span class="hljs-params">(List&lt;Callable&lt;T&gt;&gt; tasks)</span> 
+        <span class="hljs-keyword">throws</span> InterruptedException {
+    <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">scope</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StructuredTaskScope</span>&lt;&gt;()) {
+        <span class="hljs-type">var</span> <span class="hljs-variable">futures</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;StructuredTaskScope.Subtask&lt;T&gt;&gt;();
 
-        for (var task : tasks) {
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> task : tasks) {
             futures.add(scope.fork(task));
         }
 
-        scope.join(); // 等待所有子任务完成（无论成功或失败）
+        scope.join(); <span class="hljs-comment">// 等待所有子任务完成（无论成功或失败）</span>
 
-        // 收集结果
-        return futures.stream()
+        <span class="hljs-comment">// 收集结果</span>
+        <span class="hljs-keyword">return</span> futures.stream()
             .map(f -&gt; {
-                try {
-                    return new TaskResult&lt;&gt;(f.get(), null);
-                } catch (ExecutionException e) {
-                    return new TaskResult&lt;&gt;(null, e.getCause());
+                <span class="hljs-keyword">try</span> {
+                    <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">TaskResult</span>&lt;&gt;(f.get(), <span class="hljs-literal">null</span>);
+                } <span class="hljs-keyword">catch</span> (ExecutionException e) {
+                    <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">TaskResult</span>&lt;&gt;(<span class="hljs-literal">null</span>, e.getCause());
                 }
             })
             .toList();
     }
 }
-</code></pre></div>
-<h3>对比：CompletableFuture vs StructuredTaskScope</h3>
+</code></pre></div><h3>对比：CompletableFuture vs StructuredTaskScope</h3>
 <p><strong>CompletableFuture 方式（旧）：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">CompletableFuture&lt;User&gt; userFuture = CompletableFuture.supplyAsync(() -&gt; userService.findById(userId));
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java">CompletableFuture&lt;User&gt; userFuture = CompletableFuture.supplyAsync(() -&gt; userService.findById(userId));
 CompletableFuture&lt;List&lt;Order&gt;&gt; ordersFuture = CompletableFuture.supplyAsync(() -&gt; orderService.getOrders(userId));
 
 CompletableFuture&lt;UserProfile&gt; result = userFuture
-    .thenCombine(ordersFuture, UserProfile::new);
+    .thenCombine(ordersFuture, UserProfile::<span class="hljs-keyword">new</span>);
 
-// 问题：
-// 1. 如果 userFuture 失败而 ordersFuture 仍在运行，ordersFuture 不会被取消
-// 2. 线程转储中看不到 userFuture 和 ordersFuture 的父子关系
-// 3. 错误处理需要多个 exceptionally() 调用
-</code></pre></div>
-<p><strong>StructuredTaskScope 方式（新）：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
-    var user = scope.fork(() -&gt; userService.findById(userId));
-    var orders = scope.fork(() -&gt; orderService.getOrders(userId));
+<span class="hljs-comment">// 问题：</span>
+<span class="hljs-comment">// 1. 如果 userFuture 失败而 ordersFuture 仍在运行，ordersFuture 不会被取消</span>
+<span class="hljs-comment">// 2. 线程转储中看不到 userFuture 和 ordersFuture 的父子关系</span>
+<span class="hljs-comment">// 3. 错误处理需要多个 exceptionally() 调用</span>
+</code></pre></div><p><strong>StructuredTaskScope 方式（新）：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">scope</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StructuredTaskScope</span>.ShutdownOnFailure()) {
+    <span class="hljs-type">var</span> <span class="hljs-variable">user</span> <span class="hljs-operator">=</span> scope.fork(() -&gt; userService.findById(userId));
+    <span class="hljs-type">var</span> <span class="hljs-variable">orders</span> <span class="hljs-operator">=</span> scope.fork(() -&gt; orderService.getOrders(userId));
     scope.join();
     scope.throwIfFailed();
-    return new UserProfile(user.get(), orders.get());
+    <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">UserProfile</span>(user.get(), orders.get());
 }
-// 优势：
-// 1. 任一子任务失败 → 另一个被自动取消
-// 2. 线程转储中父子关系可见
-// 3. 错误处理集中在一个 throwIfFailed()
-</code></pre></div>
-<h3>最佳实践</h3>
+<span class="hljs-comment">// 优势：</span>
+<span class="hljs-comment">// 1. 任一子任务失败 → 另一个被自动取消</span>
+<span class="hljs-comment">// 2. 线程转储中父子关系可见</span>
+<span class="hljs-comment">// 3. 错误处理集中在一个 throwIfFailed()</span>
+</code></pre></div><h3>最佳实践</h3>
 <ol>
 <li><strong>优先使用 <code>ShutdownOnFailure</code></strong>：这是最安全的默认策略。大部分业务场景中，如果一部分数据获取失败，整体结果无法构建。</li>
 <li><strong>使用虚拟线程作为底层的线程工厂</strong>：<code>StructuredTaskScope</code> 默认使用虚拟线程，这是最优组合。</li>
@@ -427,111 +413,105 @@ CompletableFuture&lt;UserProfile&gt; result = userFuture
 <h2>4. Pattern Matching（模式匹配）</h2>
 <h3>设计动机</h3>
 <p>传统 Java 中的类型检查和转换冗长且易出错：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 旧方式：类型检查 → 强制转换 → 使用
-if (obj instanceof String) {
-    String s = (String) obj;  // 重复了类型信息
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 旧方式：类型检查 → 强制转换 → 使用</span>
+<span class="hljs-keyword">if</span> (obj <span class="hljs-keyword">instanceof</span> String) {
+    <span class="hljs-type">String</span> <span class="hljs-variable">s</span> <span class="hljs-operator">=</span> (String) obj;  <span class="hljs-comment">// 重复了类型信息</span>
     System.out.println(s.length());
 }
-</code></pre></div>
-<p>模式匹配的设计目标：<strong>将类型检查、转换和变量声明合并为一个原子操作，消除重复代码，由编译器保证类型安全</strong>。</p>
+</code></pre></div><p>模式匹配的设计目标：<strong>将类型检查、转换和变量声明合并为一个原子操作，消除重复代码，由编译器保证类型安全</strong>。</p>
 <h3>instanceof 增强（JEP 394, final in JDK 16）</h3>
 <p><strong>基本用法：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 旧方式
-if (obj instanceof String) {
-    String s = (String) obj;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 旧方式</span>
+<span class="hljs-keyword">if</span> (obj <span class="hljs-keyword">instanceof</span> String) {
+    <span class="hljs-type">String</span> <span class="hljs-variable">s</span> <span class="hljs-operator">=</span> (String) obj;
     System.out.println(s.toUpperCase());
 }
 
-// 模式匹配 instanceof（JDK 16+）
-if (obj instanceof String s) {
-    System.out.println(s.toUpperCase()); // s 在此作用域内有效
+<span class="hljs-comment">// 模式匹配 instanceof（JDK 16+）</span>
+<span class="hljs-keyword">if</span> (obj <span class="hljs-keyword">instanceof</span> String s) {
+    System.out.println(s.toUpperCase()); <span class="hljs-comment">// s 在此作用域内有效</span>
 }
 
-// 与条件组合
-if (obj instanceof String s &amp;&amp; s.length() &gt; 5) {
-    System.out.println(&quot;Long string: &quot; + s);
+<span class="hljs-comment">// 与条件组合</span>
+<span class="hljs-keyword">if</span> (obj <span class="hljs-keyword">instanceof</span> String s &amp;&amp; s.length() &gt; <span class="hljs-number">5</span>) {
+    System.out.println(<span class="hljs-string">"Long string: "</span> + s);
 }
 
-// 否定模式 — 变量在 else 分支有效
-if (!(obj instanceof String s)) {
-    return; // s 不在作用域内
+<span class="hljs-comment">// 否定模式 — 变量在 else 分支有效</span>
+<span class="hljs-keyword">if</span> (!(obj <span class="hljs-keyword">instanceof</span> String s)) {
+    <span class="hljs-keyword">return</span>; <span class="hljs-comment">// s 不在作用域内</span>
 }
-System.out.println(s); // s 在此作用域内有效
-</code></pre></div>
-<h3>Record Patterns（JEP 440, final in JDK 21）</h3>
+System.out.println(s); <span class="hljs-comment">// s 在此作用域内有效</span>
+</code></pre></div><h3>Record Patterns（JEP 440, final in JDK 21）</h3>
 <p>Record Patterns 允许解构 record 对象：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 定义
-record Point(int x, int y) {}
-record Line(Point start, Point end) {}
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 定义</span>
+<span class="hljs-keyword">record</span> <span class="hljs-title class_">Point</span><span class="hljs-params">(<span class="hljs-type">int</span> x, <span class="hljs-type">int</span> y)</span> {}
+<span class="hljs-keyword">record</span> <span class="hljs-title class_">Line</span><span class="hljs-params">(Point start, Point end)</span> {}
 
-// 嵌套解构
-void printLineCoordinates(Object obj) {
-    if (obj instanceof Line(Point(int x1, int y1), Point(int x2, int y2))) {
-        // x1, y1, x2, y2 直接被绑定！
-        System.out.println(&quot;Line from (%d,%d) to (%d,%d)&quot;.formatted(x1, y1, x2, y2));
+<span class="hljs-comment">// 嵌套解构</span>
+<span class="hljs-keyword">void</span> <span class="hljs-title function_">printLineCoordinates</span><span class="hljs-params">(Object obj)</span> {
+    <span class="hljs-keyword">if</span> (obj <span class="hljs-keyword">instanceof</span> <span class="hljs-title function_">Line</span><span class="hljs-params">(Point(<span class="hljs-type">int</span> x1, <span class="hljs-type">int</span> y1)</span>, Point(<span class="hljs-type">int</span> x2, <span class="hljs-type">int</span> y2))) {
+        <span class="hljs-comment">// x1, y1, x2, y2 直接被绑定！</span>
+        System.out.println(<span class="hljs-string">"Line from (%d,%d) to (%d,%d)"</span>.formatted(x1, y1, x2, y2));
     }
 }
 
-// 简化写法 — 只提取需要的字段
-if (obj instanceof Line(Point start, var end)) {
-    System.out.println(&quot;Start point: &quot; + start);
+<span class="hljs-comment">// 简化写法 — 只提取需要的字段</span>
+<span class="hljs-keyword">if</span> (obj <span class="hljs-keyword">instanceof</span> <span class="hljs-title function_">Line</span><span class="hljs-params">(Point start, <span class="hljs-keyword">var</span> end)</span>) {
+    System.out.println(<span class="hljs-string">"Start point: "</span> + start);
 }
-</code></pre></div>
-<h3>switch 模式匹配（JEP 441, final in JDK 21）</h3>
+</code></pre></div><h3>switch 模式匹配（JEP 441, final in JDK 21）</h3>
 <p>这是最强大的模式匹配形式。<code>switch</code> 可以匹配类型模式、record 模式，且编译器检查完备性：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 旧方式：if-else 链
-String legacyFormat(Object obj) {
-    if (obj == null) return &quot;null&quot;;
-    if (obj instanceof Integer) return &quot;Integer: &quot; + obj;
-    if (obj instanceof String)  return &quot;String: &quot; + obj;
-    if (obj instanceof Long)    return &quot;Long: &quot; + obj;
-    return &quot;Unknown&quot;;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 旧方式：if-else 链</span>
+String <span class="hljs-title function_">legacyFormat</span><span class="hljs-params">(Object obj)</span> {
+    <span class="hljs-keyword">if</span> (obj == <span class="hljs-literal">null</span>) <span class="hljs-keyword">return</span> <span class="hljs-string">"null"</span>;
+    <span class="hljs-keyword">if</span> (obj <span class="hljs-keyword">instanceof</span> Integer) <span class="hljs-keyword">return</span> <span class="hljs-string">"Integer: "</span> + obj;
+    <span class="hljs-keyword">if</span> (obj <span class="hljs-keyword">instanceof</span> String)  <span class="hljs-keyword">return</span> <span class="hljs-string">"String: "</span> + obj;
+    <span class="hljs-keyword">if</span> (obj <span class="hljs-keyword">instanceof</span> Long)    <span class="hljs-keyword">return</span> <span class="hljs-string">"Long: "</span> + obj;
+    <span class="hljs-keyword">return</span> <span class="hljs-string">"Unknown"</span>;
 }
 
-// 新方式：switch 模式匹配
-String modernFormat(Object obj) {
-    return switch (obj) {
-        case null            -&gt; &quot;null&quot;;
-        case Integer i       -&gt; &quot;Integer: &quot; + i;
-        case String s        -&gt; &quot;String: &quot; + s;
-        case Long l          -&gt; &quot;Long: &quot; + l;
-        default              -&gt; &quot;Unknown&quot;;
+<span class="hljs-comment">// 新方式：switch 模式匹配</span>
+String <span class="hljs-title function_">modernFormat</span><span class="hljs-params">(Object obj)</span> {
+    <span class="hljs-keyword">return</span> <span class="hljs-keyword">switch</span> (obj) {
+        <span class="hljs-keyword">case</span> <span class="hljs-literal">null</span>            -&gt; <span class="hljs-string">"null"</span>;
+        <span class="hljs-keyword">case</span> Integer i       -&gt; <span class="hljs-string">"Integer: "</span> + i;
+        <span class="hljs-keyword">case</span> String s        -&gt; <span class="hljs-string">"String: "</span> + s;
+        <span class="hljs-keyword">case</span> Long l          -&gt; <span class="hljs-string">"Long: "</span> + l;
+        <span class="hljs-keyword">default</span>              -&gt; <span class="hljs-string">"Unknown"</span>;
     };
 }
-</code></pre></div>
-<p><strong>带有 when 守卫（guard）的模式匹配：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">String classifyNumber(Object obj) {
-    return switch (obj) {
-        case Integer i when i &gt; 0  -&gt; &quot;Positive integer: &quot; + i;
-        case Integer i when i &lt; 0  -&gt; &quot;Negative integer: &quot; + i;
-        case Integer i             -&gt; &quot;Zero&quot;;
-        case Double d when Double.isNaN(d) -&gt; &quot;NaN&quot;;
-        case Double d              -&gt; &quot;Double: &quot; + d;
-        default                    -&gt; &quot;Not a number&quot;;
+</code></pre></div><p><strong>带有 when 守卫（guard）的模式匹配：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java">String <span class="hljs-title function_">classifyNumber</span><span class="hljs-params">(Object obj)</span> {
+    <span class="hljs-keyword">return</span> <span class="hljs-keyword">switch</span> (obj) {
+        <span class="hljs-keyword">case</span> Integer i <span class="hljs-keyword">when</span> i &gt; <span class="hljs-number">0</span>  -&gt; <span class="hljs-string">"Positive integer: "</span> + i;
+        <span class="hljs-keyword">case</span> Integer i <span class="hljs-keyword">when</span> i &lt; <span class="hljs-number">0</span>  -&gt; <span class="hljs-string">"Negative integer: "</span> + i;
+        <span class="hljs-keyword">case</span> Integer i             -&gt; <span class="hljs-string">"Zero"</span>;
+        <span class="hljs-keyword">case</span> Double d <span class="hljs-keyword">when</span> Double.isNaN(d) -&gt; <span class="hljs-string">"NaN"</span>;
+        <span class="hljs-keyword">case</span> Double d              -&gt; <span class="hljs-string">"Double: "</span> + d;
+        <span class="hljs-keyword">default</span>                    -&gt; <span class="hljs-string">"Not a number"</span>;
     };
 }
-</code></pre></div>
-<p><strong>结合 Record Patterns 和 switch 进行 AST 处理（经典用例）：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 定义一个代数数据类型（ADT）
-sealed interface Expr permits IntExpr, AddExpr, MulExpr, NegExpr {}
-record IntExpr(int value) implements Expr {}
-record AddExpr(Expr left, Expr right) implements Expr {}
-record MulExpr(Expr left, Expr right) implements Expr {}
-record NegExpr(Expr expr) implements Expr {}
+</code></pre></div><p><strong>结合 Record Patterns 和 switch 进行 AST 处理（经典用例）：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 定义一个代数数据类型（ADT）</span>
+<span class="hljs-keyword">sealed</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">Expr</span> <span class="hljs-keyword">permits</span> IntExpr, AddExpr, MulExpr, NegExpr {}
+<span class="hljs-keyword">record</span> <span class="hljs-title class_">IntExpr</span><span class="hljs-params">(<span class="hljs-type">int</span> value)</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">Expr</span> {}
+<span class="hljs-keyword">record</span> <span class="hljs-title class_">AddExpr</span><span class="hljs-params">(Expr left, Expr right)</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">Expr</span> {}
+<span class="hljs-keyword">record</span> <span class="hljs-title class_">MulExpr</span><span class="hljs-params">(Expr left, Expr right)</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">Expr</span> {}
+<span class="hljs-keyword">record</span> <span class="hljs-title class_">NegExpr</span><span class="hljs-params">(Expr expr)</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">Expr</span> {}
 
-// 使用 switch + record pattern 进行求值
-int eval(Expr e) {
-    return switch (e) {
-        case IntExpr(int v)              -&gt; v;
-        case AddExpr(var l, var r)       -&gt; eval(l) + eval(r);
-        case MulExpr(var l, var r)       -&gt; eval(l) * eval(r);
-        case NegExpr(var sub)             -&gt; -eval(sub);
+<span class="hljs-comment">// 使用 switch + record pattern 进行求值</span>
+<span class="hljs-type">int</span> <span class="hljs-title function_">eval</span><span class="hljs-params">(Expr e)</span> {
+    <span class="hljs-keyword">return</span> <span class="hljs-keyword">switch</span> (e) {
+        <span class="hljs-keyword">case</span> <span class="hljs-title function_">IntExpr</span><span class="hljs-params">(<span class="hljs-type">int</span> v)</span>              -&gt; v;
+        <span class="hljs-keyword">case</span> <span class="hljs-title function_">AddExpr</span><span class="hljs-params">(<span class="hljs-keyword">var</span> l, <span class="hljs-keyword">var</span> r)</span>       -&gt; eval(l) + eval(r);
+        <span class="hljs-keyword">case</span> <span class="hljs-title function_">MulExpr</span><span class="hljs-params">(<span class="hljs-keyword">var</span> l, <span class="hljs-keyword">var</span> r)</span>       -&gt; eval(l) * eval(r);
+        <span class="hljs-keyword">case</span> <span class="hljs-title function_">NegExpr</span><span class="hljs-params">(<span class="hljs-keyword">var</span> sub)</span>             -&gt; -eval(sub);
     };
-    // 编译器验证：switch 覆盖了所有 Expr 子类型（因为 Expr 是 sealed）
-    // 如果遗漏了某个 case，编译器会报错
+    <span class="hljs-comment">// 编译器验证：switch 覆盖了所有 Expr 子类型（因为 Expr 是 sealed）</span>
+    <span class="hljs-comment">// 如果遗漏了某个 case，编译器会报错</span>
 }
-</code></pre></div>
-<h3>最佳实践</h3>
+</code></pre></div><h3>最佳实践</h3>
 <ol>
 <li><strong>优先使用 switch 模式匹配替代 if-else 链</strong>：编译器提供完备性检查，减少遗漏分支的风险。</li>
 <li><strong>与 sealed class 结合使用</strong>：sealed class 限定了所有子类型，编译器可以验证 switch 的完备性，消除 <code>default</code> 分支。</li>
@@ -545,8 +525,8 @@ int eval(Expr e) {
 <hr>
 <h2>5. Record Classes（记录类，JEP 395）</h2>
 <h3>设计动机</h3>
-<p>Java 代码中大量存在&quot;数据载体&quot;类——只有字段和简单的访问器方法，没有复杂行为。写这种类需要大量的样板代码：构造器、<code>equals()</code>、<code>hashCode()</code>、<code>toString()</code>、getter 方法。IDE 可以生成这些代码，但它们会与业务逻辑混在一起，且需要手动维护一致。</p>
-<p>Record 的设计目标：<strong>提供一种简洁的语法来声明&quot;不可变数据载体&quot;，编译器自动生成构造器、访问器、<code>equals()</code>、<code>hashCode()</code> 和 <code>toString()</code></strong>。</p>
+<p>Java 代码中大量存在"数据载体"类——只有字段和简单的访问器方法，没有复杂行为。写这种类需要大量的样板代码：构造器、<code>equals()</code>、<code>hashCode()</code>、<code>toString()</code>、getter 方法。IDE 可以生成这些代码，但它们会与业务逻辑混在一起，且需要手动维护一致。</p>
+<p>Record 的设计目标：<strong>提供一种简洁的语法来声明"不可变数据载体"，编译器自动生成构造器、访问器、<code>equals()</code>、<code>hashCode()</code> 和 <code>toString()</code></strong>。</p>
 <h3>核心原理</h3>
 <p>Record 是一种限制性类（restricted class）：</p>
 <ul>
@@ -559,56 +539,53 @@ int eval(Expr e) {
 </ul>
 <h3>代码示例</h3>
 <p><strong>基本 Record：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 一行代码替代传统 40+ 行样板代码
-public record Person(String name, int age, Address address) {
-    // 紧凑构造器 — 进行验证
-    public Person {
-        if (age &lt; 0) throw new IllegalArgumentException(&quot;年龄不能为负数: &quot; + age);
-        if (name == null || name.isBlank()) throw new IllegalArgumentException(&quot;名称不能为空&quot;);
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 一行代码替代传统 40+ 行样板代码</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">Person</span><span class="hljs-params">(String name, <span class="hljs-type">int</span> age, Address address)</span> {
+    <span class="hljs-comment">// 紧凑构造器 — 进行验证</span>
+    <span class="hljs-keyword">public</span> Person {
+        <span class="hljs-keyword">if</span> (age &lt; <span class="hljs-number">0</span>) <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">IllegalArgumentException</span>(<span class="hljs-string">"年龄不能为负数: "</span> + age);
+        <span class="hljs-keyword">if</span> (name == <span class="hljs-literal">null</span> || name.isBlank()) <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">IllegalArgumentException</span>(<span class="hljs-string">"名称不能为空"</span>);
     }
 
-    // 派生方法 — 基于组件计算
-    public boolean isAdult() {
-        return age &gt;= 18;
+    <span class="hljs-comment">// 派生方法 — 基于组件计算</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">isAdult</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">return</span> age &gt;= <span class="hljs-number">18</span>;
     }
 
-    // 静态工厂方法
-    public static Person of(String name, int age) {
-        return new Person(name, age, null);
+    <span class="hljs-comment">// 静态工厂方法</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> Person <span class="hljs-title function_">of</span><span class="hljs-params">(String name, <span class="hljs-type">int</span> age)</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Person</span>(name, age, <span class="hljs-literal">null</span>);
     }
 
-    // 静态字段
-    public static final Person UNKNOWN = new Person(&quot;Unknown&quot;, 0, null);
+    <span class="hljs-comment">// 静态字段</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">Person</span> <span class="hljs-variable">UNKNOWN</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Person</span>(<span class="hljs-string">"Unknown"</span>, <span class="hljs-number">0</span>, <span class="hljs-literal">null</span>);
 }
 
-// 使用
-var person = new Person(&quot;张三&quot;, 30, new Address(&quot;Beijing&quot;));
-System.out.println(person.name());   // &quot;张三&quot; — 访问器名为 name()，不是 getName()
-System.out.println(person);           // Person[name=张三, age=30, address=Address[city=Beijing]]
-</code></pre></div>
-<p><strong>嵌套 Record：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public record User(Long id, String username, Email email) {}
-public record Email(String address, boolean verified) {}
+<span class="hljs-comment">// 使用</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">person</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Person</span>(<span class="hljs-string">"张三"</span>, <span class="hljs-number">30</span>, <span class="hljs-keyword">new</span> <span class="hljs-title class_">Address</span>(<span class="hljs-string">"Beijing"</span>));
+System.out.println(person.name());   <span class="hljs-comment">// "张三" — 访问器名为 name()，不是 getName()</span>
+System.out.println(person);           <span class="hljs-comment">// Person[name=张三, age=30, address=Address[city=Beijing]]</span>
+</code></pre></div><p><strong>嵌套 Record：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">User</span><span class="hljs-params">(Long id, String username, Email email)</span> {}
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">Email</span><span class="hljs-params">(String address, <span class="hljs-type">boolean</span> verified)</span> {}
 
-// 创建
-var user = new User(1L, &quot;alice&quot;, new Email(&quot;alice@example.com&quot;, true));
+<span class="hljs-comment">// 创建</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">user</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">User</span>(<span class="hljs-number">1L</span>, <span class="hljs-string">"alice"</span>, <span class="hljs-keyword">new</span> <span class="hljs-title class_">Email</span>(<span class="hljs-string">"alice@example.com"</span>, <span class="hljs-literal">true</span>));
 
-// 嵌套解构
-if (user instanceof User(var id, var name, Email(var addr, var verified))) {
-    System.out.println(&quot;User %s&#39;s email: %s (verified: %s)&quot;.formatted(name, addr, verified));
+<span class="hljs-comment">// 嵌套解构</span>
+<span class="hljs-keyword">if</span> (user <span class="hljs-keyword">instanceof</span> <span class="hljs-title function_">User</span><span class="hljs-params">(<span class="hljs-keyword">var</span> id, <span class="hljs-keyword">var</span> name, Email(<span class="hljs-keyword">var</span> addr, <span class="hljs-keyword">var</span> verified)</span>)) {
+    System.out.println(<span class="hljs-string">"User %s's email: %s (verified: %s)"</span>.formatted(name, addr, verified));
 }
-</code></pre></div>
-<h3>局限性</h3>
+</code></pre></div><h3>局限性</h3>
 <ol>
-<li><strong>浅不可变</strong>：Record 本身不可变，但如果其组件是可变的引用类型（如 <code>ArrayList</code>），则 record 的整体不可变性被打破。<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">record Wrapper(List&lt;String&gt; items) {} // 危险：items 内容可以外部修改
-// 解决方案：
-record SafeWrapper(List&lt;String&gt; items) {
-    public SafeWrapper {
-        items = List.copyOf(items); // 在紧凑构造器中做防御性拷贝
+<li><strong>浅不可变</strong>：Record 本身不可变，但如果其组件是可变的引用类型（如 <code>ArrayList</code>），则 record 的整体不可变性被打破。<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">record</span> <span class="hljs-title class_">Wrapper</span><span class="hljs-params">(List&lt;String&gt; items)</span> {} <span class="hljs-comment">// 危险：items 内容可以外部修改</span>
+<span class="hljs-comment">// 解决方案：</span>
+<span class="hljs-keyword">record</span> <span class="hljs-title class_">SafeWrapper</span><span class="hljs-params">(List&lt;String&gt; items)</span> {
+    <span class="hljs-keyword">public</span> SafeWrapper {
+        items = List.copyOf(items); <span class="hljs-comment">// 在紧凑构造器中做防御性拷贝</span>
     }
 }
-</code></pre></div>
-</li>
+</code></pre></div></li>
 <li><strong>不能继承</strong>：Record 是 final 的隐式子类。</li>
 <li><strong>无默认构造器</strong>：Record 始终需要一个包含所有组件的规范构造器。</li>
 <li><strong>不能声明非静态字段</strong>。</li>
@@ -616,72 +593,69 @@ record SafeWrapper(List&lt;String&gt; items) {
 <h3>Builder 模式替代方案</h3>
 <p>Record 没有 setter，但不推荐使用传统的 Builder 模式（这与 record 的不可变语义冲突）。以下是几种替代方案：</p>
 <p><strong>方案 1：wither 模式（JDK 25 可能支持）：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// JDK 25 中通过 record 的派生创建
-public record User(Long id, String name, String email, int age) {
-    // 手动实现 wither
-    public User withName(String newName) {
-        return new User(id, newName, email, age);
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// JDK 25 中通过 record 的派生创建</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">User</span><span class="hljs-params">(Long id, String name, String email, <span class="hljs-type">int</span> age)</span> {
+    <span class="hljs-comment">// 手动实现 wither</span>
+    <span class="hljs-keyword">public</span> User <span class="hljs-title function_">withName</span><span class="hljs-params">(String newName)</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">User</span>(id, newName, email, age);
     }
-    public User withEmail(String newEmail) {
-        return new User(id, name, newEmail, age);
+    <span class="hljs-keyword">public</span> User <span class="hljs-title function_">withEmail</span><span class="hljs-params">(String newEmail)</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">User</span>(id, name, newEmail, age);
     }
 }
 
-// 使用
-var updated = user.withName(&quot;Bob&quot;).withEmail(&quot;bob@example.com&quot;);
-</code></pre></div>
-<p><strong>方案 2：分步构造（使用中间可变对象）：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 适用于有很多字段且有默认值的场景
-public record AppConfig(String host, int port, String dbUrl, int maxConnections, Duration timeout) {
-    public static Builder builder() { return new Builder(); }
+<span class="hljs-comment">// 使用</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">updated</span> <span class="hljs-operator">=</span> user.withName(<span class="hljs-string">"Bob"</span>).withEmail(<span class="hljs-string">"bob@example.com"</span>);
+</code></pre></div><p><strong>方案 2：分步构造（使用中间可变对象）：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 适用于有很多字段且有默认值的场景</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">AppConfig</span><span class="hljs-params">(String host, <span class="hljs-type">int</span> port, String dbUrl, <span class="hljs-type">int</span> maxConnections, Duration timeout)</span> {
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> Builder <span class="hljs-title function_">builder</span><span class="hljs-params">()</span> { <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Builder</span>(); }
 
-    public static class Builder {
-        private String host = &quot;localhost&quot;;
-        private int port = 8080;
-        private String dbUrl;
-        private int maxConnections = 10;
-        private Duration timeout = Duration.ofSeconds(30);
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">Builder</span> {
+        <span class="hljs-keyword">private</span> <span class="hljs-type">String</span> <span class="hljs-variable">host</span> <span class="hljs-operator">=</span> <span class="hljs-string">"localhost"</span>;
+        <span class="hljs-keyword">private</span> <span class="hljs-type">int</span> <span class="hljs-variable">port</span> <span class="hljs-operator">=</span> <span class="hljs-number">8080</span>;
+        <span class="hljs-keyword">private</span> String dbUrl;
+        <span class="hljs-keyword">private</span> <span class="hljs-type">int</span> <span class="hljs-variable">maxConnections</span> <span class="hljs-operator">=</span> <span class="hljs-number">10</span>;
+        <span class="hljs-keyword">private</span> <span class="hljs-type">Duration</span> <span class="hljs-variable">timeout</span> <span class="hljs-operator">=</span> Duration.ofSeconds(<span class="hljs-number">30</span>);
 
-        public Builder host(String host) { this.host = host; return this; }
-        public Builder port(int port) { this.port = port; return this; }
-        public Builder dbUrl(String dbUrl) { this.dbUrl = dbUrl; return this; }
-        public Builder maxConnections(int n) { this.maxConnections = n; return this; }
-        public Builder timeout(Duration d) { this.timeout = d; return this; }
+        <span class="hljs-keyword">public</span> Builder <span class="hljs-title function_">host</span><span class="hljs-params">(String host)</span> { <span class="hljs-built_in">this</span>.host = host; <span class="hljs-keyword">return</span> <span class="hljs-built_in">this</span>; }
+        <span class="hljs-keyword">public</span> Builder <span class="hljs-title function_">port</span><span class="hljs-params">(<span class="hljs-type">int</span> port)</span> { <span class="hljs-built_in">this</span>.port = port; <span class="hljs-keyword">return</span> <span class="hljs-built_in">this</span>; }
+        <span class="hljs-keyword">public</span> Builder <span class="hljs-title function_">dbUrl</span><span class="hljs-params">(String dbUrl)</span> { <span class="hljs-built_in">this</span>.dbUrl = dbUrl; <span class="hljs-keyword">return</span> <span class="hljs-built_in">this</span>; }
+        <span class="hljs-keyword">public</span> Builder <span class="hljs-title function_">maxConnections</span><span class="hljs-params">(<span class="hljs-type">int</span> n)</span> { <span class="hljs-built_in">this</span>.maxConnections = n; <span class="hljs-keyword">return</span> <span class="hljs-built_in">this</span>; }
+        <span class="hljs-keyword">public</span> Builder <span class="hljs-title function_">timeout</span><span class="hljs-params">(Duration d)</span> { <span class="hljs-built_in">this</span>.timeout = d; <span class="hljs-keyword">return</span> <span class="hljs-built_in">this</span>; }
 
-        public AppConfig build() {
-            if (dbUrl == null) throw new IllegalStateException(&quot;dbUrl is required&quot;);
-            return new AppConfig(host, port, dbUrl, maxConnections, timeout);
+        <span class="hljs-keyword">public</span> AppConfig <span class="hljs-title function_">build</span><span class="hljs-params">()</span> {
+            <span class="hljs-keyword">if</span> (dbUrl == <span class="hljs-literal">null</span>) <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">IllegalStateException</span>(<span class="hljs-string">"dbUrl is required"</span>);
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">AppConfig</span>(host, port, dbUrl, maxConnections, timeout);
         }
     }
 }
 
-// 使用
-var config = AppConfig.builder()
-    .dbUrl(&quot;jdbc:postgresql://localhost/mydb&quot;)
-    .maxConnections(20)
+<span class="hljs-comment">// 使用</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">config</span> <span class="hljs-operator">=</span> AppConfig.builder()
+    .dbUrl(<span class="hljs-string">"jdbc:postgresql://localhost/mydb"</span>)
+    .maxConnections(<span class="hljs-number">20</span>)
     .build();
-</code></pre></div>
-<h3>序列化</h3>
+</code></pre></div><h3>序列化</h3>
 <p>Record 的序列化机制与传统类不同：</p>
 <ul>
 <li>反序列化时使用规范构造器（而非绕过构造器的魔法机制）</li>
 <li>这意味着 compact constructor 中的验证逻辑会在反序列化时自动执行</li>
 <li>这天然防止了反序列化攻击（传统 Java 序列化中，恶意数据可以绕过构造器）</li>
 </ul>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public record SafeUser(String name, int age) {
-    public SafeUser {
-        if (age &lt; 0 || age &gt; 150) {
-            throw new IllegalArgumentException(&quot;Invalid age: &quot; + age);
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">SafeUser</span><span class="hljs-params">(String name, <span class="hljs-type">int</span> age)</span> {
+    <span class="hljs-keyword">public</span> SafeUser {
+        <span class="hljs-keyword">if</span> (age &lt; <span class="hljs-number">0</span> || age &gt; <span class="hljs-number">150</span>) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">IllegalArgumentException</span>(<span class="hljs-string">"Invalid age: "</span> + age);
         }
     }
 }
-// 反序列化 age=999 的数据会抛出 IllegalArgumentException
-// 这是 record 相对于传统 POJO 的重大安全优势
-</code></pre></div>
-<hr>
+<span class="hljs-comment">// 反序列化 age=999 的数据会抛出 IllegalArgumentException</span>
+<span class="hljs-comment">// 这是 record 相对于传统 POJO 的重大安全优势</span>
+</code></pre></div><hr>
 <h2>6. Sealed Classes（密封类，JEP 409）</h2>
 <h3>设计动机</h3>
-<p>传统 Java 中，类要么是 <code>final</code>（完全不开放扩展），要么是开放继承（任何人都可以扩展）。缺少一种&quot;受控继承&quot;的中间立场——允许扩展，但只允许指定的部分类扩展。</p>
+<p>传统 Java 中，类要么是 <code>final</code>（完全不开放扩展），要么是开放继承（任何人都可以扩展）。缺少一种"受控继承"的中间立场——允许扩展，但只允许指定的部分类扩展。</p>
 <p>这种需求在领域建模中非常常见：例如 <code>Shape</code> 可以是 <code>Circle</code>、<code>Rectangle</code>、<code>Triangle</code>，但不应该被任意未知类扩展。这是代数数据类型（ADT）的核心概念。</p>
 <p>Sealed Class 的设计目标：<strong>让类作者明确控制哪些类可以扩展它，实现受控的多态</strong>。</p>
 <h3>核心原理</h3>
@@ -689,73 +663,70 @@ var config = AppConfig.builder()
 <li>用 <code>sealed</code> 修饰符声明一个类（或接口）</li>
 <li>用 <code>permits</code> 子句指定允许的子类型</li>
 <li>每个允许的子类型必须声明为 <code>final</code>、<code>sealed</code> 或 <code>non-sealed</code></li>
-<li><code>non-sealed</code> 表示&quot;开放给任意扩展&quot;——在密封层次结构中打开一个扩展点</li>
+<li><code>non-sealed</code> 表示"开放给任意扩展"——在密封层次结构中打开一个扩展点</li>
 </ul>
 <h3>代码示例</h3>
 <p><strong>基本用法：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 密封层次结构
-public sealed interface Shape
-    permits Circle, Rectangle, Triangle, CustomShape {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 密封层次结构</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">sealed</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">Shape</span>
+    <span class="hljs-keyword">permits</span> Circle, Rectangle, Triangle, CustomShape {
 
-    double area();
+    <span class="hljs-type">double</span> <span class="hljs-title function_">area</span><span class="hljs-params">()</span>;
 }
 
-public record Circle(double radius) implements Shape {
-    public double area() { return Math.PI * radius * radius; }
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">Circle</span><span class="hljs-params">(<span class="hljs-type">double</span> radius)</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">Shape</span> {
+    <span class="hljs-keyword">public</span> <span class="hljs-type">double</span> <span class="hljs-title function_">area</span><span class="hljs-params">()</span> { <span class="hljs-keyword">return</span> Math.PI * radius * radius; }
 }
 
-public record Rectangle(double width, double height) implements Shape {
-    public double area() { return width * height; }
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">Rectangle</span><span class="hljs-params">(<span class="hljs-type">double</span> width, <span class="hljs-type">double</span> height)</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">Shape</span> {
+    <span class="hljs-keyword">public</span> <span class="hljs-type">double</span> <span class="hljs-title function_">area</span><span class="hljs-params">()</span> { <span class="hljs-keyword">return</span> width * height; }
 }
 
-public record Triangle(double base, double height) implements Shape {
-    public double area() { return 0.5 * base * height; }
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">Triangle</span><span class="hljs-params">(<span class="hljs-type">double</span> base, <span class="hljs-type">double</span> height)</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">Shape</span> {
+    <span class="hljs-keyword">public</span> <span class="hljs-type">double</span> <span class="hljs-title function_">area</span><span class="hljs-params">()</span> { <span class="hljs-keyword">return</span> <span class="hljs-number">0.5</span> * base * height; }
 }
 
-// non-sealed: 允许用户自定义形状
-public non-sealed interface CustomShape extends Shape {
-    // 任何类都可以实现 CustomShape
+<span class="hljs-comment">// non-sealed: 允许用户自定义形状</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">non-sealed</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">CustomShape</span> <span class="hljs-keyword">extends</span> <span class="hljs-title class_">Shape</span> {
+    <span class="hljs-comment">// 任何类都可以实现 CustomShape</span>
 }
-</code></pre></div>
-<p><strong>与模式匹配配合实现完备性检查：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">double processShape(Shape shape) {
-    return switch (shape) {
-        case Circle(var r)       -&gt; Math.PI * r * r;
-        case Rectangle(var w, var h) -&gt; w * h;
-        case Triangle(var b, var h)  -&gt; 0.5 * b * h;
-        case CustomShape cs      -&gt; cs.area(); // 兜底，调用自定义实现
+</code></pre></div><p><strong>与模式匹配配合实现完备性检查：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-type">double</span> <span class="hljs-title function_">processShape</span><span class="hljs-params">(Shape shape)</span> {
+    <span class="hljs-keyword">return</span> <span class="hljs-keyword">switch</span> (shape) {
+        <span class="hljs-keyword">case</span> <span class="hljs-title function_">Circle</span><span class="hljs-params">(<span class="hljs-keyword">var</span> r)</span>       -&gt; Math.PI * r * r;
+        <span class="hljs-keyword">case</span> <span class="hljs-title function_">Rectangle</span><span class="hljs-params">(<span class="hljs-keyword">var</span> w, <span class="hljs-keyword">var</span> h)</span> -&gt; w * h;
+        <span class="hljs-keyword">case</span> <span class="hljs-title function_">Triangle</span><span class="hljs-params">(<span class="hljs-keyword">var</span> b, <span class="hljs-keyword">var</span> h)</span>  -&gt; <span class="hljs-number">0.5</span> * b * h;
+        <span class="hljs-keyword">case</span> CustomShape cs      -&gt; cs.area(); <span class="hljs-comment">// 兜底，调用自定义实现</span>
     };
-    // 编译器验证：switch 覆盖了所有 permits 子句中的子类型
-    // 如果遗漏任何一个，编译报错（无需 default）
+    <span class="hljs-comment">// 编译器验证：switch 覆盖了所有 permits 子句中的子类型</span>
+    <span class="hljs-comment">// 如果遗漏任何一个，编译报错（无需 default）</span>
 }
-</code></pre></div>
-<h3>实际应用：领域建模</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 支付结果建模
-public sealed interface PaymentResult
-    permits PaymentSuccess, PaymentFailure, PaymentPending {}
+</code></pre></div><h3>实际应用：领域建模</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 支付结果建模</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">sealed</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">PaymentResult</span>
+    <span class="hljs-keyword">permits</span> PaymentSuccess, PaymentFailure, PaymentPending {}
 
-public record PaymentSuccess(String transactionId, BigDecimal amount, Instant timestamp)
-    implements PaymentResult {}
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">PaymentSuccess</span><span class="hljs-params">(String transactionId, BigDecimal amount, Instant timestamp)</span>
+    <span class="hljs-keyword">implements</span> <span class="hljs-title class_">PaymentResult</span> {}
 
-public record PaymentFailure(String errorCode, String message, Instant timestamp)
-    implements PaymentResult {}
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">PaymentFailure</span><span class="hljs-params">(String errorCode, String message, Instant timestamp)</span>
+    <span class="hljs-keyword">implements</span> <span class="hljs-title class_">PaymentResult</span> {}
 
-public record PaymentPending(String paymentId, Instant expiresAt)
-    implements PaymentResult {}
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">PaymentPending</span><span class="hljs-params">(String paymentId, Instant expiresAt)</span>
+    <span class="hljs-keyword">implements</span> <span class="hljs-title class_">PaymentResult</span> {}
 
-// 处理支付结果 — 编译器保证覆盖所有情况
-void handlePayment(PaymentResult result) {
-    switch (result) {
-        case PaymentSuccess(var tid, var amt, var ts) -&gt;
-            notifyUser(&quot;Payment of %s succeeded: %s&quot;.formatted(amt, tid));
-        case PaymentFailure(var code, var msg, var ts) -&gt;
-            logError(&quot;Payment failed [%s]: %s&quot;.formatted(code, msg));
-        case PaymentPending(var pid, var expires) -&gt;
+<span class="hljs-comment">// 处理支付结果 — 编译器保证覆盖所有情况</span>
+<span class="hljs-keyword">void</span> <span class="hljs-title function_">handlePayment</span><span class="hljs-params">(PaymentResult result)</span> {
+    <span class="hljs-keyword">switch</span> (result) {
+        <span class="hljs-keyword">case</span> <span class="hljs-title function_">PaymentSuccess</span><span class="hljs-params">(<span class="hljs-keyword">var</span> tid, <span class="hljs-keyword">var</span> amt, <span class="hljs-keyword">var</span> ts)</span> -&gt;
+            notifyUser(<span class="hljs-string">"Payment of %s succeeded: %s"</span>.formatted(amt, tid));
+        <span class="hljs-keyword">case</span> <span class="hljs-title function_">PaymentFailure</span><span class="hljs-params">(<span class="hljs-keyword">var</span> code, <span class="hljs-keyword">var</span> msg, <span class="hljs-keyword">var</span> ts)</span> -&gt;
+            logError(<span class="hljs-string">"Payment failed [%s]: %s"</span>.formatted(code, msg));
+        <span class="hljs-keyword">case</span> <span class="hljs-title function_">PaymentPending</span><span class="hljs-params">(<span class="hljs-keyword">var</span> pid, <span class="hljs-keyword">var</span> expires)</span> -&gt;
             scheduleRetry(pid, expires);
     }
 }
-</code></pre></div>
-<h3>最佳实践</h3>
+</code></pre></div><h3>最佳实践</h3>
 <ol>
 <li><strong>优先密封接口，而非类</strong>：接口更灵活（record 可以实现它们）。</li>
 <li><strong>结合 Record 使用</strong>：Record 不可变，是 sealed 层次结构中数据载体子类型的理想选择。</li>
@@ -775,32 +746,31 @@ void handlePayment(PaymentResult result) {
 <h3>核心原理</h3>
 <p>String Templates 由两部分组成：</p>
 <ol>
-<li><strong>模板表达式</strong>：<code>STR.&quot;text \{expression} more text&quot;</code></li>
+<li><strong>模板表达式</strong>：<code>STR."text \{expression} more text"</code></li>
 <li><strong>模板处理器（Template Processor）</strong>：<code>STR</code> 是默认处理器，只需简单的插值</li>
 </ol>
-<p>模板处理器是一个实现 <code>StringTemplate.Processor</code> 接口的对象，它在模板的&quot;洞&quot;（<code>\{...}</code>）处插入值，并生成最终结果。不同的处理器有不同的安全策略。</p>
+<p>模板处理器是一个实现 <code>StringTemplate.Processor</code> 接口的对象，它在模板的"洞"（<code>\{...}</code>）处插入值，并生成最终结果。不同的处理器有不同的安全策略。</p>
 <p><strong>设计亮点</strong>：模板表达式在编译时解析，<code>\{...}</code> 中的表达式在编译时类型检查。模板处理器接收的是结构化的模板（文本片段 + 值的列表），而非一个已拼接的字符串。这意味着处理器可以在插入值之前进行转义（如 SQL 参数化）。</p>
 <h3>代码示例</h3>
 <p><strong>基本插值：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">var name = &quot;Alice&quot;;
-var age = 30;
-var city = &quot;Beijing&quot;;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-type">var</span> <span class="hljs-variable">name</span> <span class="hljs-operator">=</span> <span class="hljs-string">"Alice"</span>;
+<span class="hljs-type">var</span> <span class="hljs-variable">age</span> <span class="hljs-operator">=</span> <span class="hljs-number">30</span>;
+<span class="hljs-type">var</span> <span class="hljs-variable">city</span> <span class="hljs-operator">=</span> <span class="hljs-string">"Beijing"</span>;
 
-// 旧方式
-var old = name + &quot; is &quot; + age + &quot; years old from &quot; + city;                // 丑陋
-var old2 = String.format(&quot;%s is %d years old from %s&quot;, name, age, city);  // 格式符与参数分离
-var old3 = &quot;%s is %d years old from %s&quot;.formatted(name, age, city);       // 稍好但仍有格式符
+<span class="hljs-comment">// 旧方式</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">old</span> <span class="hljs-operator">=</span> name + <span class="hljs-string">" is "</span> + age + <span class="hljs-string">" years old from "</span> + city;                <span class="hljs-comment">// 丑陋</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">old2</span> <span class="hljs-operator">=</span> String.format(<span class="hljs-string">"%s is %d years old from %s"</span>, name, age, city);  <span class="hljs-comment">// 格式符与参数分离</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">old3</span> <span class="hljs-operator">=</span> <span class="hljs-string">"%s is %d years old from %s"</span>.formatted(name, age, city);       <span class="hljs-comment">// 稍好但仍有格式符</span>
 
-// String Templates
-var message = STR.&quot;\{name} is \{age} years old from \{city}&quot;;             // 清晰、类型安全
-</code></pre></div>
-<p><strong>多行模板：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">var product = &quot;Laptop&quot;;
-var price = 999.99;
-var quantity = 3;
-var total = price * quantity;
+<span class="hljs-comment">// String Templates</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">message</span> <span class="hljs-operator">=</span> STR.<span class="hljs-string">"\{name} is \{age} years old from \{city}"</span>;             <span class="hljs-comment">// 清晰、类型安全</span>
+</code></pre></div><p><strong>多行模板：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-type">var</span> <span class="hljs-variable">product</span> <span class="hljs-operator">=</span> <span class="hljs-string">"Laptop"</span>;
+<span class="hljs-type">var</span> <span class="hljs-variable">price</span> <span class="hljs-operator">=</span> <span class="hljs-number">999.99</span>;
+<span class="hljs-type">var</span> <span class="hljs-variable">quantity</span> <span class="hljs-operator">=</span> <span class="hljs-number">3</span>;
+<span class="hljs-type">var</span> <span class="hljs-variable">total</span> <span class="hljs-operator">=</span> price * quantity;
 
-var receipt = STR.&quot;&quot;&quot;
+<span class="hljs-type">var</span> <span class="hljs-variable">receipt</span> <span class="hljs-operator">=</span> STR.<span class="hljs-string">"""
     ========== Receipt ==========
     Product:  \{product}
     Price:    $\{%.2f.format(price)}
@@ -808,79 +778,75 @@ var receipt = STR.&quot;&quot;&quot;
     ------------------------------
     Total:    $\{%.2f.format(total)}
     ==============================
-    &quot;&quot;&quot;;
-</code></pre></div>
-<p><strong>表达式在模板中：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">var items = List.of(&quot;apple&quot;, &quot;banana&quot;, &quot;cherry&quot;);
-var joined = STR.&quot;Items: \{String.join(&quot;, &quot;, items)}&quot;;
-var count = STR.&quot;Count: \{items.size()} item\{items.size() != 1 ? &quot;s&quot; : &quot;&quot;}&quot;;
+    """</span>;
+</code></pre></div><p><strong>表达式在模板中：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-type">var</span> <span class="hljs-variable">items</span> <span class="hljs-operator">=</span> List.of(<span class="hljs-string">"apple"</span>, <span class="hljs-string">"banana"</span>, <span class="hljs-string">"cherry"</span>);
+<span class="hljs-type">var</span> <span class="hljs-variable">joined</span> <span class="hljs-operator">=</span> STR.<span class="hljs-string">"Items: \{String.join("</span>, <span class="hljs-string">", items)}"</span>;
+<span class="hljs-type">var</span> <span class="hljs-variable">count</span> <span class="hljs-operator">=</span> STR.<span class="hljs-string">"Count: \{items.size()} item\{items.size() != 1 ? "</span>s<span class="hljs-string">" : "</span><span class="hljs-string">"}"</span>;
 
-// 计算表达式
-var a = 10; var b = 20;
-var calc = STR.&quot;\{a} + \{b} = \{a + b}&quot;;  // &quot;10 + 20 = 30&quot;
-var max = STR.&quot;Max: \{Math.max(a, b)}&quot;;
-</code></pre></div>
-<p><strong>自定义模板处理器（安全示例）：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// SQL 参数化处理器 — 防止 SQL 注入
-var SQL = StringTemplate.Processor.of(
+<span class="hljs-comment">// 计算表达式</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">a</span> <span class="hljs-operator">=</span> <span class="hljs-number">10</span>; <span class="hljs-type">var</span> <span class="hljs-variable">b</span> <span class="hljs-operator">=</span> <span class="hljs-number">20</span>;
+<span class="hljs-type">var</span> <span class="hljs-variable">calc</span> <span class="hljs-operator">=</span> STR.<span class="hljs-string">"\{a} + \{b} = \{a + b}"</span>;  <span class="hljs-comment">// "10 + 20 = 30"</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">max</span> <span class="hljs-operator">=</span> STR.<span class="hljs-string">"Max: \{Math.max(a, b)}"</span>;
+</code></pre></div><p><strong>自定义模板处理器（安全示例）：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// SQL 参数化处理器 — 防止 SQL 注入</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">SQL</span> <span class="hljs-operator">=</span> StringTemplate.Processor.of(
     st -&gt; {
-        var sql = new StringBuilder();
-        var params = new ArrayList&lt;Object&gt;();
-        var fragments = st.fragments();
-        var values = st.values();
+        <span class="hljs-type">var</span> <span class="hljs-variable">sql</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>();
+        <span class="hljs-type">var</span> <span class="hljs-variable">params</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;Object&gt;();
+        <span class="hljs-type">var</span> <span class="hljs-variable">fragments</span> <span class="hljs-operator">=</span> st.fragments();
+        <span class="hljs-type">var</span> <span class="hljs-variable">values</span> <span class="hljs-operator">=</span> st.values();
 
-        for (int i = 0; i &lt; fragments.size(); i++) {
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; fragments.size(); i++) {
             sql.append(fragments.get(i));
-            if (i &lt; values.size()) {
-                sql.append(&quot;?&quot;);
+            <span class="hljs-keyword">if</span> (i &lt; values.size()) {
+                sql.append(<span class="hljs-string">"?"</span>);
                 params.add(values.get(i));
             }
         }
-        return new ParameterizedSql(sql.toString(), params);
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ParameterizedSql</span>(sql.toString(), params);
     }
 );
 
-// 使用
-var username = req.getParameter(&quot;username&quot;); // 不可信输入
-var query = SQL.&quot;SELECT * FROM users WHERE username = \{username}&quot;;
-// 如果 username = &quot;alice&#39; OR &#39;1&#39;=&#39;1&quot;，SQL 处理器会将其安全地参数化
-// 生成的 SQL: SELECT * FROM users WHERE username = ?
-// 参数: [&quot;alice&#39; OR &#39;1&#39;=&#39;1&quot;]
-// 彻底防止 SQL 注入
-</code></pre></div>
-<p><strong>JSON 模板处理器：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">var JSON = StringTemplate.Processor.of(
+<span class="hljs-comment">// 使用</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">username</span> <span class="hljs-operator">=</span> req.getParameter(<span class="hljs-string">"username"</span>); <span class="hljs-comment">// 不可信输入</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">query</span> <span class="hljs-operator">=</span> SQL.<span class="hljs-string">"SELECT * FROM users WHERE username = \{username}"</span>;
+<span class="hljs-comment">// 如果 username = "alice' OR '1'='1"，SQL 处理器会将其安全地参数化</span>
+<span class="hljs-comment">// 生成的 SQL: SELECT * FROM users WHERE username = ?</span>
+<span class="hljs-comment">// 参数: ["alice' OR '1'='1"]</span>
+<span class="hljs-comment">// 彻底防止 SQL 注入</span>
+</code></pre></div><p><strong>JSON 模板处理器：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-type">var</span> <span class="hljs-variable">JSON</span> <span class="hljs-operator">=</span> StringTemplate.Processor.of(
     st -&gt; {
-        var sb = new StringBuilder();
-        var fragments = st.fragments();
-        var values = st.values();
-        for (int i = 0; i &lt; fragments.size(); i++) {
+        <span class="hljs-type">var</span> <span class="hljs-variable">sb</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>();
+        <span class="hljs-type">var</span> <span class="hljs-variable">fragments</span> <span class="hljs-operator">=</span> st.fragments();
+        <span class="hljs-type">var</span> <span class="hljs-variable">values</span> <span class="hljs-operator">=</span> st.values();
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; fragments.size(); i++) {
             sb.append(fragments.get(i));
-            if (i &lt; values.size()) {
-                var v = values.get(i);
-                // 简单的 JSON 值转义
-                if (v instanceof String s) {
-                    sb.append(&#39;&quot;&#39;).append(s.replace(&quot;\&quot;&quot;, &quot;\\\&quot;&quot;)).append(&#39;&quot;&#39;);
-                } else {
+            <span class="hljs-keyword">if</span> (i &lt; values.size()) {
+                <span class="hljs-type">var</span> <span class="hljs-variable">v</span> <span class="hljs-operator">=</span> values.get(i);
+                <span class="hljs-comment">// 简单的 JSON 值转义</span>
+                <span class="hljs-keyword">if</span> (v <span class="hljs-keyword">instanceof</span> String s) {
+                    sb.append(<span class="hljs-string">'"'</span>).append(s.replace(<span class="hljs-string">"\""</span>, <span class="hljs-string">"\\\""</span>)).append(<span class="hljs-string">'"'</span>);
+                } <span class="hljs-keyword">else</span> {
                     sb.append(v);
                 }
             }
         }
-        return sb.toString();
+        <span class="hljs-keyword">return</span> sb.toString();
     }
 );
 
-var userId = 42L;
-var userName = &quot;Alice \&quot;The Coder\&quot;&quot;;
-var json = JSON.&quot;&quot;&quot;
+<span class="hljs-type">var</span> <span class="hljs-variable">userId</span> <span class="hljs-operator">=</span> <span class="hljs-number">42L</span>;
+<span class="hljs-type">var</span> <span class="hljs-variable">userName</span> <span class="hljs-operator">=</span> <span class="hljs-string">"Alice \"The Coder\""</span>;
+<span class="hljs-type">var</span> <span class="hljs-variable">json</span> <span class="hljs-operator">=</span> JSON.<span class="hljs-string">"""
     {
-        &quot;id&quot;: \{userId},
-        &quot;name&quot;: \{userName}
+        "id": \{userId},
+        "name": \{userName}
     }
-    &quot;&quot;&quot;;
-// 输出: { &quot;id&quot;: 42, &quot;name&quot;: &quot;Alice \&quot;The Coder\&quot;&quot; }
-</code></pre></div>
-<h3>最佳实践</h3>
+    """</span>;
+<span class="hljs-comment">// 输出: { "id": 42, "name": "Alice \"The Coder\"" }</span>
+</code></pre></div><h3>最佳实践</h3>
 <ol>
 <li><strong>默认使用 <code>STR</code> 处理器</strong>用于日志、用户消息等不需要特殊转义的场景。</li>
 <li><strong>为安全敏感场景使用专门的处理器</strong>：SQL、HTML、JSON、Shell 命令等场景必须使用对应的安全处理器，永远不要用 <code>STR</code> 然后手动拼接。</li>
@@ -912,80 +878,76 @@ var json = JSON.&quot;&quot;&quot;
 <p><strong>Arena（内存作用域）</strong>：管理 MemorySegment 的生命周期。打开一个 Arena，在 Arena 中分配内存，关闭 Arena 时所有关联的内存被释放。类似于 <code>try-with-resources</code> 的确定性资源管理。</p>
 <h3>代码示例</h3>
 <p><strong>调用 C 标准库函数（<code>strlen</code>）：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 1. 查找外部函数
-var linker = Linker.nativeLinker();
-var stdlib = SymbolLookup.libraryLookup(System.mapLibraryName(&quot;c&quot;), Arena.ofAuto());
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 1. 查找外部函数</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">linker</span> <span class="hljs-operator">=</span> Linker.nativeLinker();
+<span class="hljs-type">var</span> <span class="hljs-variable">stdlib</span> <span class="hljs-operator">=</span> SymbolLookup.libraryLookup(System.mapLibraryName(<span class="hljs-string">"c"</span>), Arena.ofAuto());
 
-// 2. 描述函数签名
-var strlenDesc = FunctionDescriptor.of(
-    ValueLayout.JAVA_LONG,  // 返回类型: size_t → long
-    ValueLayout.ADDRESS     // 参数类型: const char* → address
+<span class="hljs-comment">// 2. 描述函数签名</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">strlenDesc</span> <span class="hljs-operator">=</span> FunctionDescriptor.of(
+    ValueLayout.JAVA_LONG,  <span class="hljs-comment">// 返回类型: size_t → long</span>
+    ValueLayout.ADDRESS     <span class="hljs-comment">// 参数类型: const char* → address</span>
 );
 
-// 3. 链接
-var strlenHandle = stdlib.find(&quot;strlen&quot;)
-    .orElseThrow(() -&gt; new RuntimeException(&quot;strlen not found&quot;));
-var strlen = linker.downcallHandle(strlenHandle, strlenDesc);
+<span class="hljs-comment">// 3. 链接</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">strlenHandle</span> <span class="hljs-operator">=</span> stdlib.find(<span class="hljs-string">"strlen"</span>)
+    .orElseThrow(() -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">RuntimeException</span>(<span class="hljs-string">"strlen not found"</span>));
+<span class="hljs-type">var</span> <span class="hljs-variable">strlen</span> <span class="hljs-operator">=</span> linker.downcallHandle(strlenHandle, strlenDesc);
 
-// 4. 调用 — 需要先分配 C 字符串内存
-try (var arena = Arena.ofConfined()) {
-    var cString = arena.allocateFrom(&quot;Hello, World!&quot;); // 分配并写入 C 字符串
-    var len = (long) strlen.invoke(cString);
-    System.out.println(&quot;Length: &quot; + len);  // 13
+<span class="hljs-comment">// 4. 调用 — 需要先分配 C 字符串内存</span>
+<span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">arena</span> <span class="hljs-operator">=</span> Arena.ofConfined()) {
+    <span class="hljs-type">var</span> <span class="hljs-variable">cString</span> <span class="hljs-operator">=</span> arena.allocateFrom(<span class="hljs-string">"Hello, World!"</span>); <span class="hljs-comment">// 分配并写入 C 字符串</span>
+    <span class="hljs-type">var</span> <span class="hljs-variable">len</span> <span class="hljs-operator">=</span> (<span class="hljs-type">long</span>) strlen.invoke(cString);
+    System.out.println(<span class="hljs-string">"Length: "</span> + len);  <span class="hljs-comment">// 13</span>
 }
-</code></pre></div>
-<p><strong>调用系统函数获取 PID：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Linux/macOS: getpid()
-var linker = Linker.nativeLinker();
-var stdlib = SymbolLookup.libraryLookup(&quot;c&quot;, Arena.ofAuto());
+</code></pre></div><p><strong>调用系统函数获取 PID：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// Linux/macOS: getpid()</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">linker</span> <span class="hljs-operator">=</span> Linker.nativeLinker();
+<span class="hljs-type">var</span> <span class="hljs-variable">stdlib</span> <span class="hljs-operator">=</span> SymbolLookup.libraryLookup(<span class="hljs-string">"c"</span>, Arena.ofAuto());
 
-var getpidHandle = stdlib.find(&quot;getpid&quot;).orElseThrow();
-var getpid = linker.downcallHandle(
+<span class="hljs-type">var</span> <span class="hljs-variable">getpidHandle</span> <span class="hljs-operator">=</span> stdlib.find(<span class="hljs-string">"getpid"</span>).orElseThrow();
+<span class="hljs-type">var</span> <span class="hljs-variable">getpid</span> <span class="hljs-operator">=</span> linker.downcallHandle(
     getpidHandle,
-    FunctionDescriptor.of(ValueLayout.JAVA_INT) // int getpid(void)
+    FunctionDescriptor.of(ValueLayout.JAVA_INT) <span class="hljs-comment">// int getpid(void)</span>
 );
 
-var pid = (int) getpid.invoke();
-System.out.println(&quot;Process ID: &quot; + pid);
-</code></pre></div>
-<p><strong>安全访问堆外内存：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 对比 JNI：FFM API 中的所有内存访问都有边界检查
-try (var arena = Arena.ofConfined()) {
-    // 分配 1024 字节的堆外内存
-    var segment = arena.allocate(1024);
+<span class="hljs-type">var</span> <span class="hljs-variable">pid</span> <span class="hljs-operator">=</span> (<span class="hljs-type">int</span>) getpid.invoke();
+System.out.println(<span class="hljs-string">"Process ID: "</span> + pid);
+</code></pre></div><p><strong>安全访问堆外内存：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 对比 JNI：FFM API 中的所有内存访问都有边界检查</span>
+<span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">arena</span> <span class="hljs-operator">=</span> Arena.ofConfined()) {
+    <span class="hljs-comment">// 分配 1024 字节的堆外内存</span>
+    <span class="hljs-type">var</span> <span class="hljs-variable">segment</span> <span class="hljs-operator">=</span> arena.allocate(<span class="hljs-number">1024</span>);
 
-    // 写入（带边界检查）
-    var offset = 0;
-    for (int i = 0; i &lt; 256; i++) {
-        segment.set(ValueLayout.JAVA_INT, offset, i); // 写入 int (4 bytes)
-        offset += 4;
+    <span class="hljs-comment">// 写入（带边界检查）</span>
+    <span class="hljs-type">var</span> <span class="hljs-variable">offset</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; <span class="hljs-number">256</span>; i++) {
+        segment.set(ValueLayout.JAVA_INT, offset, i); <span class="hljs-comment">// 写入 int (4 bytes)</span>
+        offset += <span class="hljs-number">4</span>;
     }
 
-    // 读取（带边界检查）
-    offset = 0;
-    for (int i = 0; i &lt; 256; i++) {
-        var value = segment.get(ValueLayout.JAVA_INT, offset);
-        offset += 4;
+    <span class="hljs-comment">// 读取（带边界检查）</span>
+    offset = <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; <span class="hljs-number">256</span>; i++) {
+        <span class="hljs-type">var</span> <span class="hljs-variable">value</span> <span class="hljs-operator">=</span> segment.get(ValueLayout.JAVA_INT, offset);
+        offset += <span class="hljs-number">4</span>;
     }
 
-    // 如果偏移超过 1024，抛出 IndexOutOfBoundsException
-    // segment.set(ValueLayout.JAVA_INT, 1025, 42); // 抛出异常！
+    <span class="hljs-comment">// 如果偏移超过 1024，抛出 IndexOutOfBoundsException</span>
+    <span class="hljs-comment">// segment.set(ValueLayout.JAVA_INT, 1025, 42); // 抛出异常！</span>
 }
-// arena.close() 后，segment 失效，进一步访问会抛出异常
-</code></pre></div>
-<p><strong>内存映射文件：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 使用 MemorySegment 直接映射文件（零拷贝 IO）
-try (var arena = Arena.ofConfined()) {
-    var path = Path.of(&quot;/tmp/test.dat&quot;);
-    var segment = FileChannel.open(path, StandardOpenOption.READ)
-        .map(FileChannel.MapMode.READ_ONLY, 0, 1024, arena);
+<span class="hljs-comment">// arena.close() 后，segment 失效，进一步访问会抛出异常</span>
+</code></pre></div><p><strong>内存映射文件：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 使用 MemorySegment 直接映射文件（零拷贝 IO）</span>
+<span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">arena</span> <span class="hljs-operator">=</span> Arena.ofConfined()) {
+    <span class="hljs-type">var</span> <span class="hljs-variable">path</span> <span class="hljs-operator">=</span> Path.of(<span class="hljs-string">"/tmp/test.dat"</span>);
+    <span class="hljs-type">var</span> <span class="hljs-variable">segment</span> <span class="hljs-operator">=</span> FileChannel.open(path, StandardOpenOption.READ)
+        .map(FileChannel.MapMode.READ_ONLY, <span class="hljs-number">0</span>, <span class="hljs-number">1024</span>, arena);
 
-    // 直接从文件映射中读取，无需 read() 系统调用
-    var header = segment.get(ValueLayout.JAVA_INT, 0);
-    System.out.println(&quot;File header: &quot; + header);
+    <span class="hljs-comment">// 直接从文件映射中读取，无需 read() 系统调用</span>
+    <span class="hljs-type">var</span> <span class="hljs-variable">header</span> <span class="hljs-operator">=</span> segment.get(ValueLayout.JAVA_INT, <span class="hljs-number">0</span>);
+    System.out.println(<span class="hljs-string">"File header: "</span> + header);
 }
-</code></pre></div>
-<h3>对比：JNI vs FFM API</h3>
+</code></pre></div><h3>对比：JNI vs FFM API</h3>
 <table>
 <thead>
 <tr>
@@ -1040,85 +1002,82 @@ try (var arena = Arena.ofConfined()) {
 <p>Vector API 的设计目标：<strong>提供明确的、平台无关的向量化编程模型，让开发者可靠地利用 CPU SIMD 指令集，同时 JIT 编译器将向量操作编译为最优的硬件指令</strong>。</p>
 <h3>核心原理</h3>
 <ol>
-<li><strong>Vector<E></strong>：表示一个可以容纳多个元素的向量。<code>Vector</code> 的 E 是元素类型（<code>Byte</code>、<code>Short</code>、<code>Int</code>、<code>Long</code>、<code>Float</code>、<code>Double</code>）。</li>
-<li><strong>VectorSpecies<E></strong>：定义向量的&quot;形状&quot;——元素类型和长度。<code>VectorSpecies</code> 的实际长度取决于硬件支持的向量寄存器宽度（如 128-bit、256-bit、512-bit）。</li>
-<li><strong>VectorMask<E></strong>：用于条件操作，选择性地将操作应用到向量的部分元素。</li>
-<li><strong>VectorShuffle<E></strong>：用于重排向量中的元素。</li>
+<li><strong>Vector<e></e></strong>：表示一个可以容纳多个元素的向量。<code>Vector</code> 的 E 是元素类型（<code>Byte</code>、<code>Short</code>、<code>Int</code>、<code>Long</code>、<code>Float</code>、<code>Double</code>）。</li>
+<li><strong>VectorSpecies<e></e></strong>：定义向量的"形状"——元素类型和长度。<code>VectorSpecies</code> 的实际长度取决于硬件支持的向量寄存器宽度（如 128-bit、256-bit、512-bit）。</li>
+<li><strong>VectorMask<e></e></strong>：用于条件操作，选择性地将操作应用到向量的部分元素。</li>
+<li><strong>VectorShuffle<e></e></strong>：用于重排向量中的元素。</li>
 </ol>
 <h3>代码示例</h3>
 <p><strong>标量 vs 向量：两个数组元素相加：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 传统标量方式
-void scalarAdd(float[] a, float[] b, float[] c) {
-    for (int i = 0; i &lt; a.length; i++) {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 传统标量方式</span>
+<span class="hljs-keyword">void</span> <span class="hljs-title function_">scalarAdd</span><span class="hljs-params">(<span class="hljs-type">float</span>[] a, <span class="hljs-type">float</span>[] b, <span class="hljs-type">float</span>[] c)</span> {
+    <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; a.length; i++) {
         c[i] = a[i] + b[i];
     }
 }
 
-// Vector API 方式
-static final VectorSpecies&lt;Float&gt; SPECIES = FloatVector.SPECIES_PREFERRED;
+<span class="hljs-comment">// Vector API 方式</span>
+<span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> VectorSpecies&lt;Float&gt; SPECIES = FloatVector.SPECIES_PREFERRED;
 
-void vectorAdd(float[] a, float[] b, float[] c) {
-    int i = 0;
-    var length = SPECIES.loopBound(a.length); // 向量化部分的上界
+<span class="hljs-keyword">void</span> <span class="hljs-title function_">vectorAdd</span><span class="hljs-params">(<span class="hljs-type">float</span>[] a, <span class="hljs-type">float</span>[] b, <span class="hljs-type">float</span>[] c)</span> {
+    <span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+    <span class="hljs-type">var</span> <span class="hljs-variable">length</span> <span class="hljs-operator">=</span> SPECIES.loopBound(a.length); <span class="hljs-comment">// 向量化部分的上界</span>
 
-    // 以向量为单位处理
-    for (; i &lt; length; i += SPECIES.length()) {
-        var va = FloatVector.fromArray(SPECIES, a, i);
-        var vb = FloatVector.fromArray(SPECIES, b, i);
-        var vc = va.add(vb);  // 一个指令执行 SPECIES.length() 个加法
+    <span class="hljs-comment">// 以向量为单位处理</span>
+    <span class="hljs-keyword">for</span> (; i &lt; length; i += SPECIES.length()) {
+        <span class="hljs-type">var</span> <span class="hljs-variable">va</span> <span class="hljs-operator">=</span> FloatVector.fromArray(SPECIES, a, i);
+        <span class="hljs-type">var</span> <span class="hljs-variable">vb</span> <span class="hljs-operator">=</span> FloatVector.fromArray(SPECIES, b, i);
+        <span class="hljs-type">var</span> <span class="hljs-variable">vc</span> <span class="hljs-operator">=</span> va.add(vb);  <span class="hljs-comment">// 一个指令执行 SPECIES.length() 个加法</span>
         vc.intoArray(c, i);
     }
 
-    // 处理剩余元素（少于一个向量长度的尾部）
-    for (; i &lt; a.length; i++) {
+    <span class="hljs-comment">// 处理剩余元素（少于一个向量长度的尾部）</span>
+    <span class="hljs-keyword">for</span> (; i &lt; a.length; i++) {
         c[i] = a[i] + b[i];
     }
 }
-</code></pre></div>
-<p><strong>使用 VectorMask 进行条件操作：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 将数组中所有正数翻倍，负数和零保持不变
-void doublePositives(float[] arr) {
-    var species = FloatVector.SPECIES_PREFERRED;
-    int i = 0;
-    var bound = species.loopBound(arr.length);
+</code></pre></div><p><strong>使用 VectorMask 进行条件操作：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 将数组中所有正数翻倍，负数和零保持不变</span>
+<span class="hljs-keyword">void</span> <span class="hljs-title function_">doublePositives</span><span class="hljs-params">(<span class="hljs-type">float</span>[] arr)</span> {
+    <span class="hljs-type">var</span> <span class="hljs-variable">species</span> <span class="hljs-operator">=</span> FloatVector.SPECIES_PREFERRED;
+    <span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+    <span class="hljs-type">var</span> <span class="hljs-variable">bound</span> <span class="hljs-operator">=</span> species.loopBound(arr.length);
 
-    for (; i &lt; bound; i += species.length()) {
-        var v = FloatVector.fromArray(species, arr, i);
-        var mask = v.gt(0.0f);           // 创建掩码：哪些元素 &gt; 0
-        var doubled = v.mul(2.0f);       // 所有元素翻倍
-        var result = v.blend(doubled, mask); // 只对 mask 为 true 的元素取 doubled 的值
+    <span class="hljs-keyword">for</span> (; i &lt; bound; i += species.length()) {
+        <span class="hljs-type">var</span> <span class="hljs-variable">v</span> <span class="hljs-operator">=</span> FloatVector.fromArray(species, arr, i);
+        <span class="hljs-type">var</span> <span class="hljs-variable">mask</span> <span class="hljs-operator">=</span> v.gt(<span class="hljs-number">0.0f</span>);           <span class="hljs-comment">// 创建掩码：哪些元素 &gt; 0</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">doubled</span> <span class="hljs-operator">=</span> v.mul(<span class="hljs-number">2.0f</span>);       <span class="hljs-comment">// 所有元素翻倍</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> v.blend(doubled, mask); <span class="hljs-comment">// 只对 mask 为 true 的元素取 doubled 的值</span>
         result.intoArray(arr, i);
     }
 
-    for (; i &lt; arr.length; i++) {
-        if (arr[i] &gt; 0) arr[i] *= 2;
+    <span class="hljs-keyword">for</span> (; i &lt; arr.length; i++) {
+        <span class="hljs-keyword">if</span> (arr[i] &gt; <span class="hljs-number">0</span>) arr[i] *= <span class="hljs-number">2</span>;
     }
 }
-</code></pre></div>
-<p><strong>点积（Dot Product）— SIMD 经典场景：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">float dotProduct(float[] a, float[] b) {
-    var species = FloatVector.SPECIES_PREFERRED;
-    var acc = FloatVector.zero(species);  // 初始累加器
-    int i = 0;
-    var bound = species.loopBound(a.length);
+</code></pre></div><p><strong>点积（Dot Product）— SIMD 经典场景：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-type">float</span> <span class="hljs-title function_">dotProduct</span><span class="hljs-params">(<span class="hljs-type">float</span>[] a, <span class="hljs-type">float</span>[] b)</span> {
+    <span class="hljs-type">var</span> <span class="hljs-variable">species</span> <span class="hljs-operator">=</span> FloatVector.SPECIES_PREFERRED;
+    <span class="hljs-type">var</span> <span class="hljs-variable">acc</span> <span class="hljs-operator">=</span> FloatVector.zero(species);  <span class="hljs-comment">// 初始累加器</span>
+    <span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+    <span class="hljs-type">var</span> <span class="hljs-variable">bound</span> <span class="hljs-operator">=</span> species.loopBound(a.length);
 
-    for (; i &lt; bound; i += species.length()) {
-        var va = FloatVector.fromArray(species, a, i);
-        var vb = FloatVector.fromArray(species, b, i);
-        acc = acc.add(va.mul(vb));  // FMA: fused multiply-add
+    <span class="hljs-keyword">for</span> (; i &lt; bound; i += species.length()) {
+        <span class="hljs-type">var</span> <span class="hljs-variable">va</span> <span class="hljs-operator">=</span> FloatVector.fromArray(species, a, i);
+        <span class="hljs-type">var</span> <span class="hljs-variable">vb</span> <span class="hljs-operator">=</span> FloatVector.fromArray(species, b, i);
+        acc = acc.add(va.mul(vb));  <span class="hljs-comment">// FMA: fused multiply-add</span>
     }
 
-    // 将累加器中的多个部分和归约为一个标量
-    var result = acc.reduceLanes(VectorOperators.ADD);
+    <span class="hljs-comment">// 将累加器中的多个部分和归约为一个标量</span>
+    <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> acc.reduceLanes(VectorOperators.ADD);
 
-    // 标量尾部
-    for (; i &lt; a.length; i++) {
+    <span class="hljs-comment">// 标量尾部</span>
+    <span class="hljs-keyword">for</span> (; i &lt; a.length; i++) {
         result += a[i] * b[i];
     }
-    return result;
+    <span class="hljs-keyword">return</span> result;
 }
-</code></pre></div>
-<h3>性能特征</h3>
+</code></pre></div><h3>性能特征</h3>
 <p>Vector API 在以下场景具有显著性能优势（2-16x 加速，取决于硬件支持）：</p>
 <ul>
 <li>数学运算（大规模数组加减乘除）</li>
@@ -1144,126 +1103,125 @@ void doublePositives(float[] arr) {
 <hr>
 <h2>跨特性综合示例：支付处理系统</h2>
 <p>以下示例综合运用了本文涉及的多项特性：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.time.Instant;
-import java.util.*;
-import java.util.concurrent.*;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> java.time.Instant;
+<span class="hljs-keyword">import</span> java.util.*;
+<span class="hljs-keyword">import</span> java.util.concurrent.*;
 
-/**
+<span class="hljs-comment">/**
  * 支付处理系统 — 展示 JDK 25 多项特性协同使用
- */
-public class ModernPaymentSystem {
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ModernPaymentSystem</span> {
 
-    // === 领域模型：Record + Sealed ===
+    <span class="hljs-comment">// === 领域模型：Record + Sealed ===</span>
 
-    sealed interface PaymentResult
-        permits PaymentSuccess, PaymentFailure, PaymentPending {}
+    <span class="hljs-keyword">sealed</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">PaymentResult</span>
+        <span class="hljs-keyword">permits</span> PaymentSuccess, PaymentFailure, PaymentPending {}
 
-    record PaymentSuccess(String txnId, Money amount, Instant time) implements PaymentResult {}
-    record PaymentFailure(String code, String message, Instant time) implements PaymentResult {}
-    record PaymentPending(String paymentId, Instant expires) implements PaymentResult {}
-    record Money(BigDecimal amount, String currency) {
-        public Money {
-            if (amount.compareTo(BigDecimal.ZERO) &lt; 0) {
-                throw new IllegalArgumentException(&quot;金额不能为负&quot;);
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">PaymentSuccess</span><span class="hljs-params">(String txnId, Money amount, Instant time)</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">PaymentResult</span> {}
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">PaymentFailure</span><span class="hljs-params">(String code, String message, Instant time)</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">PaymentResult</span> {}
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">PaymentPending</span><span class="hljs-params">(String paymentId, Instant expires)</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">PaymentResult</span> {}
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">Money</span><span class="hljs-params">(BigDecimal amount, String currency)</span> {
+        <span class="hljs-keyword">public</span> Money {
+            <span class="hljs-keyword">if</span> (amount.compareTo(BigDecimal.ZERO) &lt; <span class="hljs-number">0</span>) {
+                <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">IllegalArgumentException</span>(<span class="hljs-string">"金额不能为负"</span>);
             }
         }
     }
 
-    // === ScopedValue: 传递请求上下文 ===
+    <span class="hljs-comment">// === ScopedValue: 传递请求上下文 ===</span>
 
-    static final ScopedValue&lt;String&gt; REQUEST_ID = ScopedValue.newInstance();
-    static final ScopedValue&lt;String&gt; USER_ID = ScopedValue.newInstance();
+    <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> ScopedValue&lt;String&gt; REQUEST_ID = ScopedValue.newInstance();
+    <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> ScopedValue&lt;String&gt; USER_ID = ScopedValue.newInstance();
 
-    // === 服务入口：结合 ScopedValues + Structured Concurrency + Virtual Threads ===
+    <span class="hljs-comment">// === 服务入口：结合 ScopedValues + Structured Concurrency + Virtual Threads ===</span>
 
-    PaymentResult processPayment(Money amount, String userId) {
-        return ScopedValue.where(REQUEST_ID, UUID.randomUUID().toString())
+    PaymentResult <span class="hljs-title function_">processPayment</span><span class="hljs-params">(Money amount, String userId)</span> {
+        <span class="hljs-keyword">return</span> ScopedValue.where(REQUEST_ID, UUID.randomUUID().toString())
             .where(USER_ID, userId)
             .call(() -&gt; {
-                try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
-                    // 并行执行风险检查和账户验证
-                    var riskCheck = scope.fork(this::checkRisk);
-                    var accountCheck = scope.fork(this::validateAccount);
+                <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">scope</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StructuredTaskScope</span>.ShutdownOnFailure()) {
+                    <span class="hljs-comment">// 并行执行风险检查和账户验证</span>
+                    <span class="hljs-type">var</span> <span class="hljs-variable">riskCheck</span> <span class="hljs-operator">=</span> scope.fork(<span class="hljs-built_in">this</span>::checkRisk);
+                    <span class="hljs-type">var</span> <span class="hljs-variable">accountCheck</span> <span class="hljs-operator">=</span> scope.fork(<span class="hljs-built_in">this</span>::validateAccount);
 
                     scope.join();
                     scope.throwIfFailed();
 
-                    // 两阶段都通过后执行支付
-                    if (!riskCheck.get().passed()) {
-                        return new PaymentFailure(&quot;RISK&quot;, &quot;风险检查未通过&quot;, Instant.now());
+                    <span class="hljs-comment">// 两阶段都通过后执行支付</span>
+                    <span class="hljs-keyword">if</span> (!riskCheck.get().passed()) {
+                        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">PaymentFailure</span>(<span class="hljs-string">"RISK"</span>, <span class="hljs-string">"风险检查未通过"</span>, Instant.now());
                     }
 
-                    return executePayment(amount);
+                    <span class="hljs-keyword">return</span> executePayment(amount);
                 }
             });
     }
 
-    // === Pattern Matching 处理结果 ===
+    <span class="hljs-comment">// === Pattern Matching 处理结果 ===</span>
 
-    String formatResult(PaymentResult result) {
-        return switch (result) {
-            case PaymentSuccess(var txn, var amt, var time)
-                when amt.amount().compareTo(new BigDecimal(&quot;10000&quot;)) &gt; 0
-                -&gt; STR.&quot;大额支付成功: 交易号=\{txn}, 金额=\{amt}&quot;;
+    String <span class="hljs-title function_">formatResult</span><span class="hljs-params">(PaymentResult result)</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">switch</span> (result) {
+            <span class="hljs-keyword">case</span> <span class="hljs-title function_">PaymentSuccess</span><span class="hljs-params">(<span class="hljs-keyword">var</span> txn, <span class="hljs-keyword">var</span> amt, <span class="hljs-keyword">var</span> time)</span>
+                <span class="hljs-keyword">when</span> amt.amount().compareTo(<span class="hljs-keyword">new</span> <span class="hljs-title class_">BigDecimal</span>(<span class="hljs-string">"10000"</span>)) &gt; <span class="hljs-number">0</span>
+                -&gt; STR.<span class="hljs-string">"大额支付成功: 交易号=\{txn}, 金额=\{amt}"</span>;
 
-            case PaymentSuccess(var txn, var amt, var time)
-                -&gt; STR.&quot;支付成功: 交易号=\{txn}, 金额=\{amt}&quot;;
+            <span class="hljs-keyword">case</span> <span class="hljs-title function_">PaymentSuccess</span><span class="hljs-params">(<span class="hljs-keyword">var</span> txn, <span class="hljs-keyword">var</span> amt, <span class="hljs-keyword">var</span> time)</span>
+                -&gt; STR.<span class="hljs-string">"支付成功: 交易号=\{txn}, 金额=\{amt}"</span>;
 
-            case PaymentFailure(var code, var msg, var time)
-                -&gt; STR.&quot;支付失败 [\{code}]: \{msg}&quot;;
+            <span class="hljs-keyword">case</span> <span class="hljs-title function_">PaymentFailure</span><span class="hljs-params">(<span class="hljs-keyword">var</span> code, <span class="hljs-keyword">var</span> msg, <span class="hljs-keyword">var</span> time)</span>
+                -&gt; STR.<span class="hljs-string">"支付失败 [\{code}]: \{msg}"</span>;
 
-            case PaymentPending(var pid, var expires)
-                -&gt; STR.&quot;支付处理中: \{pid}, 超时时间: \{expires}&quot;;
+            <span class="hljs-keyword">case</span> <span class="hljs-title function_">PaymentPending</span><span class="hljs-params">(<span class="hljs-keyword">var</span> pid, <span class="hljs-keyword">var</span> expires)</span>
+                -&gt; STR.<span class="hljs-string">"支付处理中: \{pid}, 超时时间: \{expires}"</span>;
         };
     }
 
-    // === 批量支付：使用 Vector API 计算总金额 ===
+    <span class="hljs-comment">// === 批量支付：使用 Vector API 计算总金额 ===</span>
 
-    BigDecimal calculateTotal(float[] amounts) {
-        var species = FloatVector.SPECIES_PREFERRED;
-        var acc = FloatVector.zero(species);
-        int i = 0;
-        var bound = species.loopBound(amounts.length);
+    BigDecimal <span class="hljs-title function_">calculateTotal</span><span class="hljs-params">(<span class="hljs-type">float</span>[] amounts)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">species</span> <span class="hljs-operator">=</span> FloatVector.SPECIES_PREFERRED;
+        <span class="hljs-type">var</span> <span class="hljs-variable">acc</span> <span class="hljs-operator">=</span> FloatVector.zero(species);
+        <span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+        <span class="hljs-type">var</span> <span class="hljs-variable">bound</span> <span class="hljs-operator">=</span> species.loopBound(amounts.length);
 
-        for (; i &lt; bound; i += species.length()) {
-            var v = FloatVector.fromArray(species, amounts, i);
+        <span class="hljs-keyword">for</span> (; i &lt; bound; i += species.length()) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">v</span> <span class="hljs-operator">=</span> FloatVector.fromArray(species, amounts, i);
             acc = acc.add(v);
         }
 
-        var total = acc.reduceLanes(VectorOperators.ADD);
+        <span class="hljs-type">var</span> <span class="hljs-variable">total</span> <span class="hljs-operator">=</span> acc.reduceLanes(VectorOperators.ADD);
 
-        for (; i &lt; amounts.length; i++) {
+        <span class="hljs-keyword">for</span> (; i &lt; amounts.length; i++) {
             total += amounts[i];
         }
 
-        return new BigDecimal(String.valueOf(total));
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">BigDecimal</span>(String.valueOf(total));
     }
 
-    // === 辅助方法（存根实现）===
+    <span class="hljs-comment">// === 辅助方法（存根实现）===</span>
 
-    record RiskResult(boolean passed, String reason) {}
-    record AccountResult(boolean valid, String accountId) {}
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">RiskResult</span><span class="hljs-params">(<span class="hljs-type">boolean</span> passed, String reason)</span> {}
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">AccountResult</span><span class="hljs-params">(<span class="hljs-type">boolean</span> valid, String accountId)</span> {}
 
-    RiskResult checkRisk() {
-        var userId = USER_ID.get();
-        // 实际实现：查询风控系统
-        return new RiskResult(true, &quot;OK&quot;);
+    RiskResult <span class="hljs-title function_">checkRisk</span><span class="hljs-params">()</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">userId</span> <span class="hljs-operator">=</span> USER_ID.get();
+        <span class="hljs-comment">// 实际实现：查询风控系统</span>
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RiskResult</span>(<span class="hljs-literal">true</span>, <span class="hljs-string">"OK"</span>);
     }
 
-    AccountResult validateAccount() {
-        var userId = USER_ID.get();
-        // 实际实现：查询账户服务
-        return new AccountResult(true, userId);
+    AccountResult <span class="hljs-title function_">validateAccount</span><span class="hljs-params">()</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">userId</span> <span class="hljs-operator">=</span> USER_ID.get();
+        <span class="hljs-comment">// 实际实现：查询账户服务</span>
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">AccountResult</span>(<span class="hljs-literal">true</span>, userId);
     }
 
-    PaymentResult executePayment(Money amount) {
-        // 实际实现：调用支付网关
-        return new PaymentSuccess(
+    PaymentResult <span class="hljs-title function_">executePayment</span><span class="hljs-params">(Money amount)</span> {
+        <span class="hljs-comment">// 实际实现：调用支付网关</span>
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">PaymentSuccess</span>(
             UUID.randomUUID().toString(), amount, Instant.now());
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>迁移路线图：从 JDK 21 到 JDK 25</h2>
 <table>
 <thead>
@@ -1322,7 +1280,7 @@ public class ModernPaymentSystem {
 <hr>
 <h2>常见问题</h2>
 <p><strong>Q: Virtual Threads 是否使 CompletableFuture 过时？</strong>
-A: 两者解决不同的问题。Virtual Threads 替代的是&quot;为了非阻塞 I/O 而被迫编写的异步代码&quot;。当业务逻辑天然是异步的（如等待多个外部服务的最快响应），<code>CompletableFuture.anyOf()</code> 和 <code>StructuredTaskScope.ShutdownOnSuccess()</code> 仍然有用。但对于大多数服务端业务代码，同步风格 + 虚拟线程是更好的选择。</p>
+A: 两者解决不同的问题。Virtual Threads 替代的是"为了非阻塞 I/O 而被迫编写的异步代码"。当业务逻辑天然是异步的（如等待多个外部服务的最快响应），<code>CompletableFuture.anyOf()</code> 和 <code>StructuredTaskScope.ShutdownOnSuccess()</code> 仍然有用。但对于大多数服务端业务代码，同步风格 + 虚拟线程是更好的选择。</p>
 <p><strong>Q: 所有现有代码都应该迁移到 Virtual Threads 吗？</strong>
 A: 对于 I/O 密集型服务（如 Web 服务器、微服务、数据库代理），迁移价值巨大。对于 CPU 密集型服务（如计算引擎、视频编码），迁移收益有限。迁移前先做 profiling。</p>
 <p><strong>Q: Scoped Values 完全替代 ThreadLocal 吗？</strong>
@@ -1330,9 +1288,9 @@ A: 在请求级别的上下文传递场景中（Web 请求、事务性操作）�
 <hr>
 <h2>相关条目</h2>
 <ul>
-<li><a href="#/02-Java平台/并发/02-Java并发深度解析" class="cross-ref" data-ref="02-Java并发深度解析">02-Java并发深度解析</a> — Java 内存模型与并发基础</li>
-<li><a href="#/02-Java平台/JVM/02-JVM内部机制与调优" class="cross-ref" data-ref="02-JVM内部机制与调优">02-JVM内部机制与调优</a> — JVM 垃圾收集器深度解析</li>
-<li><a href="#/03-Java应用平台/Spring核心/03-SpringBoot4深度解析" class="cross-ref" data-ref="03-SpringBoot4深度解析">03-SpringBoot4深度解析</a> — Spring Boot 4.x 中的 JDK 25 特性集成</li>
+<li><a href="#/02-Java平台/并发/02-Java并发深度解析" class="cross-ref">02-Java并发深度解析</a> — Java 内存模型与并发基础</li>
+<li><a href="#/02-Java平台/JVM/02-JVM内部机制与调优" class="cross-ref">02-JVM内部机制与调优</a> — JVM 垃圾收集器深度解析</li>
+<li><a href="#/03-Java应用平台/Spring核心/03-SpringBoot4深度解析" class="cross-ref">03-SpringBoot4深度解析</a> — Spring Boot 4.x 中的 JDK 25 特性集成</li>
 </ul>
-</div>
+</body></html></div>
 </article>

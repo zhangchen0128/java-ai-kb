@@ -1,44 +1,44 @@
 
-<article class="kb-entry" data-path="/14-AI平台与LLMOps/14-AI评估与可观测性">
+<article class="kb-entry" data-path="/14-AI平台与LLMOps">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=14">14-AI平台与LLMOps</a></div>
     <h1>AI 评估三层次 + LLM-as-a-Judge + Golden Dataset + 可观测性技术栈 — 完整 Java 实现</h1>
-    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#ai-evaluation</span><span class="badge badge-tag">#llm-as-judge</span><span class="badge badge-tag">#golden-dataset</span><span class="badge badge-tag">#observability</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#ai-evaluation</span><span class="badge badge-tag">#llm-as-judge</span><span class="badge badge-tag">#golden-dataset</span><span class="badge badge-tag">#observability</span><span class="badge badge-tag">#opentelemetry</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://docs.spring.io/spring-ai/reference/" target="_blank" rel="noopener" class="source-link" title="Spring AI 官方参考文档">Spring AI 官方参考文档</a><a href="https://opentelemetry.io/docs/languages/java/" target="_blank" rel="noopener" class="source-link" title="OpenTelemetry Java 官方文档">OpenTelemetry Java 官方文档</a><a href="https://langfuse.com/docs" target="_blank" rel="noopener" class="source-link" title="Langfuse AI 可观测性平台文档">Langfuse AI 可观测性平台文档</a><a href="https://micrometer.io/docs" target="_blank" rel="noopener" class="source-link" title="Micrometer 指标采集文档">Micrometer 指标采集文档</a></small></div>
   </div>
-  <div class="entry-body"><h1>AI 评估三层次 + LLM-as-a-Judge + Golden Dataset + 可观测性技术栈</h1>
+  <div class="entry-body"><html><head></head><body><h1>AI 评估三层次 + LLM-as-a-Judge + Golden Dataset + 可观测性技术栈</h1>
 <h2>一、概述</h2>
 <p>AI 应用的质量保障比传统软件更复杂——输出是非确定性的、评估标准主观性强、链路长（检索+生成+工具调用）。本文提出一个系统化的 AI 评估和可观测性框架，涵盖离线评估、在线评估、Agent 评估三个层次，结合 LLM-as-a-Judge、Golden Dataset 回归测试和 OpenTelemetry 全链路追踪。</p>
 <p>所有代码使用 JDK 25 + Spring Boot 4.x + Spring AI 2.x，充分利用 <code>var</code> 关键字和 Virtual Threads。</p>
 <h2>二、AI 评估三层次</h2>
 <h3>2.1 离线评估（Offline Evaluation）</h3>
 <p>离线评估在模型上线前执行，使用标准化的测试数据集。它不依赖真实用户，可以快速、可重复地运行。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public enum OfflineMetric {
-    // 生成质量
-    CORRECTNESS(&quot;正确性&quot;, &quot;回答的事实是否正确&quot;),
-    RELEVANCY(&quot;相关性&quot;, &quot;回答是否切题&quot;),
-    FAITHFULNESS(&quot;忠实度&quot;, &quot;回答是否忠于给定的上下文，无幻觉&quot;),
-    CITATION_ACCURACY(&quot;引用准确性&quot;, &quot;引用来源是否准确对应&quot;),
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">enum</span> <span class="hljs-title class_">OfflineMetric</span> {
+    <span class="hljs-comment">// 生成质量</span>
+    CORRECTNESS(<span class="hljs-string">"正确性"</span>, <span class="hljs-string">"回答的事实是否正确"</span>),
+    RELEVANCY(<span class="hljs-string">"相关性"</span>, <span class="hljs-string">"回答是否切题"</span>),
+    FAITHFULNESS(<span class="hljs-string">"忠实度"</span>, <span class="hljs-string">"回答是否忠于给定的上下文，无幻觉"</span>),
+    CITATION_ACCURACY(<span class="hljs-string">"引用准确性"</span>, <span class="hljs-string">"引用来源是否准确对应"</span>),
 
-    // 检索质量
-    MRR(&quot;Mean Reciprocal Rank&quot;, &quot;第一个相关文档排名的倒数均值&quot;),
-    NDCG_AT_10(&quot;NDCG@10&quot;, &quot;前10个结果的归一化折损累计增益&quot;),
-    RECALL_AT_10(&quot;Recall@10&quot;, &quot;前10个结果中相关文档占比&quot;),
-    PRECISION_AT_10(&quot;Precision@10&quot;, &quot;前10个结果中相关文档的比例&quot;);
+    <span class="hljs-comment">// 检索质量</span>
+    MRR(<span class="hljs-string">"Mean Reciprocal Rank"</span>, <span class="hljs-string">"第一个相关文档排名的倒数均值"</span>),
+    NDCG_AT_10(<span class="hljs-string">"NDCG@10"</span>, <span class="hljs-string">"前10个结果的归一化折损累计增益"</span>),
+    RECALL_AT_10(<span class="hljs-string">"Recall@10"</span>, <span class="hljs-string">"前10个结果中相关文档占比"</span>),
+    PRECISION_AT_10(<span class="hljs-string">"Precision@10"</span>, <span class="hljs-string">"前10个结果中相关文档的比例"</span>);
 
-    private final String displayName;
-    private final String description;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> String displayName;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> String description;
 
     OfflineMetric(String displayName, String description) {
-        this.displayName = displayName;
-        this.description = description;
+        <span class="hljs-built_in">this</span>.displayName = displayName;
+        <span class="hljs-built_in">this</span>.description = description;
     }
 }
 
-/**
+<span class="hljs-comment">/**
  * 离线评估结果
- */
-public record OfflineEvalResult(
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">OfflineEvalResult</span><span class="hljs-params">(
     String evalRunId,
     String modelName,
     String promptVersionId,
@@ -46,184 +46,181 @@ public record OfflineEvalResult(
     Map&lt;OfflineMetric, Double&gt; scores,          // 各指标得分
     List&lt;SingleTestCaseResult&gt; testCaseResults, // 逐条结果
     Duration totalDuration
-) {}
+)</span> {}
 
-public record SingleTestCaseResult(
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">SingleTestCaseResult</span><span class="hljs-params">(
     String testCaseId,
     String question,
     String expectedAnswer,
     String actualAnswer,
     Map&lt;OfflineMetric, Double&gt; scores,
     String errorMessage                         // 如有异常
-) {}
-</code></pre></div>
-<p><strong>MRR 和 NDCG 计算实现</strong>：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class RetrievalMetricsCalculator {
+)</span> {}
+</code></pre></div><p><strong>MRR 和 NDCG 计算实现</strong>：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">RetrievalMetricsCalculator</span> {
 
-    /**
+    <span class="hljs-comment">/**
      * 计算 Mean Reciprocal Rank。
      * MRR = (1/|Q|) * sum(1/rank_i)
      * 其中 rank_i 是第 i 个查询的第一个相关文档的排名位置。
-     */
-    public static double calculateMRR(List&lt;QueryRelevance&gt; queryRelevances) {
-        return queryRelevances.stream()
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-type">double</span> <span class="hljs-title function_">calculateMRR</span><span class="hljs-params">(List&lt;QueryRelevance&gt; queryRelevances)</span> {
+        <span class="hljs-keyword">return</span> queryRelevances.stream()
             .mapToDouble(qr -&gt; {
-                var firstRelevantRank = qr.relevanceScores().stream()
-                    .takeWhile(score -&gt; score == 0)  // 0=不相关
+                <span class="hljs-type">var</span> <span class="hljs-variable">firstRelevantRank</span> <span class="hljs-operator">=</span> qr.relevanceScores().stream()
+                    .takeWhile(score -&gt; score == <span class="hljs-number">0</span>)  <span class="hljs-comment">// 0=不相关</span>
                     .count();
-                return firstRelevantRank &lt; qr.relevanceScores().size()
-                    ? 1.0 / (firstRelevantRank + 1)
-                    : 0.0;
+                <span class="hljs-keyword">return</span> firstRelevantRank &lt; qr.relevanceScores().size()
+                    ? <span class="hljs-number">1.0</span> / (firstRelevantRank + <span class="hljs-number">1</span>)
+                    : <span class="hljs-number">0.0</span>;
             })
             .average()
-            .orElse(0.0);
+            .orElse(<span class="hljs-number">0.0</span>);
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 计算 NDCG@k。
      * DCG@k = sum(rel_i / log2(i+1)) for i=1..k
      * IDCG@k = 理想排序下的 DCG@k
      * NDCG@k = DCG@k / IDCG@k
-     */
-    public static double calculateNDCG(List&lt;Double&gt; relevanceScores, int k) {
-        var dcg = 0.0;
-        for (int i = 0; i &lt; Math.min(relevanceScores.size(), k); i++) {
-            dcg += relevanceScores.get(i) / (Math.log(i + 2) / Math.log(2));
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-type">double</span> <span class="hljs-title function_">calculateNDCG</span><span class="hljs-params">(List&lt;Double&gt; relevanceScores, <span class="hljs-type">int</span> k)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">dcg</span> <span class="hljs-operator">=</span> <span class="hljs-number">0.0</span>;
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; Math.min(relevanceScores.size(), k); i++) {
+            dcg += relevanceScores.get(i) / (Math.log(i + <span class="hljs-number">2</span>) / Math.log(<span class="hljs-number">2</span>));
         }
 
-        // IDCG: 按相关性降序排列的理想 DCG
-        var sortedScores = relevanceScores.stream()
+        <span class="hljs-comment">// IDCG: 按相关性降序排列的理想 DCG</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">sortedScores</span> <span class="hljs-operator">=</span> relevanceScores.stream()
             .sorted(Comparator.reverseOrder())
             .toList();
-        var idcg = 0.0;
-        for (int i = 0; i &lt; Math.min(sortedScores.size(), k); i++) {
-            idcg += sortedScores.get(i) / (Math.log(i + 2) / Math.log(2));
+        <span class="hljs-type">var</span> <span class="hljs-variable">idcg</span> <span class="hljs-operator">=</span> <span class="hljs-number">0.0</span>;
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; Math.min(sortedScores.size(), k); i++) {
+            idcg += sortedScores.get(i) / (Math.log(i + <span class="hljs-number">2</span>) / Math.log(<span class="hljs-number">2</span>));
         }
 
-        return idcg == 0 ? 0.0 : dcg / idcg;
+        <span class="hljs-keyword">return</span> idcg == <span class="hljs-number">0</span> ? <span class="hljs-number">0.0</span> : dcg / idcg;
     }
 
-    public record QueryRelevance(String queryId, List&lt;Integer&gt; relevanceScores) {}
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">QueryRelevance</span><span class="hljs-params">(String queryId, List&lt;Integer&gt; relevanceScores)</span> {}
 }
-</code></pre></div>
-<h3>2.2 在线评估（Online Evaluation）</h3>
+</code></pre></div><h3>2.2 在线评估（Online Evaluation）</h3>
 <p>在线评估基于真实用户交互数据，反映应用在生产环境中的实际表现。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public enum OnlineMetric {
-    // 用户反馈
-    USER_LIKE_RATE(&quot;用户点赞率&quot;, &quot;点赞数/总反馈数&quot;),
-    USER_DISLIKE_RATE(&quot;用户点踩率&quot;, &quot;点踩数/总反馈数&quot;),
-    COPY_RATE(&quot;复制率&quot;, &quot;用户复制回答的次数/总交互次数&quot;),
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">enum</span> <span class="hljs-title class_">OnlineMetric</span> {
+    <span class="hljs-comment">// 用户反馈</span>
+    USER_LIKE_RATE(<span class="hljs-string">"用户点赞率"</span>, <span class="hljs-string">"点赞数/总反馈数"</span>),
+    USER_DISLIKE_RATE(<span class="hljs-string">"用户点踩率"</span>, <span class="hljs-string">"点踩数/总反馈数"</span>),
+    COPY_RATE(<span class="hljs-string">"复制率"</span>, <span class="hljs-string">"用户复制回答的次数/总交互次数"</span>),
 
-    // 任务完成
-    TASK_COMPLETION_RATE(&quot;任务完成率&quot;, &quot;用户未追问即结束/无转人工的占比&quot;),
-    ESCALATION_RATE(&quot;转人工率&quot;, &quot;触发转人工的交互占比&quot;),
-    ABANDONMENT_RATE(&quot;放弃率&quot;, &quot;用户在回答完成前关闭页面的占比&quot;),
+    <span class="hljs-comment">// 任务完成</span>
+    TASK_COMPLETION_RATE(<span class="hljs-string">"任务完成率"</span>, <span class="hljs-string">"用户未追问即结束/无转人工的占比"</span>),
+    ESCALATION_RATE(<span class="hljs-string">"转人工率"</span>, <span class="hljs-string">"触发转人工的交互占比"</span>),
+    ABANDONMENT_RATE(<span class="hljs-string">"放弃率"</span>, <span class="hljs-string">"用户在回答完成前关闭页面的占比"</span>),
 
-    // 性能
-    LATENCY_P50(&quot;延迟P50&quot;, &quot;50%请求的端到端延迟&quot;),
-    LATENCY_P95(&quot;延迟P95&quot;, &quot;95%请求的端到端延迟&quot;),
-    LATENCY_P99(&quot;延迟P99&quot;, &quot;99%请求的端到端延迟&quot;),
-    TTFT_P50(&quot;首Token延迟P50&quot;, &quot;从请求到第一个Token的时间&quot;),
+    <span class="hljs-comment">// 性能</span>
+    LATENCY_P50(<span class="hljs-string">"延迟P50"</span>, <span class="hljs-string">"50%请求的端到端延迟"</span>),
+    LATENCY_P95(<span class="hljs-string">"延迟P95"</span>, <span class="hljs-string">"95%请求的端到端延迟"</span>),
+    LATENCY_P99(<span class="hljs-string">"延迟P99"</span>, <span class="hljs-string">"99%请求的端到端延迟"</span>),
+    TTFT_P50(<span class="hljs-string">"首Token延迟P50"</span>, <span class="hljs-string">"从请求到第一个Token的时间"</span>),
 
-    // 成本
-    TOKEN_CONSUMPTION(&quot;Token消耗&quot;, &quot;每次交互的平均Token消耗&quot;),
-    COST_PER_CONVERSATION(&quot;每次对话成本&quot;, &quot;总成本/对话数&quot;),
-    CACHE_HIT_RATE(&quot;缓存命中率&quot;, &quot;命中的请求/总请求&quot;);
+    <span class="hljs-comment">// 成本</span>
+    TOKEN_CONSUMPTION(<span class="hljs-string">"Token消耗"</span>, <span class="hljs-string">"每次交互的平均Token消耗"</span>),
+    COST_PER_CONVERSATION(<span class="hljs-string">"每次对话成本"</span>, <span class="hljs-string">"总成本/对话数"</span>),
+    CACHE_HIT_RATE(<span class="hljs-string">"缓存命中率"</span>, <span class="hljs-string">"命中的请求/总请求"</span>);
 
-    private final String displayName;
-    private final String description;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> String displayName;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> String description;
 }
 
-/**
+<span class="hljs-comment">/**
  * 在线指标采集器。通过 Micrometer 向 Prometheus 上报。
- */
-@Component
-public class OnlineMetricsCollector {
+ */</span>
+<span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">OnlineMetricsCollector</span> {
 
-    private final MeterRegistry registry;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> MeterRegistry registry;
 
-    public OnlineMetricsCollector(MeterRegistry registry) {
-        this.registry = registry;
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">OnlineMetricsCollector</span><span class="hljs-params">(MeterRegistry registry)</span> {
+        <span class="hljs-built_in">this</span>.registry = registry;
     }
 
-    public void recordUserFeedback(String conversationId, boolean liked,
-                                    String modelName, String promptVersion) {
-        var tags = Tags.of(&quot;model&quot;, modelName, &quot;prompt_version&quot;, promptVersion);
-        registry.counter(&quot;ai.feedback.total&quot;, tags).increment();
-        if (liked) {
-            registry.counter(&quot;ai.feedback.like&quot;, tags).increment();
-        } else {
-            registry.counter(&quot;ai.feedback.dislike&quot;, tags).increment();
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">recordUserFeedback</span><span class="hljs-params">(String conversationId, <span class="hljs-type">boolean</span> liked,
+                                    String modelName, String promptVersion)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">tags</span> <span class="hljs-operator">=</span> Tags.of(<span class="hljs-string">"model"</span>, modelName, <span class="hljs-string">"prompt_version"</span>, promptVersion);
+        registry.counter(<span class="hljs-string">"ai.feedback.total"</span>, tags).increment();
+        <span class="hljs-keyword">if</span> (liked) {
+            registry.counter(<span class="hljs-string">"ai.feedback.like"</span>, tags).increment();
+        } <span class="hljs-keyword">else</span> {
+            registry.counter(<span class="hljs-string">"ai.feedback.dislike"</span>, tags).increment();
         }
     }
 
-    public void recordLatency(String modelName, long latencyMs) {
-        Timer.builder(&quot;ai.latency&quot;)
-            .tag(&quot;model&quot;, modelName)
-            .publishPercentiles(0.5, 0.95, 0.99)
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">recordLatency</span><span class="hljs-params">(String modelName, <span class="hljs-type">long</span> latencyMs)</span> {
+        Timer.builder(<span class="hljs-string">"ai.latency"</span>)
+            .tag(<span class="hljs-string">"model"</span>, modelName)
+            .publishPercentiles(<span class="hljs-number">0.5</span>, <span class="hljs-number">0.95</span>, <span class="hljs-number">0.99</span>)
             .publishPercentileHistogram()
             .register(registry)
             .record(latencyMs, TimeUnit.MILLISECONDS);
     }
 
-    public void recordTokenUsage(String modelName, int promptTokens,
-                                  int completionTokens, double cost) {
-        var tags = Tags.of(&quot;model&quot;, modelName);
-        registry.counter(&quot;ai.tokens.prompt&quot;, tags).increment(promptTokens);
-        registry.counter(&quot;ai.tokens.completion&quot;, tags).increment(completionTokens);
-        registry.counter(&quot;ai.cost&quot;, tags).increment(cost);
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">recordTokenUsage</span><span class="hljs-params">(String modelName, <span class="hljs-type">int</span> promptTokens,
+                                  <span class="hljs-type">int</span> completionTokens, <span class="hljs-type">double</span> cost)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">tags</span> <span class="hljs-operator">=</span> Tags.of(<span class="hljs-string">"model"</span>, modelName);
+        registry.counter(<span class="hljs-string">"ai.tokens.prompt"</span>, tags).increment(promptTokens);
+        registry.counter(<span class="hljs-string">"ai.tokens.completion"</span>, tags).increment(completionTokens);
+        registry.counter(<span class="hljs-string">"ai.cost"</span>, tags).increment(cost);
     }
 
-    public void recordTaskCompletion(String conversationId, boolean completed,
-                                      boolean escalated) {
-        var tags = Tags.of(&quot;conversation_id&quot;, conversationId);
-        registry.counter(&quot;ai.task.total&quot;, tags).increment();
-        if (completed) registry.counter(&quot;ai.task.completed&quot;, tags).increment();
-        if (escalated) registry.counter(&quot;ai.task.escalated&quot;, tags).increment();
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">recordTaskCompletion</span><span class="hljs-params">(String conversationId, <span class="hljs-type">boolean</span> completed,
+                                      <span class="hljs-type">boolean</span> escalated)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">tags</span> <span class="hljs-operator">=</span> Tags.of(<span class="hljs-string">"conversation_id"</span>, conversationId);
+        registry.counter(<span class="hljs-string">"ai.task.total"</span>, tags).increment();
+        <span class="hljs-keyword">if</span> (completed) registry.counter(<span class="hljs-string">"ai.task.completed"</span>, tags).increment();
+        <span class="hljs-keyword">if</span> (escalated) registry.counter(<span class="hljs-string">"ai.task.escalated"</span>, tags).increment();
     }
 }
-</code></pre></div>
-<h3>2.3 Agent 评估（Agent Evaluation）</h3>
+</code></pre></div><h3>2.3 Agent 评估（Agent Evaluation）</h3>
 <p>Agent 场景比单次问答更复杂，需要评估工具选择和调用链路的正确性。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public record AgentEvalMetrics(
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">AgentEvalMetrics</span><span class="hljs-params">(
     // 工具选择
-    double toolSelectionAccuracy,       // 选择的工具是否正确
-    double toolParameterAccuracy,       // 工具参数是否正确
+    <span class="hljs-type">double</span> toolSelectionAccuracy,       // 选择的工具是否正确
+    <span class="hljs-type">double</span> toolParameterAccuracy,       // 工具参数是否正确
 
     // 执行质量
-    double stepCountDelta,              // 实际步骤数与最优步骤数的偏差
-    double authorizationViolationRate,  // 越权调用检测率
-    double finalResultCorrectness,      // 最终结果正确率
-    double hallucinatedToolCallRate,    // 幻觉工具调用率（调用了不存在的工具）
+    <span class="hljs-type">double</span> stepCountDelta,              // 实际步骤数与最优步骤数的偏差
+    <span class="hljs-type">double</span> authorizationViolationRate,  // 越权调用检测率
+    <span class="hljs-type">double</span> finalResultCorrectness,      // 最终结果正确率
+    <span class="hljs-type">double</span> hallucinatedToolCallRate,    // 幻觉工具调用率（调用了不存在的工具）
 
     // 效率
-    double avgToolCallLatencyMs,        // 平均工具调用延迟
-    double toolCallChainLength          // 工具调用链平均长度
-) {}
+    <span class="hljs-type">double</span> avgToolCallLatencyMs,        // 平均工具调用延迟
+    <span class="hljs-type">double</span> toolCallChainLength          // 工具调用链平均长度
+)</span> {}
 
-/**
+<span class="hljs-comment">/**
  * Agent 执行追踪和评估
- */
-@Service
-public class AgentEvaluator {
+ */</span>
+<span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">AgentEvaluator</span> {
 
-    private final MeterRegistry registry;
-    private final Tracer tracer;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> MeterRegistry registry;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Tracer tracer;
 
-    /**
+    <span class="hljs-comment">/**
      * 评估一次 Agent 执行轨迹。
-     * @param trace 实际执行轨迹
-     * @param goldenTrace 期望的执行轨迹（人工标注的&quot;标准答案&quot;）
-     */
-    public AgentEvalMetrics evaluate(AgentExecutionTrace trace,
-                                      AgentExecutionTrace goldenTrace) {
-        var toolAccuracy = evaluateToolSelection(trace, goldenTrace);
-        var paramAccuracy = evaluateParameters(trace, goldenTrace);
-        var stepDelta = Math.abs(trace.steps().size() - goldenTrace.steps().size());
-        var violations = detectAuthorizationViolations(trace);
-        var resultCorrect = evaluateFinalResult(trace, goldenTrace);
+     * <span class="hljs-doctag">@param</span> trace 实际执行轨迹
+     * <span class="hljs-doctag">@param</span> goldenTrace 期望的执行轨迹（人工标注的"标准答案"）
+     */</span>
+    <span class="hljs-keyword">public</span> AgentEvalMetrics <span class="hljs-title function_">evaluate</span><span class="hljs-params">(AgentExecutionTrace trace,
+                                      AgentExecutionTrace goldenTrace)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">toolAccuracy</span> <span class="hljs-operator">=</span> evaluateToolSelection(trace, goldenTrace);
+        <span class="hljs-type">var</span> <span class="hljs-variable">paramAccuracy</span> <span class="hljs-operator">=</span> evaluateParameters(trace, goldenTrace);
+        <span class="hljs-type">var</span> <span class="hljs-variable">stepDelta</span> <span class="hljs-operator">=</span> Math.abs(trace.steps().size() - goldenTrace.steps().size());
+        <span class="hljs-type">var</span> <span class="hljs-variable">violations</span> <span class="hljs-operator">=</span> detectAuthorizationViolations(trace);
+        <span class="hljs-type">var</span> <span class="hljs-variable">resultCorrect</span> <span class="hljs-operator">=</span> evaluateFinalResult(trace, goldenTrace);
 
-        return new AgentEvalMetrics(
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">AgentEvalMetrics</span>(
             toolAccuracy,
             paramAccuracy,
             stepDelta,
@@ -234,118 +231,116 @@ public class AgentEvaluator {
         );
     }
 
-    private double evaluateToolSelection(AgentExecutionTrace trace,
-                                          AgentExecutionTrace goldenTrace) {
-        var actualTools = trace.steps().stream()
+    <span class="hljs-keyword">private</span> <span class="hljs-type">double</span> <span class="hljs-title function_">evaluateToolSelection</span><span class="hljs-params">(AgentExecutionTrace trace,
+                                          AgentExecutionTrace goldenTrace)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">actualTools</span> <span class="hljs-operator">=</span> trace.steps().stream()
             .map(AgentStep::toolName)
             .collect(Collectors.toSet());
-        var expectedTools = goldenTrace.steps().stream()
+        <span class="hljs-type">var</span> <span class="hljs-variable">expectedTools</span> <span class="hljs-operator">=</span> goldenTrace.steps().stream()
             .map(AgentStep::toolName)
             .collect(Collectors.toSet());
 
-        if (expectedTools.isEmpty()) return 1.0;
+        <span class="hljs-keyword">if</span> (expectedTools.isEmpty()) <span class="hljs-keyword">return</span> <span class="hljs-number">1.0</span>;
 
-        var intersection = new HashSet&lt;&gt;(actualTools);
+        <span class="hljs-type">var</span> <span class="hljs-variable">intersection</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">HashSet</span>&lt;&gt;(actualTools);
         intersection.retainAll(expectedTools);
-        // F1-like: 综合考虑 precision 和 recall
-        var precision = (double) intersection.size() / actualTools.size();
-        var recall = (double) intersection.size() / expectedTools.size();
-        return precision + recall &gt; 0
-            ? 2 * precision * recall / (precision + recall)
-            : 0.0;
+        <span class="hljs-comment">// F1-like: 综合考虑 precision 和 recall</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">precision</span> <span class="hljs-operator">=</span> (<span class="hljs-type">double</span>) intersection.size() / actualTools.size();
+        <span class="hljs-type">var</span> <span class="hljs-variable">recall</span> <span class="hljs-operator">=</span> (<span class="hljs-type">double</span>) intersection.size() / expectedTools.size();
+        <span class="hljs-keyword">return</span> precision + recall &gt; <span class="hljs-number">0</span>
+            ? <span class="hljs-number">2</span> * precision * recall / (precision + recall)
+            : <span class="hljs-number">0.0</span>;
     }
 
-    private double evaluateParameters(AgentExecutionTrace trace,
-                                       AgentExecutionTrace goldenTrace) {
-        var correctCount = 0;
-        var totalParamCount = 0;
+    <span class="hljs-keyword">private</span> <span class="hljs-type">double</span> <span class="hljs-title function_">evaluateParameters</span><span class="hljs-params">(AgentExecutionTrace trace,
+                                       AgentExecutionTrace goldenTrace)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">correctCount</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+        <span class="hljs-type">var</span> <span class="hljs-variable">totalParamCount</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
 
-        for (var goldenStep : goldenTrace.steps()) {
-            var actualStep = trace.findStepByToolName(goldenStep.toolName());
-            if (actualStep == null) continue;
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> goldenStep : goldenTrace.steps()) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">actualStep</span> <span class="hljs-operator">=</span> trace.findStepByToolName(goldenStep.toolName());
+            <span class="hljs-keyword">if</span> (actualStep == <span class="hljs-literal">null</span>) <span class="hljs-keyword">continue</span>;
 
-            for (var entry : goldenStep.parameters().entrySet()) {
+            <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> entry : goldenStep.parameters().entrySet()) {
                 totalParamCount++;
-                var actualValue = actualStep.parameters().get(entry.getKey());
-                if (Objects.equals(entry.getValue(), actualValue)) {
+                <span class="hljs-type">var</span> <span class="hljs-variable">actualValue</span> <span class="hljs-operator">=</span> actualStep.parameters().get(entry.getKey());
+                <span class="hljs-keyword">if</span> (Objects.equals(entry.getValue(), actualValue)) {
                     correctCount++;
                 }
             }
         }
 
-        return totalParamCount == 0 ? 1.0 : (double) correctCount / totalParamCount;
+        <span class="hljs-keyword">return</span> totalParamCount == <span class="hljs-number">0</span> ? <span class="hljs-number">1.0</span> : (<span class="hljs-type">double</span>) correctCount / totalParamCount;
     }
 
-    private double detectAuthorizationViolations(AgentExecutionTrace trace) {
-        var violations = trace.steps().stream()
-            .filter(step -&gt; step.requiredPermissions() != null)
+    <span class="hljs-keyword">private</span> <span class="hljs-type">double</span> <span class="hljs-title function_">detectAuthorizationViolations</span><span class="hljs-params">(AgentExecutionTrace trace)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">violations</span> <span class="hljs-operator">=</span> trace.steps().stream()
+            .filter(step -&gt; step.requiredPermissions() != <span class="hljs-literal">null</span>)
             .filter(step -&gt; !step.grantedPermissions()
                 .containsAll(step.requiredPermissions()))
             .count();
-        return trace.steps().isEmpty()
-            ? 0.0
-            : (double) violations / trace.steps().size();
+        <span class="hljs-keyword">return</span> trace.steps().isEmpty()
+            ? <span class="hljs-number">0.0</span>
+            : (<span class="hljs-type">double</span>) violations / trace.steps().size();
     }
 
-    private double evaluateFinalResult(AgentExecutionTrace trace,
-                                        AgentExecutionTrace goldenTrace) {
-        // 可以使用 LLM-as-a-Judge 对比最终输出
-        return trace.finalOutput() != null
+    <span class="hljs-keyword">private</span> <span class="hljs-type">double</span> <span class="hljs-title function_">evaluateFinalResult</span><span class="hljs-params">(AgentExecutionTrace trace,
+                                        AgentExecutionTrace goldenTrace)</span> {
+        <span class="hljs-comment">// 可以使用 LLM-as-a-Judge 对比最终输出</span>
+        <span class="hljs-keyword">return</span> trace.finalOutput() != <span class="hljs-literal">null</span>
                 &amp;&amp; trace.finalOutput().equals(goldenTrace.finalOutput())
-            ? 1.0 : 0.0;
+            ? <span class="hljs-number">1.0</span> : <span class="hljs-number">0.0</span>;
     }
 }
-</code></pre></div>
-<h2>三、LLM-as-a-Judge 实现</h2>
+</code></pre></div><h2>三、LLM-as-a-Judge 实现</h2>
 <p>用大模型作为裁判来评估另一个大模型的输出，是一种可扩展的自动化评估方法。</p>
 <h3>3.1 Rubric 设计</h3>
 <p>设计清晰的 1-5 分评分标准（Rubric），确保评估的一致性和可复现性。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">/**
  * LLM-as-a-Judge 的评分准则
- */
-public record EvaluationRubric(
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">EvaluationRubric</span><span class="hljs-params">(
     String dimension,          // 评估维度：correctness, relevancy, faithfulness 等
     String description,        // 维度描述
     Map&lt;Integer, String&gt; scoringCriteria  // 1-5 分的明确标准
-) {
+)</span> {
 
-    public static EvaluationRubric correctnessRubric() {
-        return new EvaluationRubric(
-            &quot;correctness&quot;,
-            &quot;评估回答的事实准确性&quot;,
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> EvaluationRubric <span class="hljs-title function_">correctnessRubric</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">EvaluationRubric</span>(
+            <span class="hljs-string">"correctness"</span>,
+            <span class="hljs-string">"评估回答的事实准确性"</span>,
             Map.of(
-                1, &quot;回答完全错误，包含严重的事实错误。&quot;,
-                2, &quot;回答部分相关但多数事实错误。&quot;,
-                3, &quot;回答基本正确但存在细节偏差或遗漏关键信息。&quot;,
-                4, &quot;回答准确，仅有极少数非关键信息偏差。&quot;,
-                5, &quot;回答完全准确，所有事实经过验证，无任何错误。&quot;
+                <span class="hljs-number">1</span>, <span class="hljs-string">"回答完全错误，包含严重的事实错误。"</span>,
+                <span class="hljs-number">2</span>, <span class="hljs-string">"回答部分相关但多数事实错误。"</span>,
+                <span class="hljs-number">3</span>, <span class="hljs-string">"回答基本正确但存在细节偏差或遗漏关键信息。"</span>,
+                <span class="hljs-number">4</span>, <span class="hljs-string">"回答准确，仅有极少数非关键信息偏差。"</span>,
+                <span class="hljs-number">5</span>, <span class="hljs-string">"回答完全准确，所有事实经过验证，无任何错误。"</span>
             )
         );
     }
 
-    public static EvaluationRubric faithfulnessRubric() {
-        return new EvaluationRubric(
-            &quot;faithfulness&quot;,
-            &quot;评估回答是否忠实于给定的上下文，是否存在幻觉&quot;,
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> EvaluationRubric <span class="hljs-title function_">faithfulnessRubric</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">EvaluationRubric</span>(
+            <span class="hljs-string">"faithfulness"</span>,
+            <span class="hljs-string">"评估回答是否忠实于给定的上下文，是否存在幻觉"</span>,
             Map.of(
-                1, &quot;回答严重偏离上下文，编造了大量不存在的信息。&quot;,
-                2, &quot;回答大部分基于编造，仅少量引用上下文。&quot;,
-                3, &quot;回答大体基于上下文但存在一些未验证的推断。&quot;,
-                4, &quot;回答基本忠实于上下文，仅存在微小的合理推断。&quot;,
-                5, &quot;回答完全基于上下文，没有任何幻觉，所有声明都能在上下文中找到支撑。&quot;
+                <span class="hljs-number">1</span>, <span class="hljs-string">"回答严重偏离上下文，编造了大量不存在的信息。"</span>,
+                <span class="hljs-number">2</span>, <span class="hljs-string">"回答大部分基于编造，仅少量引用上下文。"</span>,
+                <span class="hljs-number">3</span>, <span class="hljs-string">"回答大体基于上下文但存在一些未验证的推断。"</span>,
+                <span class="hljs-number">4</span>, <span class="hljs-string">"回答基本忠实于上下文，仅存在微小的合理推断。"</span>,
+                <span class="hljs-number">5</span>, <span class="hljs-string">"回答完全基于上下文，没有任何幻觉，所有声明都能在上下文中找到支撑。"</span>
             )
         );
     }
 }
-</code></pre></div>
-<h3>3.2 Judge 服务实现</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
-public class LlmAsJudgeService {
+</code></pre></div><h3>3.2 Judge 服务实现</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">LlmAsJudgeService</span> {
 
-    private final ChatClient judgeClient;  // 用于打分的大模型
-    private final PromptTemplateEngine promptEngine;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> ChatClient judgeClient;  <span class="hljs-comment">// 用于打分的大模型</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> PromptTemplateEngine promptEngine;
 
-    private static final String JUDGE_SYSTEM_PROMPT = &quot;&quot;&quot;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">String</span> <span class="hljs-variable">JUDGE_SYSTEM_PROMPT</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
         你是一个专业的AI回答质量评估员。请严格根据以下评分准则对候选回答打分。
 
         评分维度：{{rubric.dimension}}
@@ -361,12 +356,12 @@ public class LlmAsJudgeService {
 
         请以 JSON 格式返回：
         {
-          &quot;score&quot;: &lt;整数1-5&gt;,
-          &quot;reasoning&quot;: &quot;&lt;评分理由，不超过200字&gt;&quot;
+          "score": &lt;整数1-5&gt;,
+          "reasoning": "&lt;评分理由，不超过200字&gt;"
         }
-        &quot;&quot;&quot;;
+        """</span>;
 
-    private static final String JUDGE_USER_TEMPLATE = &quot;&quot;&quot;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">String</span> <span class="hljs-variable">JUDGE_USER_TEMPLATE</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
         【问题】
         {{question}}
 
@@ -387,505 +382,500 @@ public class LlmAsJudgeService {
         {{candidateAnswer}}
 
         请开始评分。
-        &quot;&quot;&quot;;
+        """</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 单次评估。
-     * @param rubric 评分准则
-     * @param question 原始问题
-     * @param candidateAnswer 待评估的回答
-     * @param referenceAnswer 参考标准答案（Golden Dataset 提供，可为 null）
-     * @param retrievedContexts 检索到的上下文文档
-     */
-    public JudgeResult evaluate(EvaluationRubric rubric,
+     * <span class="hljs-doctag">@param</span> rubric 评分准则
+     * <span class="hljs-doctag">@param</span> question 原始问题
+     * <span class="hljs-doctag">@param</span> candidateAnswer 待评估的回答
+     * <span class="hljs-doctag">@param</span> referenceAnswer 参考标准答案（Golden Dataset 提供，可为 null）
+     * <span class="hljs-doctag">@param</span> retrievedContexts 检索到的上下文文档
+     */</span>
+    <span class="hljs-keyword">public</span> JudgeResult <span class="hljs-title function_">evaluate</span><span class="hljs-params">(EvaluationRubric rubric,
                                  String question,
                                  String candidateAnswer,
                                  String referenceAnswer,
-                                 List&lt;String&gt; retrievedContexts) {
-        var systemPrompt = promptEngine.render(JUDGE_SYSTEM_PROMPT,
-            Map.of(&quot;rubric&quot;, rubric));
+                                 List&lt;String&gt; retrievedContexts)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">systemPrompt</span> <span class="hljs-operator">=</span> promptEngine.render(JUDGE_SYSTEM_PROMPT,
+            Map.of(<span class="hljs-string">"rubric"</span>, rubric));
 
-        var userPrompt = promptEngine.render(JUDGE_USER_TEMPLATE, Map.of(
-            &quot;question&quot;, question,
-            &quot;referenceAnswer&quot;, referenceAnswer != null ? referenceAnswer : &quot;&quot;,
-            &quot;retrievedContexts&quot;, retrievedContexts != null ? retrievedContexts : List.of(),
-            &quot;candidateAnswer&quot;, candidateAnswer
+        <span class="hljs-type">var</span> <span class="hljs-variable">userPrompt</span> <span class="hljs-operator">=</span> promptEngine.render(JUDGE_USER_TEMPLATE, Map.of(
+            <span class="hljs-string">"question"</span>, question,
+            <span class="hljs-string">"referenceAnswer"</span>, referenceAnswer != <span class="hljs-literal">null</span> ? referenceAnswer : <span class="hljs-string">""</span>,
+            <span class="hljs-string">"retrievedContexts"</span>, retrievedContexts != <span class="hljs-literal">null</span> ? retrievedContexts : List.of(),
+            <span class="hljs-string">"candidateAnswer"</span>, candidateAnswer
         ));
 
-        var response = judgeClient.prompt()
+        <span class="hljs-type">var</span> <span class="hljs-variable">response</span> <span class="hljs-operator">=</span> judgeClient.prompt()
             .system(systemPrompt)
             .user(userPrompt)
             .call()
             .content();
 
-        return parseJudgeResponse(response);
+        <span class="hljs-keyword">return</span> parseJudgeResponse(response);
     }
 
-    private JudgeResult parseJudgeResponse(String response) {
-        // 解析 JSON 响应
-        try {
-            var objectMapper = new ObjectMapper();
-            var node = objectMapper.readTree(response);
-            return new JudgeResult(
-                node.get(&quot;score&quot;).asInt(),
-                node.get(&quot;reasoning&quot;).asText()
+    <span class="hljs-keyword">private</span> JudgeResult <span class="hljs-title function_">parseJudgeResponse</span><span class="hljs-params">(String response)</span> {
+        <span class="hljs-comment">// 解析 JSON 响应</span>
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-type">var</span> <span class="hljs-variable">objectMapper</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ObjectMapper</span>();
+            <span class="hljs-type">var</span> <span class="hljs-variable">node</span> <span class="hljs-operator">=</span> objectMapper.readTree(response);
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">JudgeResult</span>(
+                node.get(<span class="hljs-string">"score"</span>).asInt(),
+                node.get(<span class="hljs-string">"reasoning"</span>).asText()
             );
-        } catch (Exception e) {
-            return new JudgeResult(-1, &quot;Failed to parse judge response: &quot; + e.getMessage());
+        } <span class="hljs-keyword">catch</span> (Exception e) {
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">JudgeResult</span>(-<span class="hljs-number">1</span>, <span class="hljs-string">"Failed to parse judge response: "</span> + e.getMessage());
         }
     }
 
-    public record JudgeResult(int score, String reasoning) {}
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">JudgeResult</span><span class="hljs-params">(<span class="hljs-type">int</span> score, String reasoning)</span> {}
 }
-</code></pre></div>
-<h3>3.3 位置偏差缓解与多 Judge 一致性</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
-public class RobustJudgeService {
+</code></pre></div><h3>3.3 位置偏差缓解与多 Judge 一致性</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">RobustJudgeService</span> {
 
-    private final LlmAsJudgeService judgeService;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> LlmAsJudgeService judgeService;
 
-    /**
+    <span class="hljs-comment">/**
      * 通过交换对比顺序缓解位置偏差（Position Bias）。
      * 某些 LLM Judge 倾向于给先出现或后出现的答案打高分。
      * 我们运行两轮评估（交换顺序），取平均分。
-     */
-    public JudgeResult evaluatePositionDebiased(
+     */</span>
+    <span class="hljs-keyword">public</span> JudgeResult <span class="hljs-title function_">evaluatePositionDebiased</span><span class="hljs-params">(
             EvaluationRubric rubric,
             String question,
             String candidateAnswer,
             String referenceAnswer,
-            List&lt;String&gt; contexts) {
+            List&lt;String&gt; contexts)</span> {
 
-        // 第一轮：候选回答在前
-        var result1 = judgeService.evaluate(
+        <span class="hljs-comment">// 第一轮：候选回答在前</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">result1</span> <span class="hljs-operator">=</span> judgeService.evaluate(
             rubric, question, candidateAnswer, referenceAnswer, contexts);
 
-        // 第二轮：候选回答在后（通过修改模板
-        // 在实际实现中，可创建一个&quot;翻转&quot;的 prompt 模板）
-        var result2 = judgeService.evaluate(
+        <span class="hljs-comment">// 第二轮：候选回答在后（通过修改模板</span>
+        <span class="hljs-comment">// 在实际实现中，可创建一个"翻转"的 prompt 模板）</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">result2</span> <span class="hljs-operator">=</span> judgeService.evaluate(
             rubric, question, referenceAnswer, candidateAnswer, contexts);
 
-        return new JudgeResult(
-            (result1.score() + result2.score()) / 2,
-            &quot;Position-debiased average of two rounds. Round1: %d (\&quot;%s\&quot;), Round2: %d (\&quot;%s\&quot;)&quot;
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">JudgeResult</span>(
+            (result1.score() + result2.score()) / <span class="hljs-number">2</span>,
+            <span class="hljs-string">"Position-debiased average of two rounds. Round1: %d (\"%s\"), Round2: %d (\"%s\")"</span>
                 .formatted(result1.score(), result1.reasoning(),
                     result2.score(), result2.reasoning())
         );
     }
 
-    /**
-     * 多 Judge 一致性评估。使用多个不同模型作为 Judge，计算 Fleiss&#39; Kappa。
-     */
-    public MultiJudgeResult evaluateWithMultipleJudges(
+    <span class="hljs-comment">/**
+     * 多 Judge 一致性评估。使用多个不同模型作为 Judge，计算 Fleiss' Kappa。
+     */</span>
+    <span class="hljs-keyword">public</span> MultiJudgeResult <span class="hljs-title function_">evaluateWithMultipleJudges</span><span class="hljs-params">(
             EvaluationRubric rubric,
             String question,
             String candidateAnswer,
             String referenceAnswer,
             List&lt;String&gt; contexts,
-            List&lt;String&gt; judgeModels) {
+            List&lt;String&gt; judgeModels)</span> {
 
-        var results = new ArrayList&lt;JudgeResult&gt;();
-        for (var model : judgeModels) {
-            var result = judgeService.evaluate(
+        <span class="hljs-type">var</span> <span class="hljs-variable">results</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;JudgeResult&gt;();
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> model : judgeModels) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> judgeService.evaluate(
                 rubric, question, candidateAnswer, referenceAnswer, contexts);
             results.add(result);
         }
 
-        var kappa = calculateFleissKappa(results);
-        var avgScore = results.stream()
+        <span class="hljs-type">var</span> <span class="hljs-variable">kappa</span> <span class="hljs-operator">=</span> calculateFleissKappa(results);
+        <span class="hljs-type">var</span> <span class="hljs-variable">avgScore</span> <span class="hljs-operator">=</span> results.stream()
             .mapToInt(JudgeResult::score)
             .average()
-            .orElse(0);
+            .orElse(<span class="hljs-number">0</span>);
 
-        return new MultiJudgeResult(avgScore, results, kappa,
-            kappa &gt;= 0.6 ? &quot;substantial_agreement&quot; : &quot;poor_agreement&quot;);
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">MultiJudgeResult</span>(avgScore, results, kappa,
+            kappa &gt;= <span class="hljs-number">0.6</span> ? <span class="hljs-string">"substantial_agreement"</span> : <span class="hljs-string">"poor_agreement"</span>);
     }
 
-    /**
-     * 计算 Fleiss&#39; Kappa 系数来衡量多个评分者之间的一致性。
+    <span class="hljs-comment">/**
+     * 计算 Fleiss' Kappa 系数来衡量多个评分者之间的一致性。
      * Kappa &gt; 0.6：基本一致
      * Kappa &gt; 0.8：高度一致
-     */
-    private double calculateFleissKappa(List&lt;JudgeResult&gt; results) {
-        int n = results.size();          // 评分者数量
-        int k = 5;                       // 类别数 (1-5分)
-        int[][] matrix = new int[1][k];  // 简化版：单个样本
+     */</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-type">double</span> <span class="hljs-title function_">calculateFleissKappa</span><span class="hljs-params">(List&lt;JudgeResult&gt; results)</span> {
+        <span class="hljs-type">int</span> <span class="hljs-variable">n</span> <span class="hljs-operator">=</span> results.size();          <span class="hljs-comment">// 评分者数量</span>
+        <span class="hljs-type">int</span> <span class="hljs-variable">k</span> <span class="hljs-operator">=</span> <span class="hljs-number">5</span>;                       <span class="hljs-comment">// 类别数 (1-5分)</span>
+        <span class="hljs-type">int</span>[][] matrix = <span class="hljs-keyword">new</span> <span class="hljs-title class_">int</span>[<span class="hljs-number">1</span>][k];  <span class="hljs-comment">// 简化版：单个样本</span>
 
-        for (var result : results) {
-            int score = Math.clamp(result.score(), 1, 5);
-            matrix[0][score - 1]++;
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> result : results) {
+            <span class="hljs-type">int</span> <span class="hljs-variable">score</span> <span class="hljs-operator">=</span> Math.clamp(result.score(), <span class="hljs-number">1</span>, <span class="hljs-number">5</span>);
+            matrix[<span class="hljs-number">0</span>][score - <span class="hljs-number">1</span>]++;
         }
 
-        // P_i: 每个样本的观察一致性
-        double sumPi = 0;
-        for (int i = 0; i &lt; 1; i++) {
-            double sumSquared = 0;
-            for (int j = 0; j &lt; k; j++) {
-                sumSquared += (double) matrix[i][j] * matrix[i][j];
+        <span class="hljs-comment">// P_i: 每个样本的观察一致性</span>
+        <span class="hljs-type">double</span> <span class="hljs-variable">sumPi</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; <span class="hljs-number">1</span>; i++) {
+            <span class="hljs-type">double</span> <span class="hljs-variable">sumSquared</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+            <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">j</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; j &lt; k; j++) {
+                sumSquared += (<span class="hljs-type">double</span>) matrix[i][j] * matrix[i][j];
             }
-            sumPi += (sumSquared - n) / (n * (n - 1.0));
+            sumPi += (sumSquared - n) / (n * (n - <span class="hljs-number">1.0</span>));
         }
-        double P_bar = sumPi / 1.0;
+        <span class="hljs-type">double</span> <span class="hljs-variable">P_bar</span> <span class="hljs-operator">=</span> sumPi / <span class="hljs-number">1.0</span>;
 
-        // P_e: 期望一致性
-        double sumPjSquared = 0;
-        for (int j = 0; j &lt; k; j++) {
-            double pj = (double) matrix[0][j] / n;
+        <span class="hljs-comment">// P_e: 期望一致性</span>
+        <span class="hljs-type">double</span> <span class="hljs-variable">sumPjSquared</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">j</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; j &lt; k; j++) {
+            <span class="hljs-type">double</span> <span class="hljs-variable">pj</span> <span class="hljs-operator">=</span> (<span class="hljs-type">double</span>) matrix[<span class="hljs-number">0</span>][j] / n;
             sumPjSquared += pj * pj;
         }
 
-        return P_bar == 1.0 ? 1.0
-            : (P_bar - sumPjSquared) / (1.0 - sumPjSquared);
+        <span class="hljs-keyword">return</span> P_bar == <span class="hljs-number">1.0</span> ? <span class="hljs-number">1.0</span>
+            : (P_bar - sumPjSquared) / (<span class="hljs-number">1.0</span> - sumPjSquared);
     }
 }
-</code></pre></div>
-<h2>四、Golden Dataset 管理</h2>
-<p>Golden Dataset 是经过人工验证的&quot;标准答案&quot;集合，用于自动回归测试。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Entity
-@Table(name = &quot;golden_dataset_items&quot;)
-public class GoldenDatasetItem {
+</code></pre></div><h2>四、Golden Dataset 管理</h2>
+<p>Golden Dataset 是经过人工验证的"标准答案"集合，用于自动回归测试。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Entity</span>
+<span class="hljs-meta">@Table(name = "golden_dataset_items")</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">GoldenDatasetItem</span> {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.UUID)
-    private String id;
+    <span class="hljs-meta">@Id</span>
+    <span class="hljs-meta">@GeneratedValue(strategy = GenerationType.UUID)</span>
+    <span class="hljs-keyword">private</span> String id;
 
-    @Column(columnDefinition = &quot;TEXT&quot;)
-    private String question;                // 标准问题
+    <span class="hljs-meta">@Column(columnDefinition = "TEXT")</span>
+    <span class="hljs-keyword">private</span> String question;                <span class="hljs-comment">// 标准问题</span>
 
-    @Column(columnDefinition = &quot;TEXT&quot;)
-    private String expectedAnswer;          // 标准答案
+    <span class="hljs-meta">@Column(columnDefinition = "TEXT")</span>
+    <span class="hljs-keyword">private</span> String expectedAnswer;          <span class="hljs-comment">// 标准答案</span>
 
-    @Column(columnDefinition = &quot;JSON&quot;)
-    private String referenceDocuments;      // 关联的检索文档 ID 列表（JSON 数组）
+    <span class="hljs-meta">@Column(columnDefinition = "JSON")</span>
+    <span class="hljs-keyword">private</span> String referenceDocuments;      <span class="hljs-comment">// 关联的检索文档 ID 列表（JSON 数组）</span>
 
-    private String category;                // 分类：factual/reasoning/code/creative 等
-    private String difficulty;              // easy/medium/hard
+    <span class="hljs-keyword">private</span> String category;                <span class="hljs-comment">// 分类：factual/reasoning/code/creative 等</span>
+    <span class="hljs-keyword">private</span> String difficulty;              <span class="hljs-comment">// easy/medium/hard</span>
 
-    private String datasetVersion;          // 数据集版本号
+    <span class="hljs-keyword">private</span> String datasetVersion;          <span class="hljs-comment">// 数据集版本号</span>
 
-    private String createdBy;
-    private Instant createdAt;
-    private Instant updatedAt;
+    <span class="hljs-keyword">private</span> String createdBy;
+    <span class="hljs-keyword">private</span> Instant createdAt;
+    <span class="hljs-keyword">private</span> Instant updatedAt;
 
-    @ElementCollection
-    @CollectionTable(name = &quot;golden_item_metrics&quot;)
-    private Map&lt;String, Double&gt; expectedMetrics; // 期望的各指标得分
+    <span class="hljs-meta">@ElementCollection</span>
+    <span class="hljs-meta">@CollectionTable(name = "golden_item_metrics")</span>
+    <span class="hljs-keyword">private</span> Map&lt;String, Double&gt; expectedMetrics; <span class="hljs-comment">// 期望的各指标得分</span>
 
-    // getters, setters 省略
+    <span class="hljs-comment">// getters, setters 省略</span>
 }
 
-/**
+<span class="hljs-comment">/**
  * Golden Dataset 版本化管理与自动回归测试
- */
-@Service
-public class GoldenDatasetService {
+ */</span>
+<span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">GoldenDatasetService</span> {
 
-    private final GoldenDatasetRepository repo;
-    private final ChatClient chatClient;
-    private final LlmAsJudgeService judgeService;
-    private final OfflineEvaluator offlineEvaluator;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> GoldenDatasetRepository repo;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> ChatClient chatClient;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> LlmAsJudgeService judgeService;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> OfflineEvaluator offlineEvaluator;
 
-    /**
+    <span class="hljs-comment">/**
      * 执行回归测试：在每次模型/Prompt/Embedding 变更后，对 Golden Dataset
      * 中的所有条目重新跑一遍评估，对比历史基线，发现退化（regression）。
-     */
-    public RegressionTestReport runRegressionTest(
-            String datasetVersion, String modelName, String promptVersionId) {
+     */</span>
+    <span class="hljs-keyword">public</span> RegressionTestReport <span class="hljs-title function_">runRegressionTest</span><span class="hljs-params">(
+            String datasetVersion, String modelName, String promptVersionId)</span> {
 
-        var items = repo.findByDatasetVersion(datasetVersion);
-        var report = new RegressionTestReport(datasetVersion, modelName,
+        <span class="hljs-type">var</span> <span class="hljs-variable">items</span> <span class="hljs-operator">=</span> repo.findByDatasetVersion(datasetVersion);
+        <span class="hljs-type">var</span> <span class="hljs-variable">report</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RegressionTestReport</span>(datasetVersion, modelName,
             promptVersionId, Instant.now());
 
-        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            var futures = items.stream()
+        <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">executor</span> <span class="hljs-operator">=</span> Executors.newVirtualThreadPerTaskExecutor()) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">futures</span> <span class="hljs-operator">=</span> items.stream()
                 .map(item -&gt; executor.submit(() -&gt; evaluateSingleItem(
                     item, modelName, promptVersionId)))
                 .toList();
 
-            for (var future : futures) {
-                try {
-                    var result = future.get(5, TimeUnit.MINUTES);
+            <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> future : futures) {
+                <span class="hljs-keyword">try</span> {
+                    <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> future.get(<span class="hljs-number">5</span>, TimeUnit.MINUTES);
                     report.addItemResult(result);
-                } catch (TimeoutException e) {
+                } <span class="hljs-keyword">catch</span> (TimeoutException e) {
                     report.addTimeout();
-                } catch (Exception e) {
+                } <span class="hljs-keyword">catch</span> (Exception e) {
                     report.addError(e.getMessage());
                 }
             }
         }
 
         report.computeSummary();
-        return report;
+        <span class="hljs-keyword">return</span> report;
     }
 
-    private GoldenItemEvalResult evaluateSingleItem(
-            GoldenDatasetItem item, String modelName, String promptVersionId) {
+    <span class="hljs-keyword">private</span> GoldenItemEvalResult <span class="hljs-title function_">evaluateSingleItem</span><span class="hljs-params">(
+            GoldenDatasetItem item, String modelName, String promptVersionId)</span> {
 
-        var start = Instant.now();
+        <span class="hljs-type">var</span> <span class="hljs-variable">start</span> <span class="hljs-operator">=</span> Instant.now();
 
-        // 调用模型获取实际回答
-        var actualAnswer = chatClient.prompt()
+        <span class="hljs-comment">// 调用模型获取实际回答</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">actualAnswer</span> <span class="hljs-operator">=</span> chatClient.prompt()
             .user(item.getQuestion())
             .call()
             .content();
 
-        var duration = Duration.between(start, Instant.now());
+        <span class="hljs-type">var</span> <span class="hljs-variable">duration</span> <span class="hljs-operator">=</span> Duration.between(start, Instant.now());
 
-        // LLM-as-Judge 评估
-        var correctnessResult = judgeService.evaluate(
+        <span class="hljs-comment">// LLM-as-Judge 评估</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">correctnessResult</span> <span class="hljs-operator">=</span> judgeService.evaluate(
             EvaluationRubric.correctnessRubric(),
-            item.getQuestion(), actualAnswer, item.getExpectedAnswer(), null);
+            item.getQuestion(), actualAnswer, item.getExpectedAnswer(), <span class="hljs-literal">null</span>);
 
-        var faithfulnessResult = judgeService.evaluate(
+        <span class="hljs-type">var</span> <span class="hljs-variable">faithfulnessResult</span> <span class="hljs-operator">=</span> judgeService.evaluate(
             EvaluationRubric.faithfulnessRubric(),
-            item.getQuestion(), actualAnswer, null, item.getReferenceDocuments());
+            item.getQuestion(), actualAnswer, <span class="hljs-literal">null</span>, item.getReferenceDocuments());
 
-        return new GoldenItemEvalResult(
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">GoldenItemEvalResult</span>(
             item.getId(), item.getQuestion(),
             item.getExpectedAnswer(), actualAnswer,
             Map.of(
-                &quot;correctness&quot;, (double) correctnessResult.score(),
-                &quot;faithfulness&quot;, (double) faithfulnessResult.score()
+                <span class="hljs-string">"correctness"</span>, (<span class="hljs-type">double</span>) correctnessResult.score(),
+                <span class="hljs-string">"faithfulness"</span>, (<span class="hljs-type">double</span>) faithfulnessResult.score()
             ),
             duration,
-            null  // no error
+            <span class="hljs-literal">null</span>  <span class="hljs-comment">// no error</span>
         );
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 回归检测：对比本次得分与基线得分，标记退化的条目。
-     */
-    public record RegressionTestReport(
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">RegressionTestReport</span><span class="hljs-params">(
         String datasetVersion,
         String modelName,
         String promptVersionId,
         Instant executedAt,
         List&lt;GoldenItemEvalResult&gt; results,
-        int totalItems,
-        int passedItems,
-        int regressedItems,     // 退化的条数
-        int timedOutItems,
-        int errorItems,
+        <span class="hljs-type">int</span> totalItems,
+        <span class="hljs-type">int</span> passedItems,
+        <span class="hljs-type">int</span> regressedItems,     // 退化的条数
+        <span class="hljs-type">int</span> timedOutItems,
+        <span class="hljs-type">int</span> errorItems,
         Map&lt;String, Double&gt; avgScores,
         Map&lt;String, Double&gt; baselineScores,
         Map&lt;String, Double&gt; scoreDeltas,    // 与基线的差异
-        boolean passed                   // 整体是否通过（regressedItems == 0）
-    ) {
-        public void computeSummary() {
-            // 计算平均分并对比基线
+        <span class="hljs-type">boolean</span> passed                   // 整体是否通过（regressedItems == 0）
+    )</span> {
+        <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">computeSummary</span><span class="hljs-params">()</span> {
+            <span class="hljs-comment">// 计算平均分并对比基线</span>
         }
     }
 }
-</code></pre></div>
-<h2>五、AI 可观测性技术栈</h2>
+</code></pre></div><h2>五、AI 可观测性技术栈</h2>
 <h3>5.1 OpenTelemetry 集成</h3>
 <p>使用 OpenTelemetry Java Agent 自动采集，结合自定义 Span 实现 AI 专用链路追踪。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">/**
  * AI 追踪门面接口。统一定义 AI 调用的 Span 结构。
- */
-public interface AiTracePort {
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">AiTracePort</span> {
 
-    /**
+    <span class="hljs-comment">/**
      * 创建一个 AI 调用 Span。
-     */
-    Span startAiSpan(String operationType, Map&lt;String, String&gt; attributes);
+     */</span>
+    Span <span class="hljs-title function_">startAiSpan</span><span class="hljs-params">(String operationType, Map&lt;String, String&gt; attributes)</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 记录 LLM 调用事件（包含 Token 和成本信息）
-     */
-    void recordLlmEvent(Span span, String model, int promptTokens,
-                         int completionTokens, double cost, long latencyMs);
+     */</span>
+    <span class="hljs-keyword">void</span> <span class="hljs-title function_">recordLlmEvent</span><span class="hljs-params">(Span span, String model, <span class="hljs-type">int</span> promptTokens,
+                         <span class="hljs-type">int</span> completionTokens, <span class="hljs-type">double</span> cost, <span class="hljs-type">long</span> latencyMs)</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 记录工具调用事件
-     */
-    void recordToolCall(Span span, String toolName,
-                         Map&lt;String, Object&gt; parameters, Object result, long latencyMs);
+     */</span>
+    <span class="hljs-keyword">void</span> <span class="hljs-title function_">recordToolCall</span><span class="hljs-params">(Span span, String toolName,
+                         Map&lt;String, Object&gt; parameters, Object result, <span class="hljs-type">long</span> latencyMs)</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 记录 RAG 检索事件
-     */
-    void recordRetrieval(Span span, String query, List&lt;String&gt; retrievedDocIds,
-                          int topK, long latencyMs);
+     */</span>
+    <span class="hljs-keyword">void</span> <span class="hljs-title function_">recordRetrieval</span><span class="hljs-params">(Span span, String query, List&lt;String&gt; retrievedDocIds,
+                          <span class="hljs-type">int</span> topK, <span class="hljs-type">long</span> latencyMs)</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 记录用户反馈事件
-     */
-    void recordUserFeedback(String traceId, String userId,
-                             boolean liked, String comment);
+     */</span>
+    <span class="hljs-keyword">void</span> <span class="hljs-title function_">recordUserFeedback</span><span class="hljs-params">(String traceId, String userId,
+                             <span class="hljs-type">boolean</span> liked, String comment)</span>;
 }
 
-/**
+<span class="hljs-comment">/**
  * OpenTelemetry 实现
- */
-@Component
-public class OpenTelemetryAiTrace implements AiTracePort {
+ */</span>
+<span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">OpenTelemetryAiTrace</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">AiTracePort</span> {
 
-    private final Tracer tracer;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Tracer tracer;
 
-    public OpenTelemetryAiTrace(OpenTelemetry openTelemetry) {
-        this.tracer = openTelemetry.getTracer(&quot;ai-application&quot;, &quot;1.0.0&quot;);
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">OpenTelemetryAiTrace</span><span class="hljs-params">(OpenTelemetry openTelemetry)</span> {
+        <span class="hljs-built_in">this</span>.tracer = openTelemetry.getTracer(<span class="hljs-string">"ai-application"</span>, <span class="hljs-string">"1.0.0"</span>);
     }
 
-    @Override
-    public Span startAiSpan(String operationType, Map&lt;String, String&gt; attributes) {
-        var spanBuilder = tracer.spanBuilder(&quot;ai.&quot; + operationType)
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> Span <span class="hljs-title function_">startAiSpan</span><span class="hljs-params">(String operationType, Map&lt;String, String&gt; attributes)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">spanBuilder</span> <span class="hljs-operator">=</span> tracer.spanBuilder(<span class="hljs-string">"ai."</span> + operationType)
             .setSpanKind(SpanKind.INTERNAL);
 
         attributes.forEach(spanBuilder::setAttribute);
-        return spanBuilder.startSpan();
+        <span class="hljs-keyword">return</span> spanBuilder.startSpan();
     }
 
-    @Override
-    public void recordLlmEvent(Span span, String model, int promptTokens,
-                                int completionTokens, double cost, long latencyMs) {
-        span.setAttribute(&quot;llm.model&quot;, model);
-        span.setAttribute(&quot;llm.prompt_tokens&quot;, promptTokens);
-        span.setAttribute(&quot;llm.completion_tokens&quot;, completionTokens);
-        span.setAttribute(&quot;llm.total_tokens&quot;, promptTokens + completionTokens);
-        span.setAttribute(&quot;llm.cost&quot;, cost);
-        span.setAttribute(&quot;llm.latency_ms&quot;, latencyMs);
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">recordLlmEvent</span><span class="hljs-params">(Span span, String model, <span class="hljs-type">int</span> promptTokens,
+                                <span class="hljs-type">int</span> completionTokens, <span class="hljs-type">double</span> cost, <span class="hljs-type">long</span> latencyMs)</span> {
+        span.setAttribute(<span class="hljs-string">"llm.model"</span>, model);
+        span.setAttribute(<span class="hljs-string">"llm.prompt_tokens"</span>, promptTokens);
+        span.setAttribute(<span class="hljs-string">"llm.completion_tokens"</span>, completionTokens);
+        span.setAttribute(<span class="hljs-string">"llm.total_tokens"</span>, promptTokens + completionTokens);
+        span.setAttribute(<span class="hljs-string">"llm.cost"</span>, cost);
+        span.setAttribute(<span class="hljs-string">"llm.latency_ms"</span>, latencyMs);
 
-        // 添加事件
-        span.addEvent(&quot;llm.call.completed&quot;,
+        <span class="hljs-comment">// 添加事件</span>
+        span.addEvent(<span class="hljs-string">"llm.call.completed"</span>,
             Attributes.of(
-                AttributeKey.stringKey(&quot;model&quot;), model,
-                AttributeKey.longKey(&quot;prompt_tokens&quot;), promptTokens,
-                AttributeKey.longKey(&quot;completion_tokens&quot;), completionTokens,
-                AttributeKey.doubleKey(&quot;cost&quot;), cost
+                AttributeKey.stringKey(<span class="hljs-string">"model"</span>), model,
+                AttributeKey.longKey(<span class="hljs-string">"prompt_tokens"</span>), promptTokens,
+                AttributeKey.longKey(<span class="hljs-string">"completion_tokens"</span>), completionTokens,
+                AttributeKey.doubleKey(<span class="hljs-string">"cost"</span>), cost
             ));
     }
 
-    @Override
-    public void recordRetrieval(Span span, String query,
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">recordRetrieval</span><span class="hljs-params">(Span span, String query,
                                  List&lt;String&gt; retrievedDocIds,
-                                 int topK, long latencyMs) {
-        span.setAttribute(&quot;retrieval.top_k&quot;, topK);
-        span.setAttribute(&quot;retrieval.result_count&quot;, retrievedDocIds.size());
-        span.setAttribute(&quot;retrieval.latency_ms&quot;, latencyMs);
+                                 <span class="hljs-type">int</span> topK, <span class="hljs-type">long</span> latencyMs)</span> {
+        span.setAttribute(<span class="hljs-string">"retrieval.top_k"</span>, topK);
+        span.setAttribute(<span class="hljs-string">"retrieval.result_count"</span>, retrievedDocIds.size());
+        span.setAttribute(<span class="hljs-string">"retrieval.latency_ms"</span>, latencyMs);
 
-        span.addEvent(&quot;retrieval.completed&quot;,
+        span.addEvent(<span class="hljs-string">"retrieval.completed"</span>,
             Attributes.of(
-                AttributeKey.stringKey(&quot;query_preview&quot;),
-                    query.length() &gt; 100 ? query.substring(0, 100) : query,
-                AttributeKey.longKey(&quot;result_count&quot;), retrievedDocIds.size(),
-                AttributeKey.longKey(&quot;latency_ms&quot;), latencyMs
+                AttributeKey.stringKey(<span class="hljs-string">"query_preview"</span>),
+                    query.length() &gt; <span class="hljs-number">100</span> ? query.substring(<span class="hljs-number">0</span>, <span class="hljs-number">100</span>) : query,
+                AttributeKey.longKey(<span class="hljs-string">"result_count"</span>), retrievedDocIds.size(),
+                AttributeKey.longKey(<span class="hljs-string">"latency_ms"</span>), latencyMs
             ));
     }
 
-    @Override
-    public void recordToolCall(Span span, String toolName,
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">recordToolCall</span><span class="hljs-params">(Span span, String toolName,
                                 Map&lt;String, Object&gt; parameters,
-                                Object result, long latencyMs) {
-        span.setAttribute(&quot;tool.name&quot;, toolName);
-        span.setAttribute(&quot;tool.latency_ms&quot;, latencyMs);
-        span.setAttribute(&quot;tool.success&quot;, result != null);
+                                Object result, <span class="hljs-type">long</span> latencyMs)</span> {
+        span.setAttribute(<span class="hljs-string">"tool.name"</span>, toolName);
+        span.setAttribute(<span class="hljs-string">"tool.latency_ms"</span>, latencyMs);
+        span.setAttribute(<span class="hljs-string">"tool.success"</span>, result != <span class="hljs-literal">null</span>);
 
-        span.addEvent(&quot;tool.call.completed&quot;,
+        span.addEvent(<span class="hljs-string">"tool.call.completed"</span>,
             Attributes.of(
-                AttributeKey.stringKey(&quot;tool_name&quot;), toolName,
-                AttributeKey.longKey(&quot;latency_ms&quot;), latencyMs
+                AttributeKey.stringKey(<span class="hljs-string">"tool_name"</span>), toolName,
+                AttributeKey.longKey(<span class="hljs-string">"latency_ms"</span>), latencyMs
             ));
     }
 
-    @Override
-    public void recordUserFeedback(String traceId, String userId,
-                                    boolean liked, String comment) {
-        var span = tracer.spanBuilder(&quot;ai.user_feedback&quot;)
-            .setAttribute(&quot;trace.id&quot;, traceId)
-            .setAttribute(&quot;user.id&quot;, userId)
-            .setAttribute(&quot;feedback.liked&quot;, liked)
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">recordUserFeedback</span><span class="hljs-params">(String traceId, String userId,
+                                    <span class="hljs-type">boolean</span> liked, String comment)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">span</span> <span class="hljs-operator">=</span> tracer.spanBuilder(<span class="hljs-string">"ai.user_feedback"</span>)
+            .setAttribute(<span class="hljs-string">"trace.id"</span>, traceId)
+            .setAttribute(<span class="hljs-string">"user.id"</span>, userId)
+            .setAttribute(<span class="hljs-string">"feedback.liked"</span>, liked)
             .startSpan();
 
-        if (comment != null &amp;&amp; !comment.isEmpty()) {
-            span.setAttribute(&quot;feedback.comment&quot;, comment);
+        <span class="hljs-keyword">if</span> (comment != <span class="hljs-literal">null</span> &amp;&amp; !comment.isEmpty()) {
+            span.setAttribute(<span class="hljs-string">"feedback.comment"</span>, comment);
         }
         span.end();
     }
 }
-</code></pre></div>
-<h3>5.2 请求拦截器实现自动追踪</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+</code></pre></div><h3>5.2 请求拦截器实现自动追踪</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">/**
  * 通过 Spring AI 的 Advisor 机制自动为每次 LLM 调用添加追踪。
- */
-@Component
-public class AiTracingAdvisor implements RequestResponseAdvisor {
+ */</span>
+<span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">AiTracingAdvisor</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">RequestResponseAdvisor</span> {
 
-    private final AiTracePort aiTrace;
-    private final MeterRegistry meterRegistry;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> AiTracePort aiTrace;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> MeterRegistry meterRegistry;
 
-    @Override
-    public AdvisedRequest adviseRequest(AdvisedRequest request,
-                                         Map&lt;String, Object&gt; context) {
-        var span = aiTrace.startAiSpan(&quot;llm_call&quot;, Map.of(
-            &quot;model&quot;, request.model() != null ? request.model() : &quot;unknown&quot;
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> AdvisedRequest <span class="hljs-title function_">adviseRequest</span><span class="hljs-params">(AdvisedRequest request,
+                                         Map&lt;String, Object&gt; context)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">span</span> <span class="hljs-operator">=</span> aiTrace.startAiSpan(<span class="hljs-string">"llm_call"</span>, Map.of(
+            <span class="hljs-string">"model"</span>, request.model() != <span class="hljs-literal">null</span> ? request.model() : <span class="hljs-string">"unknown"</span>
         ));
-        context.put(&quot;ai.span&quot;, span);
-        context.put(&quot;ai.start_time&quot;, System.currentTimeMillis());
-        return request;
+        context.put(<span class="hljs-string">"ai.span"</span>, span);
+        context.put(<span class="hljs-string">"ai.start_time"</span>, System.currentTimeMillis());
+        <span class="hljs-keyword">return</span> request;
     }
 
-    @Override
-    public ChatResponse adviseResponse(ChatResponse response,
-                                        Map&lt;String, Object&gt; context) {
-        var span = (Span) context.get(&quot;ai.span&quot;);
-        var startTime = (Long) context.get(&quot;ai.start_time&quot;);
-        if (span != null &amp;&amp; startTime != null) {
-            var latency = System.currentTimeMillis() - startTime;
-            var metadata = response.getMetadata();
-            var usage = metadata.getUsage();
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> ChatResponse <span class="hljs-title function_">adviseResponse</span><span class="hljs-params">(ChatResponse response,
+                                        Map&lt;String, Object&gt; context)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">span</span> <span class="hljs-operator">=</span> (Span) context.get(<span class="hljs-string">"ai.span"</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">startTime</span> <span class="hljs-operator">=</span> (Long) context.get(<span class="hljs-string">"ai.start_time"</span>);
+        <span class="hljs-keyword">if</span> (span != <span class="hljs-literal">null</span> &amp;&amp; startTime != <span class="hljs-literal">null</span>) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">latency</span> <span class="hljs-operator">=</span> System.currentTimeMillis() - startTime;
+            <span class="hljs-type">var</span> <span class="hljs-variable">metadata</span> <span class="hljs-operator">=</span> response.getMetadata();
+            <span class="hljs-type">var</span> <span class="hljs-variable">usage</span> <span class="hljs-operator">=</span> metadata.getUsage();
 
-            // 记录 LLM 调用事件
+            <span class="hljs-comment">// 记录 LLM 调用事件</span>
             aiTrace.recordLlmEvent(span,
                 metadata.getModel(),
-                usage != null ? (int) usage.getPromptTokens() : 0,
-                usage != null ? (int) usage.getGenerationTokens() : 0,
+                usage != <span class="hljs-literal">null</span> ? (<span class="hljs-type">int</span>) usage.getPromptTokens() : <span class="hljs-number">0</span>,
+                usage != <span class="hljs-literal">null</span> ? (<span class="hljs-type">int</span>) usage.getGenerationTokens() : <span class="hljs-number">0</span>,
                 calculateCost(metadata.getModel(), usage),
                 latency
             );
 
-            // 记录 Micrometer 指标
-            meterRegistry.timer(&quot;ai.llm.call&quot;,
-                &quot;model&quot;, metadata.getModel())
+            <span class="hljs-comment">// 记录 Micrometer 指标</span>
+            meterRegistry.timer(<span class="hljs-string">"ai.llm.call"</span>,
+                <span class="hljs-string">"model"</span>, metadata.getModel())
                 .record(latency, TimeUnit.MILLISECONDS);
 
             span.end();
         }
-        return response;
+        <span class="hljs-keyword">return</span> response;
     }
 
-    private double calculateCost(String model, Usage usage) {
-        if (usage == null) return 0;
-        // 简化的成本计算
-        var costPer1kPrompt = switch (model) {
-            case &quot;gpt-4o&quot; -&gt; 0.0025;
-            case &quot;gpt-4o-mini&quot; -&gt; 0.00015;
-            case &quot;claude-sonnet-4-20250514&quot; -&gt; 0.003;
-            default -&gt; 0.001;
+    <span class="hljs-keyword">private</span> <span class="hljs-type">double</span> <span class="hljs-title function_">calculateCost</span><span class="hljs-params">(String model, Usage usage)</span> {
+        <span class="hljs-keyword">if</span> (usage == <span class="hljs-literal">null</span>) <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;
+        <span class="hljs-comment">// 简化的成本计算</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">costPer1kPrompt</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">switch</span> (model) {
+            <span class="hljs-keyword">case</span> <span class="hljs-string">"gpt-4o"</span> -&gt; <span class="hljs-number">0.0025</span>;
+            <span class="hljs-keyword">case</span> <span class="hljs-string">"gpt-4o-mini"</span> -&gt; <span class="hljs-number">0.00015</span>;
+            <span class="hljs-keyword">case</span> <span class="hljs-string">"claude-sonnet-4-20250514"</span> -&gt; <span class="hljs-number">0.003</span>;
+            <span class="hljs-keyword">default</span> -&gt; <span class="hljs-number">0.001</span>;
         };
-        var costPer1kCompletion = costPer1kPrompt * 4;  // 通常 completion 是 prompt 的 4 倍
-        return (usage.getPromptTokens() * costPer1kPrompt
-            + usage.getGenerationTokens() * costPer1kCompletion) / 1000.0;
+        <span class="hljs-type">var</span> <span class="hljs-variable">costPer1kCompletion</span> <span class="hljs-operator">=</span> costPer1kPrompt * <span class="hljs-number">4</span>;  <span class="hljs-comment">// 通常 completion 是 prompt 的 4 倍</span>
+        <span class="hljs-keyword">return</span> (usage.getPromptTokens() * costPer1kPrompt
+            + usage.getGenerationTokens() * costPer1kCompletion) / <span class="hljs-number">1000.0</span>;
     }
 }
-</code></pre></div>
-<h3>5.3 Prometheus + Grafana Dashboard 设计</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+</code></pre></div><h3>5.3 Prometheus + Grafana Dashboard 设计</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">/**
  * 通过 Micrometer 向 Prometheus 暴露 AI 专用指标。
  * 配合以下 Grafana Dashboard 面板使用。
- */
-@Configuration
-public class AiMetricsConfiguration {
+ */</span>
+<span class="hljs-meta">@Configuration</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">AiMetricsConfiguration</span> {
 
-    @Bean
-    public MeterRegistryCustomizer&lt;PrometheusMeterRegistry&gt; aiMetrics() {
-        return registry -&gt; registry.config().commonTags(
-            &quot;application&quot;, &quot;ai-service&quot;,
-            &quot;version&quot;, &quot;1.0.0&quot;
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-keyword">public</span> MeterRegistryCustomizer&lt;PrometheusMeterRegistry&gt; <span class="hljs-title function_">aiMetrics</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">return</span> registry -&gt; registry.config().commonTags(
+            <span class="hljs-string">"application"</span>, <span class="hljs-string">"ai-service"</span>,
+            <span class="hljs-string">"version"</span>, <span class="hljs-string">"1.0.0"</span>
         );
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 注册自定义 AI 指标。
      *
      * Grafana Dashboard 推荐面板：
@@ -906,7 +896,7 @@ public class AiMetricsConfiguration {
      *    - rate(ai_cost_total[1h]) by (model)
      *
      * 5. 错误率（Stat 面板）
-     *    - rate(ai_llm_call_seconds_count{status=&quot;error&quot;}[5m])
+     *    - rate(ai_llm_call_seconds_count{status="error"}[5m])
      *      / rate(ai_llm_call_seconds_count[5m])
      *
      * 6. 缓存命中率（Gauge）
@@ -915,11 +905,10 @@ public class AiMetricsConfiguration {
      * 7. 用户反馈（时间序列）
      *    - rate(ai_feedback_like_total[5m])
      *    - rate(ai_feedback_dislike_total[5m])
-     */
+     */</span>
 }
-</code></pre></div>
-<h3>5.4 Langfuse vs OpenTelemetry 对比</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+</code></pre></div><h3>5.4 Langfuse vs OpenTelemetry 对比</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">/**
  * Langfuse 是专为 LLM 应用设计的可观测性平台，提供开箱即用的：
  * - Prompt 版本追踪
  * - Token 用量和成本分析
@@ -934,128 +923,126 @@ public class AiMetricsConfiguration {
  *
  * 推荐策略：OpenTelemetry 作为基础设施层（统一采集），
  * Langfuse 作为 AI 专用的业务分析层（导出 OTLP 数据到 Langfuse）。
- */
+ */</span>
 
-/**
+<span class="hljs-comment">/**
  * 双写适配器：同时向 OpenTelemetry 和 Langfuse 发送追踪数据。
- */
-@Component
-public class DualTraceAdapter implements AiTracePort {
+ */</span>
+<span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">DualTraceAdapter</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">AiTracePort</span> {
 
-    private final AiTracePort otelTrace;
-    private final LangfuseClient langfuse;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> AiTracePort otelTrace;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> LangfuseClient langfuse;
 
-    @Override
-    public Span startAiSpan(String operationType, Map&lt;String, String&gt; attributes) {
-        var otelSpan = otelTrace.startAiSpan(operationType, attributes);
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> Span <span class="hljs-title function_">startAiSpan</span><span class="hljs-params">(String operationType, Map&lt;String, String&gt; attributes)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">otelSpan</span> <span class="hljs-operator">=</span> otelTrace.startAiSpan(operationType, attributes);
 
-        // 同步创建 Langfuse Trace
-        var langfuseTrace = langfuse.trace()
+        <span class="hljs-comment">// 同步创建 Langfuse Trace</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">langfuseTrace</span> <span class="hljs-operator">=</span> langfuse.trace()
             .name(operationType)
             .metadata(attributes)
             .create();
 
-        // 将 Langfuse trace ID 记录到 OTEL Span
-        otelSpan.setAttribute(&quot;langfuse.trace_id&quot;, langfuseTrace.getId());
-        return otelSpan;
+        <span class="hljs-comment">// 将 Langfuse trace ID 记录到 OTEL Span</span>
+        otelSpan.setAttribute(<span class="hljs-string">"langfuse.trace_id"</span>, langfuseTrace.getId());
+        <span class="hljs-keyword">return</span> otelSpan;
     }
 
-    @Override
-    public void recordLlmEvent(Span span, String model, int promptTokens,
-                                int completionTokens, double cost, long latencyMs) {
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">recordLlmEvent</span><span class="hljs-params">(Span span, String model, <span class="hljs-type">int</span> promptTokens,
+                                <span class="hljs-type">int</span> completionTokens, <span class="hljs-type">double</span> cost, <span class="hljs-type">long</span> latencyMs)</span> {
         otelTrace.recordLlmEvent(span, model, promptTokens,
             completionTokens, cost, latencyMs);
 
-        // 同步上报 Langfuse
-        var traceId = span.getSpanContext().getTraceId();
+        <span class="hljs-comment">// 同步上报 Langfuse</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">traceId</span> <span class="hljs-operator">=</span> span.getSpanContext().getTraceId();
         langfuse.generation()
             .traceId(traceId)
             .model(model)
-            .usage(new LangfuseUsage(promptTokens, completionTokens))
+            .usage(<span class="hljs-keyword">new</span> <span class="hljs-title class_">LangfuseUsage</span>(promptTokens, completionTokens))
             .cost(cost)
             .latency(latencyMs)
             .create();
     }
 
-    // 其他方法类似双写...
+    <span class="hljs-comment">// 其他方法类似双写...</span>
 }
-</code></pre></div>
-<h2>六、评估流水线完整编排</h2>
+</code></pre></div><h2>六、评估流水线完整编排</h2>
 <p>将离线评估、Golden Dataset 回归测试和报告生成整合为一个可自动运行的流水线。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
-public class EvaluationPipeline {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">EvaluationPipeline</span> {
 
-    private final GoldenDatasetService datasetService;
-    private final LlmAsJudgeService judgeService;
-    private final OfflineEvaluator offlineEvaluator;
-    private final OnlineMetricsCollector onlineCollector;
-    private final NotificationService notificationService;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> GoldenDatasetService datasetService;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> LlmAsJudgeService judgeService;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> OfflineEvaluator offlineEvaluator;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> OnlineMetricsCollector onlineCollector;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> NotificationService notificationService;
 
-    /**
+    <span class="hljs-comment">/**
      * 在以下时机触发自动评估流水线：
      * 1. 模型版本升级
      * 2. Prompt 模板变更
      * 3. Embedding 模型切换
      * 4. RAG 检索策略调整
-     */
-    public PipelineReport runPipeline(EvaluationTrigger trigger) {
-        var report = new PipelineReport(trigger, Instant.now());
+     */</span>
+    <span class="hljs-keyword">public</span> PipelineReport <span class="hljs-title function_">runPipeline</span><span class="hljs-params">(EvaluationTrigger trigger)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">report</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">PipelineReport</span>(trigger, Instant.now());
 
-        // Phase 1: Golden Dataset 回归测试
-        var regressionReport = datasetService.runRegressionTest(
-            &quot;v2.0&quot;, trigger.modelName(), trigger.promptVersionId());
+        <span class="hljs-comment">// Phase 1: Golden Dataset 回归测试</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">regressionReport</span> <span class="hljs-operator">=</span> datasetService.runRegressionTest(
+            <span class="hljs-string">"v2.0"</span>, trigger.modelName(), trigger.promptVersionId());
         report.setRegressionReport(regressionReport);
 
-        // Phase 2: LLM-as-a-Judge 专项评估（多个维度）
-        var judgeScores = evaluateWithAllRubrics(regressionReport);
+        <span class="hljs-comment">// Phase 2: LLM-as-a-Judge 专项评估（多个维度）</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">judgeScores</span> <span class="hljs-operator">=</span> evaluateWithAllRubrics(regressionReport);
         report.setJudgeScores(judgeScores);
 
-        // Phase 3: 性能基准测试
-        var perfBaseline = measurePerformanceBaseline(trigger);
+        <span class="hljs-comment">// Phase 3: 性能基准测试</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">perfBaseline</span> <span class="hljs-operator">=</span> measurePerformanceBaseline(trigger);
         report.setPerfBaseline(perfBaseline);
 
-        // Phase 4: 判定是否通过
+        <span class="hljs-comment">// Phase 4: 判定是否通过</span>
         report.evaluatePassCriteria(List.of(
-            new PassCriterion(&quot;regression_passed&quot;,
-                !regressionReport.passed(), false),
-            new PassCriterion(&quot;judge_score_min&quot;,
+            <span class="hljs-keyword">new</span> <span class="hljs-title class_">PassCriterion</span>(<span class="hljs-string">"regression_passed"</span>,
+                !regressionReport.passed(), <span class="hljs-literal">false</span>),
+            <span class="hljs-keyword">new</span> <span class="hljs-title class_">PassCriterion</span>(<span class="hljs-string">"judge_score_min"</span>,
                 judgeScores.values().stream().mapToDouble(Double::doubleValue)
-                    .average().orElse(0) &gt;= 3.5, false),
-            new PassCriterion(&quot;latency_p99_ms&quot;,
-                perfBaseline.latencyP99Ms() &lt; 5000, true)
+                    .average().orElse(<span class="hljs-number">0</span>) &gt;= <span class="hljs-number">3.5</span>, <span class="hljs-literal">false</span>),
+            <span class="hljs-keyword">new</span> <span class="hljs-title class_">PassCriterion</span>(<span class="hljs-string">"latency_p99_ms"</span>,
+                perfBaseline.latencyP99Ms() &lt; <span class="hljs-number">5000</span>, <span class="hljs-literal">true</span>)
         ));
 
-        // Phase 5: 发送通知
+        <span class="hljs-comment">// Phase 5: 发送通知</span>
         notificationService.sendEvaluationReport(report);
 
-        return report;
+        <span class="hljs-keyword">return</span> report;
     }
 
-    private Map&lt;String, Double&gt; evaluateWithAllRubrics(
-            RegressionTestReport regressionReport) {
-        var scores = new HashMap&lt;String, Double&gt;();
-        var rubrics = List.of(
+    <span class="hljs-keyword">private</span> Map&lt;String, Double&gt; <span class="hljs-title function_">evaluateWithAllRubrics</span><span class="hljs-params">(
+            RegressionTestReport regressionReport)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">scores</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">HashMap</span>&lt;String, Double&gt;();
+        <span class="hljs-type">var</span> <span class="hljs-variable">rubrics</span> <span class="hljs-operator">=</span> List.of(
             EvaluationRubric.correctnessRubric(),
             EvaluationRubric.faithfulnessRubric(),
-            EvaluationRubric.correctnessRubric() // 可替换为其他 Rubric
+            EvaluationRubric.correctnessRubric() <span class="hljs-comment">// 可替换为其他 Rubric</span>
         );
 
-        for (var rubric : rubrics) {
-            var avgScore = regressionReport.results().stream()
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> rubric : rubrics) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">avgScore</span> <span class="hljs-operator">=</span> regressionReport.results().stream()
                 .mapToDouble(r -&gt; {
-                    var result = judgeService.evaluate(rubric, r.question(),
-                        r.actualAnswer(), r.expectedAnswer(), null);
-                    return result.score();
+                    <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> judgeService.evaluate(rubric, r.question(),
+                        r.actualAnswer(), r.expectedAnswer(), <span class="hljs-literal">null</span>);
+                    <span class="hljs-keyword">return</span> result.score();
                 })
                 .average()
-                .orElse(0);
+                .orElse(<span class="hljs-number">0</span>);
             scores.put(rubric.dimension(), avgScore);
         }
-        return scores;
+        <span class="hljs-keyword">return</span> scores;
     }
 }
-</code></pre></div>
-<h2>七、最佳实践与常见问题</h2>
+</code></pre></div><h2>七、最佳实践与常见问题</h2>
 <h3>最佳实践</h3>
 <ol>
 <li><strong>评估前置</strong>：在 Prompt 或模型变更的 PR 中，CI 流水线自动运行 Golden Dataset 评估，不通过则阻止合并。</li>
@@ -1088,78 +1075,77 @@ A: 建议聚焦 3-5 个北极星指标（North Star Metrics）：对 RAG 应用�
 <li><p><strong>Replanning Span</strong>（重规划层）：当 Tool 执行结果返回后，Agent 需要评估结果是否满足预期、是否需要调整计划。该 Span 记录 <code>agent.replanning.decision</code>（继续/重试/放弃）和 <code>agent.replanning.reason</code>。</p>
 </li>
 </ol>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import io.micrometer.tracing.Span;
-import io.micrometer.tracing.Tracer;
-import org.springframework.ai.tool.definition.ToolResult;
-import org.springframework.stereotype.Component;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> io.micrometer.tracing.Span;
+<span class="hljs-keyword">import</span> io.micrometer.tracing.Tracer;
+<span class="hljs-keyword">import</span> org.springframework.ai.tool.definition.ToolResult;
+<span class="hljs-keyword">import</span> org.springframework.stereotype.Component;
 
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+<span class="hljs-keyword">import</span> java.util.Map;
+<span class="hljs-keyword">import</span> java.util.concurrent.ConcurrentHashMap;
 
-@Component
-public class AgentExecutionTracer {
+<span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">AgentExecutionTracer</span> {
 
-    private final Tracer tracer;
-    private final Map&lt;String, Span&gt; activeStepSpans = new ConcurrentHashMap&lt;&gt;();
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Tracer tracer;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Map&lt;String, Span&gt; activeStepSpans = <span class="hljs-keyword">new</span> <span class="hljs-title class_">ConcurrentHashMap</span>&lt;&gt;();
 
-    public AgentExecutionTracer(Tracer tracer) {
-        this.tracer = tracer;
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">AgentExecutionTracer</span><span class="hljs-params">(Tracer tracer)</span> {
+        <span class="hljs-built_in">this</span>.tracer = tracer;
     }
 
-    // 记录一个完整的 ReAct 步骤
-    public Span traceReActStep(String taskId, int stepNumber, String thought,
-                                String toolName, String toolInput, ToolResult result) {
-        var stepSpan = tracer.spanBuilder()
-                .name(&quot;agent.reat.step-&quot; + stepNumber)
-                .tag(&quot;task.id&quot;, taskId)
-                .tag(&quot;step.number&quot;, String.valueOf(stepNumber))
+    <span class="hljs-comment">// 记录一个完整的 ReAct 步骤</span>
+    <span class="hljs-keyword">public</span> Span <span class="hljs-title function_">traceReActStep</span><span class="hljs-params">(String taskId, <span class="hljs-type">int</span> stepNumber, String thought,
+                                String toolName, String toolInput, ToolResult result)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">stepSpan</span> <span class="hljs-operator">=</span> tracer.spanBuilder()
+                .name(<span class="hljs-string">"agent.reat.step-"</span> + stepNumber)
+                .tag(<span class="hljs-string">"task.id"</span>, taskId)
+                .tag(<span class="hljs-string">"step.number"</span>, String.valueOf(stepNumber))
                 .start();
 
-        // 记录思考过程
+        <span class="hljs-comment">// 记录思考过程</span>
         tracer.spanBuilder()
-                .name(&quot;agent.planning&quot;)
-                .tag(&quot;agent.step.thought&quot;, thought)
-                .tag(&quot;step.number&quot;, String.valueOf(stepNumber))
+                .name(<span class="hljs-string">"agent.planning"</span>)
+                .tag(<span class="hljs-string">"agent.step.thought"</span>, thought)
+                .tag(<span class="hljs-string">"step.number"</span>, String.valueOf(stepNumber))
                 .start()
                 .end();
 
-        // 记录工具执行
-        var execSpan = tracer.spanBuilder()
-                .name(&quot;agent.execution.&quot; + toolName)
-                .tag(&quot;tool.name&quot;, toolName)
-                .tag(&quot;tool.input&quot;, sanitizeForLogging(toolInput))
+        <span class="hljs-comment">// 记录工具执行</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">execSpan</span> <span class="hljs-operator">=</span> tracer.spanBuilder()
+                .name(<span class="hljs-string">"agent.execution."</span> + toolName)
+                .tag(<span class="hljs-string">"tool.name"</span>, toolName)
+                .tag(<span class="hljs-string">"tool.input"</span>, sanitizeForLogging(toolInput))
                 .start();
-        execSpan.tag(&quot;tool.duration_ms&quot;,
+        execSpan.tag(<span class="hljs-string">"tool.duration_ms"</span>,
                 String.valueOf(result.getDuration().toMillis()));
-        execSpan.tag(&quot;tool.success&quot;,
+        execSpan.tag(<span class="hljs-string">"tool.success"</span>,
                 String.valueOf(!result.hasError()));
-        if (result.hasError()) {
-            execSpan.tag(&quot;error.message&quot;, result.getError().getMessage());
+        <span class="hljs-keyword">if</span> (result.hasError()) {
+            execSpan.tag(<span class="hljs-string">"error.message"</span>, result.getError().getMessage());
         }
         execSpan.end();
 
-        // 记录重规划决策
+        <span class="hljs-comment">// 记录重规划决策</span>
         tracer.spanBuilder()
-                .name(&quot;agent.replanning&quot;)
-                .tag(&quot;agent.replanning.decision&quot;, determineDecision(result))
+                .name(<span class="hljs-string">"agent.replanning"</span>)
+                .tag(<span class="hljs-string">"agent.replanning.decision"</span>, determineDecision(result))
                 .start()
                 .end();
 
         stepSpan.end();
-        return stepSpan;
+        <span class="hljs-keyword">return</span> stepSpan;
     }
 
-    private String sanitizeForLogging(String input) {
-        // 脱敏：移除 API Key、Token 等敏感字段
-        return input.replaceAll(&quot;(api[Kk]ey=|Bearer\\s)[^&amp;\\s]+&quot;, &quot;$1***&quot;);
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">sanitizeForLogging</span><span class="hljs-params">(String input)</span> {
+        <span class="hljs-comment">// 脱敏：移除 API Key、Token 等敏感字段</span>
+        <span class="hljs-keyword">return</span> input.replaceAll(<span class="hljs-string">"(api[Kk]ey=|Bearer\\s)[^&amp;\\s]+"</span>, <span class="hljs-string">"$1***"</span>);
     }
 
-    private String determineDecision(ToolResult result) {
-        return result.hasError() ? &quot;RETRY&quot; : &quot;CONTINUE&quot;;
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">determineDecision</span><span class="hljs-params">(ToolResult result)</span> {
+        <span class="hljs-keyword">return</span> result.hasError() ? <span class="hljs-string">"RETRY"</span> : <span class="hljs-string">"CONTINUE"</span>;
     }
 }
-</code></pre></div>
-<h3>Agent 专用 Dashboard</h3>
+</code></pre></div><h3>Agent 专用 Dashboard</h3>
 <p>除标准的 Trace 查看外，Agent 可观测还需要专门的 Dashboard 面板：</p>
 <ul>
 <li><strong>执行图可视化</strong>：以树状图展示每一轮的 Thought → Action → Observation 链路，节点颜色表示成功（绿）/ 重试（黄）/ 失败（红）。</li>
@@ -1170,5 +1156,5 @@ public class AgentExecutionTracer {
 <h2>九、总结</h2>
 <p>本文构建了一个完整的 AI 应用评估和可观测性体系。三层次评估框架（离线/在线/Agent）覆盖了从开发到生产的全生命周期质量保障。LLM-as-a-Judge 提供了可扩展的自动化评估能力，Golden Dataset 回归测试确保每次变更不会引入退化。基于 OpenTelemetry + Micrometer + Prometheus + Grafana 的可观测性技术栈，让 AI 应用的每一步调用都透明可追踪。</p>
 <p>这套体系已在多个生产级 AI 应用中验证，能够有效降低模型升级风险、加速 Prompt 迭代周期、提升最终用户体验质量。</p>
-</div>
+</body></html></div>
 </article>

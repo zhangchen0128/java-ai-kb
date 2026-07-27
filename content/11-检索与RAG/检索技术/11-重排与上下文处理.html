@@ -1,12 +1,12 @@
 
-<article class="kb-entry" data-path="/11-检索与RAG/检索技术/11-重排与上下文处理">
+<article class="kb-entry" data-path="/11-检索与RAG">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=11">11-检索与RAG</a></div>
     <h1>重排与上下文处理：从Cross-Encoder到Lost in the Middle</h1>
-    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#reranking</span><span class="badge badge-tag">#cross-encoder</span><span class="badge badge-tag">#cohere</span><span class="badge badge-tag">#bge-reranker</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#reranking</span><span class="badge badge-tag">#cross-encoder</span><span class="badge badge-tag">#cohere</span><span class="badge badge-tag">#bge-reranker</span><span class="badge badge-tag">#context-processing</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://arxiv.org/abs/2310.06825" target="_blank" rel="noopener" class="source-link" title="BGE-Reranker 论文 — Cross-Encoder重排模型">BGE-Reranker 论文 — Cross-Encoder重排模型</a><a href="https://docs.cohere.com/reference/rerank" target="_blank" rel="noopener" class="source-link" title="Cohere Rerank API 文档">Cohere Rerank API 文档</a><a href="https://arxiv.org/abs/2307.03172" target="_blank" rel="noopener" class="source-link" title="Lost in the Middle — 上下文位置对LLM生成质量的影响">Lost in the Middle — 上下文位置对LLM生成质量的影响</a><a href="https://arxiv.org/abs/2310.02107" target="_blank" rel="noopener" class="source-link" title="LLMLingua — 上下文压缩技术">LLMLingua — 上下文压缩技术</a></small></div>
   </div>
-  <div class="entry-body"><h1>重排与上下文处理：从Cross-Encoder到Lost in the Middle</h1>
+  <div class="entry-body"><html><head></head><body><h1>重排与上下文处理：从Cross-Encoder到Lost in the Middle</h1>
 <h2>概述</h2>
 <p>混合检索返回的Top-20结果中，通常只有前5条真正相关。重排（Reranking）使用更精确的模型对检索结果重新打分，是提升RAG质量最具性价比的步骤。本文从Cross-Encoder与Bi-Encoder的架构差异出发，深入剖析重排的数学原理，覆盖Cohere Rerank、BGE-Reranker等主流模型，并探讨上下文压缩、去重、排序优化等关键处理策略。</p>
 <hr>
@@ -40,34 +40,31 @@
 <p><strong>关键数据</strong>：向量检索Top-20的MRR约0.75，经过Cross-Encoder重排后Top-5的MRR提升到0.90+。</p>
 <h3>1.2 为什么重排是性价比最高的步骤</h3>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>成本对比（单次查询）：
-- 检索 100万文档 × Embedding(768维): ~0.01 USD
-- 重排 Top-20 × Cross-Encoder: ~0.0001 USD
-- LLM生成 1K tokens: ~0.002 USD (GPT-4o-mini级)
+<span class="hljs-bullet">- </span>检索 100万文档 × Embedding(768维): ~0.01 USD
+<span class="hljs-bullet">- </span>重排 Top-20 × Cross-Encoder: ~0.0001 USD
+<span class="hljs-bullet">- </span>LLM生成 1K tokens: ~0.002 USD (GPT-4o-mini级)
 
 效果提升（MRR）：
-- 纯检索: 0.75
-- +重排: 0.90 (+20%)
-- +高级RAG模式: 0.93 (+3%)
-</code></pre></div>
-<p><strong>结论</strong>：在检索和LLM生成之间插入重排，成本增加可忽略，效果提升显著。</p>
+<span class="hljs-bullet">- </span>纯检索: 0.75
+<span class="hljs-bullet">- </span><span class="hljs-code">+重排: 0.90 (+</span>20%)
+<span class="hljs-bullet">- </span><span class="hljs-code">+高级RAG模式: 0.93 (+</span>3%)
+</code></pre></div><p><strong>结论</strong>：在检索和LLM生成之间插入重排，成本增加可忽略，效果提升显著。</p>
 <hr>
 <h2>二、Cross-Encoder vs Bi-Encoder 原理对比</h2>
 <h3>2.1 架构差异</h3>
 <p><strong>Bi-Encoder（检索阶段）</strong>：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Query  → Encoder → q_vec ─┐
-                            ├─ cosine_sim → score
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-keyword">Query</span>  → Encoder → q_vec ─┐
+                            ├─ cosine_sim → <span class="hljs-keyword">score</span>
 Doc    → Encoder → d_vec ─┘
-</code></pre></div>
-<ul>
+</code></pre></div><ul>
 <li>Query和Document<strong>独立编码</strong></li>
 <li>相似度计算：$cos(q, d) = \frac{q \cdot d}{|q||d|}$</li>
 <li>时间复杂度：编码 $O(n+m)$（n=query数, m=doc数）</li>
 <li>可以预先计算所有文档的向量并索引</li>
 </ul>
 <p><strong>Cross-Encoder（重排阶段）</strong>：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>[Query, Document] → Encoder → [CLS] → Linear → score
-</code></pre></div>
-<ul>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-selector-attr">[Query, Document]</span> → Encoder → <span class="hljs-selector-attr">[CLS]</span> → Linear → score
+</code></pre></div><ul>
 <li>Query和Document<strong>联合编码</strong></li>
 <li>通过Attention机制实现Query-Document的词级交互</li>
 <li>时间复杂度：$O(n \times m)$，每个query-document对都需要前向传播</li>
@@ -77,7 +74,7 @@ Doc    → Encoder → d_vec ─┘
 <ol>
 <li><strong>全注意力交叉</strong>：Query的每个Token与Document的每个Token计算Attention，捕获细粒度的语义匹配</li>
 <li><strong>联合语义理解</strong>：模型看到完整的<code>[CLS] query [SEP] document [SEP]</code>输入，而非分离的向量</li>
-<li><strong>可学习的交互模式</strong>：训练时学习到&quot;什么构成相关&quot;而不仅是&quot;语义相似&quot;</li>
+<li><strong>可学习的交互模式</strong>：训练时学习到"什么构成相关"而不仅是"语义相似"</li>
 </ol>
 <p><strong>数学本质</strong>：</p>
 <ul>
@@ -94,157 +91,155 @@ Doc    → Encoder → d_vec ─┘
 <hr>
 <h2>三、主流Reranker模型</h2>
 <h3>3.1 Cohere Rerank（API）</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.util.List;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> java.net.URI;
+<span class="hljs-keyword">import</span> java.net.http.HttpClient;
+<span class="hljs-keyword">import</span> java.net.http.HttpRequest;
+<span class="hljs-keyword">import</span> java.net.http.HttpResponse;
+<span class="hljs-keyword">import</span> java.util.List;
 
-public class CohereReranker {
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">CohereReranker</span> {
 
-    private final HttpClient client = HttpClient.newHttpClient();
-    private final String apiKey;
-    private final String apiUrl = &quot;https://api.cohere.com/v2/rerank&quot;;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">HttpClient</span> <span class="hljs-variable">client</span> <span class="hljs-operator">=</span> HttpClient.newHttpClient();
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> String apiKey;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">String</span> <span class="hljs-variable">apiUrl</span> <span class="hljs-operator">=</span> <span class="hljs-string">"https://api.cohere.com/v2/rerank"</span>;
 
-    public CohereReranker(String apiKey) {
-        this.apiKey = apiKey;
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">CohereReranker</span><span class="hljs-params">(String apiKey)</span> {
+        <span class="hljs-built_in">this</span>.apiKey = apiKey;
     }
 
-    public record RerankResult(int index, double relevanceScore,
-                                String document) {}
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">RerankResult</span><span class="hljs-params">(<span class="hljs-type">int</span> index, <span class="hljs-type">double</span> relevanceScore,
+                                String document)</span> {}
 
-    /**
+    <span class="hljs-comment">/**
      * Cohere Rerank v2 API 调用
-     * @param query 查询文本
-     * @param documents 待重排的文档列表（Top-20/50的检索结果）
-     * @param topN 返回前N个结果
-     * @param model 模型名：&quot;rerank-v3.5&quot; | &quot;rerank-multilingual-v3.0&quot;
-     */
-    public List&lt;RerankResult&gt; rerank(String query, List&lt;String&gt; documents,
-                                      int topN, String model) throws Exception {
-        var jsonBody = &quot;&quot;&quot;
+     * <span class="hljs-doctag">@param</span> query 查询文本
+     * <span class="hljs-doctag">@param</span> documents 待重排的文档列表（Top-20/50的检索结果）
+     * <span class="hljs-doctag">@param</span> topN 返回前N个结果
+     * <span class="hljs-doctag">@param</span> model 模型名："rerank-v3.5" | "rerank-multilingual-v3.0"
+     */</span>
+    <span class="hljs-keyword">public</span> List&lt;RerankResult&gt; <span class="hljs-title function_">rerank</span><span class="hljs-params">(String query, List&lt;String&gt; documents,
+                                      <span class="hljs-type">int</span> topN, String model)</span> <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-type">var</span> <span class="hljs-variable">jsonBody</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
             {
-                &quot;model&quot;: &quot;%s&quot;,
-                &quot;query&quot;: &quot;%s&quot;,
-                &quot;documents&quot;: %s,
-                &quot;top_n&quot;: %d,
-                &quot;return_documents&quot;: true
+                "model": "%s",
+                "query": "%s",
+                "documents": %s,
+                "top_n": %d,
+                "return_documents": true
             }
-            &quot;&quot;&quot;.formatted(model, escapeJson(query), toJsonArray(documents), topN);
+            """</span>.formatted(model, escapeJson(query), toJsonArray(documents), topN);
 
-        var request = HttpRequest.newBuilder()
+        <span class="hljs-type">var</span> <span class="hljs-variable">request</span> <span class="hljs-operator">=</span> HttpRequest.newBuilder()
             .uri(URI.create(apiUrl))
-            .header(&quot;Content-Type&quot;, &quot;application/json&quot;)
-            .header(&quot;Authorization&quot;, &quot;Bearer &quot; + apiKey)
-            .header(&quot;Accept&quot;, &quot;application/json&quot;)
+            .header(<span class="hljs-string">"Content-Type"</span>, <span class="hljs-string">"application/json"</span>)
+            .header(<span class="hljs-string">"Authorization"</span>, <span class="hljs-string">"Bearer "</span> + apiKey)
+            .header(<span class="hljs-string">"Accept"</span>, <span class="hljs-string">"application/json"</span>)
             .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
             .build();
 
-        var response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        <span class="hljs-type">var</span> <span class="hljs-variable">response</span> <span class="hljs-operator">=</span> client.send(request, HttpResponse.BodyHandlers.ofString());
 
-        if (response.statusCode() != 200) {
-            throw new RuntimeException(&quot;Cohere Rerank API error: &quot; + response.body());
+        <span class="hljs-keyword">if</span> (response.statusCode() != <span class="hljs-number">200</span>) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RuntimeException</span>(<span class="hljs-string">"Cohere Rerank API error: "</span> + response.body());
         }
 
-        return parseResponse(response.body());
+        <span class="hljs-keyword">return</span> parseResponse(response.body());
     }
 
-    private List&lt;RerankResult&gt; parseResponse(String json) throws Exception {
-        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-        var root = mapper.readTree(json);
-        var results = root.get(&quot;results&quot;);
+    <span class="hljs-keyword">private</span> List&lt;RerankResult&gt; <span class="hljs-title function_">parseResponse</span><span class="hljs-params">(String json)</span> <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-type">var</span> <span class="hljs-variable">mapper</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">com</span>.fasterxml.jackson.databind.ObjectMapper();
+        <span class="hljs-type">var</span> <span class="hljs-variable">root</span> <span class="hljs-operator">=</span> mapper.readTree(json);
+        <span class="hljs-type">var</span> <span class="hljs-variable">results</span> <span class="hljs-operator">=</span> root.get(<span class="hljs-string">"results"</span>);
 
-        var list = new java.util.ArrayList&lt;RerankResult&gt;();
-        for (var result : results) {
-            list.add(new RerankResult(
-                result.get(&quot;index&quot;).asInt(),
-                result.get(&quot;relevance_score&quot;).asDouble(),
-                result.has(&quot;document&quot;) ? result.get(&quot;document&quot;).get(&quot;text&quot;).asText() : &quot;&quot;
+        <span class="hljs-type">var</span> <span class="hljs-variable">list</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">java</span>.util.ArrayList&lt;RerankResult&gt;();
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> result : results) {
+            list.add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">RerankResult</span>(
+                result.get(<span class="hljs-string">"index"</span>).asInt(),
+                result.get(<span class="hljs-string">"relevance_score"</span>).asDouble(),
+                result.has(<span class="hljs-string">"document"</span>) ? result.get(<span class="hljs-string">"document"</span>).get(<span class="hljs-string">"text"</span>).asText() : <span class="hljs-string">""</span>
             ));
         }
-        return list;
+        <span class="hljs-keyword">return</span> list;
     }
 
-    private String escapeJson(String text) {
-        return text.replace(&quot;\\&quot;, &quot;\\\\&quot;).replace(&quot;\&quot;&quot;, &quot;\\\&quot;&quot;)
-                   .replace(&quot;\n&quot;, &quot;\\n&quot;).replace(&quot;\r&quot;, &quot;\\r&quot;);
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">escapeJson</span><span class="hljs-params">(String text)</span> {
+        <span class="hljs-keyword">return</span> text.replace(<span class="hljs-string">"\\"</span>, <span class="hljs-string">"\\\\"</span>).replace(<span class="hljs-string">"\""</span>, <span class="hljs-string">"\\\""</span>)
+                   .replace(<span class="hljs-string">"\n"</span>, <span class="hljs-string">"\\n"</span>).replace(<span class="hljs-string">"\r"</span>, <span class="hljs-string">"\\r"</span>);
     }
 
-    private String toJsonArray(List&lt;String&gt; docs) {
-        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-        try {
-            return mapper.writeValueAsString(docs);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">toJsonArray</span><span class="hljs-params">(List&lt;String&gt; docs)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">mapper</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">com</span>.fasterxml.jackson.databind.ObjectMapper();
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-keyword">return</span> mapper.writeValueAsString(docs);
+        } <span class="hljs-keyword">catch</span> (Exception e) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RuntimeException</span>(e);
         }
     }
 }
-</code></pre></div>
-<p><strong>Cohere Rerank性能数据</strong>：</p>
+</code></pre></div><p><strong>Cohere Rerank性能数据</strong>：</p>
 <ul>
 <li>rerank-v3.5: 英文最佳，延迟~100ms/20docs</li>
 <li>rerank-multilingual-v3.0: 多语言（含中文），延迟~150ms/20docs</li>
 <li>定价：$2/1M searches（约$0.00004/次，20个文档）</li>
 </ul>
 <h3>3.2 BGE-Reranker-v2-m3（本地部署）</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">/**
  * BGE-Reranker 本地部署客户端
  * 使用HuggingFace TEI (Text Embeddings Inference) 服务
  * Docker: docker run -p 8080:80 ghcr.io/huggingface/text-embeddings-inference:latest
  *          --model-id BAAI/bge-reranker-v2-m3
- */
-public class BgeRerankerClient {
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">BgeRerankerClient</span> {
 
-    private final HttpClient client = HttpClient.newHttpClient();
-    private final String teiUrl; // http://localhost:8080
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">HttpClient</span> <span class="hljs-variable">client</span> <span class="hljs-operator">=</span> HttpClient.newHttpClient();
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> String teiUrl; <span class="hljs-comment">// http://localhost:8080</span>
 
-    public BgeRerankerClient(String teiUrl) {
-        this.teiUrl = teiUrl;
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">BgeRerankerClient</span><span class="hljs-params">(String teiUrl)</span> {
+        <span class="hljs-built_in">this</span>.teiUrl = teiUrl;
     }
 
-    public record RerankResult(String text, double score, int index) {}
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">RerankResult</span><span class="hljs-params">(String text, <span class="hljs-type">double</span> score, <span class="hljs-type">int</span> index)</span> {}
 
-    public List&lt;RerankResult&gt; rerank(String query, List&lt;String&gt; documents) throws Exception {
-        var jsonBody = &quot;&quot;&quot;
+    <span class="hljs-keyword">public</span> List&lt;RerankResult&gt; <span class="hljs-title function_">rerank</span><span class="hljs-params">(String query, List&lt;String&gt; documents)</span> <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-type">var</span> <span class="hljs-variable">jsonBody</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
             {
-                &quot;query&quot;: &quot;%s&quot;,
-                &quot;texts&quot;: %s,
-                &quot;truncate&quot;: true,
-                &quot;truncation_direction&quot;: &quot;Left&quot;
+                "query": "%s",
+                "texts": %s,
+                "truncate": true,
+                "truncation_direction": "Left"
             }
-            &quot;&quot;&quot;.formatted(escapeJson(query), toJsonArray(documents));
+            """</span>.formatted(escapeJson(query), toJsonArray(documents));
 
-        // 如果返回文本，使用 /rerank；只返回分数用 /score
-        var request = HttpRequest.newBuilder()
-            .uri(URI.create(teiUrl + &quot;/rerank&quot;))
-            .header(&quot;Content-Type&quot;, &quot;application/json&quot;)
+        <span class="hljs-comment">// 如果返回文本，使用 /rerank；只返回分数用 /score</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">request</span> <span class="hljs-operator">=</span> HttpRequest.newBuilder()
+            .uri(URI.create(teiUrl + <span class="hljs-string">"/rerank"</span>))
+            .header(<span class="hljs-string">"Content-Type"</span>, <span class="hljs-string">"application/json"</span>)
             .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
             .build();
 
-        var response = client.send(request, HttpResponse.BodyHandlers.ofString());
+        <span class="hljs-type">var</span> <span class="hljs-variable">response</span> <span class="hljs-operator">=</span> client.send(request, HttpResponse.BodyHandlers.ofString());
 
-        var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-        var results = mapper.readTree(response.body());
+        <span class="hljs-type">var</span> <span class="hljs-variable">mapper</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">com</span>.fasterxml.jackson.databind.ObjectMapper();
+        <span class="hljs-type">var</span> <span class="hljs-variable">results</span> <span class="hljs-operator">=</span> mapper.readTree(response.body());
 
-        var list = new java.util.ArrayList&lt;RerankResult&gt;();
-        for (var r : results) {
-            list.add(new RerankResult(
-                r.get(&quot;text&quot;).asText(),
-                r.get(&quot;score&quot;).asDouble(),
-                r.get(&quot;index&quot;).asInt()
+        <span class="hljs-type">var</span> <span class="hljs-variable">list</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">java</span>.util.ArrayList&lt;RerankResult&gt;();
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> r : results) {
+            list.add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">RerankResult</span>(
+                r.get(<span class="hljs-string">"text"</span>).asText(),
+                r.get(<span class="hljs-string">"score"</span>).asDouble(),
+                r.get(<span class="hljs-string">"index"</span>).asInt()
             ));
         }
 
-        // 按score降序排列
+        <span class="hljs-comment">// 按score降序排列</span>
         list.sort((a, b) -&gt; Double.compare(b.score(), a.score()));
-        return list;
+        <span class="hljs-keyword">return</span> list;
     }
 
-    private String escapeJson(String s) { /* 同上 */ return s; }
-    private String toJsonArray(List&lt;String&gt; docs) { /* 同上 */ return &quot;[]&quot;; }
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">escapeJson</span><span class="hljs-params">(String s)</span> { <span class="hljs-comment">/* 同上 */</span> <span class="hljs-keyword">return</span> s; }
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">toJsonArray</span><span class="hljs-params">(List&lt;String&gt; docs)</span> { <span class="hljs-comment">/* 同上 */</span> <span class="hljs-keyword">return</span> <span class="hljs-string">"[]"</span>; }
 }
-</code></pre></div>
-<p><strong>BGE-Reranker-v2-m3 性能数据</strong>：</p>
+</code></pre></div><p><strong>BGE-Reranker-v2-m3 性能数据</strong>：</p>
 <ul>
 <li>参数量：568M</li>
 <li>延迟：<del>50ms/20docs（GPU）、</del>300ms/20docs（CPU）</li>
@@ -288,476 +283,468 @@ public class BgeRerankerClient {
 </tbody></table>
 <hr>
 <h2>四、完整重排流程</h2>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class RerankingPipeline {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">RerankingPipeline</span> {
 
-    private final CohereReranker cohereReranker;
-    private final BgeRerankerClient bgeClient;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> CohereReranker cohereReranker;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> BgeRerankerClient bgeClient;
 
-    // 双层层叠Reranker（可选）：先用快速Reranker缩减到20，再用精确Reranker
-    public record RerankedChunk(
+    <span class="hljs-comment">// 双层层叠Reranker（可选）：先用快速Reranker缩减到20，再用精确Reranker</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">RerankedChunk</span><span class="hljs-params">(
         String chunkId,
         String content,
-        double relevanceScore,
-        int originalRank,       // 在检索结果中的排名
-        int rerankedRank,       // 重排后的排名
-        double originalScore,   // 原始检索分数
+        <span class="hljs-type">double</span> relevanceScore,
+        <span class="hljs-type">int</span> originalRank,       // 在检索结果中的排名
+        <span class="hljs-type">int</span> rerankedRank,       // 重排后的排名
+        <span class="hljs-type">double</span> originalScore,   // 原始检索分数
         Map&lt;String, Object&gt; metadata
-    ) {}
+    )</span> {}
 
-    /**
+    <span class="hljs-comment">/**
      * 标准重排流程：检索Top-50 → Reranker打分 → 取Top-10
-     */
-    public List&lt;RerankedChunk&gt; rerankPipeline(
+     */</span>
+    <span class="hljs-keyword">public</span> List&lt;RerankedChunk&gt; <span class="hljs-title function_">rerankPipeline</span><span class="hljs-params">(
             String query,
             List&lt;HybridSearchService.RankedResult&gt; retrievalResults,
-            int rerankTopN) {
+            <span class="hljs-type">int</span> rerankTopN)</span> {
 
-        // 1. 提取前50条的内容（50是经验值：平衡延迟和召回）
-        var topNResults = retrievalResults.stream()
-            .limit(50)
+        <span class="hljs-comment">// 1. 提取前50条的内容（50是经验值：平衡延迟和召回）</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">topNResults</span> <span class="hljs-operator">=</span> retrievalResults.stream()
+            .limit(<span class="hljs-number">50</span>)
             .toList();
 
-        var documents = topNResults.stream()
+        <span class="hljs-type">var</span> <span class="hljs-variable">documents</span> <span class="hljs-operator">=</span> topNResults.stream()
             .map(r -&gt; r.content())
             .toList();
 
-        // 2. 调用Reranker
+        <span class="hljs-comment">// 2. 调用Reranker</span>
         List&lt;CohereReranker.RerankResult&gt; rerankResults;
-        try {
-            // 优先使用Cohere（多语言支持好）
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-comment">// 优先使用Cohere（多语言支持好）</span>
             rerankResults = cohereReranker.rerank(
-                query, documents, rerankTopN, &quot;rerank-multilingual-v3.0&quot;
+                query, documents, rerankTopN, <span class="hljs-string">"rerank-multilingual-v3.0"</span>
             );
-        } catch (Exception e) {
-            // Fallback到本地BGE-Reranker
-            try {
-                var bgeResults = bgeClient.rerank(query, documents);
+        } <span class="hljs-keyword">catch</span> (Exception e) {
+            <span class="hljs-comment">// Fallback到本地BGE-Reranker</span>
+            <span class="hljs-keyword">try</span> {
+                <span class="hljs-type">var</span> <span class="hljs-variable">bgeResults</span> <span class="hljs-operator">=</span> bgeClient.rerank(query, documents);
                 rerankResults = bgeResults.stream()
-                    .map(r -&gt; new CohereReranker.RerankResult(r.index(), r.score(), r.text()))
+                    .map(r -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">CohereReranker</span>.RerankResult(r.index(), r.score(), r.text()))
                     .toList();
-            } catch (Exception ex) {
-                // 最终Fallback：信任原始检索排序
-                return topNResults.stream()
+            } <span class="hljs-keyword">catch</span> (Exception ex) {
+                <span class="hljs-comment">// 最终Fallback：信任原始检索排序</span>
+                <span class="hljs-keyword">return</span> topNResults.stream()
                     .limit(rerankTopN)
-                    .map(r -&gt; new RerankedChunk(
+                    .map(r -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">RerankedChunk</span>(
                         r.chunkId(), getContent(r.chunkId()),
-                        1.0 - (double) topNResults.indexOf(r) / topNResults.size(),
-                        topNResults.indexOf(r) + 1, topNResults.indexOf(r) + 1,
+                        <span class="hljs-number">1.0</span> - (<span class="hljs-type">double</span>) topNResults.indexOf(r) / topNResults.size(),
+                        topNResults.indexOf(r) + <span class="hljs-number">1</span>, topNResults.indexOf(r) + <span class="hljs-number">1</span>,
                         r.score(), Map.of()
                     ))
                     .toList();
             }
         }
 
-        // 3. 构建带重排分数和原始检索分数的结果
-        var reranked = new java.util.ArrayList&lt;RerankedChunk&gt;();
-        for (int i = 0; i &lt; rerankResults.size(); i++) {
-            var rr = rerankResults.get(i);
-            var original = topNResults.get(rr.index());
-            reranked.add(new RerankedChunk(
+        <span class="hljs-comment">// 3. 构建带重排分数和原始检索分数的结果</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">reranked</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">java</span>.util.ArrayList&lt;RerankedChunk&gt;();
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; rerankResults.size(); i++) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">rr</span> <span class="hljs-operator">=</span> rerankResults.get(i);
+            <span class="hljs-type">var</span> <span class="hljs-variable">original</span> <span class="hljs-operator">=</span> topNResults.get(rr.index());
+            reranked.add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">RerankedChunk</span>(
                 original.chunkId(),
                 rr.document(),
                 rr.relevanceScore(),
-                rr.index() + 1,
-                i + 1,
+                rr.index() + <span class="hljs-number">1</span>,
+                i + <span class="hljs-number">1</span>,
                 original.score(),
                 Map.of()
             ));
         }
 
-        return reranked;
+        <span class="hljs-keyword">return</span> reranked;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 相关性阈值过滤：Reranker分数 &lt; threshold 的结果丢弃
      * 防止不相关内容进入LLM上下文窗口
-     */
-    public List&lt;RerankedChunk&gt; filterByThreshold(
-            List&lt;RerankedChunk&gt; results, double threshold) {
-        return results.stream()
+     */</span>
+    <span class="hljs-keyword">public</span> List&lt;RerankedChunk&gt; <span class="hljs-title function_">filterByThreshold</span><span class="hljs-params">(
+            List&lt;RerankedChunk&gt; results, <span class="hljs-type">double</span> threshold)</span> {
+        <span class="hljs-keyword">return</span> results.stream()
             .filter(r -&gt; r.relevanceScore() &gt;= threshold)
             .toList();
     }
 
-    private String getContent(String chunkId) { return &quot;&quot;; }
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">getContent</span><span class="hljs-params">(String chunkId)</span> { <span class="hljs-keyword">return</span> <span class="hljs-string">""</span>; }
 }
-</code></pre></div>
-<h3>4.1 重排的延迟优化</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+</code></pre></div><h3>4.1 重排的延迟优化</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">/**
  * 并行重排：将20个文档分为多组并行调用Reranker
  * 适用于本地Cross-Encoder模型（独立推理，非batch模式）
- */
-public class ParallelReranker {
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ParallelReranker</span> {
 
-    private final BgeRerankerClient bgeClient;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> BgeRerankerClient bgeClient;
 
-    public List&lt;RerankedChunk&gt; parallelRerank(
-            String query, List&lt;String&gt; documents, int batchSize) {
+    <span class="hljs-keyword">public</span> List&lt;RerankedChunk&gt; <span class="hljs-title function_">parallelRerank</span><span class="hljs-params">(
+            String query, List&lt;String&gt; documents, <span class="hljs-type">int</span> batchSize)</span> {
 
-        var batches = new java.util.ArrayList&lt;List&lt;String&gt;&gt;();
-        for (int i = 0; i &lt; documents.size(); i += batchSize) {
+        <span class="hljs-type">var</span> <span class="hljs-variable">batches</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">java</span>.util.ArrayList&lt;List&lt;String&gt;&gt;();
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; documents.size(); i += batchSize) {
             batches.add(documents.subList(i,
                 Math.min(i + batchSize, documents.size())));
         }
 
-        // 使用Virtual Threads并行处理
-        var results = new java.util.concurrent.ConcurrentLinkedQueue&lt;RerankedChunk&gt;();
+        <span class="hljs-comment">// 使用Virtual Threads并行处理</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">results</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">java</span>.util.concurrent.ConcurrentLinkedQueue&lt;RerankedChunk&gt;();
 
-        try (var executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
-            var futures = batches.stream()
+        <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">executor</span> <span class="hljs-operator">=</span> java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">futures</span> <span class="hljs-operator">=</span> batches.stream()
                 .map(batch -&gt; executor.submit(() -&gt; {
-                    try {
-                        var batchResults = bgeClient.rerank(query, batch);
-                        return batchResults;
-                    } catch (Exception e) {
-                        return List.&lt;BgeRerankerClient.RerankResult&gt;of();
+                    <span class="hljs-keyword">try</span> {
+                        <span class="hljs-type">var</span> <span class="hljs-variable">batchResults</span> <span class="hljs-operator">=</span> bgeClient.rerank(query, batch);
+                        <span class="hljs-keyword">return</span> batchResults;
+                    } <span class="hljs-keyword">catch</span> (Exception e) {
+                        <span class="hljs-keyword">return</span> List.&lt;BgeRerankerClient.RerankResult&gt;of();
                     }
                 }))
                 .toList();
 
-            for (var future : futures) {
-                try {
-                    for (var r : future.get(10, java.util.concurrent.TimeUnit.SECONDS)) {
-                        results.add(new RerankedChunk(
-                            &quot;&quot;, r.text(), r.score(), r.index(), r.index(), 0, Map.of()
+            <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> future : futures) {
+                <span class="hljs-keyword">try</span> {
+                    <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> r : future.get(<span class="hljs-number">10</span>, java.util.concurrent.TimeUnit.SECONDS)) {
+                        results.add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">RerankedChunk</span>(
+                            <span class="hljs-string">""</span>, r.text(), r.score(), r.index(), r.index(), <span class="hljs-number">0</span>, Map.of()
                         ));
                     }
-                } catch (Exception e) {
-                    // 超时或失败，跳过该批
+                } <span class="hljs-keyword">catch</span> (Exception e) {
+                    <span class="hljs-comment">// 超时或失败，跳过该批</span>
                 }
             }
         }
 
-        return results.stream()
+        <span class="hljs-keyword">return</span> results.stream()
             .sorted((a, b) -&gt; Double.compare(b.relevanceScore(), a.relevanceScore()))
             .toList();
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>五、上下文处理策略</h2>
 <h3>5.1 Lost in the Middle 现象</h3>
 <p><strong>核心发现（Liu et al., 2023）</strong>：LLM在生成长上下文答案时，对开头和结尾的信息利用最好，对中间部分的信息利用最差。</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>LLM信息利用率曲线：
   ↑
-100%│  ████
+<span class="hljs-number">100</span><span class="hljs-comment">%│  ████</span>
     │  █  █
- 85%│  █  █  █
+ <span class="hljs-number">85</span><span class="hljs-comment">%│  █  █  █</span>
     │  █  █  █  █
- 60%│  █  █  █  █  █████
+ <span class="hljs-number">60</span><span class="hljs-comment">%│  █  █  █  █  █████</span>
     │  █  █  █  █  █  █  ████
     └──┴──┴──┴──┴──┴──┴──┴──┴──→ 上下文位置
      开头                   结尾
-</code></pre></div>
-<p><strong>应对策略</strong>：将最重要的检索结果放在Prompt的开头和结尾。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+</code></pre></div><p><strong>应对策略</strong>：将最重要的检索结果放在Prompt的开头和结尾。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">/**
  * 上下文排序优化器：对抗 Lost in the Middle
- */
-public class ContextArranger {
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ContextArranger</span> {
 
-    /**
+    <span class="hljs-comment">/**
      * 最佳排列策略：
      * - 最高相关度的放在开头（模型最先看到）
      * - 次高相关度的放在结尾（模型最后看到，短期记忆最强）
      * - 中等相关度的放在中间
      *
      * 排列模式：[Best, Good4, Good5, ..., Good2, Good3, Better]
-     */
-    public List&lt;RerankedChunk&gt; arrangeForLlm(List&lt;RerankedChunk&gt; chunks) {
-        if (chunks.size() &lt;= 2) return chunks;
+     */</span>
+    <span class="hljs-keyword">public</span> List&lt;RerankedChunk&gt; <span class="hljs-title function_">arrangeForLlm</span><span class="hljs-params">(List&lt;RerankedChunk&gt; chunks)</span> {
+        <span class="hljs-keyword">if</span> (chunks.size() &lt;= <span class="hljs-number">2</span>) <span class="hljs-keyword">return</span> chunks;
 
-        var sorted = chunks.stream()
+        <span class="hljs-type">var</span> <span class="hljs-variable">sorted</span> <span class="hljs-operator">=</span> chunks.stream()
             .sorted((a, b) -&gt; Double.compare(b.relevanceScore(), a.relevanceScore()))
             .toList();
 
-        var arranged = new java.util.ArrayList&lt;RerankedChunk&gt;();
+        <span class="hljs-type">var</span> <span class="hljs-variable">arranged</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">java</span>.util.ArrayList&lt;RerankedChunk&gt;();
 
-        // 最重要的放第一个
-        arranged.add(sorted.get(0));
+        <span class="hljs-comment">// 最重要的放第一个</span>
+        arranged.add(sorted.get(<span class="hljs-number">0</span>));
 
-        // 中等相关的顺序不变
-        for (int i = sorted.size() - 1; i &gt;= 2; i--) {
+        <span class="hljs-comment">// 中等相关的顺序不变</span>
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> sorted.size() - <span class="hljs-number">1</span>; i &gt;= <span class="hljs-number">2</span>; i--) {
             arranged.add(sorted.get(i));
         }
 
-        // 第二重要的放最后一个
-        if (sorted.size() &gt;= 2) {
-            arranged.add(sorted.get(1));
+        <span class="hljs-comment">// 第二重要的放最后一个</span>
+        <span class="hljs-keyword">if</span> (sorted.size() &gt;= <span class="hljs-number">2</span>) {
+            arranged.add(sorted.get(<span class="hljs-number">1</span>));
         }
 
-        return arranged;
+        <span class="hljs-keyword">return</span> arranged;
     }
 }
-</code></pre></div>
-<h3>5.2 上下文压缩（LLMLingua思想）</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+</code></pre></div><h3>5.2 上下文压缩（LLMLingua思想）</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">/**
  * 轻量级上下文压缩器
  * 基于提示词感知的token级别压缩
  * 不依赖LLM，使用简单的启发式规则
- */
-public class LightweightContextCompressor {
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">LightweightContextCompressor</span> {
 
-    private final int maxContextTokens;  // 上下文窗口预算
-    private final double compressionRatio; // 目标压缩率
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">int</span> maxContextTokens;  <span class="hljs-comment">// 上下文窗口预算</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">double</span> compressionRatio; <span class="hljs-comment">// 目标压缩率</span>
 
-    public LightweightContextCompressor(int maxContextTokens, double compressionRatio) {
-        this.maxContextTokens = maxContextTokens;
-        this.compressionRatio = compressionRatio;
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">LightweightContextCompressor</span><span class="hljs-params">(<span class="hljs-type">int</span> maxContextTokens, <span class="hljs-type">double</span> compressionRatio)</span> {
+        <span class="hljs-built_in">this</span>.maxContextTokens = maxContextTokens;
+        <span class="hljs-built_in">this</span>.compressionRatio = compressionRatio;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 压缩上下文：在保留关键信息的前提下减少token数
      * 策略：
      * 1. 去掉重复句子
      * 2. 合并相似内容
      * 3. 保留高信息密度句子
-     */
-    public String compress(List&lt;RerankedChunk&gt; chunks, String query) {
-        var totalTokens = chunks.stream().mapToInt(c -&gt; c.content().length() / 2).sum();
-        if (totalTokens &lt;= maxContextTokens) {
-            // 不需要压缩
-            return buildContext(chunks);
+     */</span>
+    <span class="hljs-keyword">public</span> String <span class="hljs-title function_">compress</span><span class="hljs-params">(List&lt;RerankedChunk&gt; chunks, String query)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">totalTokens</span> <span class="hljs-operator">=</span> chunks.stream().mapToInt(c -&gt; c.content().length() / <span class="hljs-number">2</span>).sum();
+        <span class="hljs-keyword">if</span> (totalTokens &lt;= maxContextTokens) {
+            <span class="hljs-comment">// 不需要压缩</span>
+            <span class="hljs-keyword">return</span> buildContext(chunks);
         }
 
-        // 按相关性权重压缩：高相关chunk保留更多内容，低相关chunk压缩更多
-        var builder = new StringBuilder();
-        var budget = maxContextTokens;
+        <span class="hljs-comment">// 按相关性权重压缩：高相关chunk保留更多内容，低相关chunk压缩更多</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">builder</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>();
+        <span class="hljs-type">var</span> <span class="hljs-variable">budget</span> <span class="hljs-operator">=</span> maxContextTokens;
 
-        for (var chunk : chunks) {
-            var estimatedTokens = chunk.content().length() / 2;
-            var allocatedTokens = (int) (budget * chunk.relevanceScore()
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> chunk : chunks) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">estimatedTokens</span> <span class="hljs-operator">=</span> chunk.content().length() / <span class="hljs-number">2</span>;
+            <span class="hljs-type">var</span> <span class="hljs-variable">allocatedTokens</span> <span class="hljs-operator">=</span> (<span class="hljs-type">int</span>) (budget * chunk.relevanceScore()
                 / chunks.stream().mapToDouble(RerankedChunk::relevanceScore).sum());
 
-            if (allocatedTokens &gt;= estimatedTokens) {
-                // 预算充足，保留完整内容
-                builder.append(chunk.content()).append(&quot;\n\n&quot;);
+            <span class="hljs-keyword">if</span> (allocatedTokens &gt;= estimatedTokens) {
+                <span class="hljs-comment">// 预算充足，保留完整内容</span>
+                builder.append(chunk.content()).append(<span class="hljs-string">"\n\n"</span>);
                 budget -= estimatedTokens;
-            } else {
-                // 需要压缩：提取关键句
-                var compressed = extractKeySentences(chunk.content(), query, allocatedTokens);
-                builder.append(compressed).append(&quot;\n\n&quot;);
+            } <span class="hljs-keyword">else</span> {
+                <span class="hljs-comment">// 需要压缩：提取关键句</span>
+                <span class="hljs-type">var</span> <span class="hljs-variable">compressed</span> <span class="hljs-operator">=</span> extractKeySentences(chunk.content(), query, allocatedTokens);
+                builder.append(compressed).append(<span class="hljs-string">"\n\n"</span>);
                 budget -= allocatedTokens;
             }
         }
 
-        return builder.toString();
+        <span class="hljs-keyword">return</span> builder.toString();
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 提取关键句子：基于与Query的词汇重叠
      * 更精确的做法是使用Cross-Encoder计算句子级相关性
-     */
-    private String extractKeySentences(String text, String query, int maxTokens) {
-        var queryWords = new java.util.HashSet&lt;&gt;(
-            java.util.Arrays.asList(query.toLowerCase().split(&quot;\\s+&quot;))
+     */</span>
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">extractKeySentences</span><span class="hljs-params">(String text, String query, <span class="hljs-type">int</span> maxTokens)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">queryWords</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">java</span>.util.HashSet&lt;&gt;(
+            java.util.Arrays.asList(query.toLowerCase().split(<span class="hljs-string">"\\s+"</span>))
         );
 
-        // 按句子拆分
-        var sentences = text.split(&quot;(?&lt;=[。！？.!?])&quot;);
-        record ScoredSentence(String text, double score) {}
+        <span class="hljs-comment">// 按句子拆分</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">sentences</span> <span class="hljs-operator">=</span> text.split(<span class="hljs-string">"(?&lt;=[。！？.!?])"</span>);
+        <span class="hljs-keyword">record</span> <span class="hljs-title class_">ScoredSentence</span><span class="hljs-params">(String text, <span class="hljs-type">double</span> score)</span> {}
 
-        var scored = java.util.Arrays.stream(sentences)
+        <span class="hljs-type">var</span> <span class="hljs-variable">scored</span> <span class="hljs-operator">=</span> java.util.Arrays.stream(sentences)
             .map(s -&gt; {
-                var words = s.toLowerCase().split(&quot;\\s+&quot;);
-                var overlap = java.util.Arrays.stream(words)
+                <span class="hljs-type">var</span> <span class="hljs-variable">words</span> <span class="hljs-operator">=</span> s.toLowerCase().split(<span class="hljs-string">"\\s+"</span>);
+                <span class="hljs-type">var</span> <span class="hljs-variable">overlap</span> <span class="hljs-operator">=</span> java.util.Arrays.stream(words)
                     .filter(queryWords::contains)
                     .count();
-                var density = words.length &gt; 0 ? (double) overlap / words.length : 0;
-                return new ScoredSentence(s.trim(), density);
+                <span class="hljs-type">var</span> <span class="hljs-variable">density</span> <span class="hljs-operator">=</span> words.length &gt; <span class="hljs-number">0</span> ? (<span class="hljs-type">double</span>) overlap / words.length : <span class="hljs-number">0</span>;
+                <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ScoredSentence</span>(s.trim(), density);
             })
             .sorted((a, b) -&gt; Double.compare(b.score(), a.score()))
             .toList();
 
-        var result = new StringBuilder();
-        int tokenCount = 0;
-        for (var s : scored) {
-            var estTokens = s.text().length() / 2;
-            if (tokenCount + estTokens &gt; maxTokens) break;
+        <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>();
+        <span class="hljs-type">int</span> <span class="hljs-variable">tokenCount</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> s : scored) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">estTokens</span> <span class="hljs-operator">=</span> s.text().length() / <span class="hljs-number">2</span>;
+            <span class="hljs-keyword">if</span> (tokenCount + estTokens &gt; maxTokens) <span class="hljs-keyword">break</span>;
             result.append(s.text());
             tokenCount += estTokens;
         }
 
-        return result.toString();
+        <span class="hljs-keyword">return</span> result.toString();
     }
 
-    private String buildContext(List&lt;RerankedChunk&gt; chunks) {
-        return chunks.stream()
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">buildContext</span><span class="hljs-params">(List&lt;RerankedChunk&gt; chunks)</span> {
+        <span class="hljs-keyword">return</span> chunks.stream()
             .map(RerankedChunk::content)
-            .collect(java.util.stream.Collectors.joining(&quot;\n\n&quot;));
+            .collect(java.util.stream.Collectors.joining(<span class="hljs-string">"\n\n"</span>));
     }
 }
-</code></pre></div>
-<h3>5.3 去重处理</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+</code></pre></div><h3>5.3 去重处理</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">/**
  * 检索结果去重
- */
-public class ContextDeduplicator {
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ContextDeduplicator</span> {
 
-    /**
+    <span class="hljs-comment">/**
      * 基于Jaccard相似度去重
      * 当两个chunk的Jaccard相似度超过阈值时，保留相关性更高的
-     */
-    public List&lt;RerankedChunk&gt; deduplicate(
-            List&lt;RerankedChunk&gt; chunks, double threshold) {
-        var result = new java.util.ArrayList&lt;RerankedChunk&gt;();
+     */</span>
+    <span class="hljs-keyword">public</span> List&lt;RerankedChunk&gt; <span class="hljs-title function_">deduplicate</span><span class="hljs-params">(
+            List&lt;RerankedChunk&gt; chunks, <span class="hljs-type">double</span> threshold)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">java</span>.util.ArrayList&lt;RerankedChunk&gt;();
 
-        for (var chunk : chunks) {
-            var isDuplicate = false;
-            for (var existing : result) {
-                var jaccard = jaccardSimilarity(chunk.content(), existing.content());
-                if (jaccard &gt; threshold) {
-                    isDuplicate = true;
-                    // 如果新chunk相关性更高，替换旧的
-                    if (chunk.relevanceScore() &gt; existing.relevanceScore()) {
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> chunk : chunks) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">isDuplicate</span> <span class="hljs-operator">=</span> <span class="hljs-literal">false</span>;
+            <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> existing : result) {
+                <span class="hljs-type">var</span> <span class="hljs-variable">jaccard</span> <span class="hljs-operator">=</span> jaccardSimilarity(chunk.content(), existing.content());
+                <span class="hljs-keyword">if</span> (jaccard &gt; threshold) {
+                    isDuplicate = <span class="hljs-literal">true</span>;
+                    <span class="hljs-comment">// 如果新chunk相关性更高，替换旧的</span>
+                    <span class="hljs-keyword">if</span> (chunk.relevanceScore() &gt; existing.relevanceScore()) {
                         result.set(result.indexOf(existing), chunk);
                     }
-                    break;
+                    <span class="hljs-keyword">break</span>;
                 }
             }
-            if (!isDuplicate) {
+            <span class="hljs-keyword">if</span> (!isDuplicate) {
                 result.add(chunk);
             }
         }
 
-        return result;
+        <span class="hljs-keyword">return</span> result;
     }
 
-    private double jaccardSimilarity(String a, String b) {
-        var wordsA = new java.util.HashSet&lt;&gt;(
-            java.util.Arrays.asList(a.toLowerCase().split(&quot;\\s+&quot;))
+    <span class="hljs-keyword">private</span> <span class="hljs-type">double</span> <span class="hljs-title function_">jaccardSimilarity</span><span class="hljs-params">(String a, String b)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">wordsA</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">java</span>.util.HashSet&lt;&gt;(
+            java.util.Arrays.asList(a.toLowerCase().split(<span class="hljs-string">"\\s+"</span>))
         );
-        var wordsB = new java.util.HashSet&lt;&gt;(
-            java.util.Arrays.asList(b.toLowerCase().split(&quot;\\s+&quot;))
+        <span class="hljs-type">var</span> <span class="hljs-variable">wordsB</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">java</span>.util.HashSet&lt;&gt;(
+            java.util.Arrays.asList(b.toLowerCase().split(<span class="hljs-string">"\\s+"</span>))
         );
 
-        var intersection = new java.util.HashSet&lt;&gt;(wordsA);
+        <span class="hljs-type">var</span> <span class="hljs-variable">intersection</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">java</span>.util.HashSet&lt;&gt;(wordsA);
         intersection.retainAll(wordsB);
 
-        var union = new java.util.HashSet&lt;&gt;(wordsA);
+        <span class="hljs-type">var</span> <span class="hljs-variable">union</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">java</span>.util.HashSet&lt;&gt;(wordsA);
         union.addAll(wordsB);
 
-        return union.isEmpty() ? 0 : (double) intersection.size() / union.size();
+        <span class="hljs-keyword">return</span> union.isEmpty() ? <span class="hljs-number">0</span> : (<span class="hljs-type">double</span>) intersection.size() / union.size();
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>六、引用（Attribution）</h2>
 <h3>6.1 引用格式</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">/**
  * 引用管理：从检索结果生成可追溯的原文引用
- */
-public class CitationManager {
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">CitationManager</span> {
 
-    public record Citation(
-        int citationNumber,      // [1], [2], [3] ...
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">Citation</span><span class="hljs-params">(
+        <span class="hljs-type">int</span> citationNumber,      // [1], [2], [3] ...
         String chunkId,
         String sourceTitle,
         String sectionPath,
-        int pageNumber,
+        <span class="hljs-type">int</span> pageNumber,
         String quotedText,       // 被引用的原文片段
-        int charStart,           // 在原文中的字符位置
-        int charEnd
-    ) {}
+        <span class="hljs-type">int</span> charStart,           // 在原文中的字符位置
+        <span class="hljs-type">int</span> charEnd
+    )</span> {}
 
-    /**
+    <span class="hljs-comment">/**
      * 为LLM响应添加引用标记
      * 策略：在LLM的Prompt中要求使用 [1], [2] 格式引用来源
      * LLM响应后，从响应中提取引用编号并关联到具体的chunk
-     */
-    public String buildCitationPrompt(List&lt;RerankedChunk&gt; chunks) {
-        var builder = new StringBuilder();
-        builder.append(&quot;请根据以下参考资料回答问题，并在答案中使用 [1], [2] 等编号标注信息来源。\n\n&quot;);
+     */</span>
+    <span class="hljs-keyword">public</span> String <span class="hljs-title function_">buildCitationPrompt</span><span class="hljs-params">(List&lt;RerankedChunk&gt; chunks)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">builder</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>();
+        builder.append(<span class="hljs-string">"请根据以下参考资料回答问题，并在答案中使用 [1], [2] 等编号标注信息来源。\n\n"</span>);
 
-        for (int i = 0; i &lt; chunks.size(); i++) {
-            var chunk = chunks.get(i);
-            builder.append(&quot;参考资料 [%d]:\n&quot;.formatted(i + 1));
-            if (chunk.metadata().get(&quot;section_path&quot;) != null) {
-                builder.append(&quot;来源: %s\n&quot;.formatted(chunk.metadata().get(&quot;section_path&quot;)));
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; chunks.size(); i++) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">chunk</span> <span class="hljs-operator">=</span> chunks.get(i);
+            builder.append(<span class="hljs-string">"参考资料 [%d]:\n"</span>.formatted(i + <span class="hljs-number">1</span>));
+            <span class="hljs-keyword">if</span> (chunk.metadata().get(<span class="hljs-string">"section_path"</span>) != <span class="hljs-literal">null</span>) {
+                builder.append(<span class="hljs-string">"来源: %s\n"</span>.formatted(chunk.metadata().get(<span class="hljs-string">"section_path"</span>)));
             }
-            builder.append(chunk.content()).append(&quot;\n\n&quot;);
+            builder.append(chunk.content()).append(<span class="hljs-string">"\n\n"</span>);
         }
 
-        return builder.toString();
+        <span class="hljs-keyword">return</span> builder.toString();
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 从LLM响应中提取引用编号并验证
-     */
-    public List&lt;Citation&gt; extractCitations(String llmResponse,
-                                            List&lt;RerankedChunk&gt; chunks) {
-        var citations = new java.util.ArrayList&lt;Citation&gt;();
-        var pattern = java.util.regex.Pattern.compile(&quot;\\[(\\d+)\\]&quot;);
-        var matcher = pattern.matcher(llmResponse);
-        var seen = new java.util.HashSet&lt;Integer&gt;();
+     */</span>
+    <span class="hljs-keyword">public</span> List&lt;Citation&gt; <span class="hljs-title function_">extractCitations</span><span class="hljs-params">(String llmResponse,
+                                            List&lt;RerankedChunk&gt; chunks)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">citations</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">java</span>.util.ArrayList&lt;Citation&gt;();
+        <span class="hljs-type">var</span> <span class="hljs-variable">pattern</span> <span class="hljs-operator">=</span> java.util.regex.Pattern.compile(<span class="hljs-string">"\\[(\\d+)\\]"</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">matcher</span> <span class="hljs-operator">=</span> pattern.matcher(llmResponse);
+        <span class="hljs-type">var</span> <span class="hljs-variable">seen</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">java</span>.util.HashSet&lt;Integer&gt;();
 
-        while (matcher.find()) {
-            var num = Integer.parseInt(matcher.group(1));
-            if (!seen.contains(num) &amp;&amp; num &gt; 0 &amp;&amp; num &lt;= chunks.size()) {
+        <span class="hljs-keyword">while</span> (matcher.find()) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">num</span> <span class="hljs-operator">=</span> Integer.parseInt(matcher.group(<span class="hljs-number">1</span>));
+            <span class="hljs-keyword">if</span> (!seen.contains(num) &amp;&amp; num &gt; <span class="hljs-number">0</span> &amp;&amp; num &lt;= chunks.size()) {
                 seen.add(num);
-                var chunk = chunks.get(num - 1);
-                citations.add(new Citation(
+                <span class="hljs-type">var</span> <span class="hljs-variable">chunk</span> <span class="hljs-operator">=</span> chunks.get(num - <span class="hljs-number">1</span>);
+                citations.add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">Citation</span>(
                     num, chunk.chunkId(),
-                    (String) chunk.metadata().getOrDefault(&quot;title&quot;, &quot;未知文档&quot;),
-                    (String) chunk.metadata().getOrDefault(&quot;section_path&quot;, &quot;&quot;),
-                    (int) chunk.metadata().getOrDefault(&quot;page_number&quot;, 0),
-                    chunk.content().substring(0, Math.min(200, chunk.content().length())),
-                    0, Math.min(200, chunk.content().length())
+                    (String) chunk.metadata().getOrDefault(<span class="hljs-string">"title"</span>, <span class="hljs-string">"未知文档"</span>),
+                    (String) chunk.metadata().getOrDefault(<span class="hljs-string">"section_path"</span>, <span class="hljs-string">""</span>),
+                    (<span class="hljs-type">int</span>) chunk.metadata().getOrDefault(<span class="hljs-string">"page_number"</span>, <span class="hljs-number">0</span>),
+                    chunk.content().substring(<span class="hljs-number">0</span>, Math.min(<span class="hljs-number">200</span>, chunk.content().length())),
+                    <span class="hljs-number">0</span>, Math.min(<span class="hljs-number">200</span>, chunk.content().length())
                 ));
             }
         }
 
-        return citations;
+        <span class="hljs-keyword">return</span> citations;
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>七、完整RerankerService</h2>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.stereotype.Service;
-import java.util.List;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> org.springframework.stereotype.Service;
+<span class="hljs-keyword">import</span> java.util.List;
 
-@Service
-public class RerankerService {
+<span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">RerankerService</span> {
 
-    private final CohereReranker primaryReranker;
-    private final BgeRerankerClient fallbackReranker;
-    private final ContextDeduplicator deduplicator;
-    private final ContextArranger arranger;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> CohereReranker primaryReranker;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> BgeRerankerClient fallbackReranker;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> ContextDeduplicator deduplicator;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> ContextArranger arranger;
 
-    public RerankerService(
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">RerankerService</span><span class="hljs-params">(
             CohereReranker primaryReranker,
-            BgeRerankerClient fallbackReranker) {
-        this.primaryReranker = primaryReranker;
-        this.fallbackReranker = fallbackReranker;
-        this.deduplicator = new ContextDeduplicator();
-        this.arranger = new ContextArranger();
+            BgeRerankerClient fallbackReranker)</span> {
+        <span class="hljs-built_in">this</span>.primaryReranker = primaryReranker;
+        <span class="hljs-built_in">this</span>.fallbackReranker = fallbackReranker;
+        <span class="hljs-built_in">this</span>.deduplicator = <span class="hljs-keyword">new</span> <span class="hljs-title class_">ContextDeduplicator</span>();
+        <span class="hljs-built_in">this</span>.arranger = <span class="hljs-keyword">new</span> <span class="hljs-title class_">ContextArranger</span>();
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 完整的检索后处理管道：
      * 检索结果 → 去重 → 重排打分 → 阈值过滤 → Lost-in-Middle排序 → 返回
-     */
-    public List&lt;RerankedChunk&gt; processRetrievalResults(
+     */</span>
+    <span class="hljs-keyword">public</span> List&lt;RerankedChunk&gt; <span class="hljs-title function_">processRetrievalResults</span><span class="hljs-params">(
             String query,
-            List&lt;HybridSearchService.RankedResult&gt; retrievalResults) {
+            List&lt;HybridSearchService.RankedResult&gt; retrievalResults)</span> {
 
-        // 1. 重排打分
-        var pipeline = new RerankingPipeline(primaryReranker, fallbackReranker);
-        var reranked = pipeline.rerankPipeline(query, retrievalResults, 10);
+        <span class="hljs-comment">// 1. 重排打分</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">pipeline</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RerankingPipeline</span>(primaryReranker, fallbackReranker);
+        <span class="hljs-type">var</span> <span class="hljs-variable">reranked</span> <span class="hljs-operator">=</span> pipeline.rerankPipeline(query, retrievalResults, <span class="hljs-number">10</span>);
 
-        // 2. 去重
-        reranked = deduplicator.deduplicate(reranked, 0.85);
+        <span class="hljs-comment">// 2. 去重</span>
+        reranked = deduplicator.deduplicate(reranked, <span class="hljs-number">0.85</span>);
 
-        // 3. 相关性阈值过滤（低于0.1的结果基本不相关）
-        reranked = pipeline.filterByThreshold(reranked, 0.1);
+        <span class="hljs-comment">// 3. 相关性阈值过滤（低于0.1的结果基本不相关）</span>
+        reranked = pipeline.filterByThreshold(reranked, <span class="hljs-number">0.1</span>);
 
-        // 4. Lost-in-Middle排序优化
+        <span class="hljs-comment">// 4. Lost-in-Middle排序优化</span>
         reranked = arranger.arrangeForLlm(reranked);
 
-        return reranked;
+        <span class="hljs-keyword">return</span> reranked;
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>八、最佳实践</h2>
 <ol>
 <li><strong>默认启用重排</strong>：成本极低（&lt;5%总成本），效果提升显著（+15-20% MRR）</li>
@@ -776,10 +763,10 @@ public class RerankerService {
 </ul>
 <h2>相关条目</h2>
 <ul>
-<li><a href="#/11-检索与RAG/检索技术/11-向量检索与混合检索" class="cross-ref" data-ref="11-向量检索与混合检索">11-向量检索与混合检索</a> — 重排前的检索阶段</li>
-<li><a href="#/11-检索与RAG/RAG实现/11-完整RAG流水线实现" class="cross-ref" data-ref="11-完整RAG流水线实现">11-完整RAG流水线实现</a> — 完整RAG流水线</li>
-<li><a href="#/11-检索与RAG/RAG实现/11-高级RAG模式" class="cross-ref" data-ref="11-高级RAG模式">11-高级RAG模式</a> — 结合重排的高级RAG模式</li>
-<li><a href="#/08-模型接入与推理/模型API/08-OpenAI兼容协议详解" class="cross-ref" data-ref="08-OpenAI兼容协议详解">08-OpenAI兼容协议详解</a> — 模型接入方式</li>
+<li><a href="#/11-检索与RAG/检索技术/11-向量检索与混合检索" class="cross-ref">11-向量检索与混合检索</a> — 重排前的检索阶段</li>
+<li><a href="#/11-检索与RAG/RAG实现/11-完整RAG流水线实现" class="cross-ref">11-完整RAG流水线实现</a> — 完整RAG流水线</li>
+<li><a href="#/11-检索与RAG/RAG实现/11-高级RAG模式" class="cross-ref">11-高级RAG模式</a> — 结合重排的高级RAG模式</li>
+<li><a href="#/08-模型接入与推理/模型API/08-OpenAI兼容协议详解" class="cross-ref">08-OpenAI兼容协议详解</a> — 模型接入方式</li>
 </ul>
-</div>
+</body></html></div>
 </article>

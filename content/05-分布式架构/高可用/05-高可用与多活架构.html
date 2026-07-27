@@ -1,12 +1,12 @@
 
-<article class="kb-entry" data-path="/05-分布式架构/高可用/05-高可用与多活架构">
+<article class="kb-entry" data-path="/05-分布式架构">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=05">05-分布式架构</a></div>
     <h1>高可用与多活架构</h1>
-    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#high-availability</span><span class="badge badge-tag">#multi-active</span><span class="badge badge-tag">#failover</span><span class="badge badge-tag">#sentinel</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#high-availability</span><span class="badge badge-tag">#multi-active</span><span class="badge badge-tag">#failover</span><span class="badge badge-tag">#sentinel</span><span class="badge badge-tag">#raft</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://redis.io/docs/management/sentinel/" target="_blank" rel="noopener" class="source-link" title="Redis Sentinel 官方文档 — 自动故障转移、主观/客观下线的完整协议">Redis Sentinel 官方文档 — 自动故障转移、主观/客观下线的完整协议</a><a href="https://kafka.apache.org/documentation/#replication" target="_blank" rel="noopener" class="source-link" title="Kafka 官方文档 — ISR 机制、Leader 选举、Controller 故障转移">Kafka 官方文档 — ISR 机制、Leader 选举、Controller 故障转移</a><a href="https://dataintensive.net/" target="_blank" rel="noopener" class="source-link" title="《Designing Data-Intensive Applications》Chapter 8-9 — 分布式系统故障模型、共识算法、leader选举、脑裂处理">《Designing Data-Intensive Applications》Chapter 8-9 — 分布式系统故障模型、共识算法、leader选举、脑裂处理</a><a href="https://sre.google/books/" target="_blank" rel="noopener" class="source-link" title="《Site Reliability Engineering》Chapter 17-22 — 故障处理、优雅降级、灾备策略、RPO/RTO实践">《Site Reliability Engineering》Chapter 17-22 — 故障处理、优雅降级、灾备策略、RPO/RTO实践</a><a href="https://github.com/openark/orchestrator" target="_blank" rel="noopener" class="source-link" title="Orchestrator 源码 — MySQL 高可用自动故障转移的工业级实现">Orchestrator 源码 — MySQL 高可用自动故障转移的工业级实现</a><a href="https://netflixtechblog.com/active-active-for-multi-regional-resiliency-c47719f6685b" target="_blank" rel="noopener" class="source-link" title="Netflix TechBlog — 多活架构实践经验与数据冲突处理">Netflix TechBlog — 多活架构实践经验与数据冲突处理</a></small></div>
   </div>
-  <div class="entry-body"><h1>高可用与多活架构</h1>
+  <div class="entry-body"><html><head></head><body><h1>高可用与多活架构</h1>
 <h2>概述</h2>
 <p>高可用（High Availability, HA）是分布式系统的核心质量属性，其本质是在部分组件故障时系统仍能对外提供可接受的服务水平。可用性的技术体系从单机守护进程的冷备模式，演进到机架级/机房级/区域级的异地多活，覆盖故障检测、故障转移、数据同步、流量调度和灾备恢复的全生命周期。</p>
 <p>在 AI 应用中，高可用尤为重要：模型推理服务的延迟敏感特性决定了秒级故障检测和自动恢复是刚需；RAG 知识库的多向量索引需要同步复制保障检索一致性；Agent 长任务的持久化执行状态需要跨可用区容灾。</p>
@@ -14,7 +14,7 @@
 <hr>
 <h2>一、高可用基础</h2>
 <h3>1.1 可用性指标</h3>
-<p>可用性是系统正常运行时间占总时间的比例，业界常用&quot;几个9&quot;来量化：</p>
+<p>可用性是系统正常运行时间占总时间的比例，业界常用"几个9"来量化：</p>
 <table>
 <thead>
 <tr>
@@ -62,9 +62,8 @@
 </tr>
 </tbody></table>
 <p>核心计算公式：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Availability = MTBF / (MTBF + MTTR)
-</code></pre></div>
-<ul>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-attr">Availability</span> = MTBF / (MTBF + MTTR)
+</code></pre></div><ul>
 <li><strong>MTBF</strong> (Mean Time Between Failures)：平均无故障时间，表征系统稳定性</li>
 <li><strong>MTTR</strong> (Mean Time To Repair)：平均修复时间，表征运维响应能力</li>
 <li><strong>MTTF</strong> (Mean Time To Failure)：系统从启动到首次故障的平均时间（适用于不可修复系统）</li>
@@ -73,11 +72,10 @@
 <h3>1.2 故障检测机制</h3>
 <p>故障检测是故障转移的前提。必须有准确、低延迟的机制判断节点是否真的故障：</p>
 <p><strong>心跳机制（Heartbeat）：</strong></p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌─────────┐    TCP 连接保活/HTTP Health Check     ┌─────────┐
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌─────────┐    <span class="hljs-variable">TCP</span> 连接保活<span class="hljs-operator">/</span><span class="hljs-variable">HTTP</span> <span class="hljs-variable">Health</span> <span class="hljs-built_in">Check</span>     ┌─────────┐
 │  监控节点 │ ◄──────────────────────────────────► │  被监控节点│
-└─────────┘     每 N 秒发送心跳，超时判定故障        └─────────┘
-</code></pre></div>
-<ul>
+└─────────┘     每 <span class="hljs-built_in">N</span> 秒发送心跳，超时判定故障        └─────────┘
+</code></pre></div><ul>
 <li><strong>TCP 层心跳：</strong> 依赖 TCP Keep-Alive 或自定义长度字节的心跳包，开销最低，但无法反映应用层状态</li>
 <li><strong>HTTP Health Check：</strong> <code>/health</code>、<code>/actuator/health/liveness</code>、<code>/actuator/health/readiness</code>，能检测应用逻辑是否正常，是 K8s 和 Spring Boot 的标准方案</li>
 <li><strong>超时判死：</strong> 连续 N 次心跳失败 → 判定节点故障。N 的取值需要平衡误判率和检测延迟</li>
@@ -86,19 +84,17 @@
 <p><strong>TTL 租约（Lease）：</strong></p>
 <p>节点定期续约一个带 TTL 的租约（如写入 Redis/etcd 一个带过期时间的 key）。节点故障后租约自动过期，其他节点可感知到。优势是避免了监控者单点问题，但依赖外部存储的可用性。</p>
 <p><strong>Gossip 协议（成员关系传播）：</strong></p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Node A ──── 随机选择 ────► Node B ──── 随机选择 ────► Node C
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-keyword">Node</span> <span class="hljs-title">A</span> ──── 随机选择 ────► <span class="hljs-keyword">Node</span> <span class="hljs-title">B</span> ──── 随机选择 ────► <span class="hljs-keyword">Node</span> <span class="hljs-title">C</span>
   │                          │                          │
   └── 交换已知的成员状态 ─────┴── 交换已知的成员状态 ─────┘
-</code></pre></div>
-<p>每个节点周期性地与随机几个对等节点交换其已知的全体成员状态。信息以 O(log N) 轮次传播到整个集群。Cassandra、Redis Cluster、Consul 都使用 Gossip 或变体。优点是无中心化、扩展性好；缺点是收敛需要时间，存在短暂的不一致窗口。</p>
+</code></pre></div><p>每个节点周期性地与随机几个对等节点交换其已知的全体成员状态。信息以 O(log N) 轮次传播到整个集群。Cassandra、Redis Cluster、Consul 都使用 Gossip 或变体。优点是无中心化、扩展性好；缺点是收敛需要时间，存在短暂的不一致窗口。</p>
 <p><strong>Phi Accrual Failure Detector（自适应阈值）：</strong></p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>φ = -log₁₀(P(t | heartbeat_arrival_history))
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>φ = -<span class="hljs-built_in">log</span>₁₀(P(t | heartbeat_arrival_history))
 
-φ = 1 → 约 10% 怀疑是故障
-φ = 2 → 约 1% 怀疑是故障
-φ = 8 → 约 10⁻⁸ 怀疑是故障
-</code></pre></div>
-<p>不设置固定的超时阈值，而是根据心跳到达的历史分布，动态计算节点故障的可疑程度（φ 值）。当 φ 超过阈值时触发故障怀疑。Akka 和 Cassandra 使用此机制。相比固定超时，在面对网络抖动和瞬时负载变化时更鲁棒。</p>
+φ = <span class="hljs-number">1</span> → 约 <span class="hljs-number">10</span><span class="hljs-comment">% 怀疑是故障</span>
+φ = <span class="hljs-number">2</span> → 约 <span class="hljs-number">1</span><span class="hljs-comment">% 怀疑是故障</span>
+φ = <span class="hljs-number">8</span> → 约 <span class="hljs-number">10</span>⁻⁸ 怀疑是故障
+</code></pre></div><p>不设置固定的超时阈值，而是根据心跳到达的历史分布，动态计算节点故障的可疑程度（φ 值）。当 φ 超过阈值时触发故障怀疑。Akka 和 Cassandra 使用此机制。相比固定超时，在面对网络抖动和瞬时负载变化时更鲁棒。</p>
 <h3>1.3 故障转移基础</h3>
 <p><strong>自动 failover 流程：</strong> 检测故障 → 选举新主 → 将流量切换到新主 → 通知相关组件</p>
 <p><strong>手动 failover vs 自动 failover：</strong></p>
@@ -174,24 +170,23 @@
 </tbody></table>
 <p><strong>VIP 漂移（Keepalived + VRRP）：</strong></p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>         ┌──────────────┐
-         │   VIP: 10.0.0.100 │
+         │   VIP: <span class="hljs-number">10.0</span>.<span class="hljs-number">0.100</span> │
          └───────┬──────┘
                  │
      ┌───────────┴───────────┐
      │                       │
 ┌────┴─────┐          ┌──────┴────┐
-│  Master   │  VRRP    │  Backup   │
+│  <span class="hljs-keyword">Master</span>   <span class="hljs-title">│  VRRP</span>    │  Backup   │
 │ (Priority │◄────────►│ (Priority │
-│   100)    │  心跳     │   90)     │
+│   <span class="hljs-number">100</span>)    │  心跳     │   <span class="hljs-number">90</span>)     │
 └──────────┘          └───────────┘
 
-Master 故障 → Backup 检测到 VRRP 心跳丢失
-→ Backup 提升为 Master（优先级 100）
-→ Backup 接管 VIP 10.0.0.100
+<span class="hljs-keyword">Master</span> <span class="hljs-title">故障 → Backup</span> 检测到 VRRP 心跳丢失
+→ Backup 提升为 <span class="hljs-literal">Master</span>（优先级 <span class="hljs-number">100</span>）
+→ Backup 接管 VIP <span class="hljs-number">10.0</span>.<span class="hljs-number">0.100</span>
 → 发送免费 ARP 通告新的 MAC 地址
-→ 流量切换完成（通常 &lt; 3 秒）
-</code></pre></div>
-<p>Keepalived 的核心是通过 VRRP（Virtual Router Redundancy Protocol）实现 IP 地址的虚拟化和漂移。但它只能做 IP 层面的切换，不感知应用状态——需要配合应用层健康检查脚本（如 <code>notify_master</code> 脚本中检测 MySQL 是否真的可写）。</p>
+→ 流量切换完成（通常 <span class="hljs-tag">&lt; 3 秒）</span>
+</code></pre></div><p>Keepalived 的核心是通过 VRRP（Virtual Router Redundancy Protocol）实现 IP 地址的虚拟化和漂移。但它只能做 IP 层面的切换，不感知应用状态——需要配合应用层健康检查脚本（如 <code>notify_master</code> 脚本中检测 MySQL 是否真的可写）。</p>
 <h3>2.2 Active-Active（双活模式）</h3>
 <p>两个节点同时处理流量，互为备份：</p>
 <ul>
@@ -240,16 +235,15 @@ Master 故障 → Backup 检测到 VRRP 心跳丢失
 </tr>
 </tbody></table>
 <p><strong>MySQL 半同步复制的 after_sync 模式：</strong></p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>客户端 → 主库写入 binlog
-          │
-          ├── 等待至少 1 个从库确认收到 binlog（不等待执行完成）
-          │
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>客户端 → 主库写入 <span class="hljs-keyword">binlog
+</span>          │
+          ├── 等待至少 <span class="hljs-number">1</span> 个从库确认收到 <span class="hljs-keyword">binlog（不等待执行完成）
+</span>          │
           └── 收到确认后，提交事务并返回客户端
 
-优势：主库崩溃时，至少有一个从库拥有完整的 binlog
-代价：如果半同步超时退化为异步，需要告警和人工介入
-</code></pre></div>
-<h3>2.4 选举算法</h3>
+优势：主库崩溃时，至少有一个从库拥有完整的 <span class="hljs-keyword">binlog
+</span>代价：如果半同步超时退化为异步，需要告警和人工介入
+</code></pre></div><h3>2.4 选举算法</h3>
 <p><strong>Raft 领导者选举：</strong></p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>节点状态转换：
                       超时，开始选举
@@ -261,71 +255,66 @@ Master 故障 → Backup 检测到 VRRP 心跳丢失
           │                               获得多数票 │
           │                                       ▼
           │                                ┌──────────┐
-          └────────────────────────────────│  Leader   │
-                 发现更高 term 的 Leader     └──────────┘
-</code></pre></div>
-<p>选举比较规则：先比较 term（任期号），term 大的胜出；term 相同比较 log index，日志更新的胜出。每个节点在一个 term 内只能投一票，防止脑裂。</p>
-<p><strong>Bully 算法：</strong> 节点 ID 最大的节点成为 leader。当节点发现 leader 故障时，&quot;欺负&quot;比自己 ID 小的节点。简单但在网络分区时容易双主。</p>
+          └────────────────────────────────│  <span class="hljs-built_in">Leader</span>   │
+                 发现更高 term 的 <span class="hljs-built_in">Leader</span>     └──────────┘
+</code></pre></div><p>选举比较规则：先比较 term（任期号），term 大的胜出；term 相同比较 log index，日志更新的胜出。每个节点在一个 term 内只能投一票，防止脑裂。</p>
+<p><strong>Bully 算法：</strong> 节点 ID 最大的节点成为 leader。当节点发现 leader 故障时，"欺负"比自己 ID 小的节点。简单但在网络分区时容易双主。</p>
 <p><strong>基于 ZooKeeper 的选举：</strong></p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>/leader-election
-    ├── _c_0000000001 (临时顺序节点, node-A)
-    ├── _c_0000000002 (临时顺序节点, node-B)
-    └── _c_0000000003 (临时顺序节点, node-C)
+    ├── _c_0000000001 (临时顺序节点, <span class="hljs-keyword">node</span><span class="hljs-title">-A</span>)
+    ├── _c_0000000002 (临时顺序节点, <span class="hljs-keyword">node</span><span class="hljs-title">-B</span>)
+    └── _c_0000000003 (临时顺序节点, <span class="hljs-keyword">node</span><span class="hljs-title">-C</span>)
 
-序号最小的节点（0000000001）成为 Leader
-Leader 故障 → 临时节点自动删除 → 序号 0000000002 晋升
+序号最小的节点（<span class="hljs-number">0000000001</span>）成为 Leader
+Leader 故障 → 临时节点自动删除 → 序号 <span class="hljs-number">0000000002</span> 晋升
 每个 Follower watch 前一个序号节点
-</code></pre></div>
-<p>ZooKeeper 的临时顺序节点 + watch 机制提供了工业级的 leader 选举方案。临时节点的特性保证了 leader 崩溃后自动释放锁；顺序节点的特性保证了先到先得且无惊群效应。</p>
+</code></pre></div><p>ZooKeeper 的临时顺序节点 + watch 机制提供了工业级的 leader 选举方案。临时节点的特性保证了 leader 崩溃后自动释放锁；顺序节点的特性保证了先到先得且无惊群效应。</p>
 <hr>
 <h2>三、多活架构</h2>
 <h3>3.1 多活架构层次</h3>
 <p><strong>同城双活：</strong></p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌──────────────────── 同城（延迟 &lt; 2ms）─────────────────┐
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌──────────────────── 同城（延迟 &lt; <span class="hljs-number">2ms</span>）─────────────────┐
 │                                                          │
 │  ┌──────────────┐         数据同步         ┌──────────────┐ │
-│  │  机房 A       │ ◄═══════════════════►   │  机房 B       │ │
+│  │  机房 <span class="hljs-selector-tag">A</span>       │ ◄═══════════════════►   │  机房 <span class="hljs-selector-tag">B</span>       │ │
 │  │  (全量服务)    │     同步复制(强一致)      │  (全量服务)    │ │
 │  └──────────────┘                          └──────────────┘ │
 │                                                          │
 │  数据库主从跨机房部署，同步复制保障零数据丢失                           │
 │  任一机房故障，另一机房承载全部流量                                   │
 └──────────────────────────────────────────────────────────┘
-</code></pre></div>
-<p>核心要求：</p>
+</code></pre></div><p>核心要求：</p>
 <ul>
 <li>网络延迟极低（光纤直连，RTT &lt; 2ms），否则同步复制的延迟代价不可接受</li>
 <li>链路带宽充足，能承载数据同步和故障时全量流量</li>
 <li>必须防脑裂——通常引入第三点（仲裁节点）或依赖多机房多数派</li>
 </ul>
 <p><strong>两地三中心：</strong></p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>    城市 A（同城双活）                         城市 B（异地灾备）
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>    城市 <span class="hljs-selector-tag">A</span>（同城双活）                         城市 <span class="hljs-selector-tag">B</span>（异地灾备）
 ┌─────────────────────────┐        ┌─────────────────────┐
-│  机房 A-1     机房 A-2    │ 异步复制│    机房 B-1           │
+│  机房 <span class="hljs-selector-tag">A</span>-<span class="hljs-number">1</span>     机房 <span class="hljs-selector-tag">A</span>-<span class="hljs-number">2</span>    │ 异步复制│    机房 <span class="hljs-selector-tag">B</span>-<span class="hljs-number">1</span>           │
 │  (主) ◄────► (从/备)   │═══════►│   (灾备)              │
-│  同步复制              │ 延迟&lt;2ms│                      │
+│  同步复制              │ 延迟&lt;<span class="hljs-number">2ms</span>│                      │
 └─────────────────────────┘        └─────────────────────┘
 
 同城双活保障机房级容灾，异地灾备保障城市级容灾
 异地之间的异步复制容忍分钟级延迟和数据丢失
-</code></pre></div>
-<p>这是国内金融行业的标准架构。异地灾备中心的资源可以用于灾备演练和非核心的读流量（如报表、数据分析）。</p>
+</code></pre></div><p>这是国内金融行业的标准架构。异地灾备中心的资源可以用于灾备演练和非核心的读流量（如报表、数据分析）。</p>
 <p><strong>单元化架构：</strong></p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>用户 ID hash(user_id) % N  → 路由到固定的单元（Set）
 
 ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
-│   Set 0      │    │   Set 1      │    │   Set 2      │
-│  user [0,N,2N]│   │ user [1,N+1] │   │ user [2,N+2] │
+│   <span class="hljs-built_in">Set</span> 0      │    │   <span class="hljs-built_in">Set</span> 1      │    │   <span class="hljs-built_in">Set</span> 2      │
+│ <span class="hljs-built_in"> user </span>[0,N,2N]│   │<span class="hljs-built_in"> user </span>[1,N+1] │   │<span class="hljs-built_in"> user </span>[2,N+2] │
 │              │    │              │    │              │
 │  应用 + 数据库 │    │  应用 + 数据库 │    │  应用 + 数据库 │
 │  缓存 + 消息   │    │  缓存 + 消息   │    │  缓存 + 消息   │
 └──────────────┘    └──────────────┘    └──────────────┘
 
-每个 Set 是自包含的完整业务单元
-Set 之间无共享数据库，无跨 Set 事务
+每个 <span class="hljs-built_in">Set</span> 是自包含的完整业务单元
+<span class="hljs-built_in">Set</span> 之间无共享数据库，无跨 <span class="hljs-built_in">Set</span> 事务
 通过全局路由层将用户请求分发到所属 Set
-</code></pre></div>
-<p>单元化的优势：</p>
+</code></pre></div><p>单元化的优势：</p>
 <ul>
 <li>故障爆炸半径可控——一个 Set 故障只影响该分片的用户</li>
 <li>水平扩展简单——增加 Set 即可扩容</li>
@@ -335,28 +324,26 @@ Set 之间无共享数据库，无跨 Set 事务
 <h3>3.2 全局路由</h3>
 <p>多活架构中，如何将用户请求路由到正确的机房/单元？</p>
 <p><strong>GSLB（Global Server Load Balancing）+ 智能 DNS：</strong></p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>用户 DNS 查询 your-api.example.com
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>用户<span class="hljs-built_in"> DNS </span>查询 your-api.example.com
         │
         ▼
     GSLB 设备/服务（根据以下策略决策）：
-    ├── 用户 IP 的地理位置 → 最近机房
+    ├── 用户<span class="hljs-built_in"> IP </span>的地理位置 → 最近机房
     ├── 各机房的实时健康度 → 剔除故障机房
     ├── 各机房的当前负载 → 负载均衡分发
     └── 用户所属单元 → 路由到对应机房
         │
         ▼
     返回目标机房的 VIP 或入口地址
-</code></pre></div>
-<p><strong>HTTP 302 重定向：</strong> 用户首次访问任意机房的入口，该入口查询用户归属后返回 302 将浏览器重定向到正确机房。适用于 Web 应用，但不适用于 API 调用（增加一次额外往返）。</p>
+</code></pre></div><p><strong>HTTP 302 重定向：</strong> 用户首次访问任意机房的入口，该入口查询用户归属后返回 302 将浏览器重定向到正确机房。适用于 Web 应用，但不适用于 API 调用（增加一次额外往返）。</p>
 <p><strong>Anycast IP：</strong> 多个机房对外通告相同的 IP 地址，依赖 BGP 路由协议将用户流量自动导向最近的机房。Google 的 8.8.8.8 就是经典的 Anycast 部署。优点是网络层转发、无额外延迟；缺点是不感知应用层状态，切换依赖路由收敛。</p>
 <h3>3.3 数据分区与用户亲和性</h3>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>路由策略的核心：
-user_id → hash(user_id) % shard_count → Set ID → 机房映射
+user_id → hash(user_id) % shard_count → <span class="hljs-keyword">Set</span> ID → 机房映射
 
-用户亲和性（Session Affinity / Sticky Session）：
-同一用户的后续请求必须路由到同一机房/Set，避免跨机房读写的复杂性和延迟
-</code></pre></div>
-<p><strong>跨机房数据访问的兜底策略：</strong></p>
+用户亲和性（Session <span class="hljs-comment">Affinity</span> / Sticky Session）：
+同一用户的后续请求必须路由到同一机房/<span class="hljs-comment">Set</span>，避免跨机房读写的复杂性和延迟
+</code></pre></div><p><strong>跨机房数据访问的兜底策略：</strong></p>
 <ol>
 <li><strong>只读降级：</strong> 用户的归属机房故障时，临时路由到其他机房，但只允许读取已有数据（禁止写入）</li>
 <li><strong>异步写入暂存：</strong> 本地暂存写入操作，等归属机房恢复后异步同步</li>
@@ -415,134 +402,130 @@ user_id → hash(user_id) % shard_count → Set ID → 机房映射
 <hr>
 <h2>四、优雅关闭与滚动更新</h2>
 <h3>4.1 Spring Boot Graceful Shutdown</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">server:
-  shutdown: graceful
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-attr">server:</span>
+  <span class="hljs-attr">shutdown:</span> <span class="hljs-string">graceful</span>
 
-spring:
-  lifecycle:
-    timeout-per-shutdown-phase: 30s
+<span class="hljs-attr">spring:</span>
+  <span class="hljs-attr">lifecycle:</span>
+    <span class="hljs-attr">timeout-per-shutdown-phase:</span> <span class="hljs-string">30s</span>
 
-management:
-  endpoint:
-    health:
-      probes:
-        enabled: true
-      show-details: always
-  health:
-    livenessstate:
-      enabled: true
-    readinessstate:
-      enabled: true
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Configuration
-public class GracefulShutdownConfig {
+<span class="hljs-attr">management:</span>
+  <span class="hljs-attr">endpoint:</span>
+    <span class="hljs-attr">health:</span>
+      <span class="hljs-attr">probes:</span>
+        <span class="hljs-attr">enabled:</span> <span class="hljs-literal">true</span>
+      <span class="hljs-attr">show-details:</span> <span class="hljs-string">always</span>
+  <span class="hljs-attr">health:</span>
+    <span class="hljs-attr">livenessstate:</span>
+      <span class="hljs-attr">enabled:</span> <span class="hljs-literal">true</span>
+    <span class="hljs-attr">readinessstate:</span>
+      <span class="hljs-attr">enabled:</span> <span class="hljs-literal">true</span>
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Configuration</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">GracefulShutdownConfig</span> {
 
-    @Bean
-    public TomcatProtocolHandlerCustomizer&lt;?&gt; gracefulShutdown() {
-        return protocolHandler -&gt; {
-            protocolHandler.setKeepAliveTimeout(5_000);
-            // Spring Boot 4.x 支持设置优雅关闭的等待窗口
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-keyword">public</span> TomcatProtocolHandlerCustomizer&lt;?&gt; gracefulShutdown() {
+        <span class="hljs-keyword">return</span> protocolHandler -&gt; {
+            protocolHandler.setKeepAliveTimeout(<span class="hljs-number">5_000</span>);
+            <span class="hljs-comment">// Spring Boot 4.x 支持设置优雅关闭的等待窗口</span>
         };
     }
 
-    @EventListener
-    public void onShutdown(ApplicationReadyEvent event) {
-        // 应用启动完成后的初始化
+    <span class="hljs-meta">@EventListener</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">onShutdown</span><span class="hljs-params">(ApplicationReadyEvent event)</span> {
+        <span class="hljs-comment">// 应用启动完成后的初始化</span>
     }
 }
 
-// 自定义 Readiness 探针
-@Component
-public class CustomReadinessIndicator implements AvailabilityChangeListener {
+<span class="hljs-comment">// 自定义 Readiness 探针</span>
+<span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">CustomReadinessIndicator</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">AvailabilityChangeListener</span> {
 
-    private volatile boolean outOfService = false;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">volatile</span> <span class="hljs-type">boolean</span> <span class="hljs-variable">outOfService</span> <span class="hljs-operator">=</span> <span class="hljs-literal">false</span>;
 
-    @PostConstruct
-    public void init() {
-        AvailabilityChangeListener.register(this);
+    <span class="hljs-meta">@PostConstruct</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">init</span><span class="hljs-params">()</span> {
+        AvailabilityChangeListener.register(<span class="hljs-built_in">this</span>);
     }
 
-    public void markOutOfService() {
-        this.outOfService = true;
-        // 通知 Kubernetes readiness 探针返回 503
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">markOutOfService</span><span class="hljs-params">()</span> {
+        <span class="hljs-built_in">this</span>.outOfService = <span class="hljs-literal">true</span>;
+        <span class="hljs-comment">// 通知 Kubernetes readiness 探针返回 503</span>
     }
 
-    @Override
-    public void onStateChange(AvailabilityState state) {
-        // 监听 Spring Boot 内部状态变化
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">onStateChange</span><span class="hljs-params">(AvailabilityState state)</span> {
+        <span class="hljs-comment">// 监听 Spring Boot 内部状态变化</span>
     }
 }
 
-// Readiness HealthIndicator
-@Component
-public class TrafficReadinessHealthIndicator implements HealthIndicator {
+<span class="hljs-comment">// Readiness HealthIndicator</span>
+<span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">TrafficReadinessHealthIndicator</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">HealthIndicator</span> {
 
-    private final AtomicBoolean ready = new AtomicBoolean(true);
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">AtomicBoolean</span> <span class="hljs-variable">ready</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">AtomicBoolean</span>(<span class="hljs-literal">true</span>);
 
-    @Override
-    public Health health() {
-        if (ready.get()) {
-            return Health.up().build();
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> Health <span class="hljs-title function_">health</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">if</span> (ready.get()) {
+            <span class="hljs-keyword">return</span> Health.up().build();
         }
-        return Health.outOfService().withDetail(&quot;reason&quot;, &quot;draining&quot;).build();
+        <span class="hljs-keyword">return</span> Health.outOfService().withDetail(<span class="hljs-string">"reason"</span>, <span class="hljs-string">"draining"</span>).build();
     }
 
-    public void markOutOfService() {
-        ready.set(false);
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">markOutOfService</span><span class="hljs-params">()</span> {
+        ready.set(<span class="hljs-literal">false</span>);
     }
 }
-</code></pre></div>
-<h3>4.2 K8s preStop Hook 与完整生命周期</h3>
+</code></pre></div><h3>4.2 K8s preStop Hook 与完整生命周期</h3>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Pod 终止的完整生命周期：
 
-1. Pod 状态变为 Terminating（从 Service Endpoints 中移除）
-2. preStop Hook 执行（如果配置了）
-   └── 应用：标记 readiness 为 OUT_OF_SERVICE
+<span class="hljs-bullet">1.</span> Pod 状态变为 Terminating（从 Service Endpoints 中移除）
+<span class="hljs-bullet">2.</span> preStop Hook 执行（如果配置了）
+   └── 应用：标记 readiness 为 OUT<span class="hljs-emphasis">_OF_</span>SERVICE
    └── 等待 connection draining 完成（例如 sleep 10s）
-3. SIGTERM 发送给容器主进程
+<span class="hljs-bullet">3.</span> SIGTERM 发送给容器主进程
    └── Spring Boot 收到 SIGTERM → 执行 graceful shutdown
    └── 拒绝新的 HTTP 请求
    └── 等待正在处理的请求完成（最多 timeout-per-shutdown-phase）
-4. 等待 terminationGracePeriodSeconds（默认 30s）
-5. 超时后，SIGKILL 强杀进程
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">apiVersion: v1
-kind: Pod
-metadata:
-  name: ai-service
-spec:
-  terminationGracePeriodSeconds: 60
-  containers:
-    - name: app
-      image: ai-service:latest
-      ports:
-        - containerPort: 8080
-      lifecycle:
-        preStop:
-          exec:
-            command:
-              - /bin/sh
-              - -c
-              - |
+<span class="hljs-bullet">4.</span> 等待 terminationGracePeriodSeconds（默认 30s）
+<span class="hljs-bullet">5.</span> 超时后，SIGKILL 强杀进程
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">v1</span>
+<span class="hljs-attr">kind:</span> <span class="hljs-string">Pod</span>
+<span class="hljs-attr">metadata:</span>
+  <span class="hljs-attr">name:</span> <span class="hljs-string">ai-service</span>
+<span class="hljs-attr">spec:</span>
+  <span class="hljs-attr">terminationGracePeriodSeconds:</span> <span class="hljs-number">60</span>
+  <span class="hljs-attr">containers:</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">app</span>
+      <span class="hljs-attr">image:</span> <span class="hljs-string">ai-service:latest</span>
+      <span class="hljs-attr">ports:</span>
+        <span class="hljs-bullet">-</span> <span class="hljs-attr">containerPort:</span> <span class="hljs-number">8080</span>
+      <span class="hljs-attr">lifecycle:</span>
+        <span class="hljs-attr">preStop:</span>
+          <span class="hljs-attr">exec:</span>
+            <span class="hljs-attr">command:</span>
+              <span class="hljs-bullet">-</span> <span class="hljs-string">/bin/sh</span>
+              <span class="hljs-bullet">-</span> <span class="hljs-string">-c</span>
+              <span class="hljs-bullet">-</span> <span class="hljs-string">|
                 # 1. 标记 readiness 为 OUT_OF_SERVICE
                 curl -X POST http://localhost:8080/actuator/health/out-of-service
                 # 2. 等待连接排干（通常 10-15 秒）
                 sleep 15
-      readinessProbe:
-        httpGet:
-          path: /actuator/health/readiness
-          port: 8080
-        initialDelaySeconds: 10
-        periodSeconds: 5
-        failureThreshold: 3
-      livenessProbe:
-        httpGet:
-          path: /actuator/health/liveness
-          port: 8080
-        initialDelaySeconds: 30
-        periodSeconds: 10
-</code></pre></div>
-<p><strong>连接排干（Connection Draining）的最佳实践：</strong></p>
+</span>      <span class="hljs-attr">readinessProbe:</span>
+        <span class="hljs-attr">httpGet:</span>
+          <span class="hljs-attr">path:</span> <span class="hljs-string">/actuator/health/readiness</span>
+          <span class="hljs-attr">port:</span> <span class="hljs-number">8080</span>
+        <span class="hljs-attr">initialDelaySeconds:</span> <span class="hljs-number">10</span>
+        <span class="hljs-attr">periodSeconds:</span> <span class="hljs-number">5</span>
+        <span class="hljs-attr">failureThreshold:</span> <span class="hljs-number">3</span>
+      <span class="hljs-attr">livenessProbe:</span>
+        <span class="hljs-attr">httpGet:</span>
+          <span class="hljs-attr">path:</span> <span class="hljs-string">/actuator/health/liveness</span>
+          <span class="hljs-attr">port:</span> <span class="hljs-number">8080</span>
+        <span class="hljs-attr">initialDelaySeconds:</span> <span class="hljs-number">30</span>
+        <span class="hljs-attr">periodSeconds:</span> <span class="hljs-number">10</span>
+</code></pre></div><p><strong>连接排干（Connection Draining）的最佳实践：</strong></p>
 <ol>
 <li>先标记 readiness 为 OUT_OF_SERVICE → K8s 将该 Pod 从 Service Endpoints 中摘除</li>
 <li>存量连接自然完成或超时关闭（预留给 drain 窗口的时间）</li>
@@ -551,21 +534,20 @@ spec:
 </ol>
 <p>完整的排干时间 = preStop sleep 时间 + graceful shutdown 执行时间，必须小于 <code>terminationGracePeriodSeconds</code>。</p>
 <h3>4.3 滚动更新与发布策略</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: ai-service
-spec:
-  replicas: 3
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1         # 最多额外创建 1 个 Pod
-      maxUnavailable: 0   # 更新期间不允许有不可用 Pod（零停机）
-  template:
-    ...
-</code></pre></div>
-<table>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">apps/v1</span>
+<span class="hljs-attr">kind:</span> <span class="hljs-string">Deployment</span>
+<span class="hljs-attr">metadata:</span>
+  <span class="hljs-attr">name:</span> <span class="hljs-string">ai-service</span>
+<span class="hljs-attr">spec:</span>
+  <span class="hljs-attr">replicas:</span> <span class="hljs-number">3</span>
+  <span class="hljs-attr">strategy:</span>
+    <span class="hljs-attr">type:</span> <span class="hljs-string">RollingUpdate</span>
+    <span class="hljs-attr">rollingUpdate:</span>
+      <span class="hljs-attr">maxSurge:</span> <span class="hljs-number">1</span>         <span class="hljs-comment"># 最多额外创建 1 个 Pod</span>
+      <span class="hljs-attr">maxUnavailable:</span> <span class="hljs-number">0</span>   <span class="hljs-comment"># 更新期间不允许有不可用 Pod（零停机）</span>
+  <span class="hljs-attr">template:</span>
+    <span class="hljs-string">...</span>
+</code></pre></div><table>
 <thead>
 <tr>
 <th>发布策略</th>
@@ -605,20 +587,19 @@ spec:
 </tr>
 </tbody></table>
 <p><strong>金丝雀发布的路由策略（基于 Spring Cloud Gateway）：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Bean
-public RouteLocator canaryRoutes(RouteLocatorBuilder builder) {
-    return builder.routes()
-        .route(&quot;llm-service-canary&quot;, r -&gt; r
-            .path(&quot;/api/v1/llm/**&quot;)
-            .and().header(&quot;X-Canary&quot;, &quot;true&quot;)
-            .uri(&quot;lb://llm-service-canary&quot;))  // 金丝雀版本
-        .route(&quot;llm-service-stable&quot;, r -&gt; r
-            .path(&quot;/api/v1/llm/**&quot;)
-            .uri(&quot;lb://llm-service-stable&quot;))  // 稳定版本
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Bean</span>
+<span class="hljs-keyword">public</span> RouteLocator <span class="hljs-title function_">canaryRoutes</span><span class="hljs-params">(RouteLocatorBuilder builder)</span> {
+    <span class="hljs-keyword">return</span> builder.routes()
+        .route(<span class="hljs-string">"llm-service-canary"</span>, r -&gt; r
+            .path(<span class="hljs-string">"/api/v1/llm/**"</span>)
+            .and().header(<span class="hljs-string">"X-Canary"</span>, <span class="hljs-string">"true"</span>)
+            .uri(<span class="hljs-string">"lb://llm-service-canary"</span>))  <span class="hljs-comment">// 金丝雀版本</span>
+        .route(<span class="hljs-string">"llm-service-stable"</span>, r -&gt; r
+            .path(<span class="hljs-string">"/api/v1/llm/**"</span>)
+            .uri(<span class="hljs-string">"lb://llm-service-stable"</span>))  <span class="hljs-comment">// 稳定版本</span>
         .build();
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>五、灾备与恢复</h2>
 <h3>5.1 RPO 与 RTO</h3>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>                    ┌────── 故障发生点 ──────┐
@@ -630,9 +611,8 @@ public RouteLocator canaryRoutes(RouteLocatorBuilder builder) {
                     │  │◄─────────────────►│
                     │  │                   │
                     ▼  ▼                   ▼
-                  [故障] [开始恢复]    [恢复完成]
-</code></pre></div>
-<ul>
+                  <span class="hljs-selector-attr">[故障]</span> <span class="hljs-selector-attr">[开始恢复]</span>    <span class="hljs-selector-attr">[恢复完成]</span>
+</code></pre></div><ul>
 <li><strong>RPO (Recovery Point Objective)：</strong> 可接受的数据丢失量。RPO=0 意味着零数据丢失（同步复制）；RPO=60s 意味着可接受丢失最近 60 秒的数据（异步复制）</li>
 <li><strong>RTO (Recovery Time Objective)：</strong> 从故障发生到服务恢复的最大可接受时长。RTO=5min 意味着必须在 5 分钟内恢复服务</li>
 </ul>
@@ -718,7 +698,7 @@ public RouteLocator canaryRoutes(RouteLocatorBuilder builder) {
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>架构概览：
 
 ┌──────────────────────────────────────────────────────┐
-│                   Orchestrator                        │
+│                   <span class="hljs-keyword">Orchestrator </span>                       │
 │                                                      │
 │  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐   │
 │  │ 拓扑发现      │  │ 故障检测     │  │ 故障转移     │   │
@@ -728,35 +708,33 @@ public RouteLocator canaryRoutes(RouteLocatorBuilder builder) {
 │                                                      │
 │                       故障转移流程                      │
 │  ┌────────────────────────────────────────────────┐  │
-│  │ 1. 检测到主库故障（连续心跳失败）                  │  │
-│  │ 2. 验证主库确实不可达（多个 orchestrator 节点共识）│  │
-│  │ 3. 选择最佳从库（数据最新的、延迟最小的）          │  │
-│  │ 4. 确认其他从库的复制状态                          │  │
-│  │ 5. 将选中的从库提升为主库                          │  │
-│  │ 6. 让其他从库切换复制源到新主库                    │  │
-│  │ 7. 更新 VIP 或 ProxySQL 路由，指向新主库          │  │
-│  │ 8. 发送告警通知                                  │  │
+│  │ <span class="hljs-number">1</span>. 检测到主库故障（连续心跳失败）                  │  │
+│  │ <span class="hljs-number">2</span>. 验证主库确实不可达（多个 <span class="hljs-keyword">orchestrator </span>节点共识）│  │
+│  │ <span class="hljs-number">3</span>. 选择最佳从库（数据最新的、延迟最小的）          │  │
+│  │ <span class="hljs-number">4</span>. 确认其他从库的复制状态                          │  │
+│  │ <span class="hljs-number">5</span>. 将选中的从库提升为主库                          │  │
+│  │ <span class="hljs-number">6</span>. 让其他从库切换复制源到新主库                    │  │
+│  │ <span class="hljs-number">7</span>. 更新 VIP 或 ProxySQL 路由，指向新主库          │  │
+│  │ <span class="hljs-number">8</span>. 发送告警通知                                  │  │
 │  └────────────────────────────────────────────────┘  │
 └──────────────────────────────────────────────────────┘
-</code></pre></div>
-<p><strong>GTID 模式下的主从切换优势：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- 传统 binlog + position 方式
-CHANGE MASTER TO
-  MASTER_LOG_FILE=&#39;mysql-bin.000123&#39;,
-  MASTER_LOG_POS=456789;
+</code></pre></div><p><strong>GTID 模式下的主从切换优势：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-sql"><span class="hljs-comment">-- 传统 binlog + position 方式</span>
+CHANGE MASTER <span class="hljs-keyword">TO</span>
+  MASTER_LOG_FILE<span class="hljs-operator">=</span><span class="hljs-string">'mysql-bin.000123'</span>,
+  MASTER_LOG_POS<span class="hljs-operator">=</span><span class="hljs-number">456789</span>;
 
--- GTID 方式（简化切换、自动定位）
--- 从库自动从正确的 binlog 位置开始同步
--- 不依赖文件+偏移量的手动对齐
-</code></pre></div>
-<p>GTID（Global Transaction Identifier）为每个事务分配全局唯一标识。切换时，新从库只需告诉主库自己执行过哪些 GTID，主库就能自动确定需要同步哪些事务。这极大降低了切换的复杂度和出错概率。</p>
+<span class="hljs-comment">-- GTID 方式（简化切换、自动定位）</span>
+<span class="hljs-comment">-- 从库自动从正确的 binlog 位置开始同步</span>
+<span class="hljs-comment">-- 不依赖文件+偏移量的手动对齐</span>
+</code></pre></div><p>GTID（Global Transaction Identifier）为每个事务分配全局唯一标识。切换时，新从库只需告诉主库自己执行过哪些 GTID，主库就能自动确定需要同步哪些事务。这极大降低了切换的复杂度和出错概率。</p>
 <p><strong>ProxySQL 路由切换：</strong> Orchestrator 检测到主从切换后，调用 <code>detect_post_failover_script</code> → 脚本更新 ProxySQL 的 <code>mysql_servers</code> 表中的读写组配置 → ProxySQL 立即将写流量路由到新主库。</p>
 <h3>6.2 Redis Sentinel 故障转移</h3>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>哨兵集群（至少 3 个节点，避免偶数节点投票平手）：
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>哨兵集群（至少<span class="hljs-number"> 3 </span>个节点，避免偶数节点投票平手）：
 
     ┌──────────┐    ┌──────────┐    ┌──────────┐
     │ Sentinel │    │ Sentinel │    │ Sentinel │
-    │    1     │    │    2     │    │    3     │
+    │   <span class="hljs-number"> 1 </span>    │    │   <span class="hljs-number"> 2 </span>    │    │   <span class="hljs-number"> 3 </span>    │
     └────┬─────┘    └────┬─────┘    └────┬─────┘
          │               │               │
          └───────────────┼───────────────┘
@@ -764,11 +742,10 @@ CHANGE MASTER TO
          ┌───────────────┼───────────────┐
          │               │               │
     ┌────┴─────┐    ┌────┴─────┐    ┌────┴─────┐
-    │  Master  │    │  Slave 1 │    │  Slave 2 │
+    │  Master  │    │  Slave<span class="hljs-number"> 1 </span>│    │  Slave<span class="hljs-number"> 2 </span>│
     │  Redis   │◄───│  Redis   │    │  Redis   │
     └──────────┘ 复制└──────────┘    └──────────┘
-</code></pre></div>
-<p><strong>Sentinel 故障转移完整流程：</strong></p>
+</code></pre></div><p><strong>Sentinel 故障转移完整流程：</strong></p>
 <ol>
 <li><p><strong>主观下线（SDOWN - Subjective Down）：</strong> 单个 Sentinel 检测到 Master 在 <code>down-after-milliseconds</code> 时间内无响应，标记该 Master 为 SDOWN</p>
 </li>
@@ -783,356 +760,347 @@ CHANGE MASTER TO
 <li><p><strong>通知客户端：</strong> Sentinel 通过 Pub/Sub（<code>+switch-master</code> 频道）或客户端重连机制通知新 Master 地址</p>
 </li>
 </ol>
-<div class="code-block"><div class="code-header"><span class="code-lang">conf</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-conf"># sentinel.conf
-sentinel monitor mymaster 192.168.1.10 6379 2
+<div class="code-block"><div class="code-header"><span class="code-lang">conf</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-conf"><span class="hljs-comment"># sentinel.conf</span>
+sentinel<span class="hljs-built_in"> monitor </span>mymaster 192.168.1.10 6379 2
 sentinel down-after-milliseconds mymaster 5000
 sentinel failover-timeout mymaster 30000
 sentinel parallel-syncs mymaster 1
-</code></pre></div>
-<h3>6.3 Kafka ISR 故障处理</h3>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Topic: ai-events, Partition: 0
+</code></pre></div><h3>6.3 Kafka ISR 故障处理</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-symbol">Topic:</span> ai-events, Partition: <span class="hljs-number">0</span>
 
     ┌──────────────────────────────────────────────────────┐
-    │  ISR (In-Sync Replicas) = [Broker-1, Broker-2, Broker-3] │
+    │  ISR (In-<span class="hljs-keyword">Sync </span>Replicas) = [<span class="hljs-keyword">Broker-1, </span><span class="hljs-keyword">Broker-2, </span><span class="hljs-keyword">Broker-3] </span>│
     │                                                      │
-    │  Leader: Broker-1                                    │
-    │      消息写入 ─► Broker-1 日志                        │
+    │  Leader: <span class="hljs-keyword">Broker-1 </span>                                   │
+    │      消息写入 ─► <span class="hljs-keyword">Broker-1 </span>日志                        │
     │                    │                                 │
     │               Follower 拉取                          │
     │        ┌──────────┼──────────┐                       │
     │        ▼          ▼          ▼                       │
-    │    Broker-2    Broker-3    Broker-4                  │
+    │    <span class="hljs-keyword">Broker-2 </span>   <span class="hljs-keyword">Broker-3 </span>   <span class="hljs-keyword">Broker-4 </span>                 │
     │    (ISR)       (ISR)      (不在 ISR，落后太多)        │
     └──────────────────────────────────────────────────────┘
-</code></pre></div>
-<p><strong>ISR 机制核心参数：</strong></p>
+</code></pre></div><p><strong>ISR 机制核心参数：</strong></p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>min.insync.replicas = 2
 → 写入消息时，Leader 必须等待至少 2 个 ISR 副本确认
 → 如果 ISR 少于 2 个，写入被拒绝（NotEnoughReplicasException）
-→ 配合 acks=all 使用，保障数据可靠性
+→ 配合 <span class="hljs-attribute">acks</span>=all 使用，保障数据可靠性
 
-unclean.leader.election.enable = false
-→ false：ISR 外无活着的副本 → 分区不可用（宁可不可用也不丢数据）
-→ true：允许从 ISR 外的副本选 Leader（可用性优先，但可能丢数据）
-</code></pre></div>
-<p><strong>Controller 故障转移：</strong></p>
+unclean.leader.election.<span class="hljs-built_in">enable</span> = <span class="hljs-literal">false</span>
+→ <span class="hljs-literal">false</span>：ISR 外无活着的副本 → 分区不可用（宁可不可用也不丢数据）
+→ <span class="hljs-literal">true</span>：允许从 ISR 外的副本选 Leader（可用性优先，但可能丢数据）
+</code></pre></div><p><strong>Controller 故障转移：</strong></p>
 <p>Kafka 集群中有一个 Controller（控制器）负责分区 Leader 选举和管理。</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Controller 故障检测与转移：
 
-1. Controller 与 ZooKeeper/KRaft 的 Session 超时
-2. 其他 Broker 检测到 Controller 的临时节点消失
-3. 所有 Broker 尝试在 ZooKeeper 中创建 /controller 临时节点
-4. 先创建成功的 Broker 成为新 Controller
-5. 新 Controller 读取所有分区的 ISR 信息
-6. 对失去 Leader 的分区，从 ISR 中选举新 Leader
-7. 将新的 Leader/ISR 信息通过 LeaderAndIsr 请求分发给所有 Broker
-</code></pre></div>
-<hr>
+<span class="hljs-bullet">1.</span> Controller 与 ZooKeeper/KRaft 的 Session 超时
+<span class="hljs-bullet">2.</span> 其他 Broker 检测到 Controller 的临时节点消失
+<span class="hljs-bullet">3.</span> 所有 Broker 尝试在 ZooKeeper 中创建 /controller 临时节点
+<span class="hljs-bullet">4.</span> 先创建成功的 Broker 成为新 Controller
+<span class="hljs-bullet">5.</span> 新 Controller 读取所有分区的 ISR 信息
+<span class="hljs-bullet">6.</span> 对失去 Leader 的分区，从 ISR 中选举新 Leader
+<span class="hljs-bullet">7.</span> 将新的 Leader/ISR 信息通过 LeaderAndIsr 请求分发给所有 Broker
+</code></pre></div><hr>
 <h2>七、代码示例</h2>
 <h3>7.1 Spring Boot Graceful Shutdown + K8s Readiness Probe</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.ha.config;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">package</span> com.example.ha.config;
 
-import org.springframework.boot.actuate.health.Health;
-import org.springframework.boot.actuate.health.HealthIndicator;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.event.EventListener;
-import org.springframework.stereotype.Component;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RestController;
+<span class="hljs-keyword">import</span> org.springframework.boot.actuate.health.Health;
+<span class="hljs-keyword">import</span> org.springframework.boot.actuate.health.HealthIndicator;
+<span class="hljs-keyword">import</span> org.springframework.boot.context.event.ApplicationReadyEvent;
+<span class="hljs-keyword">import</span> org.springframework.context.event.EventListener;
+<span class="hljs-keyword">import</span> org.springframework.stereotype.Component;
+<span class="hljs-keyword">import</span> org.springframework.web.bind.annotation.PostMapping;
+<span class="hljs-keyword">import</span> org.springframework.web.bind.annotation.RestController;
 
-import java.util.concurrent.atomic.AtomicBoolean;
+<span class="hljs-keyword">import</span> java.util.concurrent.atomic.AtomicBoolean;
 
-@Component
-@RestController
-public class GracefulDrainController implements HealthIndicator {
+<span class="hljs-meta">@Component</span>
+<span class="hljs-meta">@RestController</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">GracefulDrainController</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">HealthIndicator</span> {
 
-    private final AtomicBoolean ready = new AtomicBoolean(true);
-    private final AtomicBoolean draining = new AtomicBoolean(false);
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">AtomicBoolean</span> <span class="hljs-variable">ready</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">AtomicBoolean</span>(<span class="hljs-literal">true</span>);
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">AtomicBoolean</span> <span class="hljs-variable">draining</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">AtomicBoolean</span>(<span class="hljs-literal">false</span>);
 
-    @EventListener(ApplicationReadyEvent.class)
-    public void onReady() {
-        ready.set(true);
+    <span class="hljs-meta">@EventListener(ApplicationReadyEvent.class)</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">onReady</span><span class="hljs-params">()</span> {
+        ready.set(<span class="hljs-literal">true</span>);
     }
 
-    /**
+    <span class="hljs-comment">/**
      * K8s readiness probe 调用此端点
      * 返回 OUT_OF_SERVICE 时，K8s 会将 Pod 从 Service 中摘除
-     */
-    @Override
-    public Health health() {
-        if (!ready.get()) {
-            return Health.outOfService()
-                    .withDetail(&quot;reason&quot;, &quot;draining&quot;)
+     */</span>
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> Health <span class="hljs-title function_">health</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">if</span> (!ready.get()) {
+            <span class="hljs-keyword">return</span> Health.outOfService()
+                    .withDetail(<span class="hljs-string">"reason"</span>, <span class="hljs-string">"draining"</span>)
                     .build();
         }
-        return Health.up()
-                .withDetail(&quot;status&quot;, &quot;ready&quot;)
+        <span class="hljs-keyword">return</span> Health.up()
+                .withDetail(<span class="hljs-string">"status"</span>, <span class="hljs-string">"ready"</span>)
                 .build();
     }
 
-    /**
+    <span class="hljs-comment">/**
      * K8s preStop Hook 调用此端点启动排干流程
-     */
-    @PostMapping(&quot;/actuator/drain&quot;)
-    public void startDraining() {
-        draining.set(true);
-        ready.set(false);
-        System.out.println(&quot;Draining started — Pod marked OUT_OF_SERVICE&quot;);
+     */</span>
+    <span class="hljs-meta">@PostMapping("/actuator/drain")</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">startDraining</span><span class="hljs-params">()</span> {
+        draining.set(<span class="hljs-literal">true</span>);
+        ready.set(<span class="hljs-literal">false</span>);
+        System.out.println(<span class="hljs-string">"Draining started — Pod marked OUT_OF_SERVICE"</span>);
     }
 }
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># application.yml
-server:
-  shutdown: graceful
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-comment"># application.yml</span>
+<span class="hljs-attr">server:</span>
+  <span class="hljs-attr">shutdown:</span> <span class="hljs-string">graceful</span>
 
-spring:
-  lifecycle:
-    timeout-per-shutdown-phase: 25s
+<span class="hljs-attr">spring:</span>
+  <span class="hljs-attr">lifecycle:</span>
+    <span class="hljs-attr">timeout-per-shutdown-phase:</span> <span class="hljs-string">25s</span>
 
-management:
-  endpoint:
-    health:
-      probes:
-        enabled: true
-  health:
-    livenessstate:
-      enabled: true
-    readinessstate:
-      enabled: true
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># k8s-deployment.yaml (片段)
-spec:
-  terminationGracePeriodSeconds: 45
-  containers:
-    - name: app
-      lifecycle:
-        preStop:
-          exec:
-            command:
-              - /bin/sh
-              - -c
-              - |
+<span class="hljs-attr">management:</span>
+  <span class="hljs-attr">endpoint:</span>
+    <span class="hljs-attr">health:</span>
+      <span class="hljs-attr">probes:</span>
+        <span class="hljs-attr">enabled:</span> <span class="hljs-literal">true</span>
+  <span class="hljs-attr">health:</span>
+    <span class="hljs-attr">livenessstate:</span>
+      <span class="hljs-attr">enabled:</span> <span class="hljs-literal">true</span>
+    <span class="hljs-attr">readinessstate:</span>
+      <span class="hljs-attr">enabled:</span> <span class="hljs-literal">true</span>
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-comment"># k8s-deployment.yaml (片段)</span>
+<span class="hljs-attr">spec:</span>
+  <span class="hljs-attr">terminationGracePeriodSeconds:</span> <span class="hljs-number">45</span>
+  <span class="hljs-attr">containers:</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">app</span>
+      <span class="hljs-attr">lifecycle:</span>
+        <span class="hljs-attr">preStop:</span>
+          <span class="hljs-attr">exec:</span>
+            <span class="hljs-attr">command:</span>
+              <span class="hljs-bullet">-</span> <span class="hljs-string">/bin/sh</span>
+              <span class="hljs-bullet">-</span> <span class="hljs-string">-c</span>
+              <span class="hljs-bullet">-</span> <span class="hljs-string">|
                 # 触发排干
                 curl -s -X POST http://localhost:8080/actuator/drain
                 # 等待现有请求处理完成 + K8s 摘除 Endpoint
                 sleep 12
-      readinessProbe:
-        httpGet:
-          path: /actuator/health/readiness
-          port: 8080
-        periodSeconds: 3
-        failureThreshold: 3  # 9 秒后标记为 Not Ready
-      livenessProbe:
-        httpGet:
-          path: /actuator/health/liveness
-          port: 8080
-        periodSeconds: 10
-</code></pre></div>
-<h3>7.2 Redis Sentinel + Redisson 高可用配置</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.ha.config;
+</span>      <span class="hljs-attr">readinessProbe:</span>
+        <span class="hljs-attr">httpGet:</span>
+          <span class="hljs-attr">path:</span> <span class="hljs-string">/actuator/health/readiness</span>
+          <span class="hljs-attr">port:</span> <span class="hljs-number">8080</span>
+        <span class="hljs-attr">periodSeconds:</span> <span class="hljs-number">3</span>
+        <span class="hljs-attr">failureThreshold:</span> <span class="hljs-number">3</span>  <span class="hljs-comment"># 9 秒后标记为 Not Ready</span>
+      <span class="hljs-attr">livenessProbe:</span>
+        <span class="hljs-attr">httpGet:</span>
+          <span class="hljs-attr">path:</span> <span class="hljs-string">/actuator/health/liveness</span>
+          <span class="hljs-attr">port:</span> <span class="hljs-number">8080</span>
+        <span class="hljs-attr">periodSeconds:</span> <span class="hljs-number">10</span>
+</code></pre></div><h3>7.2 Redis Sentinel + Redisson 高可用配置</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">package</span> com.example.ha.config;
 
-import org.redisson.Redisson;
-import org.redisson.api.RLock;
-import org.redisson.api.RedissonClient;
-import org.redisson.config.Config;
-import org.redisson.config.SentinelServersConfig;
-import org.redisson.connection.ConnectionListener;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
+<span class="hljs-keyword">import</span> org.redisson.Redisson;
+<span class="hljs-keyword">import</span> org.redisson.api.RLock;
+<span class="hljs-keyword">import</span> org.redisson.api.RedissonClient;
+<span class="hljs-keyword">import</span> org.redisson.config.Config;
+<span class="hljs-keyword">import</span> org.redisson.config.SentinelServersConfig;
+<span class="hljs-keyword">import</span> org.redisson.connection.ConnectionListener;
+<span class="hljs-keyword">import</span> org.springframework.context.annotation.Bean;
+<span class="hljs-keyword">import</span> org.springframework.context.annotation.Configuration;
 
-import java.net.InetSocketAddress;
-import java.util.List;
+<span class="hljs-keyword">import</span> java.net.InetSocketAddress;
+<span class="hljs-keyword">import</span> java.util.List;
 
-@Configuration
-public class RedisHACConfig {
+<span class="hljs-meta">@Configuration</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">RedisHACConfig</span> {
 
-    @Bean
-    public RedissonClient redissonClient() {
-        var config = new Config();
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-keyword">public</span> RedissonClient <span class="hljs-title function_">redissonClient</span><span class="hljs-params">()</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">config</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Config</span>();
 
-        var sentinelConfig = config.useSentinelServers()
-                .setMasterName(&quot;mymaster&quot;)
+        <span class="hljs-type">var</span> <span class="hljs-variable">sentinelConfig</span> <span class="hljs-operator">=</span> config.useSentinelServers()
+                .setMasterName(<span class="hljs-string">"mymaster"</span>)
                 .addSentinelAddress(
-                        &quot;redis://sentinel-1:26379&quot;,
-                        &quot;redis://sentinel-2:26379&quot;,
-                        &quot;redis://sentinel-3:26379&quot;
+                        <span class="hljs-string">"redis://sentinel-1:26379"</span>,
+                        <span class="hljs-string">"redis://sentinel-2:26379"</span>,
+                        <span class="hljs-string">"redis://sentinel-3:26379"</span>
                 )
-                .setDatabase(0)
-                .setConnectTimeout(3000)
-                .setTimeout(3000)
-                .setRetryAttempts(3)
-                .setRetryInterval(1500)
-                // Sentinel 模式下启用主从切换监听
-                .setCheckSentinelsList(false)
-                // 密码（如有）
-                .setPassword(&quot;your-redis-password&quot;);
+                .setDatabase(<span class="hljs-number">0</span>)
+                .setConnectTimeout(<span class="hljs-number">3000</span>)
+                .setTimeout(<span class="hljs-number">3000</span>)
+                .setRetryAttempts(<span class="hljs-number">3</span>)
+                .setRetryInterval(<span class="hljs-number">1500</span>)
+                <span class="hljs-comment">// Sentinel 模式下启用主从切换监听</span>
+                .setCheckSentinelsList(<span class="hljs-literal">false</span>)
+                <span class="hljs-comment">// 密码（如有）</span>
+                .setPassword(<span class="hljs-string">"your-redis-password"</span>);
 
-        var redisson = (Redisson) Redisson.create(config);
+        <span class="hljs-type">var</span> <span class="hljs-variable">redisson</span> <span class="hljs-operator">=</span> (Redisson) Redisson.create(config);
 
-        // 注册主从切换监听器
+        <span class="hljs-comment">// 注册主从切换监听器</span>
         redisson.getConnectionManager().getConnectionEventsHub()
-                .addListener(new ConnectionListener() {
-                    @Override
-                    public void onConnect(InetSocketAddress addr) {
-                        System.out.println(&quot;Connected to Redis: &quot; + addr);
+                .addListener(<span class="hljs-keyword">new</span> <span class="hljs-title class_">ConnectionListener</span>() {
+                    <span class="hljs-meta">@Override</span>
+                    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">onConnect</span><span class="hljs-params">(InetSocketAddress addr)</span> {
+                        System.out.println(<span class="hljs-string">"Connected to Redis: "</span> + addr);
                     }
 
-                    @Override
-                    public void onDisconnect(InetSocketAddress addr) {
-                        System.out.println(&quot;Disconnected from Redis: &quot; + addr);
+                    <span class="hljs-meta">@Override</span>
+                    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">onDisconnect</span><span class="hljs-params">(InetSocketAddress addr)</span> {
+                        System.out.println(<span class="hljs-string">"Disconnected from Redis: "</span> + addr);
                     }
                 });
 
-        return redisson;
+        <span class="hljs-keyword">return</span> redisson;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 使用示例：带重试的 Redis 操作（应对主从切换瞬间的异常）
-     */
-    @Bean
-    public CacheService cacheService(RedissonClient redisson) {
-        return new CacheService(redisson);
+     */</span>
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-keyword">public</span> CacheService <span class="hljs-title function_">cacheService</span><span class="hljs-params">(RedissonClient redisson)</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">CacheService</span>(redisson);
     }
 }
 
-// 缓存服务：封装 Sentinel 切换时的重试逻辑
-class CacheService {
+<span class="hljs-comment">// 缓存服务：封装 Sentinel 切换时的重试逻辑</span>
+<span class="hljs-keyword">class</span> <span class="hljs-title class_">CacheService</span> {
 
-    private final RedissonClient redisson;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> RedissonClient redisson;
 
-    public CacheService(RedissonClient redisson) {
-        this.redisson = redisson;
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">CacheService</span><span class="hljs-params">(RedissonClient redisson)</span> {
+        <span class="hljs-built_in">this</span>.redisson = redisson;
     }
 
-    public String getWithRetry(String key) {
-        int attempts = 3;
-        for (int i = 0; i &lt; attempts; i++) {
-            try {
-                var bucket = redisson.&lt;String&gt;getBucket(key);
-                return bucket.get();
-            } catch (Exception e) {
-                if (i == attempts - 1) throw e;
-                try {
-                    // 主从切换期间的短暂不可用，短暂休眠后重试
-                    Thread.sleep(200L * (i + 1));
-                } catch (InterruptedException ie) {
+    <span class="hljs-keyword">public</span> String <span class="hljs-title function_">getWithRetry</span><span class="hljs-params">(String key)</span> {
+        <span class="hljs-type">int</span> <span class="hljs-variable">attempts</span> <span class="hljs-operator">=</span> <span class="hljs-number">3</span>;
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; attempts; i++) {
+            <span class="hljs-keyword">try</span> {
+                <span class="hljs-type">var</span> <span class="hljs-variable">bucket</span> <span class="hljs-operator">=</span> redisson.&lt;String&gt;getBucket(key);
+                <span class="hljs-keyword">return</span> bucket.get();
+            } <span class="hljs-keyword">catch</span> (Exception e) {
+                <span class="hljs-keyword">if</span> (i == attempts - <span class="hljs-number">1</span>) <span class="hljs-keyword">throw</span> e;
+                <span class="hljs-keyword">try</span> {
+                    <span class="hljs-comment">// 主从切换期间的短暂不可用，短暂休眠后重试</span>
+                    Thread.sleep(<span class="hljs-number">200L</span> * (i + <span class="hljs-number">1</span>));
+                } <span class="hljs-keyword">catch</span> (InterruptedException ie) {
                     Thread.currentThread().interrupt();
-                    throw new RuntimeException(ie);
+                    <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RuntimeException</span>(ie);
                 }
             }
         }
-        return null;
+        <span class="hljs-keyword">return</span> <span class="hljs-literal">null</span>;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 分布式锁 —— 依赖 Sentinel 高可用的锁
-     */
-    public void executeWithLock(String lockKey, Runnable task) {
-        RLock lock = redisson.getLock(lockKey);
-        try {
-            // waitTime: 等锁时间, leaseTime: 锁自动释放时间
-            if (lock.tryLock(3, 10, java.util.concurrent.TimeUnit.SECONDS)) {
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">executeWithLock</span><span class="hljs-params">(String lockKey, Runnable task)</span> {
+        <span class="hljs-type">RLock</span> <span class="hljs-variable">lock</span> <span class="hljs-operator">=</span> redisson.getLock(lockKey);
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-comment">// waitTime: 等锁时间, leaseTime: 锁自动释放时间</span>
+            <span class="hljs-keyword">if</span> (lock.tryLock(<span class="hljs-number">3</span>, <span class="hljs-number">10</span>, java.util.concurrent.TimeUnit.SECONDS)) {
                 task.run();
             }
-        } catch (InterruptedException e) {
+        } <span class="hljs-keyword">catch</span> (InterruptedException e) {
             Thread.currentThread().interrupt();
-        } finally {
-            if (lock.isHeldByCurrentThread()) {
+        } <span class="hljs-keyword">finally</span> {
+            <span class="hljs-keyword">if</span> (lock.isHeldByCurrentThread()) {
                 lock.unlock();
             }
         }
     }
 }
-</code></pre></div>
-<h3>7.3 基于 Spring Cloud LoadBalancer 的服务健康检查 + 自动摘除</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.ha.config;
+</code></pre></div><h3>7.3 基于 Spring Cloud LoadBalancer 的服务健康检查 + 自动摘除</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">package</span> com.example.ha.config;
 
-import org.springframework.cloud.client.DefaultServiceInstance;
-import org.springframework.cloud.client.ServiceInstance;
-import org.springframework.cloud.loadbalancer.core.ServiceInstanceListSupplier;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-import reactor.core.publisher.Flux;
+<span class="hljs-keyword">import</span> org.springframework.cloud.client.DefaultServiceInstance;
+<span class="hljs-keyword">import</span> org.springframework.cloud.client.ServiceInstance;
+<span class="hljs-keyword">import</span> org.springframework.cloud.loadbalancer.core.ServiceInstanceListSupplier;
+<span class="hljs-keyword">import</span> org.springframework.context.annotation.Bean;
+<span class="hljs-keyword">import</span> org.springframework.context.annotation.Configuration;
+<span class="hljs-keyword">import</span> reactor.core.publisher.Flux;
 
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
-import java.util.List;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+<span class="hljs-keyword">import</span> java.net.URI;
+<span class="hljs-keyword">import</span> java.net.http.HttpClient;
+<span class="hljs-keyword">import</span> java.net.http.HttpRequest;
+<span class="hljs-keyword">import</span> java.net.http.HttpResponse;
+<span class="hljs-keyword">import</span> java.time.Duration;
+<span class="hljs-keyword">import</span> java.util.List;
+<span class="hljs-keyword">import</span> java.util.Map;
+<span class="hljs-keyword">import</span> java.util.concurrent.ConcurrentHashMap;
 
-@Configuration
-public class LoadBalancerHealthCheckConfig {
+<span class="hljs-meta">@Configuration</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">LoadBalancerHealthCheckConfig</span> {
 
-    private final HttpClient httpClient = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(2))
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">HttpClient</span> <span class="hljs-variable">httpClient</span> <span class="hljs-operator">=</span> HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(<span class="hljs-number">2</span>))
             .build();
 
-    private final Map&lt;String, Long&gt; unhealthyInstances = new ConcurrentHashMap&lt;&gt;();
-    private static final long UNHEALTHY_TTL_MS = 30_000; // 30 秒后重试
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Map&lt;String, Long&gt; unhealthyInstances = <span class="hljs-keyword">new</span> <span class="hljs-title class_">ConcurrentHashMap</span>&lt;&gt;();
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">long</span> <span class="hljs-variable">UNHEALTHY_TTL_MS</span> <span class="hljs-operator">=</span> <span class="hljs-number">30_000</span>; <span class="hljs-comment">// 30 秒后重试</span>
 
-    @Bean
-    public ServiceInstanceListSupplier healthCheckSupplier(
-            ServiceInstanceListSupplier discoverySupplier) {
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-keyword">public</span> ServiceInstanceListSupplier <span class="hljs-title function_">healthCheckSupplier</span><span class="hljs-params">(
+            ServiceInstanceListSupplier discoverySupplier)</span> {
 
-        return new ServiceInstanceListSupplier() {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ServiceInstanceListSupplier</span>() {
 
-            @Override
-            public String getServiceId() {
-                return discoverySupplier.getServiceId();
+            <span class="hljs-meta">@Override</span>
+            <span class="hljs-keyword">public</span> String <span class="hljs-title function_">getServiceId</span><span class="hljs-params">()</span> {
+                <span class="hljs-keyword">return</span> discoverySupplier.getServiceId();
             }
 
-            @Override
-            public Flux&lt;List&lt;ServiceInstance&gt;&gt; get() {
-                return discoverySupplier.get().map(instances -&gt; {
-                    // 过滤不健康的实例（带冷却期）
-                    return instances.stream()
-                            .filter(this::isHealthy)
+            <span class="hljs-meta">@Override</span>
+            <span class="hljs-keyword">public</span> Flux&lt;List&lt;ServiceInstance&gt;&gt; <span class="hljs-title function_">get</span><span class="hljs-params">()</span> {
+                <span class="hljs-keyword">return</span> discoverySupplier.get().map(instances -&gt; {
+                    <span class="hljs-comment">// 过滤不健康的实例（带冷却期）</span>
+                    <span class="hljs-keyword">return</span> instances.stream()
+                            .filter(<span class="hljs-built_in">this</span>::isHealthy)
                             .toList();
                 });
             }
         };
     }
 
-    private boolean isHealthy(ServiceInstance instance) {
-        String key = instance.getInstanceId();
-        Long unhealthySince = unhealthyInstances.get(key);
+    <span class="hljs-keyword">private</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">isHealthy</span><span class="hljs-params">(ServiceInstance instance)</span> {
+        <span class="hljs-type">String</span> <span class="hljs-variable">key</span> <span class="hljs-operator">=</span> instance.getInstanceId();
+        <span class="hljs-type">Long</span> <span class="hljs-variable">unhealthySince</span> <span class="hljs-operator">=</span> unhealthyInstances.get(key);
 
-        // 如果在冷却期内，跳过健康检查，直接排除
-        if (unhealthySince != null
+        <span class="hljs-comment">// 如果在冷却期内，跳过健康检查，直接排除</span>
+        <span class="hljs-keyword">if</span> (unhealthySince != <span class="hljs-literal">null</span>
                 &amp;&amp; System.currentTimeMillis() - unhealthySince &lt; UNHEALTHY_TTL_MS) {
-            return false;
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
         }
 
-        // 执行健康检查
-        try {
-            var request = HttpRequest.newBuilder()
-                    .uri(URI.create(instance.getUri() + &quot;/actuator/health&quot;))
-                    .timeout(Duration.ofSeconds(2))
+        <span class="hljs-comment">// 执行健康检查</span>
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-type">var</span> <span class="hljs-variable">request</span> <span class="hljs-operator">=</span> HttpRequest.newBuilder()
+                    .uri(URI.create(instance.getUri() + <span class="hljs-string">"/actuator/health"</span>))
+                    .timeout(Duration.ofSeconds(<span class="hljs-number">2</span>))
                     .GET()
                     .build();
 
-            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            <span class="hljs-type">var</span> <span class="hljs-variable">response</span> <span class="hljs-operator">=</span> httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
-            if (response.statusCode() == 200
-                    &amp;&amp; response.body().contains(&quot;\&quot;status\&quot;:\&quot;UP\&quot;&quot;)) {
-                unhealthyInstances.remove(key); // 恢复健康
-                return true;
+            <span class="hljs-keyword">if</span> (response.statusCode() == <span class="hljs-number">200</span>
+                    &amp;&amp; response.body().contains(<span class="hljs-string">"\"status\":\"UP\""</span>)) {
+                unhealthyInstances.remove(key); <span class="hljs-comment">// 恢复健康</span>
+                <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
             }
-        } catch (Exception e) {
-            // 健康检查失败
+        } <span class="hljs-keyword">catch</span> (Exception e) {
+            <span class="hljs-comment">// 健康检查失败</span>
         }
 
-        // 标记为不健康
+        <span class="hljs-comment">// 标记为不健康</span>
         unhealthyInstances.put(key, System.currentTimeMillis());
-        System.out.println(&quot;Marked unhealthy: &quot; + instance.getHost() + &quot;:&quot; + instance.getPort());
-        return false;
+        System.out.println(<span class="hljs-string">"Marked unhealthy: "</span> + instance.getHost() + <span class="hljs-string">":"</span> + instance.getPort());
+        <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>八、常见问题</h2>
 <p><strong>Q1: 脑裂（Split-Brain）如何防范？</strong></p>
 <p>脑裂的根本原因是网络分区导致集群分裂为多个子集，各自选出 leader 并写入数据。防范策略：</p>
@@ -1152,7 +1120,7 @@ public class LoadBalancerHealthCheckConfig {
 <p>降级策略：</p>
 <ul>
 <li>关键业务（如支付确认）读写分离配置为强制读主库</li>
-<li>非关键查询（如列表页、历史记录）允许读从库，但缓存&quot;同步中&quot;状态避免显示缺失数据</li>
+<li>非关键查询（如列表页、历史记录）允许读从库，但缓存"同步中"状态避免显示缺失数据</li>
 <li>将从库延迟作为健康指标——延迟过大的从库从负载均衡中摘除</li>
 </ul>
 <p><strong>Q3: 多活架构中数据冲突如何解决？</strong></p>
@@ -1186,10 +1154,10 @@ public class LoadBalancerHealthCheckConfig {
 <hr>
 <h2>相关条目</h2>
 <ul>
-<li><a href="#/05-分布式架构/弹性设计/05-熔断限流与弹性设计" class="cross-ref" data-ref="05-熔断限流与弹性设计">05-熔断限流与弹性设计</a> — 熔断、限流、重试等弹性策略，高可用的补充防护</li>
-<li><a href="#/05-分布式架构/事务与一致性/05-分布式一致性与事务方案" class="cross-ref" data-ref="05-分布式一致性与事务方案">05-分布式一致性与事务方案</a> — RAFT 共识、分布式事务等理论基础</li>
-<li><a href="#/04-数据与中间件/数据库与缓存/04-Redis深度解析" class="cross-ref" data-ref="04-Redis深度解析">04-Redis深度解析</a> — Redis Sentinel 集群架构深入</li>
-<li><a href="#/?d=06" class="cross-ref domain-ref">06-云原生与SRE/容器与编排/06-Kubernetes深度解析</a> — K8s 滚动更新、探针、Pod 生命周期管理</li>
+<li><a href="#/05-分布式架构/弹性设计/05-熔断限流与弹性设计" class="cross-ref">05-熔断限流与弹性设计</a> — 熔断、限流、重试等弹性策略，高可用的补充防护</li>
+<li><a href="#/05-分布式架构/事务与一致性/05-分布式一致性与事务方案" class="cross-ref">05-分布式一致性与事务方案</a> — RAFT 共识、分布式事务等理论基础</li>
+<li><a href="#/04-数据与中间件/数据库与缓存/04-Redis深度解析" class="cross-ref">04-Redis深度解析</a> — Redis Sentinel 集群架构深入</li>
+<li><span class="broken-ref" title="未找到: 06-云原生与SRE/容器与编排/06-Kubernetes深度解析">06-云原生与SRE/容器与编排/06-Kubernetes深度解析</span> — K8s 滚动更新、探针、Pod 生命周期管理</li>
 </ul>
-</div>
+</body></html></div>
 </article>

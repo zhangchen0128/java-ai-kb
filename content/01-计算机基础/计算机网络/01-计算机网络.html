@@ -1,12 +1,12 @@
 
-<article class="kb-entry" data-path="/01-计算机基础/计算机网络/01-计算机网络">
+<article class="kb-entry" data-path="/01-计算机基础">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=01">01-计算机基础</a></div>
     <h1>计算机网络 — 后端工程师必备网络知识</h1>
-    <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#tcp</span><span class="badge badge-tag">#http</span><span class="badge badge-tag">#tls</span><span class="badge badge-tag">#dns</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#tcp</span><span class="badge badge-tag">#http</span><span class="badge badge-tag">#tls</span><span class="badge badge-tag">#dns</span><span class="badge badge-tag">#socket</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://datatracker.ietf.org/doc/html/rfc7230" target="_blank" rel="noopener" class="source-link" title="RFC 7230 — HTTP/1.1 消息格式与路由">RFC 7230 — HTTP/1.1 消息格式与路由</a><a href="https://datatracker.ietf.org/doc/html/rfc7540" target="_blank" rel="noopener" class="source-link" title="RFC 7540 — HTTP/2 协议">RFC 7540 — HTTP/2 协议</a><a href="https://datatracker.ietf.org/doc/html/rfc8446" target="_blank" rel="noopener" class="source-link" title="RFC 8446 — TLS 1.3 协议">RFC 8446 — TLS 1.3 协议</a><a href="https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/net/package-summary.html" target="_blank" rel="noopener" class="source-link" title="JDK 25 java.net 和 java.nio.channels 包文档">JDK 25 java.net 和 java.nio.channels 包文档</a></small></div>
   </div>
-  <div class="entry-body"><h1>计算机网络 — 后端工程师必备网络知识</h1>
+  <div class="entry-body"><html><head></head><body><h1>计算机网络 — 后端工程师必备网络知识</h1>
 <h2>概述</h2>
 <p>网络是后端系统的血管——每个 API 调用、数据库查询、消息投递和缓存操作都经过网络。不理解网络协议栈的工程师在排查超时、连接重置、延迟抖动等问题时，只能依赖猜测而非基于原理的推理。本文以 TCP/IP 协议栈为主线，深入 HTTP/2/3 协议演进、TLS 加密体系、DNS 解析、Socket 编程和常见网络问题诊断，并全程以 Java 代码示例衔接理论与实践。</p>
 <hr>
@@ -49,26 +49,24 @@
 </tbody></table>
 <p>封装路径：应用数据 → TCP Segment（加 TCP 头）→ IP Packet（加 IP 头）→ Ethernet Frame（加 MAC 头 + CRC 尾）</p>
 <h4>1.2 为什么分四层？</h4>
-<p>分层遵循单一职责原则。每层可以独立演进——比如物理介质从铜线升级到光纤不用修改 TCP 协议；HTTP 从 1.1 升级到 2 不需要改变 IP 路由。这种&quot;层间接口稳定，层内自由演进&quot;的设计使互联网在过去 50 年里不断扩展。</p>
+<p>分层遵循单一职责原则。每层可以独立演进——比如物理介质从铜线升级到光纤不用修改 TCP 协议；HTTP 从 1.1 升级到 2 不需要改变 IP 路由。这种"层间接口稳定，层内自由演进"的设计使互联网在过去 50 年里不断扩展。</p>
 <hr>
 <h3>二、TCP 详解</h3>
 <p>TCP（Transmission Control Protocol）提供面向连接的、可靠的、有序的字节流传输。</p>
 <h4>2.1 三次握手</h4>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Client                              Server
-  | --- SYN (seq=x) ---------------&gt; |    (1) 客户端发 SYN，进入 SYN_SENT
-  | &lt;-- SYN+ACK (seq=y, ack=x+1) -- |    (2) 服务器发 SYN+ACK，进入 SYN_RCVD
-  | --- ACK (ack=y+1) -------------&gt; |    (3) 客户端发 ACK，双方进入 ESTABLISHED
-</code></pre></div>
-<p><strong>为什么是三次而不是两次？</strong> 两次握手无法防止已失效的连接请求到达服务器。假设客户端第一次 SYN 因网络拥堵延迟，客户端重传 SYN，连接建立、传输完成并关闭。之后第一个超时的 SYN 到达服务器，服务器以为客户端又想建连接，返回 SYN+ACK，但客户端已经不需要这连接——这导致服务器端挂着一个半开连接，浪费资源。三次握手让客户端必须在第三次发送 ACK 来确认连接。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Client                             <span class="hljs-built_in"> Server
+</span>  | --- SYN (<span class="hljs-attribute">seq</span>=x) ---------------&gt; |    (1) 客户端发 SYN，进入 SYN_SENT
+  | &lt;-- SYN+ACK (<span class="hljs-attribute">seq</span>=y, <span class="hljs-attribute">ack</span>=x+1) -- |    (2) 服务器发 SYN+ACK，进入 SYN_RCVD
+  | --- ACK (<span class="hljs-attribute">ack</span>=y+1) -------------&gt; |    (3) 客户端发 ACK，双方进入 ESTABLISHED
+</code></pre></div><p><strong>为什么是三次而不是两次？</strong> 两次握手无法防止已失效的连接请求到达服务器。假设客户端第一次 SYN 因网络拥堵延迟，客户端重传 SYN，连接建立、传输完成并关闭。之后第一个超时的 SYN 到达服务器，服务器以为客户端又想建连接，返回 SYN+ACK，但客户端已经不需要这连接——这导致服务器端挂着一个半开连接，浪费资源。三次握手让客户端必须在第三次发送 ACK 来确认连接。</p>
 <h4>2.2 四次挥手</h4>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Client                              Server
-  | --- FIN (seq=u) ---------------&gt; |    (1) 客户端：我没有数据要发了
-  | &lt;-- ACK (ack=u+1) ------------ |    (2) 服务器：收到，但我可能还有数据
-  | &lt;-- FIN (seq=v, ack=u+1) ----- |    (3) 服务器：我也没有数据要发了
-  | --- ACK (ack=v+1) -------------&gt; |    (4) 客户端：收到
-  |  进入 TIME_WAIT (2MSL)           |   服务器关闭
-</code></pre></div>
-<p><strong>TIME_WAIT 为什么需要 2MSL？</strong>（MSL = Maximum Segment Lifetime，通常 30-120 秒）</p>
+  | <span class="hljs-type">--- FIN</span> (seq=u) ---------------&gt; |    <span class="hljs-type">(1</span>) 客户端：我没有数据要发了
+  | <span class="hljs-type">&lt;-- ACK</span> (ack=u+<span class="hljs-number">1</span>) ------------ |    <span class="hljs-type">(2</span>) 服务器：收到，但我可能还有数据
+  | <span class="hljs-type">&lt;-- FIN</span> (seq=v, ack=u+<span class="hljs-number">1</span>) ----- |    <span class="hljs-type">(3</span>) 服务器：我也没有数据要发了
+  | <span class="hljs-type">--- ACK</span> (ack=v+<span class="hljs-number">1</span>) -------------&gt; |    <span class="hljs-type">(4</span>) 客户端：收到
+  |  <span class="hljs-type">进入 TIME_WAIT</span> (<span class="hljs-number">2</span>MSL)           |   <span class="hljs-type">服务器关闭</span>
+</code></pre></div><p><strong>TIME_WAIT 为什么需要 2MSL？</strong>（MSL = Maximum Segment Lifetime，通常 30-120 秒）</p>
 <ol>
 <li>确保最后一个 ACK 能到达服务器：如果 ACK 丢失，服务器重传 FIN，客户端能重发 ACK</li>
 <li>让旧连接的所有报文在网络上消失，避免干扰同端口的新连接</li>
@@ -79,10 +77,9 @@
 <li>调整内核参数：<code>net.ipv4.tcp_tw_reuse = 1</code></li>
 </ul>
 <h4>2.3 TCP 状态机</h4>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>CLOSED → LISTEN → SYN_RCVD → ESTABLISHED → FIN_WAIT_1 → FIN_WAIT_2 → TIME_WAIT → CLOSED
-                                           \→ CLOSE_WAIT → LAST_ACK → CLOSED
-</code></pre></div>
-<p>常见异常状态诊断：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-built_in">CLOSED</span> → LISTEN → SYN_RCVD → ESTABLISHED → FIN_WAIT_1 → FIN_WAIT_2 → TIME_WAIT → <span class="hljs-built_in">CLOSED</span>
+                                           \→ <span class="hljs-built_in">CLOSE_WAIT</span> → LAST_ACK → <span class="hljs-built_in">CLOSED</span>
+</code></pre></div><p>常见异常状态诊断：</p>
 <ul>
 <li>大量 <code>SYN_RCVD</code> → 可能遭受 SYN Flood 攻击</li>
 <li>大量 <code>CLOSE_WAIT</code> → 服务端代码忘记调用 <code>close()</code>，文件描述符泄漏</li>
@@ -90,7 +87,7 @@
 </ul>
 <h4>2.4 滑动窗口与流量控制</h4>
 <p>TCP 使用滑动窗口实现流量控制——接收方在 ACK 中告知自己的接收窗口大小（<code>rwnd</code>），发送方保证在途数据量不超过 <code>min(cwnd, rwnd)</code>。</p>
-<p>窗口为 0 时，发送方停止发送并启动&quot;零窗口探测定时器&quot;，定期发送探测报文检查接收方窗口是否重新开放。</p>
+<p>窗口为 0 时，发送方停止发送并启动"零窗口探测定时器"，定期发送探测报文检查接收方窗口是否重新开放。</p>
 <p><strong>与 Java 的关系：</strong> <code>Socket.setReceiveBufferSize(int)</code> 影响接收窗口的初始大小。默认值通常是 64KB-128KB。大带宽高延迟链路（如跨洲传输），建议增大缓冲区以利用带宽：<code>buffer_size = bandwidth * RTT</code>（带宽延迟积）。</p>
 <h4>2.5 拥塞控制</h4>
 <p>TCP 拥塞控制经历了多个版本的演进：</p>
@@ -162,95 +159,89 @@
 <hr>
 <h3>四、DNS</h3>
 <h4>4.1 解析过程</h4>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>浏览器 → 系统 DNS 解析器 → 本地 DNS 服务器（运营商/路由器）
-  → 根 DNS 服务器（返回 .com NS 记录）
-  → 顶级域 DNS 服务器（返回 example.com NS 记录）
-  → 权威 DNS 服务器（返回 example.com 的 A 记录）
-</code></pre></div>
-<p>TTL 控制缓存时间。CDN 的核心原理是基于 DNS 解析返回离用户最近的边缘节点 IP。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>浏览器 → 系统<span class="hljs-built_in"> DNS </span>解析器 → 本地<span class="hljs-built_in"> DNS </span>服务器（运营商/路由器）
+  → 根<span class="hljs-built_in"> DNS </span>服务器（返回 .com NS 记录）
+  → 顶级域<span class="hljs-built_in"> DNS </span>服务器（返回 example.com NS 记录）
+  → 权威<span class="hljs-built_in"> DNS </span>服务器（返回 example.com 的 A 记录）
+</code></pre></div><p>TTL 控制缓存时间。CDN 的核心原理是基于 DNS 解析返回离用户最近的边缘节点 IP。</p>
 <h4>4.2 Java 中的 DNS</h4>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">InetAddress addr = InetAddress.getByName(&quot;www.example.com&quot;);
-// JVM 默认缓存 DNS 结果，可通过以下参数调整：
-// -Dsun.net.inetaddr.ttl=30        (秒，-1 表示永久缓存)
-// -Dsun.net.inetaddr.negative.ttl=10  (失败缓存的 TTL)
-</code></pre></div>
-<p><strong>注意：</strong> JVM 默认永久缓存 DNS 结果（如果 SecurityManager 未安装），这在容器化/K8s 环境中可能导致调用已经销毁的旧 Pod IP。务必显式设置 <code>sun.net.inetaddr.ttl</code>。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-type">InetAddress</span> <span class="hljs-variable">addr</span> <span class="hljs-operator">=</span> InetAddress.getByName(<span class="hljs-string">"www.example.com"</span>);
+<span class="hljs-comment">// JVM 默认缓存 DNS 结果，可通过以下参数调整：</span>
+<span class="hljs-comment">// -Dsun.net.inetaddr.ttl=30        (秒，-1 表示永久缓存)</span>
+<span class="hljs-comment">// -Dsun.net.inetaddr.negative.ttl=10  (失败缓存的 TTL)</span>
+</code></pre></div><p><strong>注意：</strong> JVM 默认永久缓存 DNS 结果（如果 SecurityManager 未安装），这在容器化/K8s 环境中可能导致调用已经销毁的旧 Pod IP。务必显式设置 <code>sun.net.inetaddr.ttl</code>。</p>
 <hr>
 <h3>五、TLS 1.3</h3>
 <p>TLS 1.3（RFC 8446）是对 TLS 1.2 的重大简化。</p>
 <h4>5.1 握手过程</h4>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Client → Server: ClientHello (支持的密码套件 + 密钥共享)
-Server → Client: ServerHello (选择的密码套件 + 密钥共享)
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-built_in">Client</span> → <span class="hljs-built_in">Server</span>: <span class="hljs-built_in">ClientHello</span> (支持的密码套件 + 密钥共享)
+<span class="hljs-built_in">Server</span> → <span class="hljs-built_in">Client</span>: <span class="hljs-built_in">ServerHello</span> (选择的密码套件 + 密钥共享)
                  + {EncryptedExtensions}
                  + {Certificate}
                  + {CertificateVerify}
                  + {Finished}
-Client → Server: {Finished}
-</code></pre></div>
-<p><strong>1-RTT 握手：</strong> TLS 1.3 握手只需 1 个 Round-Trip Time（TLS 1.2 需要 2 个 RTT）。客户端在第一个 ClientHello 中就包含了密钥共享（如 ECDHE 的公钥），减少了往返次数。</p>
+<span class="hljs-built_in">Client</span> → <span class="hljs-built_in">Server</span>: {Finished}
+</code></pre></div><p><strong>1-RTT 握手：</strong> TLS 1.3 握手只需 1 个 Round-Trip Time（TLS 1.2 需要 2 个 RTT）。客户端在第一个 ClientHello 中就包含了密钥共享（如 ECDHE 的公钥），减少了往返次数。</p>
 <p><strong>PFS（Perfect Forward Secrecy）：</strong> TLS 1.3 强制使用支持 PFS 的密码套件（ECDHE），即使服务器的长期私钥泄漏，已建立的会话密钥也不会泄漏。TLS 1.3 移除了 RSA 密钥交换和静态 DH 等不支持 PFS 的算法。</p>
 <h4>5.2 证书链</h4>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Root CA（预装，自签名）→ Intermediate CA → Server Certificate（叶子证书）
-</code></pre></div>
-<p>客户端验证链条：用 Root CA 公钥验证 Intermediate CA 签名 → 用 Intermediate CA 公钥验证 Server 证书签名。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Root <span class="hljs-keyword">CA</span>（预装，自签名）→ Intermediate <span class="hljs-keyword">CA</span> → Server Certificate（叶子证书）
+</code></pre></div><p>客户端验证链条：用 Root CA 公钥验证 Intermediate CA 签名 → 用 Intermediate CA 公钥验证 Server 证书签名。</p>
 <h4>5.3 Java 中的 TLS</h4>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// JDK 25 HttpClient 默认使用 TLS 1.3
-var client = HttpClient.newBuilder()
-    .sslContext(sslContext)     // 自定义 SSLContext
-    .sslParameters(params)      // 自定义密码套件等
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// JDK 25 HttpClient 默认使用 TLS 1.3</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">client</span> <span class="hljs-operator">=</span> HttpClient.newBuilder()
+    .sslContext(sslContext)     <span class="hljs-comment">// 自定义 SSLContext</span>
+    .sslParameters(params)      <span class="hljs-comment">// 自定义密码套件等</span>
     .version(HttpClient.Version.HTTP_2)
     .build();
-</code></pre></div>
-<p>mTLS（双向 TLS）：服务端不仅提供证书，也要求客户端提供证书。适合内部服务间通信的身份认证。</p>
+</code></pre></div><p>mTLS（双向 TLS）：服务端不仅提供证书，也要求客户端提供证书。适合内部服务间通信的身份认证。</p>
 <hr>
 <h3>六、Socket 编程</h3>
 <h4>6.1 传统阻塞 Socket</h4>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">try (var serverSocket = new ServerSocket(8080)) {
-    while (true) {
-        var clientSocket = serverSocket.accept();  // 阻塞等待连接
-        new Thread(() -&gt; {  // 传统做法：一个连接一个线程
-            try (clientSocket;
-                 var in = new BufferedReader(
-                     new InputStreamReader(clientSocket.getInputStream()));
-                 var out = new PrintWriter(clientSocket.getOutputStream(), true)) {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">serverSocket</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ServerSocket</span>(<span class="hljs-number">8080</span>)) {
+    <span class="hljs-keyword">while</span> (<span class="hljs-literal">true</span>) {
+        <span class="hljs-type">var</span> <span class="hljs-variable">clientSocket</span> <span class="hljs-operator">=</span> serverSocket.accept();  <span class="hljs-comment">// 阻塞等待连接</span>
+        <span class="hljs-keyword">new</span> <span class="hljs-title class_">Thread</span>(() -&gt; {  <span class="hljs-comment">// 传统做法：一个连接一个线程</span>
+            <span class="hljs-keyword">try</span> (clientSocket;
+                 <span class="hljs-type">var</span> <span class="hljs-variable">in</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">BufferedReader</span>(
+                     <span class="hljs-keyword">new</span> <span class="hljs-title class_">InputStreamReader</span>(clientSocket.getInputStream()));
+                 <span class="hljs-type">var</span> <span class="hljs-variable">out</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">PrintWriter</span>(clientSocket.getOutputStream(), <span class="hljs-literal">true</span>)) {
                 String line;
-                while ((line = in.readLine()) != null) {
-                    out.println(&quot;Echo: &quot; + line);
+                <span class="hljs-keyword">while</span> ((line = in.readLine()) != <span class="hljs-literal">null</span>) {
+                    out.println(<span class="hljs-string">"Echo: "</span> + line);
                 }
-            } catch (IOException e) {
+            } <span class="hljs-keyword">catch</span> (IOException e) {
                 e.printStackTrace();
             }
         }).start();
     }
 }
-</code></pre></div>
-<p>线程-per-connection 模型的致命缺陷：当连接数达到数千时，线程数爆炸，大量时间花在上下文切换上。</p>
+</code></pre></div><p>线程-per-connection 模型的致命缺陷：当连接数达到数千时，线程数爆炸，大量时间花在上下文切换上。</p>
 <h4>6.2 NIO Selector 模式</h4>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">try (var selector = Selector.open();
-     var serverChannel = ServerSocketChannel.open()) {
-    serverChannel.bind(new InetSocketAddress(8080));
-    serverChannel.configureBlocking(false);
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">selector</span> <span class="hljs-operator">=</span> Selector.open();
+     <span class="hljs-type">var</span> <span class="hljs-variable">serverChannel</span> <span class="hljs-operator">=</span> ServerSocketChannel.open()) {
+    serverChannel.bind(<span class="hljs-keyword">new</span> <span class="hljs-title class_">InetSocketAddress</span>(<span class="hljs-number">8080</span>));
+    serverChannel.configureBlocking(<span class="hljs-literal">false</span>);
     serverChannel.register(selector, SelectionKey.OP_ACCEPT);
 
-    while (true) {
-        selector.select(); // epoll_wait
-        var keys = selector.selectedKeys().iterator();
-        while (keys.hasNext()) {
-            var key = keys.next();
+    <span class="hljs-keyword">while</span> (<span class="hljs-literal">true</span>) {
+        selector.select(); <span class="hljs-comment">// epoll_wait</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">keys</span> <span class="hljs-operator">=</span> selector.selectedKeys().iterator();
+        <span class="hljs-keyword">while</span> (keys.hasNext()) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">key</span> <span class="hljs-operator">=</span> keys.next();
             keys.remove();
-            if (key.isAcceptable()) {
-                // 接受新连接
-                var client = ((ServerSocketChannel) key.channel()).accept();
-                client.configureBlocking(false);
+            <span class="hljs-keyword">if</span> (key.isAcceptable()) {
+                <span class="hljs-comment">// 接受新连接</span>
+                <span class="hljs-type">var</span> <span class="hljs-variable">client</span> <span class="hljs-operator">=</span> ((ServerSocketChannel) key.channel()).accept();
+                client.configureBlocking(<span class="hljs-literal">false</span>);
                 client.register(selector, SelectionKey.OP_READ);
-            } else if (key.isReadable()) {
-                // 读取数据
-                var client = (SocketChannel) key.channel();
-                var buffer = ByteBuffer.allocate(1024);
-                int read = client.read(buffer);
-                if (read == -1) {
+            } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (key.isReadable()) {
+                <span class="hljs-comment">// 读取数据</span>
+                <span class="hljs-type">var</span> <span class="hljs-variable">client</span> <span class="hljs-operator">=</span> (SocketChannel) key.channel();
+                <span class="hljs-type">var</span> <span class="hljs-variable">buffer</span> <span class="hljs-operator">=</span> ByteBuffer.allocate(<span class="hljs-number">1024</span>);
+                <span class="hljs-type">int</span> <span class="hljs-variable">read</span> <span class="hljs-operator">=</span> client.read(buffer);
+                <span class="hljs-keyword">if</span> (read == -<span class="hljs-number">1</span>) {
                     client.close();
-                } else {
+                } <span class="hljs-keyword">else</span> {
                     buffer.flip();
                     client.write(buffer);
                 }
@@ -258,8 +249,7 @@ var client = HttpClient.newBuilder()
         }
     }
 }
-</code></pre></div>
-<p>这个模型是 Netty 的基础。单个线程通过 Selector（底层 epoll）管理数千个连接。</p>
+</code></pre></div><p>这个模型是 Netty 的基础。单个线程通过 Selector（底层 epoll）管理数千个连接。</p>
 <hr>
 <h3>七、负载均衡</h3>
 <table>
@@ -335,47 +325,46 @@ var client = HttpClient.newBuilder()
 <p><strong>Java 端诊断：</strong> <code>-Djavax.net.debug=ssl:handshake</code> 输出 TLS 握手详情，用于排查证书问题和协议版本不匹配。</p>
 <hr>
 <h2>代码示例 — 使用 JDK HttpClient</h2>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// JDK 25 HttpClient — 支持 HTTP/2, SSE, Virtual Threads
-void http2Example() throws Exception {
-    try (var client = HttpClient.newBuilder()
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// JDK 25 HttpClient — 支持 HTTP/2, SSE, Virtual Threads</span>
+<span class="hljs-keyword">void</span> <span class="hljs-title function_">http2Example</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> Exception {
+    <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">client</span> <span class="hljs-operator">=</span> HttpClient.newBuilder()
             .version(HttpClient.Version.HTTP_2)
-            .connectTimeout(Duration.ofSeconds(10))
+            .connectTimeout(Duration.ofSeconds(<span class="hljs-number">10</span>))
             .build()) {
 
-        var request = HttpRequest.newBuilder()
-            .uri(URI.create(&quot;https://http2.golang.org/reqinfo&quot;))
-            .header(&quot;Accept&quot;, &quot;application/json&quot;)
+        <span class="hljs-type">var</span> <span class="hljs-variable">request</span> <span class="hljs-operator">=</span> HttpRequest.newBuilder()
+            .uri(URI.create(<span class="hljs-string">"https://http2.golang.org/reqinfo"</span>))
+            .header(<span class="hljs-string">"Accept"</span>, <span class="hljs-string">"application/json"</span>)
             .GET()
             .build();
 
-        var response = client.send(request,
+        <span class="hljs-type">var</span> <span class="hljs-variable">response</span> <span class="hljs-operator">=</span> client.send(request,
             HttpResponse.BodyHandlers.ofString());
 
-        System.out.println(&quot;Status: &quot; + response.statusCode());
-        System.out.println(&quot;Version: &quot; + response.version()); // HTTP_2
-        System.out.println(&quot;Body: &quot; + response.body());
+        System.out.println(<span class="hljs-string">"Status: "</span> + response.statusCode());
+        System.out.println(<span class="hljs-string">"Version: "</span> + response.version()); <span class="hljs-comment">// HTTP_2</span>
+        System.out.println(<span class="hljs-string">"Body: "</span> + response.body());
     }
 }
 
-// SSE 流式接收（配合 Virtual Threads）
-void sseWithVirtualThreads() {
-    var request = HttpRequest.newBuilder()
-        .uri(URI.create(&quot;https://api.example.com/events&quot;))
+<span class="hljs-comment">// SSE 流式接收（配合 Virtual Threads）</span>
+<span class="hljs-keyword">void</span> <span class="hljs-title function_">sseWithVirtualThreads</span><span class="hljs-params">()</span> {
+    <span class="hljs-type">var</span> <span class="hljs-variable">request</span> <span class="hljs-operator">=</span> HttpRequest.newBuilder()
+        .uri(URI.create(<span class="hljs-string">"https://api.example.com/events"</span>))
         .GET()
         .build();
 
-    var client = HttpClient.newBuilder().build();
+    <span class="hljs-type">var</span> <span class="hljs-variable">client</span> <span class="hljs-operator">=</span> HttpClient.newBuilder().build();
     client.sendAsync(request, HttpResponse.BodyHandlers.ofLines())
         .thenAccept(response -&gt; {
             response.body().forEach(line -&gt; {
-                if (line.startsWith(&quot;data:&quot;)) {
-                    System.out.println(&quot;Event: &quot; + line);
+                <span class="hljs-keyword">if</span> (line.startsWith(<span class="hljs-string">"data:"</span>)) {
+                    System.out.println(<span class="hljs-string">"Event: "</span> + line);
                 }
             });
         });
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>常见问题 / 面试题</h2>
 <p><strong>Q1: TCP 三次握手中，第二次握手（SYN+ACK）丢失了会怎样？</strong>
 客户端由于没有收到 SYN+ACK，会重传 SYN（默认重传 5 次，间隔 1s、2s、4s、8s、16s）。服务器端由于没有收到 ACK，也会重传 SYN+ACK。两侧的重传机制独立运作。</p>
@@ -396,9 +385,9 @@ TLS 1.3 的握手从 2-RTT 减少到 1-RTT（0-RTT 重连更快），因为 Clie
 <hr>
 <h2>相关条目</h2>
 <ul>
-<li><a href="#/01-计算机基础/操作系统/01-操作系统基础" class="cross-ref" data-ref="01-操作系统基础">01-操作系统基础</a> — 操作系统基础（I/O 模型、文件系统）</li>
-<li><a href="#/01-计算机基础/数据库原理/01-数据库原理" class="cross-ref" data-ref="01-数据库原理">01-数据库原理</a> — 数据库原理</li>
-<li><a href="#/01-计算机基础/分布式理论/01-分布式系统理论" class="cross-ref" data-ref="01-分布式系统理论">01-分布式系统理论</a> — 分布式理论（CAP、一致性）</li>
+<li><a href="#/01-计算机基础/操作系统/01-操作系统基础" class="cross-ref">01-操作系统基础</a> — 操作系统基础（I/O 模型、文件系统）</li>
+<li><a href="#/01-计算机基础/数据库原理/01-数据库原理" class="cross-ref">01-数据库原理</a> — 数据库原理</li>
+<li><a href="#/01-计算机基础/分布式理论/01-分布式系统理论" class="cross-ref">01-分布式系统理论</a> — 分布式理论（CAP、一致性）</li>
 </ul>
-</div>
+</body></html></div>
 </article>

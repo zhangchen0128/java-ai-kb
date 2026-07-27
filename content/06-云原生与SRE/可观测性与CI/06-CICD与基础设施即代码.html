@@ -1,12 +1,12 @@
 
-<article class="kb-entry" data-path="/06-云原生与SRE/可观测性与CI/06-CICD与基础设施即代码">
+<article class="kb-entry" data-path="/06-云原生与SRE">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=06">06-云原生与SRE</a></div>
     <h1>CI/CD 与基础设施即代码（IaC）</h1>
-    <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#cicd</span><span class="badge badge-tag">#github-actions</span><span class="badge badge-tag">#argocd</span><span class="badge badge-tag">#terraform</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#cicd</span><span class="badge badge-tag">#github-actions</span><span class="badge badge-tag">#argocd</span><span class="badge badge-tag">#terraform</span><span class="badge badge-tag">#gitops</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://docs.github.com/en/actions" target="_blank" rel="noopener" class="source-link" title="GitHub Actions 官方文档">GitHub Actions 官方文档</a><a href="https://argo-cd.readthedocs.io/" target="_blank" rel="noopener" class="source-link" title="ArgoCD 官方文档">ArgoCD 官方文档</a><a href="https://developer.hashicorp.com/terraform/docs" target="_blank" rel="noopener" class="source-link" title="Terraform 官方文档">Terraform 官方文档</a><a href="https://www.oreilly.com/library/view/terraform-up-and/" target="_blank" rel="noopener" class="source-link" title="《Terraform: Up &amp; Running》— Yevgeniy Brikman">《Terraform: Up &amp; Running》— Yevgeniy Brikman</a></small></div>
   </div>
-  <div class="entry-body"><h1>CI/CD 与基础设施即代码（IaC）</h1>
+  <div class="entry-body"><html><head></head><body><h1>CI/CD 与基础设施即代码（IaC）</h1>
 <h2>概述</h2>
 <p>CI/CD 流水线是现代软件交付的动脉，IaC 则是基础设施管理的声明式范式。对于 AI 应用，CI/CD 不仅要处理传统 Java 应用的构建和部署，还需考虑模型文件管理、GPU 资源调度和推理服务的特殊部署策略。</p>
 <p>本文覆盖 GitHub Actions 流水线设计、Docker 镜像构建优化、容器安全扫描、GitOps（ArgoCD）、部署策略和 Terraform IaC 基础。</p>
@@ -18,417 +18,403 @@
 └────────┘  └────────┘  └────────┘  └─────────┘  └──────────┘  └──────────┘
 
 Build:    编译 + 单元测试
-Test:     集成测试 + 安全测试
+<span class="hljs-keyword">Test:     </span>集成测试 + 安全测试
 Scan:     代码扫描(SonarQube) + 依赖扫描(Trivy) + 镜像扫描
 Package:  构建 Docker 镜像 + 推送 Registry
 Deploy:   部署到目标环境
 Verify:   冒烟测试 + 健康检查 + 回滚验证
-</code></pre></div>
-<h3>1.2 AI 应用的特殊考量</h3>
+</code></pre></div><h3>1.2 AI 应用的特殊考量</h3>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>额外的流水线阶段：
 ┌──────────────┐  ┌───────────────┐  ┌──────────────────┐
-│ Model Verify │─▶│ Embed Test    │─▶│ Retrieval Eval   │
+│ Model Verify │─▶│ Embed <span class="hljs-keyword">Test</span>    │─▶│ Retrieval <span class="hljs-keyword">Eval</span>   │
 └──────────────┘  └───────────────┘  └──────────────────┘
 
 Model Verify:     模型文件完整性校验（SHA256）+ 模型加载测试
-Embed Test:       Embedding 质量回归测试（Golden Dataset）
-Retrieval Eval:   RAG 检索质量评估（MRR/NDCG/召回率）
-</code></pre></div>
-<hr>
+Embed <span class="hljs-keyword">Test</span>:       Embedding 质量回归测试（Golden Dataset）
+Retrieval <span class="hljs-keyword">Eval</span>:   RAG 检索质量评估（MRR/NDCG/召回率）
+</code></pre></div><hr>
 <h2>二、GitHub Actions 深入</h2>
 <h3>2.1 完整 CI 流水线</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># .github/workflows/ci.yml
-name: CI Pipeline
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-comment"># .github/workflows/ci.yml</span>
+<span class="hljs-attr">name:</span> <span class="hljs-string">CI</span> <span class="hljs-string">Pipeline</span>
 
-on:
-  push:
-    branches: [main, develop]
-  pull_request:
-    branches: [main]
+<span class="hljs-attr">on:</span>
+  <span class="hljs-attr">push:</span>
+    <span class="hljs-attr">branches:</span> [<span class="hljs-string">main</span>, <span class="hljs-string">develop</span>]
+  <span class="hljs-attr">pull_request:</span>
+    <span class="hljs-attr">branches:</span> [<span class="hljs-string">main</span>]
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+<span class="hljs-attr">env:</span>
+  <span class="hljs-attr">REGISTRY:</span> <span class="hljs-string">ghcr.io</span>
+  <span class="hljs-attr">IMAGE_NAME:</span> <span class="hljs-string">${{</span> <span class="hljs-string">github.repository</span> <span class="hljs-string">}}</span>
 
-jobs:
-  # ============================================
-  # Job 1: Build &amp; Unit Test
-  # ============================================
-  build:
-    name: Build and Unit Test
-    runs-on: ubuntu-latest
-    outputs:
-      artifact-name: ${{ steps.upload.outputs.artifact-name }}
+<span class="hljs-attr">jobs:</span>
+  <span class="hljs-comment"># ============================================</span>
+  <span class="hljs-comment"># Job 1: Build &amp; Unit Test</span>
+  <span class="hljs-comment"># ============================================</span>
+  <span class="hljs-attr">build:</span>
+    <span class="hljs-attr">name:</span> <span class="hljs-string">Build</span> <span class="hljs-string">and</span> <span class="hljs-string">Unit</span> <span class="hljs-string">Test</span>
+    <span class="hljs-attr">runs-on:</span> <span class="hljs-string">ubuntu-latest</span>
+    <span class="hljs-attr">outputs:</span>
+      <span class="hljs-attr">artifact-name:</span> <span class="hljs-string">${{</span> <span class="hljs-string">steps.upload.outputs.artifact-name</span> <span class="hljs-string">}}</span>
 
-    strategy:
-      matrix:
-        java: [&#39;25&#39;]
+    <span class="hljs-attr">strategy:</span>
+      <span class="hljs-attr">matrix:</span>
+        <span class="hljs-attr">java:</span> [<span class="hljs-string">'25'</span>]
 
-    steps:
-      - uses: actions/checkout@v4
+    <span class="hljs-attr">steps:</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">uses:</span> <span class="hljs-string">actions/checkout@v4</span>
 
-      - name: Set up JDK ${{ matrix.java }}
-        uses: actions/setup-java@v4
-        with:
-          java-version: ${{ matrix.java }}
-          distribution: &#39;temurin&#39;
-          cache: &#39;maven&#39;
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">Set</span> <span class="hljs-string">up</span> <span class="hljs-string">JDK</span> <span class="hljs-string">${{</span> <span class="hljs-string">matrix.java</span> <span class="hljs-string">}}</span>
+        <span class="hljs-attr">uses:</span> <span class="hljs-string">actions/setup-java@v4</span>
+        <span class="hljs-attr">with:</span>
+          <span class="hljs-attr">java-version:</span> <span class="hljs-string">${{</span> <span class="hljs-string">matrix.java</span> <span class="hljs-string">}}</span>
+          <span class="hljs-attr">distribution:</span> <span class="hljs-string">'temurin'</span>
+          <span class="hljs-attr">cache:</span> <span class="hljs-string">'maven'</span>
 
-      - name: Build with Maven
-        run: ./mvnw verify -B -DskipITs
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">Build</span> <span class="hljs-string">with</span> <span class="hljs-string">Maven</span>
+        <span class="hljs-attr">run:</span> <span class="hljs-string">./mvnw</span> <span class="hljs-string">verify</span> <span class="hljs-string">-B</span> <span class="hljs-string">-DskipITs</span>
 
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-results-${{ matrix.java }}
-          path: &#39;**/target/surefire-reports/*.xml&#39;
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">Upload</span> <span class="hljs-string">test</span> <span class="hljs-string">results</span>
+        <span class="hljs-attr">if:</span> <span class="hljs-string">always()</span>
+        <span class="hljs-attr">uses:</span> <span class="hljs-string">actions/upload-artifact@v4</span>
+        <span class="hljs-attr">with:</span>
+          <span class="hljs-attr">name:</span> <span class="hljs-string">test-results-${{</span> <span class="hljs-string">matrix.java</span> <span class="hljs-string">}}</span>
+          <span class="hljs-attr">path:</span> <span class="hljs-string">'**/target/surefire-reports/*.xml'</span>
 
-      - name: Upload JAR artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: app-jar
-          path: target/*.jar
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">Upload</span> <span class="hljs-string">JAR</span> <span class="hljs-string">artifact</span>
+        <span class="hljs-attr">uses:</span> <span class="hljs-string">actions/upload-artifact@v4</span>
+        <span class="hljs-attr">with:</span>
+          <span class="hljs-attr">name:</span> <span class="hljs-string">app-jar</span>
+          <span class="hljs-attr">path:</span> <span class="hljs-string">target/*.jar</span>
 
-  # ============================================
-  # Job 2: Integration Tests
-  # ============================================
-  integration-test:
-    name: Integration Tests
-    runs-on: ubuntu-latest
-    needs: build
-    services:
-      postgres:
-        image: pgvector/pgvector:pg17
-        env:
-          POSTGRES_DB: testdb
-          POSTGRES_USER: test
-          POSTGRES_PASSWORD: test
-        ports: [&#39;5432:5432&#39;]
-        options: &gt;-
+  <span class="hljs-comment"># ============================================</span>
+  <span class="hljs-comment"># Job 2: Integration Tests</span>
+  <span class="hljs-comment"># ============================================</span>
+  <span class="hljs-attr">integration-test:</span>
+    <span class="hljs-attr">name:</span> <span class="hljs-string">Integration</span> <span class="hljs-string">Tests</span>
+    <span class="hljs-attr">runs-on:</span> <span class="hljs-string">ubuntu-latest</span>
+    <span class="hljs-attr">needs:</span> <span class="hljs-string">build</span>
+    <span class="hljs-attr">services:</span>
+      <span class="hljs-attr">postgres:</span>
+        <span class="hljs-attr">image:</span> <span class="hljs-string">pgvector/pgvector:pg17</span>
+        <span class="hljs-attr">env:</span>
+          <span class="hljs-attr">POSTGRES_DB:</span> <span class="hljs-string">testdb</span>
+          <span class="hljs-attr">POSTGRES_USER:</span> <span class="hljs-string">test</span>
+          <span class="hljs-attr">POSTGRES_PASSWORD:</span> <span class="hljs-string">test</span>
+        <span class="hljs-attr">ports:</span> [<span class="hljs-string">'5432:5432'</span>]
+        <span class="hljs-attr">options:</span> <span class="hljs-string">&gt;-
           --health-cmd pg_isready
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-      redis:
-        image: redis:7.4-alpine
-        ports: [&#39;6379:6379&#39;]
-        options: --health-cmd &quot;redis-cli ping&quot; --health-interval 10s
+</span>      <span class="hljs-attr">redis:</span>
+        <span class="hljs-attr">image:</span> <span class="hljs-string">redis:7.4-alpine</span>
+        <span class="hljs-attr">ports:</span> [<span class="hljs-string">'6379:6379'</span>]
+        <span class="hljs-attr">options:</span> <span class="hljs-string">--health-cmd</span> <span class="hljs-string">"redis-cli ping"</span> <span class="hljs-string">--health-interval</span> <span class="hljs-string">10s</span>
 
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-java@v4
-        with:
-          java-version: &#39;25&#39;
-          distribution: &#39;temurin&#39;
-          cache: &#39;maven&#39;
+    <span class="hljs-attr">steps:</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">uses:</span> <span class="hljs-string">actions/checkout@v4</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">uses:</span> <span class="hljs-string">actions/setup-java@v4</span>
+        <span class="hljs-attr">with:</span>
+          <span class="hljs-attr">java-version:</span> <span class="hljs-string">'25'</span>
+          <span class="hljs-attr">distribution:</span> <span class="hljs-string">'temurin'</span>
+          <span class="hljs-attr">cache:</span> <span class="hljs-string">'maven'</span>
 
-      - name: Run integration tests
-        run: ./mvnw verify -Pintegration-test -B
-        env:
-          SPRING_DATASOURCE_URL: jdbc:postgresql://localhost:5432/testdb
-          SPRING_DATASOURCE_USERNAME: test
-          SPRING_DATASOURCE_PASSWORD: test
-          SPRING_DATA_REDIS_HOST: localhost
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">Run</span> <span class="hljs-string">integration</span> <span class="hljs-string">tests</span>
+        <span class="hljs-attr">run:</span> <span class="hljs-string">./mvnw</span> <span class="hljs-string">verify</span> <span class="hljs-string">-Pintegration-test</span> <span class="hljs-string">-B</span>
+        <span class="hljs-attr">env:</span>
+          <span class="hljs-attr">SPRING_DATASOURCE_URL:</span> <span class="hljs-string">jdbc:postgresql://localhost:5432/testdb</span>
+          <span class="hljs-attr">SPRING_DATASOURCE_USERNAME:</span> <span class="hljs-string">test</span>
+          <span class="hljs-attr">SPRING_DATASOURCE_PASSWORD:</span> <span class="hljs-string">test</span>
+          <span class="hljs-attr">SPRING_DATA_REDIS_HOST:</span> <span class="hljs-string">localhost</span>
 
-  # ============================================
-  # Job 3: Code Analysis
-  # ============================================
-  code-analysis:
-    name: Code Quality &amp; Security
-    runs-on: ubuntu-latest
-    needs: build
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # SonarQube 需要完整 Git 历史
+  <span class="hljs-comment"># ============================================</span>
+  <span class="hljs-comment"># Job 3: Code Analysis</span>
+  <span class="hljs-comment"># ============================================</span>
+  <span class="hljs-attr">code-analysis:</span>
+    <span class="hljs-attr">name:</span> <span class="hljs-string">Code</span> <span class="hljs-string">Quality</span> <span class="hljs-string">&amp;</span> <span class="hljs-string">Security</span>
+    <span class="hljs-attr">runs-on:</span> <span class="hljs-string">ubuntu-latest</span>
+    <span class="hljs-attr">needs:</span> <span class="hljs-string">build</span>
+    <span class="hljs-attr">steps:</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">uses:</span> <span class="hljs-string">actions/checkout@v4</span>
+        <span class="hljs-attr">with:</span>
+          <span class="hljs-attr">fetch-depth:</span> <span class="hljs-number">0</span>  <span class="hljs-comment"># SonarQube 需要完整 Git 历史</span>
 
-      - uses: actions/setup-java@v4
-        with:
-          java-version: &#39;25&#39;
-          distribution: &#39;temurin&#39;
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">uses:</span> <span class="hljs-string">actions/setup-java@v4</span>
+        <span class="hljs-attr">with:</span>
+          <span class="hljs-attr">java-version:</span> <span class="hljs-string">'25'</span>
+          <span class="hljs-attr">distribution:</span> <span class="hljs-string">'temurin'</span>
 
-      - name: SonarQube Scan
-        env:
-          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: |
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">SonarQube</span> <span class="hljs-string">Scan</span>
+        <span class="hljs-attr">env:</span>
+          <span class="hljs-attr">SONAR_TOKEN:</span> <span class="hljs-string">${{</span> <span class="hljs-string">secrets.SONAR_TOKEN</span> <span class="hljs-string">}}</span>
+        <span class="hljs-attr">run:</span> <span class="hljs-string">|
           ./mvnw sonar:sonar \
             -Dsonar.projectKey=ai-rag-service \
             -Dsonar.host.url=${{ vars.SONAR_HOST_URL }}
+</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">Dependency</span> <span class="hljs-string">Check</span> <span class="hljs-string">(OWASP)</span>
+        <span class="hljs-attr">run:</span> <span class="hljs-string">./mvnw</span> <span class="hljs-string">org.owasp:dependency-check-maven:check</span> <span class="hljs-string">-B</span>
 
-      - name: Dependency Check (OWASP)
-        run: ./mvnw org.owasp:dependency-check-maven:check -B
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">SpotBugs</span>
+        <span class="hljs-attr">run:</span> <span class="hljs-string">./mvnw</span> <span class="hljs-string">spotbugs:check</span> <span class="hljs-string">-B</span>
 
-      - name: SpotBugs
-        run: ./mvnw spotbugs:check -B
+  <span class="hljs-comment"># ============================================</span>
+  <span class="hljs-comment"># Job 4: Docker Build &amp; Push</span>
+  <span class="hljs-comment"># ============================================</span>
+  <span class="hljs-attr">docker:</span>
+    <span class="hljs-attr">name:</span> <span class="hljs-string">Build</span> <span class="hljs-string">and</span> <span class="hljs-string">Push</span> <span class="hljs-string">Docker</span> <span class="hljs-string">Image</span>
+    <span class="hljs-attr">runs-on:</span> <span class="hljs-string">ubuntu-latest</span>
+    <span class="hljs-attr">needs:</span> [<span class="hljs-string">build</span>, <span class="hljs-string">integration-test</span>, <span class="hljs-string">code-analysis</span>]
+    <span class="hljs-attr">if:</span> <span class="hljs-string">github.event_name</span> <span class="hljs-string">==</span> <span class="hljs-string">'push'</span> <span class="hljs-string">&amp;&amp;</span> <span class="hljs-string">github.ref</span> <span class="hljs-string">==</span> <span class="hljs-string">'refs/heads/main'</span>
+    <span class="hljs-attr">permissions:</span>
+      <span class="hljs-attr">contents:</span> <span class="hljs-string">read</span>
+      <span class="hljs-attr">packages:</span> <span class="hljs-string">write</span>
+      <span class="hljs-attr">id-token:</span> <span class="hljs-string">write</span>
 
-  # ============================================
-  # Job 4: Docker Build &amp; Push
-  # ============================================
-  docker:
-    name: Build and Push Docker Image
-    runs-on: ubuntu-latest
-    needs: [build, integration-test, code-analysis]
-    if: github.event_name == &#39;push&#39; &amp;&amp; github.ref == &#39;refs/heads/main&#39;
-    permissions:
-      contents: read
-      packages: write
-      id-token: write
+    <span class="hljs-attr">steps:</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">uses:</span> <span class="hljs-string">actions/checkout@v4</span>
 
-    steps:
-      - uses: actions/checkout@v4
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">uses:</span> <span class="hljs-string">actions/download-artifact@v4</span>
+        <span class="hljs-attr">with:</span>
+          <span class="hljs-attr">name:</span> <span class="hljs-string">app-jar</span>
+          <span class="hljs-attr">path:</span> <span class="hljs-string">target/</span>
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: app-jar
-          path: target/
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">Set</span> <span class="hljs-string">up</span> <span class="hljs-string">Docker</span> <span class="hljs-string">Buildx</span>
+        <span class="hljs-attr">uses:</span> <span class="hljs-string">docker/setup-buildx-action@v3</span>
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">Login</span> <span class="hljs-string">to</span> <span class="hljs-string">GitHub</span> <span class="hljs-string">Container</span> <span class="hljs-string">Registry</span>
+        <span class="hljs-attr">uses:</span> <span class="hljs-string">docker/login-action@v3</span>
+        <span class="hljs-attr">with:</span>
+          <span class="hljs-attr">registry:</span> <span class="hljs-string">${{</span> <span class="hljs-string">env.REGISTRY</span> <span class="hljs-string">}}</span>
+          <span class="hljs-attr">username:</span> <span class="hljs-string">${{</span> <span class="hljs-string">github.actor</span> <span class="hljs-string">}}</span>
+          <span class="hljs-attr">password:</span> <span class="hljs-string">${{</span> <span class="hljs-string">secrets.GITHUB_TOKEN</span> <span class="hljs-string">}}</span>
 
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">Extract</span> <span class="hljs-string">metadata</span>
+        <span class="hljs-attr">id:</span> <span class="hljs-string">meta</span>
+        <span class="hljs-attr">uses:</span> <span class="hljs-string">docker/metadata-action@v5</span>
+        <span class="hljs-attr">with:</span>
+          <span class="hljs-attr">images:</span> <span class="hljs-string">${{</span> <span class="hljs-string">env.REGISTRY</span> <span class="hljs-string">}}/${{</span> <span class="hljs-string">env.IMAGE_NAME</span> <span class="hljs-string">}}</span>
+          <span class="hljs-attr">tags:</span> <span class="hljs-string">|
             type=sha,prefix=,format=short
             type=ref,event=branch
             type=semver,pattern={{version}}
+</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">Build</span> <span class="hljs-string">and</span> <span class="hljs-string">push</span>
+        <span class="hljs-attr">uses:</span> <span class="hljs-string">docker/build-push-action@v6</span>
+        <span class="hljs-attr">with:</span>
+          <span class="hljs-attr">context:</span> <span class="hljs-string">.</span>
+          <span class="hljs-attr">push:</span> <span class="hljs-literal">true</span>
+          <span class="hljs-attr">platforms:</span> <span class="hljs-string">linux/amd64,linux/arm64</span>  <span class="hljs-comment"># 多平台</span>
+          <span class="hljs-attr">tags:</span> <span class="hljs-string">${{</span> <span class="hljs-string">steps.meta.outputs.tags</span> <span class="hljs-string">}}</span>
+          <span class="hljs-attr">labels:</span> <span class="hljs-string">${{</span> <span class="hljs-string">steps.meta.outputs.labels</span> <span class="hljs-string">}}</span>
+          <span class="hljs-attr">cache-from:</span> <span class="hljs-string">type=gha</span>
+          <span class="hljs-attr">cache-to:</span> <span class="hljs-string">type=gha,mode=max</span>
+          <span class="hljs-attr">provenance:</span> <span class="hljs-literal">true</span>
+          <span class="hljs-attr">sbom:</span> <span class="hljs-literal">true</span>
+</code></pre></div><h3>2.2 Matrix Build（多环境）</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-attr">deploy:</span>
+  <span class="hljs-attr">name:</span> <span class="hljs-string">Deploy</span> <span class="hljs-string">to</span> <span class="hljs-string">${{</span> <span class="hljs-string">matrix.environment</span> <span class="hljs-string">}}</span>
+  <span class="hljs-attr">runs-on:</span> <span class="hljs-string">ubuntu-latest</span>
+  <span class="hljs-attr">needs:</span> <span class="hljs-string">docker</span>
+  <span class="hljs-attr">strategy:</span>
+    <span class="hljs-attr">matrix:</span>
+      <span class="hljs-attr">environment:</span> [<span class="hljs-string">dev</span>, <span class="hljs-string">staging</span>]
+    <span class="hljs-attr">fail-fast:</span> <span class="hljs-literal">false</span>  <span class="hljs-comment"># 不因一个环境失败取消其他</span>
 
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          platforms: linux/amd64,linux/arm64  # 多平台
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          provenance: true
-          sbom: true
-</code></pre></div>
-<h3>2.2 Matrix Build（多环境）</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">deploy:
-  name: Deploy to ${{ matrix.environment }}
-  runs-on: ubuntu-latest
-  needs: docker
-  strategy:
-    matrix:
-      environment: [dev, staging]
-    fail-fast: false  # 不因一个环境失败取消其他
+  <span class="hljs-attr">environment:</span>
+    <span class="hljs-attr">name:</span> <span class="hljs-string">${{</span> <span class="hljs-string">matrix.environment</span> <span class="hljs-string">}}</span>
+    <span class="hljs-attr">url:</span> <span class="hljs-string">https://${{</span> <span class="hljs-string">matrix.environment</span> <span class="hljs-string">}}.example.com</span>
 
-  environment:
-    name: ${{ matrix.environment }}
-    url: https://${{ matrix.environment }}.example.com
+  <span class="hljs-attr">steps:</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">Checkout</span> <span class="hljs-string">Helm</span> <span class="hljs-string">chart</span>
+      <span class="hljs-attr">uses:</span> <span class="hljs-string">actions/checkout@v4</span>
+      <span class="hljs-attr">with:</span>
+        <span class="hljs-attr">repository:</span> <span class="hljs-string">myorg/helm-charts</span>
 
-  steps:
-    - name: Checkout Helm chart
-      uses: actions/checkout@v4
-      with:
-        repository: myorg/helm-charts
-
-    - name: Deploy with Helm
-      run: |
+    <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">Deploy</span> <span class="hljs-string">with</span> <span class="hljs-string">Helm</span>
+      <span class="hljs-attr">run:</span> <span class="hljs-string">|
         helm upgrade --install ai-rag-service ./ai-rag-service \
           --namespace ${{ matrix.environment }} \
           --values values-${{ matrix.environment }}.yaml \
           --set image.tag=${{ github.sha }} \
-          --wait --timeout 5m
-</code></pre></div>
-<h3>2.3 缓存策略优化</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># Maven 依赖缓存
-- uses: actions/setup-java@v4
-  with:
-    java-version: &#39;25&#39;
-    distribution: &#39;temurin&#39;
-    cache: &#39;maven&#39;  # 自动缓存 ~/.m2/repository
+          --wait --timeout 5m</span>
+</code></pre></div><h3>2.3 缓存策略优化</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-comment"># Maven 依赖缓存</span>
+<span class="hljs-bullet">-</span> <span class="hljs-attr">uses:</span> <span class="hljs-string">actions/setup-java@v4</span>
+  <span class="hljs-attr">with:</span>
+    <span class="hljs-attr">java-version:</span> <span class="hljs-string">'25'</span>
+    <span class="hljs-attr">distribution:</span> <span class="hljs-string">'temurin'</span>
+    <span class="hljs-attr">cache:</span> <span class="hljs-string">'maven'</span>  <span class="hljs-comment"># 自动缓存 ~/.m2/repository</span>
 
-# Docker Layer 缓存（GitHub Actions Cache）
-- uses: docker/build-push-action@v6
-  with:
-    cache-from: type=gha      # 从 GitHub Actions Cache 恢复
-    cache-to: type=gha,mode=max  # 写入最大缓存（所有中间层）
+<span class="hljs-comment"># Docker Layer 缓存（GitHub Actions Cache）</span>
+<span class="hljs-bullet">-</span> <span class="hljs-attr">uses:</span> <span class="hljs-string">docker/build-push-action@v6</span>
+  <span class="hljs-attr">with:</span>
+    <span class="hljs-attr">cache-from:</span> <span class="hljs-string">type=gha</span>      <span class="hljs-comment"># 从 GitHub Actions Cache 恢复</span>
+    <span class="hljs-attr">cache-to:</span> <span class="hljs-string">type=gha,mode=max</span>  <span class="hljs-comment"># 写入最大缓存（所有中间层）</span>
 
-# Gradle 缓存
-- uses: actions/setup-java@v4
-  with:
-    java-version: &#39;25&#39;
-    distribution: &#39;temurin&#39;
-    cache: &#39;gradle&#39;
-</code></pre></div>
-<h3>2.4 环境保护规则（Environment Protection）</h3>
+<span class="hljs-comment"># Gradle 缓存</span>
+<span class="hljs-bullet">-</span> <span class="hljs-attr">uses:</span> <span class="hljs-string">actions/setup-java@v4</span>
+  <span class="hljs-attr">with:</span>
+    <span class="hljs-attr">java-version:</span> <span class="hljs-string">'25'</span>
+    <span class="hljs-attr">distribution:</span> <span class="hljs-string">'temurin'</span>
+    <span class="hljs-attr">cache:</span> <span class="hljs-string">'gradle'</span>
+</code></pre></div><h3>2.4 环境保护规则（Environment Protection）</h3>
 <p>在 GitHub Repository Settings &gt; Environments 中配置：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Production Environment:
-  - Required reviewers: 2 (deployment protection rule)
-  - Wait timer: 0 minutes
-  - Deployment branches: main
-  - Secrets:
-    - KUBE_CONFIG: restricted to production environment
-    - OPENAI_API_KEY_PROD: restricted to production environment
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># 使用生产环境时的审批规则
-deploy-prod:
-  name: Deploy to Production
-  runs-on: ubuntu-latest
-  needs: docker
-  environment:
-    name: production
-    url: https://api.example.com
-  steps:
-    # 需要 2 人审批 → GitHub UI 中审批后才能执行
-    - name: Deploy
-      run: |
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-attribute">Production Environment</span><span class="hljs-punctuation">:</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-string">Required reviewers: 2 (deployment protection rule)</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-string">Wait timer: 0 minutes</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-string">Deployment branches: main</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-string">Secrets:</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-string">KUBE_CONFIG: restricted to production environment</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-string">OPENAI_API_KEY_PROD: restricted to production environment</span>
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-comment"># 使用生产环境时的审批规则</span>
+<span class="hljs-attr">deploy-prod:</span>
+  <span class="hljs-attr">name:</span> <span class="hljs-string">Deploy</span> <span class="hljs-string">to</span> <span class="hljs-string">Production</span>
+  <span class="hljs-attr">runs-on:</span> <span class="hljs-string">ubuntu-latest</span>
+  <span class="hljs-attr">needs:</span> <span class="hljs-string">docker</span>
+  <span class="hljs-attr">environment:</span>
+    <span class="hljs-attr">name:</span> <span class="hljs-string">production</span>
+    <span class="hljs-attr">url:</span> <span class="hljs-string">https://api.example.com</span>
+  <span class="hljs-attr">steps:</span>
+    <span class="hljs-comment"># 需要 2 人审批 → GitHub UI 中审批后才能执行</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">Deploy</span>
+      <span class="hljs-attr">run:</span> <span class="hljs-string">|
         helm upgrade --install ai-rag-service ./chart \
           --namespace production \
           --values values-prod.yaml \
           --set image.tag=${{ github.sha }} \
-          --wait --timeout 10m
-</code></pre></div>
-<h3>2.5 Secrets 管理</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># GitHub Actions Secrets 使用示例
-steps:
-  # 方式1：环境变量
-  - name: Build with secrets
-    env:
-      DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
-      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          --wait --timeout 10m</span>
+</code></pre></div><h3>2.5 Secrets 管理</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-comment"># GitHub Actions Secrets 使用示例</span>
+<span class="hljs-attr">steps:</span>
+  <span class="hljs-comment"># 方式1：环境变量</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">Build</span> <span class="hljs-string">with</span> <span class="hljs-string">secrets</span>
+    <span class="hljs-attr">env:</span>
+      <span class="hljs-attr">DB_PASSWORD:</span> <span class="hljs-string">${{</span> <span class="hljs-string">secrets.DB_PASSWORD</span> <span class="hljs-string">}}</span>
+      <span class="hljs-attr">OPENAI_API_KEY:</span> <span class="hljs-string">${{</span> <span class="hljs-string">secrets.OPENAI_API_KEY</span> <span class="hljs-string">}}</span>
 
-  # 方式2：文件挂载（敏感配置文件）
-  - name: Create Google credentials
-    run: |
-      echo &#39;${{ secrets.GCP_SA_KEY }}&#39; &gt; /tmp/gcp-key.json
-
-  # 方式3：Vault 集成（推荐）
-  - name: Import secrets from Vault
-    uses: hashicorp/vault-action@v3
-    with:
-      url: ${{ vars.VAULT_ADDR }}
-      method: jwt
-      role: github-actions
-      secrets: |
+  <span class="hljs-comment"># 方式2：文件挂载（敏感配置文件）</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">Create</span> <span class="hljs-string">Google</span> <span class="hljs-string">credentials</span>
+    <span class="hljs-attr">run:</span> <span class="hljs-string">|
+      echo '${{ secrets.GCP_SA_KEY }}' &gt; /tmp/gcp-key.json
+</span>
+  <span class="hljs-comment"># 方式3：Vault 集成（推荐）</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">Import</span> <span class="hljs-string">secrets</span> <span class="hljs-string">from</span> <span class="hljs-string">Vault</span>
+    <span class="hljs-attr">uses:</span> <span class="hljs-string">hashicorp/vault-action@v3</span>
+    <span class="hljs-attr">with:</span>
+      <span class="hljs-attr">url:</span> <span class="hljs-string">${{</span> <span class="hljs-string">vars.VAULT_ADDR</span> <span class="hljs-string">}}</span>
+      <span class="hljs-attr">method:</span> <span class="hljs-string">jwt</span>
+      <span class="hljs-attr">role:</span> <span class="hljs-string">github-actions</span>
+      <span class="hljs-attr">secrets:</span> <span class="hljs-string">|
         secret/data/ci db-username | DB_USERNAME ;
-        secret/data/ci db-password | DB_PASSWORD
-</code></pre></div>
-<hr>
+        secret/data/ci db-password | DB_PASSWORD</span>
+</code></pre></div><hr>
 <h2>三、Docker 镜像构建优化</h2>
 <h3>3.1 BuildKit 特性</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">dockerfile</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-dockerfile"># syntax=docker/dockerfile:1
+<div class="code-block"><div class="code-header"><span class="code-lang">dockerfile</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-dockerfile"><span class="hljs-comment"># syntax=docker/dockerfile:1</span>
 
-# 1. --mount=type=cache: 缓存依赖
-RUN --mount=type=cache,target=/root/.m2 \
-    ./mvnw dependency:go-offline -B
+<span class="hljs-comment"># 1. --mount=type=cache: 缓存依赖</span>
+<span class="hljs-keyword">RUN</span><span class="language-bash"> --mount=<span class="hljs-built_in">type</span>=cache,target=/root/.m2 \
+    ./mvnw dependency:go-offline -B</span>
 
-# 2. --mount=type=secret: 安全传递密钥（不留在镜像层）
-RUN --mount=type=secret,id=maven-settings,dst=/root/.m2/settings.xml \
-    --mount=type=cache,target=/root/.m2 \
-    ./mvnw deploy -B
+<span class="hljs-comment"># 2. --mount=type=secret: 安全传递密钥（不留在镜像层）</span>
+<span class="hljs-keyword">RUN</span><span class="language-bash"> --mount=<span class="hljs-built_in">type</span>=secret,<span class="hljs-built_in">id</span>=maven-settings,dst=/root/.m2/settings.xml \
+    --mount=<span class="hljs-built_in">type</span>=cache,target=/root/.m2 \
+    ./mvnw deploy -B</span>
 
-# 3. --mount=type=bind: 从构建上下文挂载
-RUN --mount=type=bind,source=config,target=/tmp/config \
-    cp /tmp/config/app.yml /app/config/
+<span class="hljs-comment"># 3. --mount=type=bind: 从构建上下文挂载</span>
+<span class="hljs-keyword">RUN</span><span class="language-bash"> --mount=<span class="hljs-built_in">type</span>=<span class="hljs-built_in">bind</span>,<span class="hljs-built_in">source</span>=config,target=/tmp/config \
+    <span class="hljs-built_in">cp</span> /tmp/config/app.yml /app/config/</span>
 
-# 4. HEREDOC 语法（多行 RUN）
-RUN &lt;&lt;EOF
-  apk add --no-cache curl ca-certificates
+<span class="hljs-comment"># 4. HEREDOC 语法（多行 RUN）</span>
+<span class="hljs-keyword">RUN</span><span class="language-bash"> &lt;&lt;<span class="hljs-string">EOF</span></span>
+  apk <span class="hljs-keyword">add</span><span class="language-bash"><span class="hljs-string"> --no-cache curl ca-certificates</span></span>
   addgroup -S appgroup
   adduser -S appuser -G appgroup
 EOF
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># BuildKit 启用（docker build 默认）
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-comment"># BuildKit 启用（docker build 默认）</span>
 DOCKER_BUILDKIT=1 docker build -t app .
 
-# 传递 Secret
-docker build --secret id=maven-settings,src=settings.xml -t app .
+<span class="hljs-comment"># 传递 Secret</span>
+docker build --secret <span class="hljs-built_in">id</span>=maven-settings,src=settings.xml -t app .
 
-# Buildx 多平台构建
+<span class="hljs-comment"># Buildx 多平台构建</span>
 docker buildx build \
   --platform linux/amd64,linux/arm64 \
   --push -t registry.example.com/app:latest .
-</code></pre></div>
-<h3>3.2 分层缓存优化策略</h3>
+</code></pre></div><h3>3.2 分层缓存优化策略</h3>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Dockerfile 层顺序（从最不易变到最易变）：
-1. FROM 基础镜像          ← 几乎不变
-2. RUN 系统工具安装        ← 偶尔变
-3. COPY pom.xml           ← 依赖变更时才变
-4. RUN 下载依赖           ← 依赖变更时才变（缓存重点）
-5. COPY src               ← 每次代码变更都变
-6. RUN 编译               ← 每次代码变更都变
-7. COPY 构建产物           ← 每次代码变更都变
-</code></pre></div>
-<hr>
+<span class="hljs-bullet">1.</span> FROM 基础镜像          ← 几乎不变
+<span class="hljs-bullet">2.</span> RUN 系统工具安装        ← 偶尔变
+<span class="hljs-bullet">3.</span> COPY pom.xml           ← 依赖变更时才变
+<span class="hljs-bullet">4.</span> RUN 下载依赖           ← 依赖变更时才变（缓存重点）
+<span class="hljs-bullet">5.</span> COPY src               ← 每次代码变更都变
+<span class="hljs-bullet">6.</span> RUN 编译               ← 每次代码变更都变
+<span class="hljs-bullet">7.</span> COPY 构建产物           ← 每次代码变更都变
+</code></pre></div><hr>
 <h2>四、容器镜像安全</h2>
 <h3>4.1 Trivy 扫描</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># GitHub Actions 中集成 Trivy
-container-scan:
-  name: Container Security Scan
-  runs-on: ubuntu-latest
-  needs: docker
-  steps:
-    - name: Scan image for vulnerabilities
-      uses: aquasecurity/trivy-action@master
-      with:
-        image-ref: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-        format: &#39;sarif&#39;
-        output: &#39;trivy-results.sarif&#39;
-        severity: &#39;CRITICAL,HIGH&#39;
-        exit-code: &#39;1&#39;  # CRITICAL 存在时使流水线失败
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-comment"># GitHub Actions 中集成 Trivy</span>
+<span class="hljs-attr">container-scan:</span>
+  <span class="hljs-attr">name:</span> <span class="hljs-string">Container</span> <span class="hljs-string">Security</span> <span class="hljs-string">Scan</span>
+  <span class="hljs-attr">runs-on:</span> <span class="hljs-string">ubuntu-latest</span>
+  <span class="hljs-attr">needs:</span> <span class="hljs-string">docker</span>
+  <span class="hljs-attr">steps:</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">Scan</span> <span class="hljs-string">image</span> <span class="hljs-string">for</span> <span class="hljs-string">vulnerabilities</span>
+      <span class="hljs-attr">uses:</span> <span class="hljs-string">aquasecurity/trivy-action@master</span>
+      <span class="hljs-attr">with:</span>
+        <span class="hljs-attr">image-ref:</span> <span class="hljs-string">${{</span> <span class="hljs-string">env.REGISTRY</span> <span class="hljs-string">}}/${{</span> <span class="hljs-string">env.IMAGE_NAME</span> <span class="hljs-string">}}:${{</span> <span class="hljs-string">github.sha</span> <span class="hljs-string">}}</span>
+        <span class="hljs-attr">format:</span> <span class="hljs-string">'sarif'</span>
+        <span class="hljs-attr">output:</span> <span class="hljs-string">'trivy-results.sarif'</span>
+        <span class="hljs-attr">severity:</span> <span class="hljs-string">'CRITICAL,HIGH'</span>
+        <span class="hljs-attr">exit-code:</span> <span class="hljs-string">'1'</span>  <span class="hljs-comment"># CRITICAL 存在时使流水线失败</span>
 
-    - name: Upload Trivy results to GitHub Security
-      uses: github/codeql-action/upload-sarif@v3
-      with:
-        sarif_file: &#39;trivy-results.sarif&#39;
+    <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">Upload</span> <span class="hljs-string">Trivy</span> <span class="hljs-string">results</span> <span class="hljs-string">to</span> <span class="hljs-string">GitHub</span> <span class="hljs-string">Security</span>
+      <span class="hljs-attr">uses:</span> <span class="hljs-string">github/codeql-action/upload-sarif@v3</span>
+      <span class="hljs-attr">with:</span>
+        <span class="hljs-attr">sarif_file:</span> <span class="hljs-string">'trivy-results.sarif'</span>
 
-    # 扫描 IaC 文件
-    - name: Scan IaC files
-      uses: aquasecurity/trivy-action@master
-      with:
-        scan-type: &#39;config&#39;
-        scan-ref: &#39;./infra/terraform&#39;
-        format: &#39;table&#39;
-        exit-code: &#39;1&#39;
-</code></pre></div>
-<h3>4.2 SBOM 生成 (syft)</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">- name: Generate SBOM
-  uses: anchore/sbom-action@v0
-  with:
-    image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.sha }}
-    format: spdx-json
-    output-file: sbom.spdx.json
+    <span class="hljs-comment"># 扫描 IaC 文件</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">Scan</span> <span class="hljs-string">IaC</span> <span class="hljs-string">files</span>
+      <span class="hljs-attr">uses:</span> <span class="hljs-string">aquasecurity/trivy-action@master</span>
+      <span class="hljs-attr">with:</span>
+        <span class="hljs-attr">scan-type:</span> <span class="hljs-string">'config'</span>
+        <span class="hljs-attr">scan-ref:</span> <span class="hljs-string">'./infra/terraform'</span>
+        <span class="hljs-attr">format:</span> <span class="hljs-string">'table'</span>
+        <span class="hljs-attr">exit-code:</span> <span class="hljs-string">'1'</span>
+</code></pre></div><h3>4.2 SBOM 生成 (syft)</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">Generate</span> <span class="hljs-string">SBOM</span>
+  <span class="hljs-attr">uses:</span> <span class="hljs-string">anchore/sbom-action@v0</span>
+  <span class="hljs-attr">with:</span>
+    <span class="hljs-attr">image:</span> <span class="hljs-string">${{</span> <span class="hljs-string">env.REGISTRY</span> <span class="hljs-string">}}/${{</span> <span class="hljs-string">env.IMAGE_NAME</span> <span class="hljs-string">}}:${{</span> <span class="hljs-string">github.sha</span> <span class="hljs-string">}}</span>
+    <span class="hljs-attr">format:</span> <span class="hljs-string">spdx-json</span>
+    <span class="hljs-attr">output-file:</span> <span class="hljs-string">sbom.spdx.json</span>
 
-- name: Upload SBOM
-  uses: actions/upload-artifact@v4
-  with:
-    name: sbom
-    path: sbom.spdx.json
-</code></pre></div>
-<h3>4.3 镜像签名 (cosign)</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">- name: Install Cosign
-  uses: sigstore/cosign-installer@v3
+<span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">Upload</span> <span class="hljs-string">SBOM</span>
+  <span class="hljs-attr">uses:</span> <span class="hljs-string">actions/upload-artifact@v4</span>
+  <span class="hljs-attr">with:</span>
+    <span class="hljs-attr">name:</span> <span class="hljs-string">sbom</span>
+    <span class="hljs-attr">path:</span> <span class="hljs-string">sbom.spdx.json</span>
+</code></pre></div><h3>4.3 镜像签名 (cosign)</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">Install</span> <span class="hljs-string">Cosign</span>
+  <span class="hljs-attr">uses:</span> <span class="hljs-string">sigstore/cosign-installer@v3</span>
 
-- name: Sign image
-  run: |
+<span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">Sign</span> <span class="hljs-string">image</span>
+  <span class="hljs-attr">run:</span> <span class="hljs-string">|
     cosign sign --yes \
       ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
-  env:
-    COSIGN_PRIVATE_KEY: ${{ secrets.COSIGN_PRIVATE_KEY }}
-    COSIGN_PASSWORD: ${{ secrets.COSIGN_PASSWORD }}
+</span>  <span class="hljs-attr">env:</span>
+    <span class="hljs-attr">COSIGN_PRIVATE_KEY:</span> <span class="hljs-string">${{</span> <span class="hljs-string">secrets.COSIGN_PRIVATE_KEY</span> <span class="hljs-string">}}</span>
+    <span class="hljs-attr">COSIGN_PASSWORD:</span> <span class="hljs-string">${{</span> <span class="hljs-string">secrets.COSIGN_PASSWORD</span> <span class="hljs-string">}}</span>
 
-- name: Verify signature
-  run: |
+<span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">Verify</span> <span class="hljs-string">signature</span>
+  <span class="hljs-attr">run:</span> <span class="hljs-string">|
     cosign verify \
       --certificate-identity ${{ github.repository }} \
-      ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}
-</code></pre></div>
-<hr>
+      ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}</span>
+</code></pre></div><hr>
 <h2>五、部署策略</h2>
 <h3>5.1 四大策略对比</h3>
 <table>
@@ -471,311 +457,301 @@ container-scan:
 </tr>
 </tbody></table>
 <h3>5.2 金丝雀发布 (Argo Rollouts)</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">apiVersion: argoproj.io/v1alpha1
-kind: Rollout
-metadata:
-  name: ai-rag-service
-spec:
-  replicas: 5
-  strategy:
-    canary:
-      steps:
-      - setWeight: 10      # 10% 流量到新版本
-      - pause:
-          duration: 5m     # 观察 5 分钟
-      - setWeight: 30      # 30%
-      - pause:
-          duration: 10m
-      - setWeight: 50      # 50%
-      - pause:
-          duration: 20m
-      - setWeight: 100     # 100%
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">argoproj.io/v1alpha1</span>
+<span class="hljs-attr">kind:</span> <span class="hljs-string">Rollout</span>
+<span class="hljs-attr">metadata:</span>
+  <span class="hljs-attr">name:</span> <span class="hljs-string">ai-rag-service</span>
+<span class="hljs-attr">spec:</span>
+  <span class="hljs-attr">replicas:</span> <span class="hljs-number">5</span>
+  <span class="hljs-attr">strategy:</span>
+    <span class="hljs-attr">canary:</span>
+      <span class="hljs-attr">steps:</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">setWeight:</span> <span class="hljs-number">10</span>      <span class="hljs-comment"># 10% 流量到新版本</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">pause:</span>
+          <span class="hljs-attr">duration:</span> <span class="hljs-string">5m</span>     <span class="hljs-comment"># 观察 5 分钟</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">setWeight:</span> <span class="hljs-number">30</span>      <span class="hljs-comment"># 30%</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">pause:</span>
+          <span class="hljs-attr">duration:</span> <span class="hljs-string">10m</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">setWeight:</span> <span class="hljs-number">50</span>      <span class="hljs-comment"># 50%</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">pause:</span>
+          <span class="hljs-attr">duration:</span> <span class="hljs-string">20m</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">setWeight:</span> <span class="hljs-number">100</span>     <span class="hljs-comment"># 100%</span>
 
-      # 自动回滚条件
-      analysis:
-        templates:
-        - templateName: error-rate-check
-        startingStep: 2
+      <span class="hljs-comment"># 自动回滚条件</span>
+      <span class="hljs-attr">analysis:</span>
+        <span class="hljs-attr">templates:</span>
+        <span class="hljs-bullet">-</span> <span class="hljs-attr">templateName:</span> <span class="hljs-string">error-rate-check</span>
+        <span class="hljs-attr">startingStep:</span> <span class="hljs-number">2</span>
 
-  template:
-    spec:
-      containers:
-      - name: app
-        image: registry.example.com/ai-rag-service:canary
+  <span class="hljs-attr">template:</span>
+    <span class="hljs-attr">spec:</span>
+      <span class="hljs-attr">containers:</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">app</span>
+        <span class="hljs-attr">image:</span> <span class="hljs-string">registry.example.com/ai-rag-service:canary</span>
 
----
-# 自动回滚分析模板
-apiVersion: argoproj.io/v1alpha1
-kind: AnalysisTemplate
-metadata:
-  name: error-rate-check
-spec:
-  metrics:
-  - name: error-rate
-    interval: 30s
-    failureLimit: 2
-    successCondition: result[0] &lt; 0.01  # 错误率 &lt; 1%
-    provider:
-      prometheus:
-        address: http://prometheus:9090
-        query: |
+<span class="hljs-meta">---</span>
+<span class="hljs-comment"># 自动回滚分析模板</span>
+<span class="hljs-attr">apiVersion:</span> <span class="hljs-string">argoproj.io/v1alpha1</span>
+<span class="hljs-attr">kind:</span> <span class="hljs-string">AnalysisTemplate</span>
+<span class="hljs-attr">metadata:</span>
+  <span class="hljs-attr">name:</span> <span class="hljs-string">error-rate-check</span>
+<span class="hljs-attr">spec:</span>
+  <span class="hljs-attr">metrics:</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">error-rate</span>
+    <span class="hljs-attr">interval:</span> <span class="hljs-string">30s</span>
+    <span class="hljs-attr">failureLimit:</span> <span class="hljs-number">2</span>
+    <span class="hljs-attr">successCondition:</span> <span class="hljs-string">result[0]</span> <span class="hljs-string">&lt;</span> <span class="hljs-number">0.01</span>  <span class="hljs-comment"># 错误率 &lt; 1%</span>
+    <span class="hljs-attr">provider:</span>
+      <span class="hljs-attr">prometheus:</span>
+        <span class="hljs-attr">address:</span> <span class="hljs-string">http://prometheus:9090</span>
+        <span class="hljs-attr">query:</span> <span class="hljs-string">|
           sum(rate(http_server_requests_total{
-            application=&quot;ai-rag-service&quot;,
-            status=~&quot;5.*&quot;
+            application="ai-rag-service",
+            status=~"5.*"
           }[1m]))
           /
           sum(rate(http_server_requests_total{
-            application=&quot;ai-rag-service&quot;
-          }[1m]))
-</code></pre></div>
-<h3>5.3 蓝绿部署 Service 切换</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># Blue Service (当前生产)
-apiVersion: v1
-kind: Service
-metadata:
-  name: ai-rag-service
-spec:
-  selector:
-    app: ai-rag-service
-    version: blue
+            application="ai-rag-service"
+          }[1m]))</span>
+</code></pre></div><h3>5.3 蓝绿部署 Service 切换</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-comment"># Blue Service (当前生产)</span>
+<span class="hljs-attr">apiVersion:</span> <span class="hljs-string">v1</span>
+<span class="hljs-attr">kind:</span> <span class="hljs-string">Service</span>
+<span class="hljs-attr">metadata:</span>
+  <span class="hljs-attr">name:</span> <span class="hljs-string">ai-rag-service</span>
+<span class="hljs-attr">spec:</span>
+  <span class="hljs-attr">selector:</span>
+    <span class="hljs-attr">app:</span> <span class="hljs-string">ai-rag-service</span>
+    <span class="hljs-attr">version:</span> <span class="hljs-string">blue</span>
 
----
-# 部署 Green (新版本)
-# ... Deployment version: green ...
+<span class="hljs-meta">---</span>
+<span class="hljs-comment"># 部署 Green (新版本)</span>
+<span class="hljs-comment"># ... Deployment version: green ...</span>
 
----
-# 切换流量到 Green
-apiVersion: v1
-kind: Service
-metadata:
-  name: ai-rag-service
-spec:
-  selector:
-    app: ai-rag-service
-    version: green  # 一键切换
-</code></pre></div>
-<hr>
+<span class="hljs-meta">---</span>
+<span class="hljs-comment"># 切换流量到 Green</span>
+<span class="hljs-attr">apiVersion:</span> <span class="hljs-string">v1</span>
+<span class="hljs-attr">kind:</span> <span class="hljs-string">Service</span>
+<span class="hljs-attr">metadata:</span>
+  <span class="hljs-attr">name:</span> <span class="hljs-string">ai-rag-service</span>
+<span class="hljs-attr">spec:</span>
+  <span class="hljs-attr">selector:</span>
+    <span class="hljs-attr">app:</span> <span class="hljs-string">ai-rag-service</span>
+    <span class="hljs-attr">version:</span> <span class="hljs-string">green</span>  <span class="hljs-comment"># 一键切换</span>
+</code></pre></div><hr>
 <h2>六、GitOps (ArgoCD)</h2>
 <h3>6.1 核心概念</h3>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Git Repository (单一事实来源)
 │
-├── app-of-apps/
-│   └── root-app.yaml         # ArgoCD Application 定义
-├── ai-rag-service/
-│   ├── base/                  # 基础配置
+├── app-of-apps<span class="hljs-symbol">/</span>
+│   └── root-app.yaml         <span class="hljs-comment"># ArgoCD Application 定义</span>
+├── ai-rag-service<span class="hljs-symbol">/</span>
+│   ├── base<span class="hljs-symbol">/</span>                  <span class="hljs-comment"># 基础配置</span>
 │   │   ├── deployment.yaml
 │   │   ├── service.yaml
 │   │   └── kustomization.yaml
-│   └── overlays/
-│       ├── dev/
+│   └── overlays<span class="hljs-symbol">/</span>
+│       ├── dev<span class="hljs-symbol">/</span>
 │       │   └── kustomization.yaml
-│       └── prod/
+│       └── prod<span class="hljs-symbol">/</span>
 │           └── kustomization.yaml
-</code></pre></div>
-<h3>6.2 Application 定义</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: ai-rag-service
-  namespace: argocd
-spec:
-  project: default
-  source:
-    repoURL: https://github.com/myorg/gitops-config.git
-    targetRevision: main
-    path: ai-rag-service/overlays/prod
+</code></pre></div><h3>6.2 Application 定义</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">argoproj.io/v1alpha1</span>
+<span class="hljs-attr">kind:</span> <span class="hljs-string">Application</span>
+<span class="hljs-attr">metadata:</span>
+  <span class="hljs-attr">name:</span> <span class="hljs-string">ai-rag-service</span>
+  <span class="hljs-attr">namespace:</span> <span class="hljs-string">argocd</span>
+<span class="hljs-attr">spec:</span>
+  <span class="hljs-attr">project:</span> <span class="hljs-string">default</span>
+  <span class="hljs-attr">source:</span>
+    <span class="hljs-attr">repoURL:</span> <span class="hljs-string">https://github.com/myorg/gitops-config.git</span>
+    <span class="hljs-attr">targetRevision:</span> <span class="hljs-string">main</span>
+    <span class="hljs-attr">path:</span> <span class="hljs-string">ai-rag-service/overlays/prod</span>
 
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: production
+  <span class="hljs-attr">destination:</span>
+    <span class="hljs-attr">server:</span> <span class="hljs-string">https://kubernetes.default.svc</span>
+    <span class="hljs-attr">namespace:</span> <span class="hljs-string">production</span>
 
-  syncPolicy:
-    automated:
-      prune: true          # 自动删除 Git 中不存在的资源
-      selfHeal: true       # 自动修复手动修改
-      allowEmpty: false
-    syncOptions:
-    - CreateNamespace=true
-    - PruneLast=true       # 先部署再删除旧资源
-    retry:
-      limit: 5
-      backoff:
-        duration: 5s
-        factor: 2
-        maxDuration: 3m
+  <span class="hljs-attr">syncPolicy:</span>
+    <span class="hljs-attr">automated:</span>
+      <span class="hljs-attr">prune:</span> <span class="hljs-literal">true</span>          <span class="hljs-comment"># 自动删除 Git 中不存在的资源</span>
+      <span class="hljs-attr">selfHeal:</span> <span class="hljs-literal">true</span>       <span class="hljs-comment"># 自动修复手动修改</span>
+      <span class="hljs-attr">allowEmpty:</span> <span class="hljs-literal">false</span>
+    <span class="hljs-attr">syncOptions:</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-string">CreateNamespace=true</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-string">PruneLast=true</span>       <span class="hljs-comment"># 先部署再删除旧资源</span>
+    <span class="hljs-attr">retry:</span>
+      <span class="hljs-attr">limit:</span> <span class="hljs-number">5</span>
+      <span class="hljs-attr">backoff:</span>
+        <span class="hljs-attr">duration:</span> <span class="hljs-string">5s</span>
+        <span class="hljs-attr">factor:</span> <span class="hljs-number">2</span>
+        <span class="hljs-attr">maxDuration:</span> <span class="hljs-string">3m</span>
 
-  # 健康检查
-  ignoreDifferences:
-  - group: apps
-    kind: Deployment
-    jsonPointers:
-    - /spec/replicas  # HPA 管理的 replicas，不触发 OutOfSync
-</code></pre></div>
-<h3>6.3 ArgoCD Image Updater</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># 自动更新镜像（配合 CI 流水线）
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  annotations:
-    argocd-image-updater.argoproj.io/image-list: &gt;
+  <span class="hljs-comment"># 健康检查</span>
+  <span class="hljs-attr">ignoreDifferences:</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-attr">group:</span> <span class="hljs-string">apps</span>
+    <span class="hljs-attr">kind:</span> <span class="hljs-string">Deployment</span>
+    <span class="hljs-attr">jsonPointers:</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-string">/spec/replicas</span>  <span class="hljs-comment"># HPA 管理的 replicas，不触发 OutOfSync</span>
+</code></pre></div><h3>6.3 ArgoCD Image Updater</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-comment"># 自动更新镜像（配合 CI 流水线）</span>
+<span class="hljs-attr">apiVersion:</span> <span class="hljs-string">argoproj.io/v1alpha1</span>
+<span class="hljs-attr">kind:</span> <span class="hljs-string">Application</span>
+<span class="hljs-attr">metadata:</span>
+  <span class="hljs-attr">annotations:</span>
+    <span class="hljs-attr">argocd-image-updater.argoproj.io/image-list:</span> <span class="hljs-string">&gt;
       app=registry.example.com/ai-rag-service
-    argocd-image-updater.argoproj.io/app.update-strategy: semver
-    argocd-image-updater.argoproj.io/write-back-method: git
-spec:
-  # ... rest of application spec
-</code></pre></div>
-<hr>
+</span>    <span class="hljs-attr">argocd-image-updater.argoproj.io/app.update-strategy:</span> <span class="hljs-string">semver</span>
+    <span class="hljs-attr">argocd-image-updater.argoproj.io/write-back-method:</span> <span class="hljs-string">git</span>
+<span class="hljs-attr">spec:</span>
+  <span class="hljs-comment"># ... rest of application spec</span>
+</code></pre></div><hr>
 <h2>七、Terraform IaC</h2>
 <h3>7.1 核心概念</h3>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Terraform 工作流：
 Write → Plan → Apply → (State)
 
-Write:   编写 .tf 配置文件（声明期望状态）
-Plan:    terraform plan — 预览变更
-Apply:   terraform apply — 执行变更
-State:   terraform.tfstate — 记录实际状态（远程存储）
-</code></pre></div>
-<h3>7.2 Provider 与 Resource</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">hcl</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-hcl"># main.tf
-terraform {
-  required_version = &quot;&gt;= 1.8&quot;
+<span class="hljs-symbol">Write:</span>   编写 .tf 配置文件（声明期望状态）
+<span class="hljs-symbol">Plan:</span>    terraform plan — 预览变更
+<span class="hljs-symbol">Apply:</span>   terraform apply — 执行变更
+<span class="hljs-symbol">State:</span>   terraform.tfstate — 记录实际状态（远程存储）
+</code></pre></div><h3>7.2 Provider 与 Resource</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">hcl</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-hcl"><span class="hljs-comment"># main.tf</span>
+<span class="hljs-section">terraform</span> {
+  <span class="hljs-attribute">required_version</span> = <span class="hljs-string">"&gt;= 1.8"</span>
   required_providers {
-    postgresql = {
-      source  = &quot;cyrilgdn/postgresql&quot;
-      version = &quot;~&gt; 1.23&quot;
+    <span class="hljs-attribute">postgresql</span> = {
+      <span class="hljs-attribute">source</span>  = <span class="hljs-string">"cyrilgdn/postgresql"</span>
+      version = <span class="hljs-string">"~&gt; 1.23"</span>
     }
     kubernetes = {
-      source  = &quot;hashicorp/kubernetes&quot;
-      version = &quot;~&gt; 2.30&quot;
+      <span class="hljs-attribute">source</span>  = <span class="hljs-string">"hashicorp/kubernetes"</span>
+      version = <span class="hljs-string">"~&gt; 2.30"</span>
     }
   }
 
-  backend &quot;s3&quot; {
-    bucket = &quot;terraform-state&quot;
-    key    = &quot;ai-rag-service/terraform.tfstate&quot;
-    region = &quot;us-east-1&quot;
+  backend <span class="hljs-string">"s3"</span> {
+    <span class="hljs-attribute">bucket</span> = <span class="hljs-string">"terraform-state"</span>
+    key    = <span class="hljs-string">"ai-rag-service/terraform.tfstate"</span>
+    region = <span class="hljs-string">"us-east-1"</span>
   }
 }
 
-# PostgreSQL 数据库
-resource &quot;postgresql_database&quot; &quot;ai_knowledge&quot; {
-  name  = &quot;ai_knowledge&quot;
+<span class="hljs-comment"># PostgreSQL 数据库</span>
+resource <span class="hljs-string">"postgresql_database"</span> <span class="hljs-string">"ai_knowledge"</span> {
+  <span class="hljs-attribute">name</span>  = <span class="hljs-string">"ai_knowledge"</span>
   owner = postgresql_role.app.name
 }
 
-resource &quot;postgresql_extension&quot; &quot;pgvector&quot; {
-  name     = &quot;vector&quot;
+resource <span class="hljs-string">"postgresql_extension"</span> <span class="hljs-string">"pgvector"</span> {
+  <span class="hljs-attribute">name</span>     = <span class="hljs-string">"vector"</span>
   database = postgresql_database.ai_knowledge.name
 }
 
-# Redis 实例
-resource &quot;rediscloud_subscription&quot; &quot;cache&quot; {
-  name           = &quot;ai-rag-cache&quot;
-  memory_storage = &quot;ram&quot;
+<span class="hljs-comment"># Redis 实例</span>
+resource <span class="hljs-string">"rediscloud_subscription"</span> <span class="hljs-string">"cache"</span> {
+  <span class="hljs-attribute">name</span>           = <span class="hljs-string">"ai-rag-cache"</span>
+  memory_storage = <span class="hljs-string">"ram"</span>
   cloud_provider {
-    provider = &quot;AWS&quot;
+    <span class="hljs-attribute">provider</span> = <span class="hljs-string">"AWS"</span>
     region {
-      region = &quot;us-east-1&quot;
+      <span class="hljs-attribute">region</span> = <span class="hljs-string">"us-east-1"</span>
     }
   }
-  # ...
+  <span class="hljs-comment"># ...</span>
 }
 
-# K8s Namespace
-resource &quot;kubernetes_namespace&quot; &quot;ai_rag&quot; {
-  metadata {
-    name = &quot;ai-rag-production&quot;
+<span class="hljs-comment"># K8s Namespace</span>
+resource <span class="hljs-string">"kubernetes_namespace"</span> <span class="hljs-string">"ai_rag"</span> {
+  <span class="hljs-section">metadata</span> {
+    <span class="hljs-attribute">name</span> = <span class="hljs-string">"ai-rag-production"</span>
   }
 }
 
-# K8s Secret
-resource &quot;kubernetes_secret&quot; &quot;db_credentials&quot; {
-  metadata {
-    name      = &quot;db-credentials&quot;
-    namespace = kubernetes_namespace.ai_rag.metadata[0].name
+<span class="hljs-comment"># K8s Secret</span>
+resource <span class="hljs-string">"kubernetes_secret"</span> <span class="hljs-string">"db_credentials"</span> {
+  <span class="hljs-section">metadata</span> {
+    <span class="hljs-attribute">name</span>      = <span class="hljs-string">"db-credentials"</span>
+    namespace = kubernetes_namespace.ai_rag.metadata[<span class="hljs-number">0</span>].name
   }
 
   data = {
-    username = postgresql_role.app.name
+    <span class="hljs-attribute">username</span> = postgresql_role.app.name
     password = postgresql_role.app.password
   }
 }
 
-output &quot;database_url&quot; {
-  value     = &quot;jdbc:postgresql://${postgresql_database.ai_knowledge.host}:5432/${postgresql_database.ai_knowledge.name}&quot;
-  sensitive = true
+output <span class="hljs-string">"database_url"</span> {
+  <span class="hljs-attribute">value</span>     = <span class="hljs-string">"jdbc:postgresql://${postgresql_database.ai_knowledge.host}:5432/${postgresql_database.ai_knowledge.name}"</span>
+  sensitive = <span class="hljs-literal">true</span>
 }
-</code></pre></div>
-<h3>7.3 状态管理与远程存储</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">hcl</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-hcl"># 远程状态存储（S3 + DynamoDB 锁）
-terraform {
-  backend &quot;s3&quot; {
-    bucket         = &quot;my-terraform-state&quot;
-    key            = &quot;ai-rag/production/terraform.tfstate&quot;
-    region         = &quot;us-east-1&quot;
-    encrypt        = true
-    dynamodb_table = &quot;terraform-locks&quot;  # 状态锁，防止并发修改
+</code></pre></div><h3>7.3 状态管理与远程存储</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">hcl</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-hcl"><span class="hljs-comment"># 远程状态存储（S3 + DynamoDB 锁）</span>
+<span class="hljs-section">terraform</span> {
+  <span class="hljs-attribute">backend</span> <span class="hljs-string">"s3"</span> {
+    <span class="hljs-attribute">bucket</span>         = <span class="hljs-string">"my-terraform-state"</span>
+    key            = <span class="hljs-string">"ai-rag/production/terraform.tfstate"</span>
+    region         = <span class="hljs-string">"us-east-1"</span>
+    encrypt        = <span class="hljs-literal">true</span>
+    dynamodb_table = <span class="hljs-string">"terraform-locks"</span>  <span class="hljs-comment"># 状态锁，防止并发修改</span>
   }
 }
-</code></pre></div>
-<p><strong>Plan-Apply 流程：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># 1. 初始化（下载 provider，配置 backend）
+</code></pre></div><p><strong>Plan-Apply 流程：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-comment"># 1. 初始化（下载 provider，配置 backend）</span>
 terraform init
 
-# 2. 格式化
-terraform fmt -recursive
+<span class="hljs-comment"># 2. 格式化</span>
+terraform <span class="hljs-built_in">fmt</span> -recursive
 
-# 3. 验证语法
+<span class="hljs-comment"># 3. 验证语法</span>
 terraform validate
 
-# 4. 预览变更
+<span class="hljs-comment"># 4. 预览变更</span>
 terraform plan -out=tfplan
 
-# 5. 应用变更
+<span class="hljs-comment"># 5. 应用变更</span>
 terraform apply tfplan
 
-# 6. 查看输出
+<span class="hljs-comment"># 6. 查看输出</span>
 terraform output
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>八、完整 CI/CD 流程（AI 应用）</h2>
 <h3>8.1 流水线总览</h3>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Git Push (main)
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-variable">Git</span> <span class="hljs-variable">Push</span> <span class="hljs-punctuation">(</span><span class="hljs-variable">main</span><span class="hljs-punctuation">)</span>
     │
     ▼
 ┌─────────────────────┐
-│ GitHub Actions CI    │
-│ ├ Build &amp; Test       │
-│ ├ Code Scan          │
-│ ├ Docker Build+Push  │
-│ ├ Image Scan (Trivy) │
-│ └ Cosign Sign        │
+│ <span class="hljs-variable">GitHub</span> <span class="hljs-variable">Actions</span> <span class="hljs-variable">CI</span>    │
+│ ├ <span class="hljs-variable">Build</span> <span class="hljs-operator">&amp;</span> <span class="hljs-variable">Test</span>       │
+│ ├ <span class="hljs-variable">Code</span> <span class="hljs-built_in">Scan</span>          │
+│ ├ <span class="hljs-variable">Docker</span> <span class="hljs-variable">Build</span><span class="hljs-operator">+</span><span class="hljs-variable">Push</span>  │
+│ ├ <span class="hljs-built_in">Image</span> <span class="hljs-built_in">Scan</span> <span class="hljs-punctuation">(</span><span class="hljs-variable">Trivy</span><span class="hljs-punctuation">)</span> │
+│ └ <span class="hljs-variable">Cosign</span> <span class="hljs-built_in">Sign</span>        │
 └─────────┬───────────┘
-          │ Image Tag Update
+          │ <span class="hljs-built_in">Image</span> <span class="hljs-variable">Tag</span> <span class="hljs-built_in">Update</span>
           ▼
 ┌─────────────────────┐
-│ ArgoCD               │
-│ ├ Auto Sync (dev)    │
-│ └ Manual Sync (prod) │
-└─────────┬───────────┘
-          │
-          ▼
-┌─────────────────────┐
-│ K8s (dev/prod)       │
-│ ├ Canary Deploy      │
-│ ├ Health Checks      │
-│ └ Auto Rollback      │
+│ <span class="hljs-variable">ArgoCD</span>               │
+│ ├ <span class="hljs-variable">Auto</span> <span class="hljs-variable">Sync</span> <span class="hljs-punctuation">(</span><span class="hljs-variable">dev</span><span class="hljs-punctuation">)</span>    │
+│ └ <span class="hljs-built_in">Manual</span> <span class="hljs-variable">Sync</span> <span class="hljs-punctuation">(</span><span class="hljs-variable">prod</span><span class="hljs-punctuation">)</span> │
 └─────────┬───────────┘
           │
           ▼
 ┌─────────────────────┐
-│ OTel + Grafana       │
-│ ├ Metrics Dashboard  │
-│ ├ Alerting           │
-│ └ Trace Analysis     │
+│ <span class="hljs-variable">K8s</span> <span class="hljs-punctuation">(</span><span class="hljs-variable">dev</span><span class="hljs-operator">/</span><span class="hljs-variable">prod</span><span class="hljs-punctuation">)</span>       │
+│ ├ <span class="hljs-variable">Canary</span> <span class="hljs-built_in">Deploy</span>      │
+│ ├ <span class="hljs-variable">Health</span> <span class="hljs-variable">Checks</span>      │
+│ └ <span class="hljs-variable">Auto</span> <span class="hljs-variable">Rollback</span>      │
+└─────────┬───────────┘
+          │
+          ▼
+┌─────────────────────┐
+│ <span class="hljs-variable">OTel</span> <span class="hljs-operator">+</span> <span class="hljs-variable">Grafana</span>       │
+│ ├ <span class="hljs-variable">Metrics</span> <span class="hljs-variable">Dashboard</span>  │
+│ ├ <span class="hljs-variable">Alerting</span>           │
+│ └ <span class="hljs-built_in">Trace</span> <span class="hljs-variable">Analysis</span>     │
 └─────────────────────┘
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>常见问题</h2>
 <p><strong>Q: 制品管理用什么？</strong>
 A: Docker 镜像用 Container Registry (ghcr.io/ECR/ACR)；Maven 制品用 Nexus/Artifactory；Helm Chart 用 ChartMuseum/OCI Registry。</p>
@@ -788,9 +764,9 @@ A: Terraform Workspace 或目录分离（<code>env/dev</code>, <code>env/prod</c
 <hr>
 <h2>相关条目</h2>
 <ul>
-<li><a href="#/06-云原生与SRE/容器与编排/06-Docker与Kubernetes云原生部署" class="cross-ref" data-ref="06-Docker与Kubernetes云原生部署">06-Docker与Kubernetes云原生部署</a> — Docker 镜像构建与 K8s 部署</li>
-<li><a href="#/06-云原生与SRE/可观测性与CI/06-OpenTelemetry可观测性体系" class="cross-ref" data-ref="06-OpenTelemetry可观测性体系">06-OpenTelemetry可观测性体系</a> — 部署后可观测性</li>
-<li><a href="#/05-分布式架构/弹性设计/05-熔断限流与弹性设计" class="cross-ref" data-ref="05-熔断限流与弹性设计">05-熔断限流与弹性设计</a> — 部署后的弹性保障</li>
+<li><a href="#/06-云原生与SRE/容器与编排/06-Docker与Kubernetes云原生部署" class="cross-ref">06-Docker与Kubernetes云原生部署</a> — Docker 镜像构建与 K8s 部署</li>
+<li><a href="#/06-云原生与SRE/可观测性与CI/06-OpenTelemetry可观测性体系" class="cross-ref">06-OpenTelemetry可观测性体系</a> — 部署后可观测性</li>
+<li><a href="#/05-分布式架构/弹性设计/05-熔断限流与弹性设计" class="cross-ref">05-熔断限流与弹性设计</a> — 部署后的弹性保障</li>
 </ul>
-</div>
+</body></html></div>
 </article>

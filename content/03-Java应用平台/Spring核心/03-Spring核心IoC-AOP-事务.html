@@ -1,12 +1,12 @@
 
-<article class="kb-entry" data-path="/03-Java应用平台/Spring核心/03-Spring核心IoC-AOP-事务">
+<article class="kb-entry" data-path="/03-Java应用平台">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=03">03-Java应用平台</a></div>
     <h1>Spring核心IoC-AOP-事务</h1>
-    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#spring-ioc</span><span class="badge badge-tag">#spring-aop</span><span class="badge badge-tag">#spring-transaction</span><span class="badge badge-tag">#bean-lifecycle</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#spring-ioc</span><span class="badge badge-tag">#spring-aop</span><span class="badge badge-tag">#spring-transaction</span><span class="badge badge-tag">#bean-lifecycle</span><span class="badge badge-tag">#circular-dependency</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://docs.spring.io/spring-framework/reference/core.html" target="_blank" rel="noopener" class="source-link" title="Spring Framework Reference — IoC Container, AOP, Transaction Management, Events, Resources">Spring Framework Reference — IoC Container, AOP, Transaction Management, Events, Resources</a><a href="https://docs.spring.io/spring-framework/reference/data-access/transaction.html" target="_blank" rel="noopener" class="source-link" title="Spring Transaction Management Reference">Spring Transaction Management Reference</a><a href="https://github.com/spring-projects/spring-framework" target="_blank" rel="noopener" class="source-link" title="Spring Framework source — DefaultListableBeanFactory, TransactionInterceptor, AbstractAutoProxyCreator">Spring Framework source — DefaultListableBeanFactory, TransactionInterceptor, AbstractAutoProxyCreator</a><a href="https://www.manning.com/books/spring-in-action-sixth-edition" target="_blank" rel="noopener" class="source-link" title="Spring in Action, Sixth Edition (Craig Walls, 2022)">Spring in Action, Sixth Edition (Craig Walls, 2022)</a></small></div>
   </div>
-  <div class="entry-body"><h1>Spring 核心 IoC / AOP / 事务</h1>
+  <div class="entry-body"><html><head></head><body><h1>Spring 核心 IoC / AOP / 事务</h1>
 <h2>概述</h2>
 <p>Spring Framework 是 Java 企业开发的事实标准，其三大核心能力——<strong>IoC 容器</strong>（控制反转与依赖注入）、<strong>AOP</strong>（面向切面编程）、<strong>事务管理</strong>——构成了现代 Java 应用的骨架。</p>
 <p>本文从源码级别剖析 Bean 生命周期的完整链路、AOP 的代理选择策略和失效场景、Spring 事务的传播机制及其常见陷阱，以及事件机制和资源抽象。所有代码示例使用 JDK 25 + Spring Boot 4.x 风格。</p>
@@ -48,44 +48,41 @@
 </tr>
 </tbody></table>
 <p>Spring Boot 4.x 默认使用 <code>AnnotationConfigApplicationContext</code> 作为实现：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@SpringBootApplication
-public class Application {
-    public static void main(String[] args) {
-        var ctx = SpringApplication.run(Application.class, args);
-        // ctx 的类型是 AnnotationConfigServletWebServerApplicationContext
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@SpringBootApplication</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">Application</span> {
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">main</span><span class="hljs-params">(String[] args)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">ctx</span> <span class="hljs-operator">=</span> SpringApplication.run(Application.class, args);
+        <span class="hljs-comment">// ctx 的类型是 AnnotationConfigServletWebServerApplicationContext</span>
     }
 }
-</code></pre></div>
-<h3>1.2 Bean 生命周期完整链路</h3>
+</code></pre></div><h3>1.2 Bean 生命周期完整链路</h3>
 <p>一个 Bean 从创建到销毁经历以下阶段（源码级别）：</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌──────────────────────────────────────────────────────────────────┐
 │                    Bean 生命周期（完整版）                         │
 ├──────────────────────────────────────────────────────────────────┤
-│  1. Instantiate — 反射调用构造函数，创建 Bean 实例               │
-│  2. Populate Properties — 填充属性（@Autowired/@Value 注入）    │
-│  3. BeanNameAware.setBeanName()                                  │
-│  4. BeanClassLoaderAware.setBeanClassLoader()                    │
-│  5. BeanFactoryAware.setBeanFactory()                            │
-│  6. EnvironmentAware.setEnvironment()                            │
-│  7. BeanPostProcessor.postProcessBeforeInitialization()          │
-│  8. @PostConstruct 标注的方法                                     │
-│  9. InitializingBean.afterPropertiesSet()                        │
-│ 10. BeanPostProcessor.postProcessAfterInitialization()  ← AOP 代理在此创建 │
-│ 11. Bean 就绪，可以被使用                                        │
-│ 12. @PreDestroy 标注的方法                                       │
-│ 13. DisposableBean.destroy()                                     │
+│  <span class="hljs-number">1</span>. Instantiate — 反射调用构造函数，创建 Bean 实例               │
+│  <span class="hljs-number">2</span>. Populate Properties — 填充属性（@Autowired/@Value 注入）    │
+│  <span class="hljs-number">3</span>. BeanNameAware<span class="hljs-selector-class">.setBeanName</span>()                                  │
+│  <span class="hljs-number">4</span>. BeanClassLoaderAware<span class="hljs-selector-class">.setBeanClassLoader</span>()                    │
+│  <span class="hljs-number">5</span>. BeanFactoryAware<span class="hljs-selector-class">.setBeanFactory</span>()                            │
+│  <span class="hljs-number">6</span>. EnvironmentAware<span class="hljs-selector-class">.setEnvironment</span>()                            │
+│  <span class="hljs-number">7</span>. BeanPostProcessor<span class="hljs-selector-class">.postProcessBeforeInitialization</span>()          │
+│  <span class="hljs-number">8</span>. @PostConstruct 标注的方法                                     │
+│  <span class="hljs-number">9</span>. InitializingBean<span class="hljs-selector-class">.afterPropertiesSet</span>()                        │
+│ <span class="hljs-number">10</span>. BeanPostProcessor<span class="hljs-selector-class">.postProcessAfterInitialization</span>()  ← AOP 代理在此创建 │
+│ <span class="hljs-number">11</span>. Bean 就绪，可以被使用                                        │
+│ <span class="hljs-number">12</span>. @PreDestroy 标注的方法                                       │
+│ <span class="hljs-number">13</span>. DisposableBean<span class="hljs-selector-class">.destroy</span>()                                     │
 └──────────────────────────────────────────────────────────────────┘
-</code></pre></div>
-<p><strong>关键源码位置：</strong> <code>AbstractAutowireCapableBeanFactory.doCreateBean()</code> 方法，约 500 行，是整个 Bean 创建的编排入口。</p>
+</code></pre></div><p><strong>关键源码位置：</strong> <code>AbstractAutowireCapableBeanFactory.doCreateBean()</code> 方法，约 500 行，是整个 Bean 创建的编排入口。</p>
 <p><strong>第 10 步的深度解析（AOP 代理创建）：</strong></p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>AbstractAutoProxyCreator.postProcessAfterInitialization()
- └─ wrapIfNecessary()
-     └─ getAdvicesAndAdvisorsForBean()  // 找出匹配的切面
-         └─ createProxy()
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>AbstractAutoProxyCreator<span class="hljs-selector-class">.postProcessAfterInitialization</span>()
+ └─ <span class="hljs-built_in">wrapIfNecessary</span>()
+     └─ <span class="hljs-built_in">getAdvicesAndAdvisorsForBean</span>()  <span class="hljs-comment">// 找出匹配的切面</span>
+         └─ <span class="hljs-built_in">createProxy</span>()
              ├─ 有接口 → JdkDynamicAopProxy
              └─ 无接口 → CglibAopProxy (Objenesis)
-</code></pre></div>
-<h3>1.3 Bean 作用域</h3>
+</code></pre></div><h3>1.3 Bean 作用域</h3>
 <table>
 <thead>
 <tr>
@@ -120,88 +117,85 @@ public class Application {
 <td>应用级共享数据</td>
 </tr>
 </tbody></table>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Scope(&quot;prototype&quot;)
-@Component
-public class ReportGenerator {
-    // 每次注入/获取都创建新实例
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Scope("prototype")</span>
+<span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ReportGenerator</span> {
+    <span class="hljs-comment">// 每次注入/获取都创建新实例</span>
 }
 
-// 注意：singleton Bean 中注入 prototype Bean 默认只会注入一次
-// 解决方案：使用 @Lookup 或 ObjectFactory/Provider
-@Component
-public class ReportService {
-    @Lookup
-    public ReportGenerator getReportGenerator() {
-        return null; // Spring 通过 CGLIB 覆盖此方法
+<span class="hljs-comment">// 注意：singleton Bean 中注入 prototype Bean 默认只会注入一次</span>
+<span class="hljs-comment">// 解决方案：使用 @Lookup 或 ObjectFactory/Provider</span>
+<span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ReportService</span> {
+    <span class="hljs-meta">@Lookup</span>
+    <span class="hljs-keyword">public</span> ReportGenerator <span class="hljs-title function_">getReportGenerator</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-literal">null</span>; <span class="hljs-comment">// Spring 通过 CGLIB 覆盖此方法</span>
     }
 }
-</code></pre></div>
-<h3>1.4 循环依赖与三级缓存</h3>
+</code></pre></div><h3>1.4 循环依赖与三级缓存</h3>
 <p>Spring 通过三级缓存解决单例 Bean 的构造器循环依赖（setter 注入的循环依赖可以解决，构造函数注入的循环依赖无法解决）：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// DefaultSingletonBeanRegistry 中的三级缓存：
-// 一级缓存（singletonObjects）：完全初始化完成的 Bean
-// 二级缓存（earlySingletonObjects）：早期暴露的 Bean（未完成属性填充）
-// 三级缓存（singletonFactories）：Bean 工厂（可生成早期 Bean 引用）
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// DefaultSingletonBeanRegistry 中的三级缓存：</span>
+<span class="hljs-comment">// 一级缓存（singletonObjects）：完全初始化完成的 Bean</span>
+<span class="hljs-comment">// 二级缓存（earlySingletonObjects）：早期暴露的 Bean（未完成属性填充）</span>
+<span class="hljs-comment">// 三级缓存（singletonFactories）：Bean 工厂（可生成早期 Bean 引用）</span>
 
-// 解决流程（A ← → B 循环依赖）：
-// 1. 创建 A → 发现需要 B → 将 A 的 ObjectFactory 放入三级缓存
-// 2. 创建 B → 发现需要 A → 从三级缓存获取 A 的 ObjectFactory
-//    → 生成 A 的早期引用 → 放入二级缓存 → 从三级缓存移除
-// 3. B 完成初始化 → 放入一级缓存
-// 4. A 继续初始化（使用二级缓存中的 B 引用）→ 放入一级缓存
-</code></pre></div>
-<p><strong>最佳实践：</strong> 避免循环依赖。使用构造函数注入（强制不可变）、重新设计模块边界、提取公共依赖为独立 Bean。</p>
+<span class="hljs-comment">// 解决流程（A ← → B 循环依赖）：</span>
+<span class="hljs-comment">// 1. 创建 A → 发现需要 B → 将 A 的 ObjectFactory 放入三级缓存</span>
+<span class="hljs-comment">// 2. 创建 B → 发现需要 A → 从三级缓存获取 A 的 ObjectFactory</span>
+<span class="hljs-comment">//    → 生成 A 的早期引用 → 放入二级缓存 → 从三级缓存移除</span>
+<span class="hljs-comment">// 3. B 完成初始化 → 放入一级缓存</span>
+<span class="hljs-comment">// 4. A 继续初始化（使用二级缓存中的 B 引用）→ 放入一级缓存</span>
+</code></pre></div><p><strong>最佳实践：</strong> 避免循环依赖。使用构造函数注入（强制不可变）、重新设计模块边界、提取公共依赖为独立 Bean。</p>
 <hr>
 <h2>二、Spring AOP</h2>
 <h3>2.1 AspectJ 注解体系</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Aspect
-@Component
-public class LoggingAspect {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Aspect</span>
+<span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">LoggingAspect</span> {
 
-    // Pointcut：定义切点
-    @Pointcut(&quot;execution(* com.example.service.*.*(..))&quot;)
-    public void serviceLayer() {}
+    <span class="hljs-comment">// Pointcut：定义切点</span>
+    <span class="hljs-meta">@Pointcut("execution(* com.example.service.*.*(..))")</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">serviceLayer</span><span class="hljs-params">()</span> {}
 
-    // Before：方法执行前
-    @Before(&quot;serviceLayer()&quot;)
-    public void logBefore(JoinPoint joinPoint) {
-        var methodName = joinPoint.getSignature().getName();
-        var args = Arrays.toString(joinPoint.getArgs());
-        System.out.printf(&quot;→ %s(%s)%n&quot;, methodName, args);
+    <span class="hljs-comment">// Before：方法执行前</span>
+    <span class="hljs-meta">@Before("serviceLayer()")</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">logBefore</span><span class="hljs-params">(JoinPoint joinPoint)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">methodName</span> <span class="hljs-operator">=</span> joinPoint.getSignature().getName();
+        <span class="hljs-type">var</span> <span class="hljs-variable">args</span> <span class="hljs-operator">=</span> Arrays.toString(joinPoint.getArgs());
+        System.out.printf(<span class="hljs-string">"→ %s(%s)%n"</span>, methodName, args);
     }
 
-    // AfterReturning：方法正常返回后
-    @AfterReturning(pointcut = &quot;serviceLayer()&quot;, returning = &quot;result&quot;)
-    public void logAfterReturning(JoinPoint joinPoint, Object result) {
-        System.out.printf(&quot;← %s returned: %s%n&quot;,
+    <span class="hljs-comment">// AfterReturning：方法正常返回后</span>
+    <span class="hljs-meta">@AfterReturning(pointcut = "serviceLayer()", returning = "result")</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">logAfterReturning</span><span class="hljs-params">(JoinPoint joinPoint, Object result)</span> {
+        System.out.printf(<span class="hljs-string">"← %s returned: %s%n"</span>,
             joinPoint.getSignature().getName(), result);
     }
 
-    // AfterThrowing：方法抛出异常后
-    @AfterThrowing(pointcut = &quot;serviceLayer()&quot;, throwing = &quot;ex&quot;)
-    public void logAfterThrowing(JoinPoint joinPoint, Exception ex) {
-        System.err.printf(&quot;✗ %s threw: %s%n&quot;,
+    <span class="hljs-comment">// AfterThrowing：方法抛出异常后</span>
+    <span class="hljs-meta">@AfterThrowing(pointcut = "serviceLayer()", throwing = "ex")</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">logAfterThrowing</span><span class="hljs-params">(JoinPoint joinPoint, Exception ex)</span> {
+        System.err.printf(<span class="hljs-string">"✗ %s threw: %s%n"</span>,
             joinPoint.getSignature().getName(), ex.getMessage());
     }
 
-    // Around：环绕通知（最强大，控制方法执行全过程）
-    @Around(&quot;serviceLayer()&quot;)
-    public Object logAround(ProceedingJoinPoint pjp) throws Throwable {
-        var start = System.nanoTime();
-        try {
-            var result = pjp.proceed(); // 必须调用 proceed()，否则方法不执行
-            var elapsed = (System.nanoTime() - start) / 1_000_000;
-            System.out.printf(&quot;%s completed in %dms%n&quot;,
+    <span class="hljs-comment">// Around：环绕通知（最强大，控制方法执行全过程）</span>
+    <span class="hljs-meta">@Around("serviceLayer()")</span>
+    <span class="hljs-keyword">public</span> Object <span class="hljs-title function_">logAround</span><span class="hljs-params">(ProceedingJoinPoint pjp)</span> <span class="hljs-keyword">throws</span> Throwable {
+        <span class="hljs-type">var</span> <span class="hljs-variable">start</span> <span class="hljs-operator">=</span> System.nanoTime();
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> pjp.proceed(); <span class="hljs-comment">// 必须调用 proceed()，否则方法不执行</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">elapsed</span> <span class="hljs-operator">=</span> (System.nanoTime() - start) / <span class="hljs-number">1_000_000</span>;
+            System.out.printf(<span class="hljs-string">"%s completed in %dms%n"</span>,
                 pjp.getSignature(), elapsed);
-            return result;
-        } catch (Exception e) {
-            System.err.printf(&quot;%s failed: %s%n&quot;, pjp.getSignature(), e.getMessage());
-            throw e;
+            <span class="hljs-keyword">return</span> result;
+        } <span class="hljs-keyword">catch</span> (Exception e) {
+            System.err.printf(<span class="hljs-string">"%s failed: %s%n"</span>, pjp.getSignature(), e.getMessage());
+            <span class="hljs-keyword">throw</span> e;
         }
     }
 }
-</code></pre></div>
-<h3>2.2 Pointcut 表达式</h3>
+</code></pre></div><h3>2.2 Pointcut 表达式</h3>
 <table>
 <thead>
 <tr>
@@ -247,86 +241,81 @@ public class LoggingAspect {
 </tr>
 </tbody></table>
 <p><strong>AI 场景中的 AOP 应用示例——自动记录 Tool 调用耗时：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Target(ElementType.METHOD)
-@Retention(RetentionPolicy.RUNTIME)
-@interface ToolMethod {
-    String name();
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Target(ElementType.METHOD)</span>
+<span class="hljs-meta">@Retention(RetentionPolicy.RUNTIME)</span>
+<span class="hljs-meta">@interface</span> ToolMethod {
+    String <span class="hljs-title function_">name</span><span class="hljs-params">()</span>;
 }
 
-@Aspect
-@Component
-public class ToolMetricsAspect {
+<span class="hljs-meta">@Aspect</span>
+<span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ToolMetricsAspect</span> {
 
-    @Around(&quot;@annotation(toolMethod)&quot;)
-    public Object measureToolExecution(ProceedingJoinPoint pjp, ToolMethod toolMethod)
-            throws Throwable {
-        var start = System.nanoTime();
-        try {
-            return pjp.proceed();
-        } finally {
-            var elapsed = (System.nanoTime() - start) / 1_000_000.0;
-            System.out.printf(&quot;[Metrics] Tool &#39;%s&#39; executed in %.2fms%n&quot;,
+    <span class="hljs-meta">@Around("@annotation(toolMethod)")</span>
+    <span class="hljs-keyword">public</span> Object <span class="hljs-title function_">measureToolExecution</span><span class="hljs-params">(ProceedingJoinPoint pjp, ToolMethod toolMethod)</span>
+            <span class="hljs-keyword">throws</span> Throwable {
+        <span class="hljs-type">var</span> <span class="hljs-variable">start</span> <span class="hljs-operator">=</span> System.nanoTime();
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-keyword">return</span> pjp.proceed();
+        } <span class="hljs-keyword">finally</span> {
+            <span class="hljs-type">var</span> <span class="hljs-variable">elapsed</span> <span class="hljs-operator">=</span> (System.nanoTime() - start) / <span class="hljs-number">1_000_000.0</span>;
+            System.out.printf(<span class="hljs-string">"[Metrics] Tool '%s' executed in %.2fms%n"</span>,
                 toolMethod.name(), elapsed);
-            // 实际项目中：将指标发送到 Micrometer/Prometheus
+            <span class="hljs-comment">// 实际项目中：将指标发送到 Micrometer/Prometheus</span>
         }
     }
 }
-</code></pre></div>
-<h3>2.3 AOP 失效场景（高频踩坑）</h3>
+</code></pre></div><h3>2.3 AOP 失效场景（高频踩坑）</h3>
 <p><strong>场景1：自调用（Self-Invocation）</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
-public class UserService {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">UserService</span> {
 
-    @Transactional  // 直接调用：事务生效
-    public void createUser() { /* ... */ }
+    <span class="hljs-meta">@Transactional</span>  <span class="hljs-comment">// 直接调用：事务生效</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">createUser</span><span class="hljs-params">()</span> { <span class="hljs-comment">/* ... */</span> }
 
-    public void batchCreate() {
-        // AOP 失效！这是内部调用（this.createUser()），不经过代理
-        createUser(); // 等价于 this.createUser()
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">batchCreate</span><span class="hljs-params">()</span> {
+        <span class="hljs-comment">// AOP 失效！这是内部调用（this.createUser()），不经过代理</span>
+        createUser(); <span class="hljs-comment">// 等价于 this.createUser()</span>
     }
 }
 
-// 解决方案1：注入自己（通过 ApplicationContext 或 @Lazy @Autowired）
-// 解决方案2：将方法拆分到不同的 Bean 中
-// 解决方案3：使用 AopContext.currentProxy()
-@Service
-public class UserService {
-    public void batchCreate() {
+<span class="hljs-comment">// 解决方案1：注入自己（通过 ApplicationContext 或 @Lazy @Autowired）</span>
+<span class="hljs-comment">// 解决方案2：将方法拆分到不同的 Bean 中</span>
+<span class="hljs-comment">// 解决方案3：使用 AopContext.currentProxy()</span>
+<span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">UserService</span> {
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">batchCreate</span><span class="hljs-params">()</span> {
         ((UserService) AopContext.currentProxy()).createUser();
-        // 需要在配置中启用：@EnableAspectJAutoProxy(exposeProxy = true)
+        <span class="hljs-comment">// 需要在配置中启用：@EnableAspectJAutoProxy(exposeProxy = true)</span>
     }
 }
-</code></pre></div>
-<p><strong>场景2：非 public 方法</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
-public class UserService {
-    @Transactional
-    protected void internalMethod() { // 事务不生效！
-        // Spring AOP 默认只代理 public 方法（CGLIB 可以代理 protected）
+</code></pre></div><p><strong>场景2：非 public 方法</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">UserService</span> {
+    <span class="hljs-meta">@Transactional</span>
+    <span class="hljs-keyword">protected</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">internalMethod</span><span class="hljs-params">()</span> { <span class="hljs-comment">// 事务不生效！</span>
+        <span class="hljs-comment">// Spring AOP 默认只代理 public 方法（CGLIB 可以代理 protected）</span>
     }
 }
-</code></pre></div>
-<p><strong>场景3：异常类型不匹配</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Transactional(rollbackFor = RuntimeException.class) // 默认
-public void process() throws Exception {
-    throw new Exception(&quot;Checked exception&quot;); // 不会回滚！
+</code></pre></div><p><strong>场景3：异常类型不匹配</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Transactional(rollbackFor = RuntimeException.class)</span> <span class="hljs-comment">// 默认</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">process</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> Exception {
+    <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Exception</span>(<span class="hljs-string">"Checked exception"</span>); <span class="hljs-comment">// 不会回滚！</span>
 }
 
-// 解决方案
-@Transactional(rollbackFor = Exception.class) // 所有异常都回滚
-public void process() throws Exception { /* ... */ }
-</code></pre></div>
-<hr>
+<span class="hljs-comment">// 解决方案</span>
+<span class="hljs-meta">@Transactional(rollbackFor = Exception.class)</span> <span class="hljs-comment">// 所有异常都回滚</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">process</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> Exception { <span class="hljs-comment">/* ... */</span> }
+</code></pre></div><hr>
 <h2>三、Spring 事务管理</h2>
 <h3>3.1 @Transactional 原理</h3>
 <p>Spring 事务通过 <code>TransactionInterceptor</code> 实现，它是 AOP 的 Around 通知：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>调用 createOrder() → TransactionInterceptor.invoke()
- ├─ PlatformTransactionManager.getTransaction()  // 开启事务
- ├─ invocation.proceed()                          // 执行目标方法
- ├─ 若成功：PlatformTransactionManager.commit()  // 提交事务
- └─ 若异常：PlatformTransactionManager.rollback() // 回滚事务
-</code></pre></div>
-<h3>3.2 事务隔离级别</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>调用 <span class="hljs-built_in">createOrder</span>() → TransactionInterceptor<span class="hljs-selector-class">.invoke</span>()
+ ├─ PlatformTransactionManager<span class="hljs-selector-class">.getTransaction</span>()  <span class="hljs-comment">// 开启事务</span>
+ ├─ invocation<span class="hljs-selector-class">.proceed</span>()                          <span class="hljs-comment">// 执行目标方法</span>
+ ├─ 若成功：PlatformTransactionManager<span class="hljs-selector-class">.commit</span>()  <span class="hljs-comment">// 提交事务</span>
+ └─ 若异常：PlatformTransactionManager<span class="hljs-selector-class">.rollback</span>() <span class="hljs-comment">// 回滚事务</span>
+</code></pre></div><h3>3.2 事务隔离级别</h3>
 <table>
 <thead>
 <tr>
@@ -367,13 +356,12 @@ public void process() throws Exception { /* ... */ }
 </tr>
 </tbody></table>
 <p><strong>默认隔离级别取决于数据库：</strong> MySQL 默认为 REPEATABLE_READ，PostgreSQL 默认为 READ_COMMITTED。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Transactional(isolation = Isolation.READ_COMMITTED)
-public void transferMoney(Long fromId, Long toId, BigDecimal amount) {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Transactional(isolation = Isolation.READ_COMMITTED)</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">transferMoney</span><span class="hljs-params">(Long fromId, Long toId, BigDecimal amount)</span> {
     accountRepo.debit(fromId, amount);
     accountRepo.credit(toId, amount);
 }
-</code></pre></div>
-<h3>3.3 事务传播行为</h3>
+</code></pre></div><h3>3.3 事务传播行为</h3>
 <table>
 <thead>
 <tr>
@@ -418,38 +406,36 @@ public void transferMoney(Long fromId, Long toId, BigDecimal amount) {
 <td>禁止事务场景</td>
 </tr>
 </tbody></table>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
-public class OrderService {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">OrderService</span> {
 
-    @Transactional // REQUIRED，默认
-    public void createOrder(OrderDto dto) {
-        // 主事务：创建订单
+    <span class="hljs-meta">@Transactional</span> <span class="hljs-comment">// REQUIRED，默认</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">createOrder</span><span class="hljs-params">(OrderDto dto)</span> {
+        <span class="hljs-comment">// 主事务：创建订单</span>
         orderRepo.save(dto.toEntity());
-        // 记录日志（独立事务，即使主事务失败，日志也保留）
-        auditService.log(&quot;Order created: &quot; + dto.orderId());
+        <span class="hljs-comment">// 记录日志（独立事务，即使主事务失败，日志也保留）</span>
+        auditService.log(<span class="hljs-string">"Order created: "</span> + dto.orderId());
     }
 }
 
-@Service
-public class AuditService {
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void log(String message) {
-        // 独立事务，不受调用方事务影响
-        auditRepo.save(new AuditLog(message));
+<span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">AuditService</span> {
+    <span class="hljs-meta">@Transactional(propagation = Propagation.REQUIRES_NEW)</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">log</span><span class="hljs-params">(String message)</span> {
+        <span class="hljs-comment">// 独立事务，不受调用方事务影响</span>
+        auditRepo.save(<span class="hljs-keyword">new</span> <span class="hljs-title class_">AuditLog</span>(message));
     }
 }
-</code></pre></div>
-<h3>3.4 PlatformTransactionManager</h3>
+</code></pre></div><h3>3.4 PlatformTransactionManager</h3>
 <p>Spring 为不同数据访问技术提供不同的事务管理器：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// JDBC / JPA：DataSourceTransactionManager / JpaTransactionManager
-// Hibernate：HibernateTransactionManager
-// JTA（分布式事务）：JtaTransactionManager
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// JDBC / JPA：DataSourceTransactionManager / JpaTransactionManager</span>
+<span class="hljs-comment">// Hibernate：HibernateTransactionManager</span>
+<span class="hljs-comment">// JTA（分布式事务）：JtaTransactionManager</span>
 
-// Spring Boot 自动配置会根据类路径自动选择
-// 有 spring-data-jpa → JpaTransactionManager
-// 有 spring-jdbc 但没有 JPA → DataSourceTransactionManager
-</code></pre></div>
-<h3>3.5 事务失效场景（高频踩坑）</h3>
+<span class="hljs-comment">// Spring Boot 自动配置会根据类路径自动选择</span>
+<span class="hljs-comment">// 有 spring-data-jpa → JpaTransactionManager</span>
+<span class="hljs-comment">// 有 spring-jdbc 但没有 JPA → DataSourceTransactionManager</span>
+</code></pre></div><h3>3.5 事务失效场景（高频踩坑）</h3>
 <ol>
 <li><strong>自调用</strong>：同上文的 AOP 自调用问题</li>
 <li><strong>非 public 方法</strong>：Spring AOP 通过动态代理实现，默认只能拦截 public 方法</li>
@@ -459,70 +445,68 @@ public class AuditService {
 </ol>
 <hr>
 <h2>四、Spring 事件机制</h2>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 1. 定义事件
-public record OrderCreatedEvent(Long orderId, String userId, BigDecimal amount) {}
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 1. 定义事件</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">OrderCreatedEvent</span><span class="hljs-params">(Long orderId, String userId, BigDecimal amount)</span> {}
 
-// 2. 发布事件
-@Service
-public class OrderService {
-    private final ApplicationEventPublisher publisher;
+<span class="hljs-comment">// 2. 发布事件</span>
+<span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">OrderService</span> {
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> ApplicationEventPublisher publisher;
 
-    public OrderService(ApplicationEventPublisher publisher) {
-        this.publisher = publisher;
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">OrderService</span><span class="hljs-params">(ApplicationEventPublisher publisher)</span> {
+        <span class="hljs-built_in">this</span>.publisher = publisher;
     }
 
-    @Transactional
-    public void createOrder(OrderDto dto) {
+    <span class="hljs-meta">@Transactional</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">createOrder</span><span class="hljs-params">(OrderDto dto)</span> {
         orderRepo.save(dto.toEntity());
-        publisher.publishEvent(new OrderCreatedEvent(dto.orderId(), dto.userId(), dto.amount()));
+        publisher.publishEvent(<span class="hljs-keyword">new</span> <span class="hljs-title class_">OrderCreatedEvent</span>(dto.orderId(), dto.userId(), dto.amount()));
     }
 }
 
-// 3. 监听事件
-@Component
-public class OrderEventListener {
+<span class="hljs-comment">// 3. 监听事件</span>
+<span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">OrderEventListener</span> {
 
-    // 同步监听（默认）
-    @EventListener
-    public void handleOrderCreated(OrderCreatedEvent event) {
-        smsService.sendNotification(event.userId(), &quot;Order created!&quot;);
+    <span class="hljs-comment">// 同步监听（默认）</span>
+    <span class="hljs-meta">@EventListener</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">handleOrderCreated</span><span class="hljs-params">(OrderCreatedEvent event)</span> {
+        smsService.sendNotification(event.userId(), <span class="hljs-string">"Order created!"</span>);
     }
 
-    // 事务提交后监听（确保数据已持久化）
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    public void handleAfterCommit(OrderCreatedEvent event) {
-        // 此时事务已提交，适合发送消息、调用外部 API
-        messageQueue.send(&quot;order-topic&quot;, event);
+    <span class="hljs-comment">// 事务提交后监听（确保数据已持久化）</span>
+    <span class="hljs-meta">@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">handleAfterCommit</span><span class="hljs-params">(OrderCreatedEvent event)</span> {
+        <span class="hljs-comment">// 此时事务已提交，适合发送消息、调用外部 API</span>
+        messageQueue.send(<span class="hljs-string">"order-topic"</span>, event);
     }
 
-    // 异步监听
-    @Async
-    @EventListener
-    public void handleAsync(OrderCreatedEvent event) {
-        // 异步处理，不阻塞主线程
+    <span class="hljs-comment">// 异步监听</span>
+    <span class="hljs-meta">@Async</span>
+    <span class="hljs-meta">@EventListener</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">handleAsync</span><span class="hljs-params">(OrderCreatedEvent event)</span> {
+        <span class="hljs-comment">// 异步处理，不阻塞主线程</span>
         metricsService.recordOrder(event);
     }
 }
-</code></pre></div>
-<p><strong>AI 场景应用：</strong> 当知识库文档更新时，发布 <code>DocumentUpdatedEvent</code>，触发 Embedding 重新生成的监听器。</p>
+</code></pre></div><p><strong>AI 场景应用：</strong> 当知识库文档更新时，发布 <code>DocumentUpdatedEvent</code>，触发 Embedding 重新生成的监听器。</p>
 <hr>
 <h2>五、资源抽象</h2>
 <p>Spring 的 <code>Resource</code> 接口提供统一的资源访问抽象：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Component
-public class ConfigLoader {
-    // 支持 classpath:、file:、http: 等前缀
-    @Value(&quot;classpath:prompts/system-prompt.txt&quot;)
-    private Resource systemPrompt;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ConfigLoader</span> {
+    <span class="hljs-comment">// 支持 classpath:、file:、http: 等前缀</span>
+    <span class="hljs-meta">@Value("classpath:prompts/system-prompt.txt")</span>
+    <span class="hljs-keyword">private</span> Resource systemPrompt;
 
-    @Value(&quot;file:${app.data-dir}/faq.json&quot;)
-    private Resource faqFile;
+    <span class="hljs-meta">@Value("file:${app.data-dir}/faq.json")</span>
+    <span class="hljs-keyword">private</span> Resource faqFile;
 
-    public String loadSystemPrompt() throws IOException {
-        return Files.readString(Path.of(systemPrompt.getURI()));
+    <span class="hljs-keyword">public</span> String <span class="hljs-title function_">loadSystemPrompt</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> IOException {
+        <span class="hljs-keyword">return</span> Files.readString(Path.of(systemPrompt.getURI()));
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>常见问题</h2>
 <p><strong>Q: 为什么 Spring 推荐构造函数注入？</strong>
 A: 构造函数注入强制依赖不可变（final），避免 NPE，便于单元测试，且能检测循环依赖（启动时就会报错而非运行时）。Spring 4.3+ 对单构造函数自动注入。</p>
@@ -535,10 +519,10 @@ A: Spring 的本地事务不支持分布式。使用 Seata（AT/TCC/Saga 模式�
 <hr>
 <h2>相关条目</h2>
 <ul>
-<li><a href="#/03-Java应用平台/Spring核心/03-SpringBoot4深度解析" class="cross-ref" data-ref="03-SpringBoot4深度解析">03-SpringBoot4深度解析</a>：自动配置与 Starter 机制</li>
-<li><a href="#/02-Java平台/反射与模块化/02-反射与模块化系统" class="cross-ref" data-ref="02-反射与模块化系统">02-反射与模块化系统</a>：AOP 底层反射和动态代理</li>
-<li><a href="#/03-Java应用平台/Web与安全/03-SpringMVC与SSE流式输出" class="cross-ref" data-ref="03-SpringMVC与SSE流式输出">03-SpringMVC与SSE流式输出</a>：Web 层核心</li>
-<li><a href="#/03-Java应用平台/数据访问/03-SpringDataJPA与MyBatis深度解析" class="cross-ref" data-ref="03-SpringDataJPA与MyBatis深度解析">03-SpringDataJPA与MyBatis深度解析</a>：事务在持久层的应用</li>
+<li><a href="#/03-Java应用平台/Spring核心/03-SpringBoot4深度解析" class="cross-ref">03-SpringBoot4深度解析</a>：自动配置与 Starter 机制</li>
+<li><a href="#/02-Java平台/反射与模块化/02-反射与模块化系统" class="cross-ref">02-反射与模块化系统</a>：AOP 底层反射和动态代理</li>
+<li><a href="#/03-Java应用平台/Web与安全/03-SpringMVC与SSE流式输出" class="cross-ref">03-SpringMVC与SSE流式输出</a>：Web 层核心</li>
+<li><a href="#/03-Java应用平台/数据访问/03-SpringDataJPA与MyBatis深度解析" class="cross-ref">03-SpringDataJPA与MyBatis深度解析</a>：事务在持久层的应用</li>
 </ul>
-</div>
+</body></html></div>
 </article>

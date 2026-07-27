@@ -1,119 +1,113 @@
 
-<article class="kb-entry" data-path="/02-Java平台/IO模型/02-Java-IO模型深度解析">
+<article class="kb-entry" data-path="/02-Java平台">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=02">02-Java平台</a></div>
     <h1>Java IO 模型深度解析 — BIO、NIO、epoll、零拷贝、Netty 与 AI 场景实战</h1>
-    <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#java-nio</span><span class="badge badge-tag">#bio</span><span class="badge badge-tag">#epoll</span><span class="badge badge-tag">#zero-copy</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#java-nio</span><span class="badge badge-tag">#bio</span><span class="badge badge-tag">#epoll</span><span class="badge badge-tag">#zero-copy</span><span class="badge badge-tag">#netty</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://openjdk.org/groups/nio/" target="_blank" rel="noopener" class="source-link" title="OpenJDK NIO 官方文档与规范，涵盖 Buffer、Channel、Selector API 定义">OpenJDK NIO 官方文档与规范，涵盖 Buffer、Channel、Selector API 定义</a><a href="https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/nio/package-summary.html" target="_blank" rel="noopener" class="source-link" title="JDK 25 java.nio 包官方 JavaDoc">JDK 25 java.nio 包官方 JavaDoc</a><a href="https://netty.io/wiki/user-guide-for-4.x.html" target="_blank" rel="noopener" class="source-link" title="Netty 官方用户指南（4.x），EventLoop、ChannelPipeline、ByteBuf 权威参考">Netty 官方用户指南（4.x），EventLoop、ChannelPipeline、ByteBuf 权威参考</a><a href="https://github.com/netty/netty" target="_blank" rel="noopener" class="source-link" title="Netty 源码仓库，核心实现包括 EpollEventLoop、PooledByteBufAllocator">Netty 源码仓库，核心实现包括 EpollEventLoop、PooledByteBufAllocator</a><a href="https://www.oreilly.com/library/view/java-nio/0596002882/" target="_blank" rel="noopener" class="source-link" title="《Java NIO》(O'Reilly)，Ronn Hitchens 著，NIO 原理权威书籍">《Java NIO》(O'Reilly)，Ronn Hitchens 著，NIO 原理权威书籍</a><a href="https://www.oreilly.com/library/view/netty-in-action/9781617291470/" target="_blank" rel="noopener" class="source-link" title="《Netty in Action》，Norman Maurer 著，Netty 核心架构与实践">《Netty in Action》，Norman Maurer 著，Netty 核心架构与实践</a><a href="https://kafka.apache.org/documentation/#design_os" target="_blank" rel="noopener" class="source-link" title="Apache Kafka 设计文档，sendfile 零拷贝在 Kafka 中的实际应用">Apache Kafka 设计文档，sendfile 零拷贝在 Kafka 中的实际应用</a><a href="https://man7.org/linux/man-pages/man7/epoll.7.html" target="_blank" rel="noopener" class="source-link" title="Linux epoll(7) 手册，epoll 三种工作模式及 ET/LT 触发语义">Linux epoll(7) 手册，epoll 三种工作模式及 ET/LT 触发语义</a></small></div>
   </div>
-  <div class="entry-body"><h1>Java IO 模型深度解析 — BIO、NIO、epoll、零拷贝、Netty 与 AI 场景实战</h1>
+  <div class="entry-body"><html><head></head><body><h1>Java IO 模型深度解析 — BIO、NIO、epoll、零拷贝、Netty 与 AI 场景实战</h1>
 <h2>概述</h2>
 <p>Java 的 IO 模型演进是理解高性能网络编程的基础。从 JDK 1.0 的阻塞式 BIO，到 JDK 1.4 引入的 NIO（New IO / Non-blocking IO），再到 JDK 7 的 NIO.2（异步 IO），以及 Netty 对 NIO 的工程化封装，Java IO 的发展脉络清晰地反映了操作系统底层 IO 模型（select/poll/epoll）的进化。在大模型时代，SSE 流式响应、大文件上传、WebSocket 实时通信等 AI 应用场景对 IO 模型提出了新的要求。本文将深入剖析这六个维度，并提供可直接运行的代码示例。</p>
 <p>Java IO 的整体演进路线：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>BIO (JDK 1.0) ──► NIO (JDK 1.4) ──► NIO.2 / AIO (JDK 7)
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>BIO (JDK <span class="hljs-number">1.0</span>) ──► NIO (JDK <span class="hljs-number">1.4</span>) ──► NIO.<span class="hljs-number">2</span> <span class="hljs-symbol">/</span> AIO (JDK <span class="hljs-number">7</span>)
                       │
                       └──► Netty (社区主导的 NIO 工程化封装)
                                 │
-                                └──► AI 场景适配（SSE / WebSocket / Virtual Threads）
-</code></pre></div>
-<hr>
+                                └──► AI 场景适配（SSE <span class="hljs-symbol">/</span> WebSocket <span class="hljs-symbol">/</span> Virtual Threads）
+</code></pre></div><hr>
 <h2>一、BIO（Blocking IO）— 一切的开端</h2>
 <h3>1.1 核心抽象：InputStream / OutputStream</h3>
 <p>BIO 是 Java 最原始的 IO 模型，其核心是面向字节流的 <code>InputStream</code> 和 <code>OutputStream</code> 两个抽象类。所有操作都是<strong>阻塞</strong>的：当线程调用 <code>read()</code> 时，如果数据尚未到达，线程会被操作系统挂起，直到有数据可读为止。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// JDK 25 风格 — BIO 文件读取示例
-import java.io.*;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// JDK 25 风格 — BIO 文件读取示例</span>
+<span class="hljs-keyword">import</span> java.io.*;
 
-void bioFileRead() throws IOException {
-    var file = new File(&quot;/tmp/test.txt&quot;);
-    try (var fis = new FileInputStream(file);
-         var bis = new BufferedInputStream(fis);
-         var reader = new InputStreamReader(bis);
-         var br = new BufferedReader(reader)) {
+<span class="hljs-keyword">void</span> <span class="hljs-title function_">bioFileRead</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> IOException {
+    <span class="hljs-type">var</span> <span class="hljs-variable">file</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">File</span>(<span class="hljs-string">"/tmp/test.txt"</span>);
+    <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">fis</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">FileInputStream</span>(file);
+         <span class="hljs-type">var</span> <span class="hljs-variable">bis</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">BufferedInputStream</span>(fis);
+         <span class="hljs-type">var</span> <span class="hljs-variable">reader</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">InputStreamReader</span>(bis);
+         <span class="hljs-type">var</span> <span class="hljs-variable">br</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">BufferedReader</span>(reader)) {
 
         String line;
-        while ((line = br.readLine()) != null) {
+        <span class="hljs-keyword">while</span> ((line = br.readLine()) != <span class="hljs-literal">null</span>) {
             System.out.println(line);
         }
     }
 }
-</code></pre></div>
-<h3>1.2 字符流：Reader / Writer</h3>
+</code></pre></div><h3>1.2 字符流：Reader / Writer</h3>
 <p>Java 区分字节流和字符流。字节流（InputStream/OutputStream）处理原始字节，字符流（Reader/Writer）处理字符数据，内部进行编解码转换。</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>字节流                       字符流
-InputStream    ──────────►   Reader      (输入)
-OutputStream   ──────────►   Writer      (输出)
+<span class="hljs-built_in">InputStream</span>    ──────────►   <span class="hljs-variable">Reader</span>      <span class="hljs-punctuation">(</span>输入<span class="hljs-punctuation">)</span>
+<span class="hljs-built_in">OutputStream</span>   ──────────►   <span class="hljs-variable">Writer</span>      <span class="hljs-punctuation">(</span>输出<span class="hljs-punctuation">)</span>
 
-转换桥梁：InputStreamReader / OutputStreamWriter
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 字符流 + 字符编码处理
-void charStreamExample() throws IOException {
-    var path = java.nio.file.Path.of(&quot;/tmp/test.txt&quot;);
-    // 使用 Files 工具类，内部自动管理字符编码
-    var content = java.nio.file.Files.readString(path);
+转换桥梁：<span class="hljs-variable">InputStreamReader</span> <span class="hljs-operator">/</span> <span class="hljs-variable">OutputStreamWriter</span>
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 字符流 + 字符编码处理</span>
+<span class="hljs-keyword">void</span> <span class="hljs-title function_">charStreamExample</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> IOException {
+    <span class="hljs-type">var</span> <span class="hljs-variable">path</span> <span class="hljs-operator">=</span> java.nio.file.Path.of(<span class="hljs-string">"/tmp/test.txt"</span>);
+    <span class="hljs-comment">// 使用 Files 工具类，内部自动管理字符编码</span>
+    <span class="hljs-type">var</span> <span class="hljs-variable">content</span> <span class="hljs-operator">=</span> java.nio.file.Files.readString(path);
     System.out.println(content);
 
-    // 显式指定编码写入
+    <span class="hljs-comment">// 显式指定编码写入</span>
     java.nio.file.Files.writeString(
-        path, &quot;你好，世界！&quot;, java.nio.file.StandardOpenOption.APPEND);
+        path, <span class="hljs-string">"你好，世界！"</span>, java.nio.file.StandardOpenOption.APPEND);
 }
-</code></pre></div>
-<h3>1.3 Decorator（装饰器）模式</h3>
+</code></pre></div><h3>1.3 Decorator（装饰器）模式</h3>
 <p>Java IO 类库大量使用装饰器模式。核心组件 <code>FileInputStream</code> 提供基本功能，而 <code>BufferedInputStream</code>、<code>DataInputStream</code>、<code>ObjectInputStream</code> 等通过层层包装添加缓冲、数据类型解析、对象序列化等功能。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 装饰器模式示意
-void decoratorPattern() throws IOException {
-    // 核心组件：只提供逐字节读取
-    var fileInput = new FileInputStream(&quot;/tmp/data.bin&quot;);
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 装饰器模式示意</span>
+<span class="hljs-keyword">void</span> <span class="hljs-title function_">decoratorPattern</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> IOException {
+    <span class="hljs-comment">// 核心组件：只提供逐字节读取</span>
+    <span class="hljs-type">var</span> <span class="hljs-variable">fileInput</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">FileInputStream</span>(<span class="hljs-string">"/tmp/data.bin"</span>);
 
-    // 装饰层1：添加缓冲
-    var buffered = new BufferedInputStream(fileInput);
+    <span class="hljs-comment">// 装饰层1：添加缓冲</span>
+    <span class="hljs-type">var</span> <span class="hljs-variable">buffered</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">BufferedInputStream</span>(fileInput);
 
-    // 装饰层2：添加原始数据类型读取能力
-    var dataInput = new DataInputStream(buffered);
+    <span class="hljs-comment">// 装饰层2：添加原始数据类型读取能力</span>
+    <span class="hljs-type">var</span> <span class="hljs-variable">dataInput</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">DataInputStream</span>(buffered);
 
-    // 现在可以读 int、double 等类型
-    int value = dataInput.readInt();
-    double price = dataInput.readDouble();
+    <span class="hljs-comment">// 现在可以读 int、double 等类型</span>
+    <span class="hljs-type">int</span> <span class="hljs-variable">value</span> <span class="hljs-operator">=</span> dataInput.readInt();
+    <span class="hljs-type">double</span> <span class="hljs-variable">price</span> <span class="hljs-operator">=</span> dataInput.readDouble();
     dataInput.close();
 }
-</code></pre></div>
-<p>这种设计的好处是<strong>组合优于继承</strong>：你可以按需组合不同的功能层（缓冲 + 数据解析 + 校验和 等），避免了类爆炸问题。</p>
+</code></pre></div><p>这种设计的好处是<strong>组合优于继承</strong>：你可以按需组合不同的功能层（缓冲 + 数据解析 + 校验和 等），避免了类爆炸问题。</p>
 <h3>1.4 BIO 网络编程的困境</h3>
-<p>BIO 在网络编程中的经典模式是&quot;一个连接一个线程&quot;（Thread-per-Connection）：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// BIO Socket 服务端 — 经典模式
-void bioSocketServer() throws IOException {
-    try (var serverSocket = new java.net.ServerSocket(8080)) {
-        System.out.println(&quot;BIO Server listening on port 8080&quot;);
-        while (true) {
-            // accept() 阻塞，等待新连接
-            var clientSocket = serverSocket.accept();
-            // 每个连接创建一个新线程
+<p>BIO 在网络编程中的经典模式是"一个连接一个线程"（Thread-per-Connection）：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// BIO Socket 服务端 — 经典模式</span>
+<span class="hljs-keyword">void</span> <span class="hljs-title function_">bioSocketServer</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> IOException {
+    <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">serverSocket</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">java</span>.net.ServerSocket(<span class="hljs-number">8080</span>)) {
+        System.out.println(<span class="hljs-string">"BIO Server listening on port 8080"</span>);
+        <span class="hljs-keyword">while</span> (<span class="hljs-literal">true</span>) {
+            <span class="hljs-comment">// accept() 阻塞，等待新连接</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">clientSocket</span> <span class="hljs-operator">=</span> serverSocket.accept();
+            <span class="hljs-comment">// 每个连接创建一个新线程</span>
             Thread.ofPlatform().start(() -&gt; handleClient(clientSocket));
         }
     }
 }
 
-void handleClient(java.net.Socket socket) {
-    try (socket;
-         var in = new BufferedReader(
-             new InputStreamReader(socket.getInputStream()));
-         var out = new PrintWriter(socket.getOutputStream(), true)) {
+<span class="hljs-keyword">void</span> <span class="hljs-title function_">handleClient</span><span class="hljs-params">(java.net.Socket socket)</span> {
+    <span class="hljs-keyword">try</span> (socket;
+         <span class="hljs-type">var</span> <span class="hljs-variable">in</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">BufferedReader</span>(
+             <span class="hljs-keyword">new</span> <span class="hljs-title class_">InputStreamReader</span>(socket.getInputStream()));
+         <span class="hljs-type">var</span> <span class="hljs-variable">out</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">PrintWriter</span>(socket.getOutputStream(), <span class="hljs-literal">true</span>)) {
 
         String line;
-        while ((line = in.readLine()) != null) {
-            out.println(&quot;Echo: &quot; + line);
+        <span class="hljs-keyword">while</span> ((line = in.readLine()) != <span class="hljs-literal">null</span>) {
+            out.println(<span class="hljs-string">"Echo: "</span> + line);
         }
-    } catch (IOException e) {
+    } <span class="hljs-keyword">catch</span> (IOException e) {
         e.printStackTrace();
     }
 }
-</code></pre></div>
-<p><strong>问题：</strong> 当并发连接数上升到数千甚至数万时，线程数爆炸导致：</p>
+</code></pre></div><p><strong>问题：</strong> 当并发连接数上升到数千甚至数万时，线程数爆炸导致：</p>
 <ul>
 <li><strong>内存开销大</strong>：每个线程约占用 1MB 栈空间（可通过 <code>-Xss</code> 调优但仍有限）</li>
 <li><strong>上下文切换成本高</strong>：CPU 大量时间花在切换线程而非处理业务</li>
 <li><strong>C10K 问题</strong>：无法高效处理 10000+ 并发连接</li>
 </ul>
-<blockquote class="callout callout-info">Virtual Threads（JEP 444）改善了线程的内存开销问题，但 BIO 的根本问题——I/O 操作的阻塞等待导致线程空转——依然存在。Virtual Threads 的价值体现在业务代码可以用同步风格写异步逻辑，但底层 IO 实现仍应使用 NIO。</p>
+<blockquote class="callout callout-info"><p><strong>注意：</strong> Virtual Threads（JEP 444）改善了线程的内存开销问题，但 BIO 的根本问题——I/O 操作的阻塞等待导致线程空转——依然存在。Virtual Threads 的价值体现在业务代码可以用同步风格写异步逻辑，但底层 IO 实现仍应使用 NIO。</p>
 </blockquote>
 <hr>
 <h2>二、NIO（Non-blocking IO）— 高并发的基石</h2>
@@ -125,9 +119,8 @@ void handleClient(java.net.Socket socket) {
          │            │            │
     SocketChannel  SocketChannel  ServerSocketChannel
          │            │            │
-      Buffer        Buffer        Buffer
-</code></pre></div>
-<p><strong>Channel（通道）：</strong> 双向的数据传输通道，既可以读也可以写。与 BIO 的 Stream 不同，Channel 是双向的。主要实现：</p>
+      <span class="hljs-built_in">Buffer</span>        <span class="hljs-built_in">Buffer</span>        <span class="hljs-built_in">Buffer</span>
+</code></pre></div><p><strong>Channel（通道）：</strong> 双向的数据传输通道，既可以读也可以写。与 BIO 的 Stream 不同，Channel 是双向的。主要实现：</p>
 <ul>
 <li><code>FileChannel</code> — 文件 IO</li>
 <li><code>SocketChannel</code> — TCP 客户端</li>
@@ -141,12 +134,11 @@ void handleClient(java.net.Socket socket) {
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>                     capacity（容量，不可变）
 ┌─────────────────────────────────────────────────────┐
 │  已读/已写区域  │     可读/可写区域    │  不可访问   │
-│  [0, position) │ [position, limit)   │ [limit, cap) │
+│  [<span class="hljs-number">0</span>, <span class="hljs-built_in">position</span>) │ [<span class="hljs-built_in">position</span>, <span class="hljs-built_in">limit</span>)   │ [<span class="hljs-built_in">limit</span>, cap) │
 └─────────────────────────────────────────────────────┘
                  ▲                      ▲
-             position                 limit
-</code></pre></div>
-<table>
+             <span class="hljs-built_in">position</span>                 <span class="hljs-built_in">limit</span>
+</code></pre></div><table>
 <thead>
 <tr>
 <th>属���</th>
@@ -175,44 +167,43 @@ void handleClient(java.net.Socket socket) {
 </tr>
 </tbody></table>
 <p><strong>关键操作：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">void bufferOperations() {
-    // 分配一个 10 字节的 HeapByteBuffer
-    var buffer = java.nio.ByteBuffer.allocate(10);
-    // 写模式：position=0, limit=10, capacity=10
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">void</span> <span class="hljs-title function_">bufferOperations</span><span class="hljs-params">()</span> {
+    <span class="hljs-comment">// 分配一个 10 字节的 HeapByteBuffer</span>
+    <span class="hljs-type">var</span> <span class="hljs-variable">buffer</span> <span class="hljs-operator">=</span> java.nio.ByteBuffer.allocate(<span class="hljs-number">10</span>);
+    <span class="hljs-comment">// 写模式：position=0, limit=10, capacity=10</span>
 
-    // 写入 5 个字节：&#39;H&#39;,&#39;e&#39;,&#39;l&#39;,&#39;l&#39;,&#39;o&#39;
-    buffer.put((byte) &#39;H&#39;);
-    buffer.put((byte) &#39;e&#39;);
-    buffer.put((byte) &#39;l&#39;);
-    buffer.put((byte) &#39;l&#39;);
-    buffer.put((byte) &#39;o&#39;);
-    // position=5, limit=10, capacity=10
+    <span class="hljs-comment">// 写入 5 个字节：'H','e','l','l','o'</span>
+    buffer.put((<span class="hljs-type">byte</span>) <span class="hljs-string">'H'</span>);
+    buffer.put((<span class="hljs-type">byte</span>) <span class="hljs-string">'e'</span>);
+    buffer.put((<span class="hljs-type">byte</span>) <span class="hljs-string">'l'</span>);
+    buffer.put((<span class="hljs-type">byte</span>) <span class="hljs-string">'l'</span>);
+    buffer.put((<span class="hljs-type">byte</span>) <span class="hljs-string">'o'</span>);
+    <span class="hljs-comment">// position=5, limit=10, capacity=10</span>
 
-    // flip()：切换到读模式
+    <span class="hljs-comment">// flip()：切换到读模式</span>
     buffer.flip();
-    // position=0, limit=5, capacity=10
+    <span class="hljs-comment">// position=0, limit=5, capacity=10</span>
 
-    // 读取数据
-    while (buffer.hasRemaining()) {
-        System.out.print((char) buffer.get());
+    <span class="hljs-comment">// 读取数据</span>
+    <span class="hljs-keyword">while</span> (buffer.hasRemaining()) {
+        System.out.print((<span class="hljs-type">char</span>) buffer.get());
     }
-    // position=5, limit=5, capacity=10
+    <span class="hljs-comment">// position=5, limit=5, capacity=10</span>
     System.out.println();
 
-    // rewind()：重新读取（position 归零，limit 不变）
+    <span class="hljs-comment">// rewind()：重新读取（position 归零，limit 不变）</span>
     buffer.rewind();
-    // position=0, limit=5, capacity=10
+    <span class="hljs-comment">// position=0, limit=5, capacity=10</span>
 
-    // clear()：准备下一次写入（position=0, limit=capacity）
-    // 注意：数据并未被清除，只是&quot;逻辑清空&quot;
+    <span class="hljs-comment">// clear()：准备下一次写入（position=0, limit=capacity）</span>
+    <span class="hljs-comment">// 注意：数据并未被清除，只是"逻辑清空"</span>
     buffer.clear();
-    // position=0, limit=10, capacity=10
+    <span class="hljs-comment">// position=0, limit=10, capacity=10</span>
 
-    // compact()：将未读数据移到开头，准备写入
-    // 适用于读了一半想写的场景
+    <span class="hljs-comment">// compact()：将未读数据移到开头，准备写入</span>
+    <span class="hljs-comment">// 适用于读了一半想写的场景</span>
 }
-</code></pre></div>
-<p><strong>Buffer 方法速查表：</strong></p>
+</code></pre></div><p><strong>Buffer 方法速查表：</strong></p>
 <table>
 <thead>
 <tr>
@@ -285,19 +276,18 @@ void handleClient(java.net.Socket socket) {
 </tbody></table>
 <h3>2.3 Direct Memory vs Heap Memory</h3>
 <p>ByteBuffer 有两种内存分配方式，这是理解 NIO 性能的关键。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">void bufferMemoryComparison() {
-    // Heap Buffer：数据在 JVM 堆中
-    var heapBuffer = java.nio.ByteBuffer.allocate(1024);
-    // heapBuffer.hasArray() == true
-    // heapBuffer.array() 返回底层 byte[]
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">void</span> <span class="hljs-title function_">bufferMemoryComparison</span><span class="hljs-params">()</span> {
+    <span class="hljs-comment">// Heap Buffer：数据在 JVM 堆中</span>
+    <span class="hljs-type">var</span> <span class="hljs-variable">heapBuffer</span> <span class="hljs-operator">=</span> java.nio.ByteBuffer.allocate(<span class="hljs-number">1024</span>);
+    <span class="hljs-comment">// heapBuffer.hasArray() == true</span>
+    <span class="hljs-comment">// heapBuffer.array() 返回底层 byte[]</span>
 
-    // Direct Buffer：数据在堆外内存（OS 管理）
-    var directBuffer = java.nio.ByteBuffer.allocateDirect(1024);
-    // directBuffer.hasArray() == false (不一定，取决于实现)
-    // 通过 Unsafe 或 native 方法分配
+    <span class="hljs-comment">// Direct Buffer：数据在堆外内存（OS 管理）</span>
+    <span class="hljs-type">var</span> <span class="hljs-variable">directBuffer</span> <span class="hljs-operator">=</span> java.nio.ByteBuffer.allocateDirect(<span class="hljs-number">1024</span>);
+    <span class="hljs-comment">// directBuffer.hasArray() == false (不一定，取决于实现)</span>
+    <span class="hljs-comment">// 通过 Unsafe 或 native 方法分配</span>
 }
-</code></pre></div>
-<table>
+</code></pre></div><table>
 <thead>
 <tr>
 <th>对比维度</th>
@@ -335,44 +325,42 @@ void handleClient(java.net.Socket socket) {
 <p><strong>Direct Buffer 的内存管理：</strong> Direct Buffer 的内存不属于 JVM 堆，不会被普通 GC 回收。Java 通过 <code>Cleaner</code> 和虚引用（PhantomReference）机制在 DirectByteBuffer 对象被 GC 时释放堆外内存。但如果 Direct ByteBuffer 分配过快，可能触发显式的 <code>System.gc()</code> 调用。Netty 通过自己的内存池（<code>PooledByteBufAllocator</code>）来规避这个问题。</p>
 <h3>2.4 Scatter / Gather（分散读写）</h3>
 <p>Scatter（分散读）和 Gather（聚集写）允许单次 IO 操作读写多个 Buffer。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">void scatterGatherExample() throws IOException {
-    // 模拟一个网络协议：header(8字节) + body(变长)
-    var headerBuf = java.nio.ByteBuffer.allocate(8);
-    var bodyBuf = java.nio.ByteBuffer.allocate(1024);
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">void</span> <span class="hljs-title function_">scatterGatherExample</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> IOException {
+    <span class="hljs-comment">// 模拟一个网络协议：header(8字节) + body(变长)</span>
+    <span class="hljs-type">var</span> <span class="hljs-variable">headerBuf</span> <span class="hljs-operator">=</span> java.nio.ByteBuffer.allocate(<span class="hljs-number">8</span>);
+    <span class="hljs-type">var</span> <span class="hljs-variable">bodyBuf</span> <span class="hljs-operator">=</span> java.nio.ByteBuffer.allocate(<span class="hljs-number">1024</span>);
 
-    // Scatter Read：将 Channel 的数据按顺序&quot;分散&quot;到多个 Buffer
-    try (var channel = java.nio.channels.SocketChannel.open()) {
-        var buffers = new java.nio.ByteBuffer[]{headerBuf, bodyBuf};
-        // 先填满 headerBuf，再填 bodyBuf
-        long bytesRead = channel.read(buffers);
+    <span class="hljs-comment">// Scatter Read：将 Channel 的数据按顺序"分散"到多个 Buffer</span>
+    <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">channel</span> <span class="hljs-operator">=</span> java.nio.channels.SocketChannel.open()) {
+        <span class="hljs-type">var</span> <span class="hljs-variable">buffers</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">java</span>.nio.ByteBuffer[]{headerBuf, bodyBuf};
+        <span class="hljs-comment">// 先填满 headerBuf，再填 bodyBuf</span>
+        <span class="hljs-type">long</span> <span class="hljs-variable">bytesRead</span> <span class="hljs-operator">=</span> channel.read(buffers);
 
         headerBuf.flip();
-        int bodyLength = headerBuf.getInt();  // 读取 body 长度
+        <span class="hljs-type">int</span> <span class="hljs-variable">bodyLength</span> <span class="hljs-operator">=</span> headerBuf.getInt();  <span class="hljs-comment">// 读取 body 长度</span>
 
         bodyBuf.flip();
         bodyBuf.limit(bodyLength);
-        // 处理 body 数据...
+        <span class="hljs-comment">// 处理 body 数据...</span>
     }
 
-    // Gather Write：将多个 Buffer 的数据按顺序&quot;聚集&quot;写入 Channel
-    // headerBuf 写完后自动写 bodyBuf
-    // channel.write(new ByteBuffer[]{headerBuf, bodyBuf});
+    <span class="hljs-comment">// Gather Write：将多个 Buffer 的数据按顺序"聚集"写入 Channel</span>
+    <span class="hljs-comment">// headerBuf 写完后自动写 bodyBuf</span>
+    <span class="hljs-comment">// channel.write(new ByteBuffer[]{headerBuf, bodyBuf});</span>
 }
-</code></pre></div>
-<p>Scatter/Gather 在 Netty 中被广泛使用，例如 HTTP 协议的 Header + Body 分离读写。</p>
+</code></pre></div><p>Scatter/Gather 在 Netty 中被广泛使用，例如 HTTP 协议的 Header + Body 分离读写。</p>
 <hr>
 <h2>三、epoll 与 Java NIO — 从操作系统到 JDK</h2>
 <h3>3.1 IO 多路复用的三代演进：select → poll → epoll</h3>
 <p>Java 的 <code>Selector</code> 在 Linux 上底层依赖 <code>epoll</code>（JDK 1.6+ 默认），在 macOS/BSD 上使用 <code>kqueue</code>。理解 epoll 的演进有助于理解为什么 NIO 能高效处理数万连接。</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>select (1983)              poll (1997)              epoll (2002)
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-selector-tag">select</span> (<span class="hljs-number">1983</span>)              poll (<span class="hljs-number">1997</span>)              epoll (<span class="hljs-number">2002</span>)
 ┌──────────────┐     ┌──────────────┐        ┌──────────────────┐
 │ fd_set 位图   │     │ pollfd 数组   │        │ 红黑树 + 就绪链表  │
-│ 最大 1024    │     │ 无限制        │        │ 无限制            │
-│ O(n) 遍历    │     │ O(n) 遍历     │        │ O(1) 获取就绪事件  │
+│ 最大 <span class="hljs-number">1024</span>    │     │ 无限制        │        │ 无限制            │
+│ <span class="hljs-built_in">O</span>(n) 遍历    │     │ <span class="hljs-built_in">O</span>(n) 遍历     │        │ <span class="hljs-built_in">O</span>(<span class="hljs-number">1</span>) 获取就绪事件  │
 │ 每次传入全量  │     │ 每次传入全量   │        │ 增量式：只关注变化  │
 └──────────────┘     └──────────────┘        └──────────────────┘
-</code></pre></div>
-<p><strong>epoll 的核心 API：</strong></p>
+</code></pre></div><p><strong>epoll 的核心 API：</strong></p>
 <table>
 <thead>
 <tr>
@@ -440,116 +428,110 @@ void handleClient(java.net.Socket socket) {
 <td>可通过 register 时传入额外参数启用</td>
 </tr>
 </tbody></table>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Java Selector 注册时的触发模式（默认 LT）
-void selectorTriggerModes() throws IOException {
-    var selector = java.nio.channels.Selector.open();
-    var channel = java.nio.channels.SocketChannel.open();
-    channel.configureBlocking(false);
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// Java Selector 注册时的触发模式（默认 LT）</span>
+<span class="hljs-keyword">void</span> <span class="hljs-title function_">selectorTriggerModes</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> IOException {
+    <span class="hljs-type">var</span> <span class="hljs-variable">selector</span> <span class="hljs-operator">=</span> java.nio.channels.Selector.open();
+    <span class="hljs-type">var</span> <span class="hljs-variable">channel</span> <span class="hljs-operator">=</span> java.nio.channels.SocketChannel.open();
+    channel.configureBlocking(<span class="hljs-literal">false</span>);
 
-    // 默认：水平触发（不需要额外参数）
+    <span class="hljs-comment">// 默认：水平触发（不需要额外参数）</span>
     channel.register(selector, java.nio.channels.SelectionKey.OP_READ);
 
-    // 边缘触发（需要通过内部实现类设置，不推荐）
-    // Netty 的 EpollEventLoop 在 Linux 上使用 ET 模式
+    <span class="hljs-comment">// 边缘触发（需要通过内部实现类设置，不推荐）</span>
+    <span class="hljs-comment">// Netty 的 EpollEventLoop 在 Linux 上使用 ET 模式</span>
 }
-</code></pre></div>
-<blockquote>
+</code></pre></div><blockquote>
 <p><strong>Netty 的选择：</strong> Netty 的 <code>EpollEventLoop</code> 在 Linux 上<strong>使用 ET 模式</strong>以追求极致性能。通过在每个 Channel 的 <code>unsafe().read()</code> 中循环读取直到返回 0（数据已读空），Netty 实现了 ET 模式的高效处理。这也是 Netty 性能优于原生 JDK Selector 的原因之一。</p>
 </blockquote>
 <h3>3.3 Java Selector 的 epoll 空轮询 Bug</h3>
 <p>这是一个经典且影响深远的 JDK Bug（JDK-6403933）。在 Linux 平台，有时 <code>Selector.select()</code> 会在没有任何就绪 Channel 的情况下<strong>被唤醒并返回 0</strong>，导致 CPU 100% 空转。</p>
 <p><strong>根因：</strong> epoll 的 <code>epoll_wait</code> 在某些场景下会<strong>虚假唤醒</strong>（spurious wakeup），但 JDK 的 Selector 实现没有正确处理这种情况。具体触发条件包括：被中断的系统调用（如信号处理）、已关闭的 fd 仍被监听等。</p>
 <p><strong>Netty 的应对策略：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Netty 中 EpollEventLoop 的空轮询检测策略（简化示意）
-public class EpollBugWorkaround {
-    private static final int SELECTOR_AUTO_REBUILD_THRESHOLD = 512;
-    private int selectCnt = 0;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// Netty 中 EpollEventLoop 的空轮询检测策略（简化示意）</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">EpollBugWorkaround</span> {
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">int</span> <span class="hljs-variable">SELECTOR_AUTO_REBUILD_THRESHOLD</span> <span class="hljs-operator">=</span> <span class="hljs-number">512</span>;
+    <span class="hljs-keyword">private</span> <span class="hljs-type">int</span> <span class="hljs-variable">selectCnt</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
 
-    void select() throws IOException {
-        // 执行 select 操作
-        int selectedKeys = selector.select(timeoutMillis);
+    <span class="hljs-keyword">void</span> <span class="hljs-title function_">select</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> IOException {
+        <span class="hljs-comment">// 执行 select 操作</span>
+        <span class="hljs-type">int</span> <span class="hljs-variable">selectedKeys</span> <span class="hljs-operator">=</span> selector.select(timeoutMillis);
 
-        if (selectedKeys == 0) {
-            // select 返回 0，可能是空轮询
-            long time = System.nanoTime() - startTime;
-            if (time &lt; timeoutMillis - SLEEP_MS) {
-                // 远早于超时时间就醒了 → 很可能是空轮询 bug
+        <span class="hljs-keyword">if</span> (selectedKeys == <span class="hljs-number">0</span>) {
+            <span class="hljs-comment">// select 返回 0，可能是空轮询</span>
+            <span class="hljs-type">long</span> <span class="hljs-variable">time</span> <span class="hljs-operator">=</span> System.nanoTime() - startTime;
+            <span class="hljs-keyword">if</span> (time &lt; timeoutMillis - SLEEP_MS) {
+                <span class="hljs-comment">// 远早于超时时间就醒了 → 很可能是空轮询 bug</span>
                 selectCnt++;
             }
-        } else {
-            selectCnt = 0;  // 正常返回，重置计数
+        } <span class="hljs-keyword">else</span> {
+            selectCnt = <span class="hljs-number">0</span>;  <span class="hljs-comment">// 正常返回，重置计数</span>
         }
 
-        // 如果空轮询次数超过阈值：重建 Selector
-        if (selectCnt &gt; SELECTOR_AUTO_REBUILD_THRESHOLD) {
-            rebuildSelector();  // 创建新 Selector，将所有 Channel 重新注册
-            selectCnt = 0;
+        <span class="hljs-comment">// 如果空轮询次数超过阈值：重建 Selector</span>
+        <span class="hljs-keyword">if</span> (selectCnt &gt; SELECTOR_AUTO_REBUILD_THRESHOLD) {
+            rebuildSelector();  <span class="hljs-comment">// 创建新 Selector，将所有 Channel 重新注册</span>
+            selectCnt = <span class="hljs-number">0</span>;
         }
     }
 
-    void rebuildSelector() {
-        // 创建新的 Selector
-        // 遍历旧 Selector 上所有注册的 Channel
-        // 取消旧注册，重新注册到新 Selector
-        // 关闭旧 Selector
+    <span class="hljs-keyword">void</span> <span class="hljs-title function_">rebuildSelector</span><span class="hljs-params">()</span> {
+        <span class="hljs-comment">// 创建新的 Selector</span>
+        <span class="hljs-comment">// 遍历旧 Selector 上所有注册的 Channel</span>
+        <span class="hljs-comment">// 取消旧注册，重新注册到新 Selector</span>
+        <span class="hljs-comment">// 关闭旧 Selector</span>
     }
 }
-</code></pre></div>
-<p><strong>JDK 层面的修复：</strong> 从 JDK 11 开始，OpenJDK 社区逐步改进了 <code>EPollSelectorImpl</code> 的实现，通过更严格的轮询状态检查和更精细的 epoll_wait 超时处理来缓解此问题。但在高负载场景下，Netty 的防御性重建策略仍然是必要的。</p>
+</code></pre></div><p><strong>JDK 层面的修复：</strong> 从 JDK 11 开始，OpenJDK 社区逐步改进了 <code>EPollSelectorImpl</code> 的实现，通过更严格的轮询状态检查和更精细的 epoll_wait 超时处理来缓解此问题。但在高负载场景下，Netty 的防御性重建策略仍然是必要的。</p>
 <hr>
-<h2>四、零拷贝（Zero-Copy）— 让数据&quot;飞&quot;起来</h2>
+<h2>四、零拷贝（Zero-Copy）— 让数据"飞"起来</h2>
 <p>零拷贝是高性能 IO 的核心优化技术。传统 IO 操作需要数据在用户态和内核态之间反复拷贝，而零拷贝技术旨在减少甚至消除这些不必要的拷贝。</p>
 <h3>4.1 传统 IO 的数据拷贝路径</h3>
-<p>以&quot;将文件内容通过 Socket 发送&quot;为例，传统方式经历 4 次拷贝和 4 次上下文切换：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>传统 IO 数据路径（read + write）：
-┌─────────┐    read()    ┌─────────┐    DMA     ┌──────────┐
+<p>以"将文件内容通过 Socket 发送"为例，传统方式经历 4 次拷贝和 4 次上下文切换：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>传统 IO 数据路径（<span class="hljs-built_in">read</span> + <span class="hljs-built_in">write</span>）：
+┌─────────┐    <span class="hljs-built_in">read</span>()    ┌─────────┐    DMA     ┌──────────┐
 │ 应用程序  │ ◄────────── │ 内核缓冲  │ ◄───────── │    磁盘    │
 │ (用户态)  │ ──────────► │ (内核态)  │ ──────────► │ (硬件)    │
-└─────────┘    write()   └─────────┘    DMA     └──────────┘
+└─────────┘    <span class="hljs-built_in">write</span>()   └─────────┘    DMA     └──────────┘
                              │
                          内核 Socket 缓冲
                              │
                           DMA ──► 网卡
 
-上下文切换：用户态→内核态（read）→用户态→内核态（write）= 4 次
-数据拷贝：磁盘→内核→用户→内核→Socket = 4 次
-</code></pre></div>
-<h3>4.2 sendfile 系统调用</h3>
+上下文切换：用户态→内核态（<span class="hljs-built_in">read</span>）→用户态→内核态（<span class="hljs-built_in">write</span>）= <span class="hljs-number">4</span> 次
+数据拷贝：磁盘→内核→用户→内核→Socket = <span class="hljs-number">4</span> 次
+</code></pre></div><h3>4.2 sendfile 系统调用</h3>
 <p>Linux 2.1 引入的 <code>sendfile()</code> 将两次系统调用合并为一次，数据路径变为：</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>sendfile 数据路径：
 磁盘 ──DMA──► 内核缓冲 ──CPU拷贝──► Socket 缓冲 ──DMA──► 网卡
 
-上下文切换：仅 1 次
-数据拷贝：磁盘→内核→Socket = 3 次（其中 2 次 DMA，1 次 CPU）
-</code></pre></div>
-<p>如果网卡支持 <strong>Scatter-Gather DMA</strong>（Linux 2.4+），可以进一步减少到 2 次 DMA 拷贝：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>sendfile + SG-DMA 数据路径：
-磁盘 ──DMA──► 内核缓冲 ──► Socket 缓冲（仅传递文件描述符和长度）
+上下文切换：仅<span class="hljs-number"> 1 </span>次
+数据拷贝：磁盘→内核→Socket =<span class="hljs-number"> 3 </span>次（其中<span class="hljs-number"> 2 </span>次 DMA，1 次 CPU）
+</code></pre></div><p>如果网卡支持 <strong>Scatter-Gather DMA</strong>（Linux 2.4+），可以进一步减少到 2 次 DMA 拷贝：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-variable">sendfile</span> <span class="hljs-operator">+</span> <span class="hljs-variable">SG</span><span class="hljs-operator">-</span><span class="hljs-variable">DMA</span> 数据路径：
+磁盘 ──<span class="hljs-variable">DMA</span>──► 内核缓冲 ──► <span class="hljs-built_in">Socket</span> 缓冲（仅传递文件描述符和长度）
                 │
-                └── DMA（通过 gather 操作直接从内核缓冲到网卡）
+                └── <span class="hljs-variable">DMA</span>（通过 <span class="hljs-variable">gather</span> 操作直接从内核缓冲到网卡）
 
-数据拷贝：仅 2 次 DMA，0 次 CPU 拷贝 — 真正的&quot;零&quot;拷贝
-</code></pre></div>
-<h3>4.3 mmap（内存映射）</h3>
+数据拷贝：仅 <span class="hljs-number">2</span> 次 <span class="hljs-variable">DMA</span>，<span class="hljs-number">0</span> 次 <span class="hljs-variable">CPU</span> 拷贝 — 真正的<span class="hljs-string">"零"</span>拷贝
+</code></pre></div><h3>4.3 mmap（内存映射）</h3>
 <p><code>mmap</code> 将文件映射到虚拟内存地址空间，让应用程序像访问内存一样访问文件：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">void mmapExample() throws IOException {
-    try (var channel = java.nio.channels.FileChannel.open(
-            java.nio.file.Path.of(&quot;/tmp/large_file.dat&quot;),
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">void</span> <span class="hljs-title function_">mmapExample</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> IOException {
+    <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">channel</span> <span class="hljs-operator">=</span> java.nio.channels.FileChannel.open(
+            java.nio.file.Path.of(<span class="hljs-string">"/tmp/large_file.dat"</span>),
             java.nio.file.StandardOpenOption.READ)) {
 
-        // 将文件映射到虚拟内存（从偏移 0 开始，映射全部）
-        var mappedBuffer = channel.map(
+        <span class="hljs-comment">// 将文件映射到虚拟内存（从偏移 0 开始，映射全部）</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">mappedBuffer</span> <span class="hljs-operator">=</span> channel.map(
             java.nio.channels.FileChannel.MapMode.READ_ONLY,
-            0, channel.size());
+            <span class="hljs-number">0</span>, channel.size());
 
-        // 像操作 ByteBuffer 一样操作文件内容
-        // 修改会直接反映到文件（READ_WRITE 模式）
-        byte[] data = new byte[1024];
+        <span class="hljs-comment">// 像操作 ByteBuffer 一样操作文件内容</span>
+        <span class="hljs-comment">// 修改会直接反映到文件（READ_WRITE 模式）</span>
+        <span class="hljs-type">byte</span>[] data = <span class="hljs-keyword">new</span> <span class="hljs-title class_">byte</span>[<span class="hljs-number">1024</span>];
         mappedBuffer.get(data);
     }
 }
-</code></pre></div>
-<p><strong>mmap vs sendfile：</strong></p>
+</code></pre></div><p><strong>mmap vs sendfile：</strong></p>
 <table>
 <thead>
 <tr>
@@ -581,54 +563,52 @@ public class EpollBugWorkaround {
 </tbody></table>
 <h3>4.4 FileChannel.transferTo — Java 中的 sendfile</h3>
 <p>JDK 1.4 引入的 <code>transferTo/transferFrom</code> 是 Java 中使用 sendfile 的标准方式：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">void zeroCopyTransfer() throws IOException {
-    try (var srcChannel = java.nio.channels.FileChannel.open(
-            java.nio.file.Path.of(&quot;/tmp/large_file.dat&quot;),
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">void</span> <span class="hljs-title function_">zeroCopyTransfer</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> IOException {
+    <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">srcChannel</span> <span class="hljs-operator">=</span> java.nio.channels.FileChannel.open(
+            java.nio.file.Path.of(<span class="hljs-string">"/tmp/large_file.dat"</span>),
             java.nio.file.StandardOpenOption.READ);
-         var destChannel = java.nio.channels.SocketChannel.open(
-             new java.net.InetSocketAddress(&quot;localhost&quot;, 8080))) {
+         <span class="hljs-type">var</span> <span class="hljs-variable">destChannel</span> <span class="hljs-operator">=</span> java.nio.channels.SocketChannel.open(
+             <span class="hljs-keyword">new</span> <span class="hljs-title class_">java</span>.net.InetSocketAddress(<span class="hljs-string">"localhost"</span>, <span class="hljs-number">8080</span>))) {
 
-        long position = 0;
-        long size = srcChannel.size();
+        <span class="hljs-type">long</span> <span class="hljs-variable">position</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+        <span class="hljs-type">long</span> <span class="hljs-variable">size</span> <span class="hljs-operator">=</span> srcChannel.size();
 
-        // transferTo 内部调用 sendfile() 系统调用（Linux）
-        // 数据不经过用户空间，零 CPU 拷贝
-        while (position &lt; size) {
+        <span class="hljs-comment">// transferTo 内部调用 sendfile() 系统调用（Linux）</span>
+        <span class="hljs-comment">// 数据不经过用户空间，零 CPU 拷贝</span>
+        <span class="hljs-keyword">while</span> (position &lt; size) {
             position += srcChannel.transferTo(position, size - position, destChannel);
         }
     }
 }
 
-// 同样用于文件间拷贝（sendfile 也支持文件到文件，Linux 2.6.33+）
-void fileToFileCopy() throws IOException {
-    try (var src = java.nio.channels.FileChannel.open(
-            java.nio.file.Path.of(&quot;/tmp/source.dat&quot;),
+<span class="hljs-comment">// 同样用于文件间拷贝（sendfile 也支持文件到文件，Linux 2.6.33+）</span>
+<span class="hljs-keyword">void</span> <span class="hljs-title function_">fileToFileCopy</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> IOException {
+    <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">src</span> <span class="hljs-operator">=</span> java.nio.channels.FileChannel.open(
+            java.nio.file.Path.of(<span class="hljs-string">"/tmp/source.dat"</span>),
             java.nio.file.StandardOpenOption.READ);
-         var dest = java.nio.channels.FileChannel.open(
-             java.nio.file.Path.of(&quot;/tmp/target.dat&quot;),
+         <span class="hljs-type">var</span> <span class="hljs-variable">dest</span> <span class="hljs-operator">=</span> java.nio.channels.FileChannel.open(
+             java.nio.file.Path.of(<span class="hljs-string">"/tmp/target.dat"</span>),
              java.nio.file.StandardOpenOption.CREATE,
              java.nio.file.StandardOpenOption.WRITE)) {
 
-        src.transferTo(0, src.size(), dest);
-        // 或者 dest.transferFrom(src, 0, src.size());
+        src.transferTo(<span class="hljs-number">0</span>, src.size(), dest);
+        <span class="hljs-comment">// 或者 dest.transferFrom(src, 0, src.size());</span>
     }
 }
-</code></pre></div>
-<h3>4.5 零拷贝在 Kafka 中的应用</h3>
-<p>Apache Kafka 是零拷贝技术的经典案例。Kafka 的消息传递路径是&quot;生产者写入 → Broker 存储 → 消费者读取&quot;，Broker 的核心职责是将磁盘上的消息分发给消费者。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Kafka 的 FileRecords.writeTo() 核心逻辑（简化示意）
-// 实际实现在 kafka/server/src/main/java/org/apache/kafka/storage/internals/log/FileRecords.java
-public class FileRecords {
-    // ...
-    public long writeTo(java.nio.channels.GatheringByteChannel destChannel,
-                         long offset, int length) throws IOException {
-        // 使用 FileChannel.transferTo() 直接发送文件到网络
-        // 底层调用 sendfile()，实现零拷贝
-        return channel.transferTo(offset, length, destChannel);
+</code></pre></div><h3>4.5 零拷贝在 Kafka 中的应用</h3>
+<p>Apache Kafka 是零拷贝技术的经典案例。Kafka 的消息传递路径是"生产者写入 → Broker 存储 → 消费者读取"，Broker 的核心职责是将磁盘上的消息分发给消费者。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// Kafka 的 FileRecords.writeTo() 核心逻辑（简化示意）</span>
+<span class="hljs-comment">// 实际实现在 kafka/server/src/main/java/org/apache/kafka/storage/internals/log/FileRecords.java</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">FileRecords</span> {
+    <span class="hljs-comment">// ...</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-type">long</span> <span class="hljs-title function_">writeTo</span><span class="hljs-params">(java.nio.channels.GatheringByteChannel destChannel,
+                         <span class="hljs-type">long</span> offset, <span class="hljs-type">int</span> length)</span> <span class="hljs-keyword">throws</span> IOException {
+        <span class="hljs-comment">// 使用 FileChannel.transferTo() 直接发送文件到网络</span>
+        <span class="hljs-comment">// 底层调用 sendfile()，实现零拷贝</span>
+        <span class="hljs-keyword">return</span> channel.transferTo(offset, length, destChannel);
     }
 }
-</code></pre></div>
-<p><strong>Kafka 零拷贝的价值：</strong></p>
+</code></pre></div><p><strong>Kafka 零拷贝的价值：</strong></p>
 <ul>
 <li><strong>不经过用户态</strong>：消息从磁盘页缓存直接发送到网卡，不经过 Broker 的 JVM 堆</li>
 <li><strong>降低 CPU 使用率</strong>：省去了用户态/内核态切换和内存拷贝的 CPU 开销</li>
@@ -637,12 +617,11 @@ public class FileRecords {
 </ul>
 <p><strong>为什么 Kafka 能做到而传统方案做不到？</strong></p>
 <p>传统消息队列（如 ActiveMQ）将消息从磁盘读到 JVM 堆中，处理（反序列化、路由）后再写入 Socket。Kafka 的设计哲学就是不处理消息内容，因此可以直接使用 sendfile 将磁盘数据原样转发。</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>传统 MQ：磁盘 → 内核缓冲 → JVM 堆（反序列化 → 业务逻辑 → 序列化）→ 内核 Socket 缓冲 → 网卡
-Kafka：  磁盘 → 内核缓冲（sendfile + SG-DMA）─────────────────────→ 网卡
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>传统 <span class="hljs-variable">MQ</span>：磁盘 → 内核缓冲 → <span class="hljs-variable">JVM</span> 堆（反序列化 → 业务逻辑 → 序列化）→ 内核 <span class="hljs-built_in">Socket</span> 缓冲 → 网卡
+<span class="hljs-variable">Kafka</span>：  磁盘 → 内核缓冲（<span class="hljs-variable">sendfile</span> <span class="hljs-operator">+</span> <span class="hljs-variable">SG</span><span class="hljs-operator">-</span><span class="hljs-variable">DMA</span>）─────────────────────→ 网卡
                      ↑
-               0 次 CPU 拷贝，0 次用户态介入
-</code></pre></div>
-<hr>
+               <span class="hljs-number">0</span> 次 <span class="hljs-variable">CPU</span> 拷贝，<span class="hljs-number">0</span> 次用户态介入
+</code></pre></div><hr>
 <h2>五、Netty 核心架构 — 工业级 NIO 框架</h2>
 <p>Netty 是目前 Java 生态中事实标准的 NIO 网络框架。它将原生 NIO 的复杂性封装为清晰的抽象。几乎所有需要高性能网络通信的 Java 项目（Dubbo、gRPC-Java、RocketMQ、Elasticsearch、Spark）都基于 Netty。</p>
 <h3>5.1 EventLoop 模型</h3>
@@ -655,7 +634,7 @@ Kafka：  磁盘 → 内核缓冲（sendfile + SG-DMA）────────
           ┌───────────────┼───────────────┐
           │               │               │
    ┌──────▼──────┐ ┌──────▼──────┐ ┌──────▼──────┐
-   │ EventLoop 1 │ │ EventLoop 2 │ │ EventLoop N │
+   │ EventLoop <span class="hljs-number">1</span> │ │ EventLoop <span class="hljs-number">2</span> │ │ EventLoop N │
    │ ┌─────────┐ │ │ ┌─────────┐ │ │ ┌─────────┐ │
    │ │Selector │ │ │ │Selector │ │ │ │Selector │ │
    │ └─────────┘ │ │ └─────────┘ │ │ └─────────┘ │
@@ -664,44 +643,42 @@ Kafka：  磁盘 → 内核缓冲（sendfile + SG-DMA）────────
    │ └─────────┘ │ │ └─────────┘ │ │ └─────────┘ │
    └──────┬──────┘ └──────┬──────┘ └──────┬──────┘
           │               │               │
-     Channel 1..N    Channel N+1..2N   Channel ...
+     <span class="hljs-built_in">Channel</span> <span class="hljs-number">1.</span>.N    <span class="hljs-built_in">Channel</span> N+<span class="hljs-number">1.</span><span class="hljs-number">.2</span>N   <span class="hljs-built_in">Channel</span> ...
 
- 一个 Channel 的所有 IO 操作由同一个 EventLoop 处理（线程安全）
-</code></pre></div>
-<p><strong>关键设计原则：</strong></p>
+ 一个 <span class="hljs-built_in">Channel</span> 的所有 <span class="hljs-built_in">IO</span> 操作由同一个 EventLoop 处理（线程安全）
+</code></pre></div><p><strong>关键设计原则：</strong></p>
 <ol>
 <li><strong>一个 EventLoop 绑定一个 Selector + 一个 Thread</strong>：避免 Channel 间的并发竞争</li>
 <li><strong>一个 Channel 绑定一个 EventLoop</strong>：该 Channel 的所有 IO 事件和 Handler 处理都在同一个线程中执行，天然线程安全</li>
 <li><strong>多个 EventLoop 组成 EventLoopGroup</strong>：提供并行处理能力，通常配置为 CPU 核心数 * 2</li>
 </ol>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Netty EventLoop 的简化概念模型
-public interface EventLoop extends java.util.concurrent.ScheduledExecutorService {
-    // 注册 Channel 并返回 Future
-    io.netty.channel.ChannelFuture register(io.netty.channel.Channel channel);
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// Netty EventLoop 的简化概念模型</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">EventLoop</span> <span class="hljs-keyword">extends</span> <span class="hljs-title class_">java</span>.util.concurrent.ScheduledExecutorService {
+    <span class="hljs-comment">// 注册 Channel 并返回 Future</span>
+    io.netty.channel.ChannelFuture <span class="hljs-title function_">register</span><span class="hljs-params">(io.netty.channel.Channel channel)</span>;
 
-    // 在 EventLoop 线程中执行任务
-    void execute(Runnable command);
+    <span class="hljs-comment">// 在 EventLoop 线程中执行任务</span>
+    <span class="hljs-keyword">void</span> <span class="hljs-title function_">execute</span><span class="hljs-params">(Runnable command)</span>;
 }
 
-// 核心循环（简化）
-// while (!shutdown) {
-//     selector.select();              // 等待 IO 事件
-//     for (SelectionKey key : selectedKeys) {
-//         channel.unsafe().read();     // 处理 IO 事件，触发 pipeline
-//     }
-//     runAllTasks();                   // 处理任务队列
-// }
-</code></pre></div>
-<h3>5.2 ChannelPipeline — 责任链模式</h3>
+<span class="hljs-comment">// 核心循环（简化）</span>
+<span class="hljs-comment">// while (!shutdown) {</span>
+<span class="hljs-comment">//     selector.select();              // 等待 IO 事件</span>
+<span class="hljs-comment">//     for (SelectionKey key : selectedKeys) {</span>
+<span class="hljs-comment">//         channel.unsafe().read();     // 处理 IO 事件，触发 pipeline</span>
+<span class="hljs-comment">//     }</span>
+<span class="hljs-comment">//     runAllTasks();                   // 处理任务队列</span>
+<span class="hljs-comment">// }</span>
+</code></pre></div><h3>5.2 ChannelPipeline — 责任链模式</h3>
 <p>Netty 的 ChannelPipeline 是一个责任链（Chain of Responsibility），由一系列 ChannelHandler 组成，数据在管道中流动并被依次处理。</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>                    I/O Request (入站)
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>                    <span class="hljs-selector-tag">I</span>/O Request (入站)
                     via Channel or ChannelHandlerContext
                          │
   ┌──────────────────────────────────────────────────────────────┐
   │                  ChannelPipeline                             │
   │                                                             │
   │  ┌───────────────────────────────────────────────────────┐  │
-  │  │  [ Handler1 (inbound) ]  →  [ Handler2 (inbound) ]  → │  │ 入站
+  │  │  <span class="hljs-selector-attr">[ Handler1 (inbound) ]</span>  →  <span class="hljs-selector-attr">[ Handler2 (inbound) ]</span>  → │  │ 入站
   │  │  (Decoder / Biz Logic)      (Biz Logic Handler)       │  │
   │  └───────────────────────────────────────────────────────┘  │
   │                            │                                │
@@ -710,16 +687,15 @@ public interface EventLoop extends java.util.concurrent.ScheduledExecutorService
   │                        HeadContext                          │
   │                            │                                │
   │  ┌───────────────────────────────────────────────────────┐  │
-  │  │  [ Handler3 (outbound) ] ← [ Handler4 (outbound) ] ←  │  │ 出站
-  │  │  (Encoder)                  (Header Appender)         │  │
+  │  │  <span class="hljs-selector-attr">[ Handler3 (outbound) ]</span> ← <span class="hljs-selector-attr">[ Handler4 (outbound) ]</span> ←  │  │ 出站
+  │  │  (Encoder)                  (<span class="hljs-selector-tag">Header</span> Appender)         │  │
   │  └───────────────────────────────────────────────────────┘  │
   │                                                             │
   └─────────────────────────────────────────────────────────────┘
                          │
-                    I/O Response (出站)
+                    <span class="hljs-selector-tag">I</span>/O Response (出站)
                     via Channel or ChannelHandlerContext
-</code></pre></div>
-<p><strong>ChannelHandler 类型：</strong></p>
+</code></pre></div><p><strong>ChannelHandler 类型：</strong></p>
 <table>
 <thead>
 <tr>
@@ -744,20 +720,19 @@ public interface EventLoop extends java.util.concurrent.ScheduledExecutorService
 <li>入站事件（Inbound）：从 Pipeline 头部（Head）向尾部（Tail）传播</li>
 <li>出站事件（Outbound）：从 Pipeline 尾部（Tail）向头部（Head）传播</li>
 </ul>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Handler 中的事件传播
-public class MyInboundHandler extends io.netty.channel.ChannelInboundHandlerAdapter {
-    @Override
-    public void channelRead(io.netty.channel.ChannelHandlerContext ctx, Object msg) {
-        // 处理消息...
-        System.out.println(&quot;Received: &quot; + msg);
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// Handler 中的事件传播</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">MyInboundHandler</span> <span class="hljs-keyword">extends</span> <span class="hljs-title class_">io</span>.netty.channel.ChannelInboundHandlerAdapter {
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">channelRead</span><span class="hljs-params">(io.netty.channel.ChannelHandlerContext ctx, Object msg)</span> {
+        <span class="hljs-comment">// 处理消息...</span>
+        System.out.println(<span class="hljs-string">"Received: "</span> + msg);
 
-        // 传递给下一个 Inbound Handler
+        <span class="hljs-comment">// 传递给下一个 Inbound Handler</span>
         ctx.fireChannelRead(msg);
-        // 或者 ctx.write() 触发 Outbound 链
+        <span class="hljs-comment">// 或者 ctx.write() 触发 Outbound 链</span>
     }
 }
-</code></pre></div>
-<p><strong>ChannelHandlerContext</strong> 是 Handler 与 Pipeline 之间的桥梁，提供了事件触发和 Pipeline 操作的能力。每个 Handler 被添加到 Pipeline 时会创建一个对应的 Context。</p>
+</code></pre></div><p><strong>ChannelHandlerContext</strong> 是 Handler 与 Pipeline 之间的桥梁，提供了事件触发和 Pipeline 操作的能力。每个 Handler 被添加到 Pipeline 时会创建一个对应的 Context。</p>
 <h3>5.3 ByteBuf — Netty 的字节容器</h3>
 <p>Netty 的 <code>ByteBuf</code> 是对 JDK <code>ByteBuffer</code> 的增强替代，解决了原生 Buffer 的诸多痛点。</p>
 <p><strong>ByteBuf 相对于 ByteBuffer 的优势：</strong></p>
@@ -805,37 +780,35 @@ public class MyInboundHandler extends io.netty.channel.ChannelInboundHandlerAdap
             │                    │                     │
 ┌───────────┼────────────────────┼─────────────────────┼────┐
 │ 已读(废弃)  │   可读区域          │      可写区域         │    │
-│  discard   │   readable bytes   │   writable bytes    │    │
+│  <span class="hljs-keyword">discard </span>  │   readable <span class="hljs-keyword">bytes </span>  │   writable <span class="hljs-keyword">bytes </span>   │    │
 └───────────┴────────────────────┴─────────────────────┴────┘
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">void byteBufBasicOperations() {
-    // 1. 分配 ByteBuf（默认 Pooled + Direct）
-    var buf = io.netty.buffer.PooledByteBufAllocator.DEFAULT.buffer(256);
-    // 或者：var buf = io.netty.buffer.Unpooled.buffer(256);
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">void</span> <span class="hljs-title function_">byteBufBasicOperations</span><span class="hljs-params">()</span> {
+    <span class="hljs-comment">// 1. 分配 ByteBuf（默认 Pooled + Direct）</span>
+    <span class="hljs-type">var</span> <span class="hljs-variable">buf</span> <span class="hljs-operator">=</span> io.netty.buffer.PooledByteBufAllocator.DEFAULT.buffer(<span class="hljs-number">256</span>);
+    <span class="hljs-comment">// 或者：var buf = io.netty.buffer.Unpooled.buffer(256);</span>
 
-    // 2. 写入数据
-    buf.writeInt(42);           // writerIndex += 4
-    buf.writeLong(System.currentTimeMillis());  // writerIndex += 8
-    buf.writeBytes(&quot;hello netty&quot;.getBytes());   // writerIndex += 11
+    <span class="hljs-comment">// 2. 写入数据</span>
+    buf.writeInt(<span class="hljs-number">42</span>);           <span class="hljs-comment">// writerIndex += 4</span>
+    buf.writeLong(System.currentTimeMillis());  <span class="hljs-comment">// writerIndex += 8</span>
+    buf.writeBytes(<span class="hljs-string">"hello netty"</span>.getBytes());   <span class="hljs-comment">// writerIndex += 11</span>
 
-    // 3. 读取数据（无需 flip！）
-    int value = buf.readInt();  // readerIndex += 4
-    long timestamp = buf.readLong();  // readerIndex += 8
+    <span class="hljs-comment">// 3. 读取数据（无需 flip！）</span>
+    <span class="hljs-type">int</span> <span class="hljs-variable">value</span> <span class="hljs-operator">=</span> buf.readInt();  <span class="hljs-comment">// readerIndex += 4</span>
+    <span class="hljs-type">long</span> <span class="hljs-variable">timestamp</span> <span class="hljs-operator">=</span> buf.readLong();  <span class="hljs-comment">// readerIndex += 8</span>
 
-    // 4. 查看可读数据（Mark 模式，不移动 readerIndex）
+    <span class="hljs-comment">// 4. 查看可读数据（Mark 模式，不移动 readerIndex）</span>
     buf.markReaderIndex();
-    byte firstByte = buf.readByte();
-    buf.resetReaderIndex();  // readerIndex 恢复
+    <span class="hljs-type">byte</span> <span class="hljs-variable">firstByte</span> <span class="hljs-operator">=</span> buf.readByte();
+    buf.resetReaderIndex();  <span class="hljs-comment">// readerIndex 恢复</span>
 
-    // 5. 零拷贝 slice
-    var slice = buf.slice(buf.readerIndex(), 5);  // 共享底层数据
+    <span class="hljs-comment">// 5. 零拷贝 slice</span>
+    <span class="hljs-type">var</span> <span class="hljs-variable">slice</span> <span class="hljs-operator">=</span> buf.slice(buf.readerIndex(), <span class="hljs-number">5</span>);  <span class="hljs-comment">// 共享底层数据</span>
 
-    // 6. 引用计数管理
-    buf.retain();   // 引用计数 +1
-    buf.release();  // 引用计数 -1，归零后释放回内存池
+    <span class="hljs-comment">// 6. 引用计数管理</span>
+    buf.retain();   <span class="hljs-comment">// 引用计数 +1</span>
+    buf.release();  <span class="hljs-comment">// 引用计数 -1，归零后释放回内存池</span>
 }
-</code></pre></div>
-<p><strong>四种分配器组合：</strong></p>
+</code></pre></div><p><strong>四种分配器组合：</strong></p>
 <table>
 <thead>
 <tr>
@@ -866,69 +839,67 @@ public class MyInboundHandler extends io.netty.channel.ChannelInboundHandlerAdap
 </tr>
 </tbody></table>
 <p><strong>CompositeByteBuf — 零拷贝组合多个 ByteBuf：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">void compositeBufferExample() {
-    // 传统方式：需要复制数据到新缓冲区
-    // byte[] merged = new byte[buf1.readableBytes() + buf2.readableBytes()];
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">void</span> <span class="hljs-title function_">compositeBufferExample</span><span class="hljs-params">()</span> {
+    <span class="hljs-comment">// 传统方式：需要复制数据到新缓冲区</span>
+    <span class="hljs-comment">// byte[] merged = new byte[buf1.readableBytes() + buf2.readableBytes()];</span>
 
-    // Netty 方式：零拷贝组合
-    var headerBuf = io.netty.buffer.Unpooled.wrappedBuffer(&quot;HTTP/1.1 200 OK\r\n&quot;.getBytes());
-    var bodyBuf = io.netty.buffer.Unpooled.wrappedBuffer(&quot;{\&quot;status\&quot;:\&quot;ok\&quot;}&quot;.getBytes());
+    <span class="hljs-comment">// Netty 方式：零拷贝组合</span>
+    <span class="hljs-type">var</span> <span class="hljs-variable">headerBuf</span> <span class="hljs-operator">=</span> io.netty.buffer.Unpooled.wrappedBuffer(<span class="hljs-string">"HTTP/1.1 200 OK\r\n"</span>.getBytes());
+    <span class="hljs-type">var</span> <span class="hljs-variable">bodyBuf</span> <span class="hljs-operator">=</span> io.netty.buffer.Unpooled.wrappedBuffer(<span class="hljs-string">"{\"status\":\"ok\"}"</span>.getBytes());
 
-    var composite = io.netty.buffer.PooledByteBufAllocator.DEFAULT.compositeBuffer();
-    composite.addComponents(true, headerBuf, bodyBuf);
-    // headerBuf 和 bodyBuf 的 refCnt 已转移给 composite
+    <span class="hljs-type">var</span> <span class="hljs-variable">composite</span> <span class="hljs-operator">=</span> io.netty.buffer.PooledByteBufAllocator.DEFAULT.compositeBuffer();
+    composite.addComponents(<span class="hljs-literal">true</span>, headerBuf, bodyBuf);
+    <span class="hljs-comment">// headerBuf 和 bodyBuf 的 refCnt 已转移给 composite</span>
 }
-</code></pre></div>
-<h3>5.4 Codecs（编解码器）</h3>
+</code></pre></div><h3>5.4 Codecs（编解码器）</h3>
 <p>Netty 的编解码器是 ChannelHandler 的特化：</p>
 <ul>
 <li><strong>Decoder（解码）</strong>：<code>ByteToMessageDecoder</code> — 字节 → 消息对象（Inbound）</li>
 <li><strong>Encoder（编码）</strong>：<code>MessageToByteEncoder</code> — 消息对象 → 字节（Outbound）</li>
 <li><strong>Codec（编解码器）</strong>：<code>ByteToMessageCodec</code> / <code>MessageToMessageCodec</code> — 双向转换</li>
 </ul>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 自定义帧解码器：基于长度前缀的协议
-import io.netty.buffer.ByteBuf;
-import io.netty.channel.ChannelHandlerContext;
-import io.netty.handler.codec.ByteToMessageDecoder;
-import java.util.List;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 自定义帧解码器：基于长度前缀的协议</span>
+<span class="hljs-keyword">import</span> io.netty.buffer.ByteBuf;
+<span class="hljs-keyword">import</span> io.netty.channel.ChannelHandlerContext;
+<span class="hljs-keyword">import</span> io.netty.handler.codec.ByteToMessageDecoder;
+<span class="hljs-keyword">import</span> java.util.List;
 
-public class LengthFieldBasedFrameDecoder extends ByteToMessageDecoder {
-    private static final int MAX_FRAME_LENGTH = 65536;
-    private static final int LENGTH_FIELD_OFFSET = 0;
-    private static final int LENGTH_FIELD_LENGTH = 4;
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">LengthFieldBasedFrameDecoder</span> <span class="hljs-keyword">extends</span> <span class="hljs-title class_">ByteToMessageDecoder</span> {
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">int</span> <span class="hljs-variable">MAX_FRAME_LENGTH</span> <span class="hljs-operator">=</span> <span class="hljs-number">65536</span>;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">int</span> <span class="hljs-variable">LENGTH_FIELD_OFFSET</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">int</span> <span class="hljs-variable">LENGTH_FIELD_LENGTH</span> <span class="hljs-operator">=</span> <span class="hljs-number">4</span>;
 
-    @Override
-    protected void decode(ChannelHandlerContext ctx, ByteBuf in, List&lt;Object&gt; out) {
-        // 检查是否足够读取长度字段
-        if (in.readableBytes() &lt; LENGTH_FIELD_LENGTH) {
-            return; // 等待更多数据
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">protected</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">decode</span><span class="hljs-params">(ChannelHandlerContext ctx, ByteBuf in, List&lt;Object&gt; out)</span> {
+        <span class="hljs-comment">// 检查是否足够读取长度字段</span>
+        <span class="hljs-keyword">if</span> (in.readableBytes() &lt; LENGTH_FIELD_LENGTH) {
+            <span class="hljs-keyword">return</span>; <span class="hljs-comment">// 等待更多数据</span>
         }
 
-        // 标记当前位置，以便后续回退
+        <span class="hljs-comment">// 标记当前位置，以便后续回退</span>
         in.markReaderIndex();
 
-        // 读取帧长度
-        int frameLength = in.readInt();
+        <span class="hljs-comment">// 读取帧长度</span>
+        <span class="hljs-type">int</span> <span class="hljs-variable">frameLength</span> <span class="hljs-operator">=</span> in.readInt();
 
-        // 长度合法性检查
-        if (frameLength &lt; 0 || frameLength &gt; MAX_FRAME_LENGTH) {
+        <span class="hljs-comment">// 长度合法性检查</span>
+        <span class="hljs-keyword">if</span> (frameLength &lt; <span class="hljs-number">0</span> || frameLength &gt; MAX_FRAME_LENGTH) {
             in.resetReaderIndex();
-            throw new IllegalArgumentException(&quot;Invalid frame length: &quot; + frameLength);
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">IllegalArgumentException</span>(<span class="hljs-string">"Invalid frame length: "</span> + frameLength);
         }
 
-        // 检查完整帧是否已到达
-        if (in.readableBytes() &lt; frameLength) {
-            in.resetReaderIndex();  // 数据不完整，回退等待
-            return;
+        <span class="hljs-comment">// 检查完整帧是否已到达</span>
+        <span class="hljs-keyword">if</span> (in.readableBytes() &lt; frameLength) {
+            in.resetReaderIndex();  <span class="hljs-comment">// 数据不完整，回退等待</span>
+            <span class="hljs-keyword">return</span>;
         }
 
-        // 提取完整帧数据
-        var frameData = in.readBytes(frameLength);
-        out.add(frameData);  // 传递给下一个 Handler
+        <span class="hljs-comment">// 提取完整帧数据</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">frameData</span> <span class="hljs-operator">=</span> in.readBytes(frameLength);
+        out.add(frameData);  <span class="hljs-comment">// 传递给下一个 Handler</span>
     }
 }
-</code></pre></div>
-<p><strong>Netty 内置的编解码器：</strong></p>
+</code></pre></div><p><strong>Netty 内置的编解码器：</strong></p>
 <table>
 <thead>
 <tr>
@@ -970,17 +941,16 @@ public class LengthFieldBasedFrameDecoder extends ByteToMessageDecoder {
 </tr>
 </tbody></table>
 <h3>5.5 TCP 粘包/拆包问题与解决方案</h3>
-<p>TCP 是流式协议，没有消息边界，会导致所谓的&quot;粘包&quot;和&quot;拆包&quot;：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>发送端连续发送：  [MSG1][MSG2][MSG3]
+<p>TCP 是流式协议，没有消息边界，会导致所谓的"粘包"和"拆包"：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>发送端连续发送：  <span class="hljs-selector-attr">[MSG1]</span><span class="hljs-selector-attr">[MSG2]</span><span class="hljs-selector-attr">[MSG3]</span>
                       │
                  TCP 流传输（无边界的字节流）
                       │
 接收端可能收到：
-  情景1（粘包）：[MSG1 MSG2  MSG3]
-  情景2（拆包）：[MSG1 MS][G2 MSG3]
-  情景3（混合）：[MSG1 MSG2][MSG3]
-</code></pre></div>
-<p><strong>四种经典解决方案：</strong></p>
+  情景<span class="hljs-number">1</span>（粘包）：<span class="hljs-selector-attr">[MSG1 MSG2  MSG3]</span>
+  情景<span class="hljs-number">2</span>（拆包）：<span class="hljs-selector-attr">[MSG1 MS]</span><span class="hljs-selector-attr">[G2 MSG3]</span>
+  情景<span class="hljs-number">3</span>（混合）：<span class="hljs-selector-attr">[MSG1 MSG2]</span><span class="hljs-selector-attr">[MSG3]</span>
+</code></pre></div><p><strong>四种经典解决方案：</strong></p>
 <table>
 <thead>
 <tr>
@@ -1016,166 +986,165 @@ public class LengthFieldBasedFrameDecoder extends ByteToMessageDecoder {
 </tr>
 </tbody></table>
 <p><strong>Netty HTTP Server 完整示例：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 使用 Netty 构建一个完整的 HTTP 服务器
-import io.netty.bootstrap.ServerBootstrap;
-import io.netty.channel.*;
-import io.netty.channel.nio.NioEventLoopGroup;
-import io.netty.channel.socket.nio.NioServerSocketChannel;
-import io.netty.handler.codec.http.*;
-import io.netty.buffer.Unpooled;
-import java.nio.charset.StandardCharsets;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 使用 Netty 构建一个完整的 HTTP 服务器</span>
+<span class="hljs-keyword">import</span> io.netty.bootstrap.ServerBootstrap;
+<span class="hljs-keyword">import</span> io.netty.channel.*;
+<span class="hljs-keyword">import</span> io.netty.channel.nio.NioEventLoopGroup;
+<span class="hljs-keyword">import</span> io.netty.channel.socket.nio.NioServerSocketChannel;
+<span class="hljs-keyword">import</span> io.netty.handler.codec.http.*;
+<span class="hljs-keyword">import</span> io.netty.buffer.Unpooled;
+<span class="hljs-keyword">import</span> java.nio.charset.StandardCharsets;
 
-public class NettyHttpServer {
-    private final int port;
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">NettyHttpServer</span> {
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">int</span> port;
 
-    public NettyHttpServer(int port) {
-        this.port = port;
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">NettyHttpServer</span><span class="hljs-params">(<span class="hljs-type">int</span> port)</span> {
+        <span class="hljs-built_in">this</span>.port = port;
     }
 
-    public void start() throws InterruptedException {
-        var bossGroup = new NioEventLoopGroup(1);    // 接收连接
-        var workerGroup = new NioEventLoopGroup();    // 处理 IO
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">start</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> InterruptedException {
+        <span class="hljs-type">var</span> <span class="hljs-variable">bossGroup</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">NioEventLoopGroup</span>(<span class="hljs-number">1</span>);    <span class="hljs-comment">// 接收连接</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">workerGroup</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">NioEventLoopGroup</span>();    <span class="hljs-comment">// 处理 IO</span>
 
-        try {
-            var bootstrap = new ServerBootstrap();
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-type">var</span> <span class="hljs-variable">bootstrap</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ServerBootstrap</span>();
             bootstrap.group(bossGroup, workerGroup)
                 .channel(NioServerSocketChannel.class)
-                .childHandler(new ChannelInitializer&lt;Channel&gt;() {
-                    @Override
-                    protected void initChannel(Channel ch) {
-                        var pipeline = ch.pipeline();
-                        // HTTP 编解码器（解决粘包/拆包）
-                        pipeline.addLast(new HttpServerCodec());
-                        // HTTP 消息聚合器（将分块的 HTTP 消息聚合成完整消息）
-                        pipeline.addLast(new HttpObjectAggregator(65536));
-                        // 业务处理器
-                        pipeline.addLast(new HttpServerHandler());
+                .childHandler(<span class="hljs-keyword">new</span> <span class="hljs-title class_">ChannelInitializer</span>&lt;Channel&gt;() {
+                    <span class="hljs-meta">@Override</span>
+                    <span class="hljs-keyword">protected</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">initChannel</span><span class="hljs-params">(Channel ch)</span> {
+                        <span class="hljs-type">var</span> <span class="hljs-variable">pipeline</span> <span class="hljs-operator">=</span> ch.pipeline();
+                        <span class="hljs-comment">// HTTP 编解码器（解决粘包/拆包）</span>
+                        pipeline.addLast(<span class="hljs-keyword">new</span> <span class="hljs-title class_">HttpServerCodec</span>());
+                        <span class="hljs-comment">// HTTP 消息聚合器（将分块的 HTTP 消息聚合成完整消息）</span>
+                        pipeline.addLast(<span class="hljs-keyword">new</span> <span class="hljs-title class_">HttpObjectAggregator</span>(<span class="hljs-number">65536</span>));
+                        <span class="hljs-comment">// 业务处理器</span>
+                        pipeline.addLast(<span class="hljs-keyword">new</span> <span class="hljs-title class_">HttpServerHandler</span>());
                     }
                 })
-                .option(ChannelOption.SO_BACKLOG, 128)
-                .childOption(ChannelOption.SO_KEEPALIVE, true);
+                .option(ChannelOption.SO_BACKLOG, <span class="hljs-number">128</span>)
+                .childOption(ChannelOption.SO_KEEPALIVE, <span class="hljs-literal">true</span>);
 
-            var future = bootstrap.bind(port).sync();
-            System.out.println(&quot;Netty HTTP Server started on port &quot; + port);
+            <span class="hljs-type">var</span> <span class="hljs-variable">future</span> <span class="hljs-operator">=</span> bootstrap.bind(port).sync();
+            System.out.println(<span class="hljs-string">"Netty HTTP Server started on port "</span> + port);
             future.channel().closeFuture().sync();
-        } finally {
+        } <span class="hljs-keyword">finally</span> {
             bossGroup.shutdownGracefully();
             workerGroup.shutdownGracefully();
         }
     }
 
-    static class HttpServerHandler extends SimpleChannelInboundHandler&lt;FullHttpRequest&gt; {
-        @Override
-        protected void channelRead0(ChannelHandlerContext ctx, FullHttpRequest request) {
-            var uri = request.uri();
-            if (&quot;/health&quot;.equals(uri)) {
-                var responseContent = Unpooled.copiedBuffer(
-                    &quot;{\&quot;status\&quot;:\&quot;UP\&quot;}&quot;, StandardCharsets.UTF_8);
-                var response = new DefaultFullHttpResponse(
+    <span class="hljs-keyword">static</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">HttpServerHandler</span> <span class="hljs-keyword">extends</span> <span class="hljs-title class_">SimpleChannelInboundHandler</span>&lt;FullHttpRequest&gt; {
+        <span class="hljs-meta">@Override</span>
+        <span class="hljs-keyword">protected</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">channelRead0</span><span class="hljs-params">(ChannelHandlerContext ctx, FullHttpRequest request)</span> {
+            <span class="hljs-type">var</span> <span class="hljs-variable">uri</span> <span class="hljs-operator">=</span> request.uri();
+            <span class="hljs-keyword">if</span> (<span class="hljs-string">"/health"</span>.equals(uri)) {
+                <span class="hljs-type">var</span> <span class="hljs-variable">responseContent</span> <span class="hljs-operator">=</span> Unpooled.copiedBuffer(
+                    <span class="hljs-string">"{\"status\":\"UP\"}"</span>, StandardCharsets.UTF_8);
+                <span class="hljs-type">var</span> <span class="hljs-variable">response</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">DefaultFullHttpResponse</span>(
                     HttpVersion.HTTP_1_1, HttpResponseStatus.OK, responseContent);
                 response.headers()
-                    .set(HttpHeaderNames.CONTENT_TYPE, &quot;application/json&quot;)
+                    .set(HttpHeaderNames.CONTENT_TYPE, <span class="hljs-string">"application/json"</span>)
                     .set(HttpHeaderNames.CONTENT_LENGTH, responseContent.readableBytes());
                 ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
-            } else {
-                var response = new DefaultFullHttpResponse(
+            } <span class="hljs-keyword">else</span> {
+                <span class="hljs-type">var</span> <span class="hljs-variable">response</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">DefaultFullHttpResponse</span>(
                     HttpVersion.HTTP_1_1, HttpResponseStatus.NOT_FOUND);
                 ctx.writeAndFlush(response).addListener(ChannelFutureListener.CLOSE);
             }
         }
 
-        @Override
-        public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
+        <span class="hljs-meta">@Override</span>
+        <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">exceptionCaught</span><span class="hljs-params">(ChannelHandlerContext ctx, Throwable cause)</span> {
             cause.printStackTrace();
             ctx.close();
         }
     }
 
-    public static void main(String[] args) throws Exception {
-        new NettyHttpServer(8080).start();
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">main</span><span class="hljs-params">(String[] args)</span> <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-keyword">new</span> <span class="hljs-title class_">NettyHttpServer</span>(<span class="hljs-number">8080</span>).start();
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>六、NIO 服务器实战</h2>
 <h3>6.1 原生 NIO Echo 服务器</h3>
 <p>下面是一个完整可运行的 NIO Echo 服务器，展示了 Selector 的完整使用流程：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.io.IOException;
-import java.net.InetSocketAddress;
-import java.nio.ByteBuffer;
-import java.nio.channels.*;
-import java.util.Iterator;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> java.io.IOException;
+<span class="hljs-keyword">import</span> java.net.InetSocketAddress;
+<span class="hljs-keyword">import</span> java.nio.ByteBuffer;
+<span class="hljs-keyword">import</span> java.nio.channels.*;
+<span class="hljs-keyword">import</span> java.util.Iterator;
 
-public class NioEchoServer {
-    private static final int PORT = 8080;
-    private static final int BUFFER_SIZE = 1024;
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">NioEchoServer</span> {
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">int</span> <span class="hljs-variable">PORT</span> <span class="hljs-operator">=</span> <span class="hljs-number">8080</span>;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">int</span> <span class="hljs-variable">BUFFER_SIZE</span> <span class="hljs-operator">=</span> <span class="hljs-number">1024</span>;
 
-    public void start() throws IOException {
-        var selector = Selector.open();
-        var serverChannel = ServerSocketChannel.open();
-        serverChannel.configureBlocking(false);
-        serverChannel.bind(new InetSocketAddress(PORT));
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">start</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> IOException {
+        <span class="hljs-type">var</span> <span class="hljs-variable">selector</span> <span class="hljs-operator">=</span> Selector.open();
+        <span class="hljs-type">var</span> <span class="hljs-variable">serverChannel</span> <span class="hljs-operator">=</span> ServerSocketChannel.open();
+        serverChannel.configureBlocking(<span class="hljs-literal">false</span>);
+        serverChannel.bind(<span class="hljs-keyword">new</span> <span class="hljs-title class_">InetSocketAddress</span>(PORT));
         serverChannel.register(selector, SelectionKey.OP_ACCEPT);
-        System.out.println(&quot;NIO Echo Server started on port &quot; + PORT);
+        System.out.println(<span class="hljs-string">"NIO Echo Server started on port "</span> + PORT);
 
-        var buffer = ByteBuffer.allocate(BUFFER_SIZE);
+        <span class="hljs-type">var</span> <span class="hljs-variable">buffer</span> <span class="hljs-operator">=</span> ByteBuffer.allocate(BUFFER_SIZE);
 
-        while (true) {
-            // 阻塞等待就绪事件
+        <span class="hljs-keyword">while</span> (<span class="hljs-literal">true</span>) {
+            <span class="hljs-comment">// 阻塞等待就绪事件</span>
             selector.select();
 
             Iterator&lt;SelectionKey&gt; keyIterator = selector.selectedKeys().iterator();
-            while (keyIterator.hasNext()) {
-                var key = keyIterator.next();
-                keyIterator.remove();  // 必须手动移除，否则下次还会被处理
+            <span class="hljs-keyword">while</span> (keyIterator.hasNext()) {
+                <span class="hljs-type">var</span> <span class="hljs-variable">key</span> <span class="hljs-operator">=</span> keyIterator.next();
+                keyIterator.remove();  <span class="hljs-comment">// 必须手动移除，否则下次还会被处理</span>
 
-                try {
-                    if (key.isAcceptable()) {
-                        // 处理新连接
-                        var server = (ServerSocketChannel) key.channel();
-                        var client = server.accept();
-                        client.configureBlocking(false);
+                <span class="hljs-keyword">try</span> {
+                    <span class="hljs-keyword">if</span> (key.isAcceptable()) {
+                        <span class="hljs-comment">// 处理新连接</span>
+                        <span class="hljs-type">var</span> <span class="hljs-variable">server</span> <span class="hljs-operator">=</span> (ServerSocketChannel) key.channel();
+                        <span class="hljs-type">var</span> <span class="hljs-variable">client</span> <span class="hljs-operator">=</span> server.accept();
+                        client.configureBlocking(<span class="hljs-literal">false</span>);
                         client.register(selector, SelectionKey.OP_READ);
-                        System.out.println(&quot;New client: &quot; + client.getRemoteAddress());
+                        System.out.println(<span class="hljs-string">"New client: "</span> + client.getRemoteAddress());
 
-                    } else if (key.isReadable()) {
-                        // 处理读事件
-                        var client = (SocketChannel) key.channel();
+                    } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (key.isReadable()) {
+                        <span class="hljs-comment">// 处理读事件</span>
+                        <span class="hljs-type">var</span> <span class="hljs-variable">client</span> <span class="hljs-operator">=</span> (SocketChannel) key.channel();
                         buffer.clear();
-                        int bytesRead = client.read(buffer);
+                        <span class="hljs-type">int</span> <span class="hljs-variable">bytesRead</span> <span class="hljs-operator">=</span> client.read(buffer);
 
-                        if (bytesRead == -1) {
-                            // 客户端关闭连接
-                            System.out.println(&quot;Client disconnected: &quot; + client.getRemoteAddress());
+                        <span class="hljs-keyword">if</span> (bytesRead == -<span class="hljs-number">1</span>) {
+                            <span class="hljs-comment">// 客户端关闭连接</span>
+                            System.out.println(<span class="hljs-string">"Client disconnected: "</span> + client.getRemoteAddress());
                             key.cancel();
                             client.close();
-                            continue;
+                            <span class="hljs-keyword">continue</span>;
                         }
 
                         buffer.flip();
-                        byte[] data = new byte[buffer.remaining()];
+                        <span class="hljs-type">byte</span>[] data = <span class="hljs-keyword">new</span> <span class="hljs-title class_">byte</span>[buffer.remaining()];
                         buffer.get(data);
-                        String message = new String(data);
+                        <span class="hljs-type">String</span> <span class="hljs-variable">message</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">String</span>(data);
 
-                        // Echo 回去（注册写事件）
+                        <span class="hljs-comment">// Echo 回去（注册写事件）</span>
                         key.interestOps(SelectionKey.OP_WRITE);
-                        key.attach(message);  // 附加数据
+                        key.attach(message);  <span class="hljs-comment">// 附加数据</span>
 
-                    } else if (key.isWritable()) {
-                        // 处理写事件
-                        var client = (SocketChannel) key.channel();
-                        String message = (String) key.attachment();
+                    } <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (key.isWritable()) {
+                        <span class="hljs-comment">// 处理写事件</span>
+                        <span class="hljs-type">var</span> <span class="hljs-variable">client</span> <span class="hljs-operator">=</span> (SocketChannel) key.channel();
+                        <span class="hljs-type">String</span> <span class="hljs-variable">message</span> <span class="hljs-operator">=</span> (String) key.attachment();
 
                         buffer.clear();
-                        buffer.put((&quot;Echo: &quot; + message).getBytes());
+                        buffer.put((<span class="hljs-string">"Echo: "</span> + message).getBytes());
                         buffer.flip();
                         client.write(buffer);
 
-                        // 切回读模式
+                        <span class="hljs-comment">// 切回读模式</span>
                         key.interestOps(SelectionKey.OP_READ);
                     }
-                } catch (IOException e) {
-                    // 连接异常，取消注册并关闭
+                } <span class="hljs-keyword">catch</span> (IOException e) {
+                    <span class="hljs-comment">// 连接异常，取消注册并关闭</span>
                     key.cancel();
                     key.channel().close();
                 }
@@ -1183,12 +1152,11 @@ public class NioEchoServer {
         }
     }
 
-    public static void main(String[] args) throws IOException {
-        new NioEchoServer().start();
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">main</span><span class="hljs-params">(String[] args)</span> <span class="hljs-keyword">throws</span> IOException {
+        <span class="hljs-keyword">new</span> <span class="hljs-title class_">NioEchoServer</span>().start();
     }
 }
-</code></pre></div>
-<p><strong>关键要点：</strong></p>
+</code></pre></div><p><strong>关键要点：</strong></p>
 <ol>
 <li><code>keyIterator.remove()</code> 必须调用——Selector 不会自动从 <code>selectedKeys</code> 集合中移除已处理的 Key</li>
 <li><code>interestOps()</code> 用于动态切换感兴趣的事件类型（读写交替）</li>
@@ -1201,169 +1169,164 @@ public class NioEchoServer {
 <h3>7.1 SSE 流式响应处理</h3>
 <p>SSE（Server-Sent Events）是 LLM streaming 的标准协议。当用户发起一个 Chat Completion 请求时，服务端以 SSE 流式地返回每个 token，前端逐步渲染。</p>
 <p><strong>SSE 协议格式：</strong></p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>data: {&quot;choices&quot;:[{&quot;delta&quot;:{&quot;content&quot;:&quot;你&quot;}}],&quot;id&quot;:&quot;chatcmpl-xxx&quot;}
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>data: {"choices":[{"delta":{"<span class="hljs-attribute">content</span>":<span class="hljs-string">"你"</span>}}],"id":<span class="hljs-string">"chatcmpl-xxx"</span>}
 
-data: {&quot;choices&quot;:[{&quot;delta&quot;:{&quot;content&quot;:&quot;好&quot;}}],&quot;id&quot;:&quot;chatcmpl-xxx&quot;}
+data: {"choices":[{"delta":{"<span class="hljs-attribute">content</span>":<span class="hljs-string">"好"</span>}}],"id":<span class="hljs-string">"chatcmpl-xxx"</span>}
 
 data: [DONE]
-</code></pre></div>
-<p><strong>服务端：使用 Virtual Threads + Spring MVC SSE</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.http.MediaType;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
-import java.io.IOException;
-import java.util.concurrent.Executors;
+</code></pre></div><p><strong>服务端：使用 Virtual Threads + Spring MVC SSE</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> org.springframework.http.MediaType;
+<span class="hljs-keyword">import</span> org.springframework.web.bind.annotation.*;
+<span class="hljs-keyword">import</span> org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
+<span class="hljs-keyword">import</span> java.io.IOException;
+<span class="hljs-keyword">import</span> java.util.concurrent.Executors;
 
-@RestController
-@RequestMapping(&quot;/api/chat&quot;)
-public class ChatStreamController {
+<span class="hljs-meta">@RestController</span>
+<span class="hljs-meta">@RequestMapping("/api/chat")</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ChatStreamController</span> {
 
-    // 注意：SSE 请求必须在 Virtual Thread 上处理
-    // 配置：spring.threads.virtual.enabled=true
+    <span class="hljs-comment">// 注意：SSE 请求必须在 Virtual Thread 上处理</span>
+    <span class="hljs-comment">// 配置：spring.threads.virtual.enabled=true</span>
 
-    @GetMapping(value = &quot;/stream&quot;, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter chatStream(@RequestParam String prompt) {
-        var emitter = new SseEmitter(0L);  // 0 = 无超时
+    <span class="hljs-meta">@GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)</span>
+    <span class="hljs-keyword">public</span> SseEmitter <span class="hljs-title function_">chatStream</span><span class="hljs-params">(<span class="hljs-meta">@RequestParam</span> String prompt)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">emitter</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">SseEmitter</span>(<span class="hljs-number">0L</span>);  <span class="hljs-comment">// 0 = 无超时</span>
 
-        // SseEmitter 内部使用阻塞 write，适合 Virtual Threads
+        <span class="hljs-comment">// SseEmitter 内部使用阻塞 write，适合 Virtual Threads</span>
         Thread.ofVirtual().start(() -&gt; {
-            try {
-                // 模拟 LLM token 流式返回
-                String[] tokens = {&quot;你好&quot;, &quot;！&quot;, &quot;我是&quot;, &quot;AI&quot;, &quot;助手&quot;, &quot;，&quot;, &quot;很高兴&quot;, &quot;为你&quot;, &quot;服务&quot;, &quot;。&quot;};
-                for (String token : tokens) {
-                    // 每个 token 作为一个 SSE 事件发送
+            <span class="hljs-keyword">try</span> {
+                <span class="hljs-comment">// 模拟 LLM token 流式返回</span>
+                String[] tokens = {<span class="hljs-string">"你好"</span>, <span class="hljs-string">"！"</span>, <span class="hljs-string">"我是"</span>, <span class="hljs-string">"AI"</span>, <span class="hljs-string">"助手"</span>, <span class="hljs-string">"，"</span>, <span class="hljs-string">"很高兴"</span>, <span class="hljs-string">"为你"</span>, <span class="hljs-string">"服务"</span>, <span class="hljs-string">"。"</span>};
+                <span class="hljs-keyword">for</span> (String token : tokens) {
+                    <span class="hljs-comment">// 每个 token 作为一个 SSE 事件发送</span>
                     emitter.send(SseEmitter.event()
-                        .data(&quot;{\&quot;token\&quot;:\&quot;&quot; + token + &quot;\&quot;}&quot;)
+                        .data(<span class="hljs-string">"{\"token\":\""</span> + token + <span class="hljs-string">"\"}"</span>)
                         .id(String.valueOf(System.currentTimeMillis())));
-                    Thread.sleep(200); // 模拟生成延迟
+                    Thread.sleep(<span class="hljs-number">200</span>); <span class="hljs-comment">// 模拟生成延迟</span>
                 }
                 emitter.complete();
-            } catch (IOException | InterruptedException e) {
+            } <span class="hljs-keyword">catch</span> (IOException | InterruptedException e) {
                 emitter.completeWithError(e);
             }
         });
 
-        return emitter;
+        <span class="hljs-keyword">return</span> emitter;
     }
 }
-</code></pre></div>
-<p><strong>客户端：使用 JDK HttpClient 消费 SSE 流</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.util.concurrent.Flow;
-import java.util.concurrent.CompletableFuture;
+</code></pre></div><p><strong>客户端：使用 JDK HttpClient 消费 SSE 流</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> java.net.URI;
+<span class="hljs-keyword">import</span> java.net.http.HttpClient;
+<span class="hljs-keyword">import</span> java.net.http.HttpRequest;
+<span class="hljs-keyword">import</span> java.net.http.HttpResponse;
+<span class="hljs-keyword">import</span> java.util.concurrent.Flow;
+<span class="hljs-keyword">import</span> java.util.concurrent.CompletableFuture;
 
-public class SseStreamClient {
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">SseStreamClient</span> {
 
-    public void consumeSseStream() throws Exception {
-        var client = HttpClient.newHttpClient();
-        var request = HttpRequest.newBuilder()
-            .uri(URI.create(&quot;http://localhost:8080/api/chat/stream?prompt=hello&quot;))
-            .header(&quot;Accept&quot;, &quot;text/event-stream&quot;)
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">consumeSseStream</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-type">var</span> <span class="hljs-variable">client</span> <span class="hljs-operator">=</span> HttpClient.newHttpClient();
+        <span class="hljs-type">var</span> <span class="hljs-variable">request</span> <span class="hljs-operator">=</span> HttpRequest.newBuilder()
+            .uri(URI.create(<span class="hljs-string">"http://localhost:8080/api/chat/stream?prompt=hello"</span>))
+            .header(<span class="hljs-string">"Accept"</span>, <span class="hljs-string">"text/event-stream"</span>)
             .GET()
             .build();
 
-        // 使用 BodySubscribers 的 fromLineSubscriber 逐行解析 SSE
-        var subscriber = new Flow.Subscriber&lt;String&gt;() {
-            private Flow.Subscription subscription;
+        <span class="hljs-comment">// 使用 BodySubscribers 的 fromLineSubscriber 逐行解析 SSE</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">subscriber</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Flow</span>.Subscriber&lt;String&gt;() {
+            <span class="hljs-keyword">private</span> Flow.Subscription subscription;
 
-            @Override
-            public void onSubscribe(Flow.Subscription subscription) {
-                this.subscription = subscription;
-                subscription.request(Long.MAX_VALUE); // 反压策略：无限制
+            <span class="hljs-meta">@Override</span>
+            <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">onSubscribe</span><span class="hljs-params">(Flow.Subscription subscription)</span> {
+                <span class="hljs-built_in">this</span>.subscription = subscription;
+                subscription.request(Long.MAX_VALUE); <span class="hljs-comment">// 反压策略：无限制</span>
             }
 
-            @Override
-            public void onNext(String line) {
-                if (line.startsWith(&quot;data:&quot;)) {
-                    String data = line.substring(5).trim();
-                    if (!&quot;[DONE]&quot;.equals(data)) {
-                        System.out.println(&quot;Received: &quot; + data);
-                        // 实时渲染 token...
+            <span class="hljs-meta">@Override</span>
+            <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">onNext</span><span class="hljs-params">(String line)</span> {
+                <span class="hljs-keyword">if</span> (line.startsWith(<span class="hljs-string">"data:"</span>)) {
+                    <span class="hljs-type">String</span> <span class="hljs-variable">data</span> <span class="hljs-operator">=</span> line.substring(<span class="hljs-number">5</span>).trim();
+                    <span class="hljs-keyword">if</span> (!<span class="hljs-string">"[DONE]"</span>.equals(data)) {
+                        System.out.println(<span class="hljs-string">"Received: "</span> + data);
+                        <span class="hljs-comment">// 实时渲染 token...</span>
                     }
                 }
             }
 
-            @Override
-            public void onError(Throwable throwable) {
+            <span class="hljs-meta">@Override</span>
+            <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">onError</span><span class="hljs-params">(Throwable throwable)</span> {
                 throwable.printStackTrace();
             }
 
-            @Override
-            public void onComplete() {
-                System.out.println(&quot;SSE stream completed.&quot;);
+            <span class="hljs-meta">@Override</span>
+            <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">onComplete</span><span class="hljs-params">()</span> {
+                System.out.println(<span class="hljs-string">"SSE stream completed."</span>);
             }
         };
 
         client.sendAsync(request, HttpResponse.BodyHandlers.fromLineSubscriber(subscriber))
-            .thenAccept(response -&gt; System.out.println(&quot;Response status: &quot; + response.statusCode()))
+            .thenAccept(response -&gt; System.out.println(<span class="hljs-string">"Response status: "</span> + response.statusCode()))
             .join();
     }
 }
-</code></pre></div>
-<p><strong>Virtual Threads 在 SSE 场景中的价值：</strong></p>
+</code></pre></div><p><strong>Virtual Threads 在 SSE 场景中的价值：</strong></p>
 <p>在传统线程模型下，每个 SSE 连接会长时间占用一个平台线程（可能持续数十秒到数分钟）。如果有 10000 个并发 SSE 连接，传统的线程池模型会面临严重的资源问题。Virtual Threads 的轻量级特性（每个 VT 仅占用几百字节）使得用同步阻塞风格处理大量 SSE 连接成为可能。</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>传统线程模型（ThreadPool）： 10000 并发 SSE → 10000 平台线程 → ~10GB 栈内存
-Virtual Threads：             10000 并发 SSE → 10000 虚拟线程  → ~几 MB 内存
-</code></pre></div>
-<h3>7.2 大文件上传</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>传统线程模型（ThreadPool）：<span class="hljs-number"> 10000 </span>并发 SSE →<span class="hljs-number"> 10000 </span>平台线程 → ~10GB 栈内存
+Virtual Threads：            <span class="hljs-number"> 10000 </span>并发 SSE →<span class="hljs-number"> 10000 </span>虚拟线程  → ~几 MB 内存
+</code></pre></div><h3>7.2 大文件上传</h3>
 <p>AI 应用中常见的文件上传场景（如知识库文档上传）需要处理大文件。基本模式是：接收文件 → 流式写入磁盘/对象存储 → 异步处理。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.web.bind.annotation.*;
-import org.springframework.web.multipart.MultipartFile;
-import java.io.IOException;
-import java.nio.channels.FileChannel;
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> org.springframework.web.bind.annotation.*;
+<span class="hljs-keyword">import</span> org.springframework.web.multipart.MultipartFile;
+<span class="hljs-keyword">import</span> java.io.IOException;
+<span class="hljs-keyword">import</span> java.nio.channels.FileChannel;
+<span class="hljs-keyword">import</span> java.nio.file.Path;
+<span class="hljs-keyword">import</span> java.nio.file.StandardOpenOption;
 
-@RestController
-@RequestMapping(&quot;/api/files&quot;)
-public class FileUploadController {
+<span class="hljs-meta">@RestController</span>
+<span class="hljs-meta">@RequestMapping("/api/files")</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">FileUploadController</span> {
 
-    private static final long MAX_FILE_SIZE = 100 * 1024 * 1024; // 100MB
-    private static final Path UPLOAD_DIR = Path.of(&quot;/tmp/uploads&quot;);
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">long</span> <span class="hljs-variable">MAX_FILE_SIZE</span> <span class="hljs-operator">=</span> <span class="hljs-number">100</span> * <span class="hljs-number">1024</span> * <span class="hljs-number">1024</span>; <span class="hljs-comment">// 100MB</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">Path</span> <span class="hljs-variable">UPLOAD_DIR</span> <span class="hljs-operator">=</span> Path.of(<span class="hljs-string">"/tmp/uploads"</span>);
 
-    @PostMapping(&quot;/upload&quot;)
-    public String uploadFile(@RequestParam(&quot;file&quot;) MultipartFile file) throws IOException {
-        if (file.getSize() &gt; MAX_FILE_SIZE) {
-            throw new IllegalArgumentException(&quot;File too large: &quot; + file.getSize());
+    <span class="hljs-meta">@PostMapping("/upload")</span>
+    <span class="hljs-keyword">public</span> String <span class="hljs-title function_">uploadFile</span><span class="hljs-params">(<span class="hljs-meta">@RequestParam("file")</span> MultipartFile file)</span> <span class="hljs-keyword">throws</span> IOException {
+        <span class="hljs-keyword">if</span> (file.getSize() &gt; MAX_FILE_SIZE) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">IllegalArgumentException</span>(<span class="hljs-string">"File too large: "</span> + file.getSize());
         }
 
-        // 获取原始文件的 InputStream（封装了临时文件或内存缓冲）
-        // 对于大文件，Spring 会将文件写入临时目录
-        var fileName = System.currentTimeMillis() + &quot;_&quot; + file.getOriginalFilename();
-        var targetPath = UPLOAD_DIR.resolve(fileName);
+        <span class="hljs-comment">// 获取原始文件的 InputStream（封装了临时文件或内存缓冲）</span>
+        <span class="hljs-comment">// 对于大文件，Spring 会将文件写入临时目录</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">fileName</span> <span class="hljs-operator">=</span> System.currentTimeMillis() + <span class="hljs-string">"_"</span> + file.getOriginalFilename();
+        <span class="hljs-type">var</span> <span class="hljs-variable">targetPath</span> <span class="hljs-operator">=</span> UPLOAD_DIR.resolve(fileName);
 
         java.nio.file.Files.createDirectories(UPLOAD_DIR);
 
-        // 使用 transferTo 实现高效的流式写入（利用零拷贝）
-        try (var inputStream = file.getInputStream();
-             var fileChannel = FileChannel.open(targetPath,
+        <span class="hljs-comment">// 使用 transferTo 实现高效的流式写入（利用零拷贝）</span>
+        <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">inputStream</span> <span class="hljs-operator">=</span> file.getInputStream();
+             <span class="hljs-type">var</span> <span class="hljs-variable">fileChannel</span> <span class="hljs-operator">=</span> FileChannel.open(targetPath,
                  StandardOpenOption.CREATE, StandardOpenOption.WRITE)) {
 
-            // 用 Channel 方式写入（避免不必要的 buffer 复制）
-            var readableByteChannel = java.nio.channels.Channels.newChannel(inputStream);
-            long transferred = 0;
-            long position = 0;
-            while ((transferred = fileChannel.transferFrom(readableByteChannel, position, 8192)) &gt; 0) {
+            <span class="hljs-comment">// 用 Channel 方式写入（避免不必要的 buffer 复制）</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">readableByteChannel</span> <span class="hljs-operator">=</span> java.nio.channels.Channels.newChannel(inputStream);
+            <span class="hljs-type">long</span> <span class="hljs-variable">transferred</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+            <span class="hljs-type">long</span> <span class="hljs-variable">position</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+            <span class="hljs-keyword">while</span> ((transferred = fileChannel.transferFrom(readableByteChannel, position, <span class="hljs-number">8192</span>)) &gt; <span class="hljs-number">0</span>) {
                 position += transferred;
             }
         }
 
-        // 异步触发后续处理（文档解析、切片、Embedding 等）
+        <span class="hljs-comment">// 异步触发后续处理（文档解析、切片、Embedding 等）</span>
         Thread.ofVirtual().start(() -&gt; processUploadedFile(targetPath));
 
-        return &quot;Uploaded: &quot; + fileName + &quot; (&quot; + file.getSize() + &quot; bytes)&quot;;
+        <span class="hljs-keyword">return</span> <span class="hljs-string">"Uploaded: "</span> + fileName + <span class="hljs-string">" ("</span> + file.getSize() + <span class="hljs-string">" bytes)"</span>;
     }
 
-    private void processUploadedFile(Path filePath) {
-        // 异步处理：文档解析 → 切片 → Embedding → 写入向量数据库
-        System.out.println(&quot;Processing: &quot; + filePath);
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">processUploadedFile</span><span class="hljs-params">(Path filePath)</span> {
+        <span class="hljs-comment">// 异步处理：文档解析 → 切片 → Embedding → 写入向量数据库</span>
+        System.out.println(<span class="hljs-string">"Processing: "</span> + filePath);
     }
 }
-</code></pre></div>
-<p><strong>大文件上传的最佳实践：</strong></p>
+</code></pre></div><p><strong>大文件上传的最佳实践：</strong></p>
 <ol>
 <li><strong>分片上传（Multipart Upload）</strong>：对于超大文件（&gt; 100MB），使用分片上传。MinIO/S3 支持 multipart upload API</li>
 <li><strong>流式处理，避免全量加载进内存</strong>：无论文件多大，始终使用流（Stream/Channel）</li>
@@ -1372,105 +1335,103 @@ public class FileUploadController {
 </ol>
 <h3>7.3 WebSocket 实时通信</h3>
 <p>WebSocket 在 AI 应用中有多个场景：Agent 状态的实时推送、多 Agent 协作的消息通道、推理进度的实时更新。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.web.socket.*;
-import org.springframework.web.socket.handler.TextWebSocketHandler;
-import org.springframework.stereotype.Component;
-import java.io.IOException;
-import java.util.concurrent.ConcurrentHashMap;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> org.springframework.web.socket.*;
+<span class="hljs-keyword">import</span> org.springframework.web.socket.handler.TextWebSocketHandler;
+<span class="hljs-keyword">import</span> org.springframework.stereotype.Component;
+<span class="hljs-keyword">import</span> java.io.IOException;
+<span class="hljs-keyword">import</span> java.util.concurrent.ConcurrentHashMap;
 
-@Component
-public class AiAgentWebSocketHandler extends TextWebSocketHandler {
+<span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">AiAgentWebSocketHandler</span> <span class="hljs-keyword">extends</span> <span class="hljs-title class_">TextWebSocketHandler</span> {
 
-    // 保存所有活跃的 WebSocket 会话
-    private final ConcurrentHashMap&lt;String, WebSocketSession&gt; sessions = new ConcurrentHashMap&lt;&gt;();
+    <span class="hljs-comment">// 保存所有活跃的 WebSocket 会话</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> ConcurrentHashMap&lt;String, WebSocketSession&gt; sessions = <span class="hljs-keyword">new</span> <span class="hljs-title class_">ConcurrentHashMap</span>&lt;&gt;();
 
-    @Override
-    public void afterConnectionEstablished(WebSocketSession session) {
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">afterConnectionEstablished</span><span class="hljs-params">(WebSocketSession session)</span> {
         sessions.put(session.getId(), session);
-        System.out.println(&quot;WebSocket connected: &quot; + session.getId());
+        System.out.println(<span class="hljs-string">"WebSocket connected: "</span> + session.getId());
 
-        // 发送欢迎消息
-        try {
-            session.sendMessage(new TextMessage(
-                &quot;{\&quot;type\&quot;:\&quot;connected\&quot;,\&quot;sessionId\&quot;:\&quot;&quot; + session.getId() + &quot;\&quot;}&quot;));
-        } catch (IOException e) {
+        <span class="hljs-comment">// 发送欢迎消息</span>
+        <span class="hljs-keyword">try</span> {
+            session.sendMessage(<span class="hljs-keyword">new</span> <span class="hljs-title class_">TextMessage</span>(
+                <span class="hljs-string">"{\"type\":\"connected\",\"sessionId\":\""</span> + session.getId() + <span class="hljs-string">"\"}"</span>));
+        } <span class="hljs-keyword">catch</span> (IOException e) {
             e.printStackTrace();
         }
     }
 
-    @Override
-    protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
-        var payload = message.getPayload();
-        System.out.println(&quot;Received: &quot; + payload);
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">protected</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">handleTextMessage</span><span class="hljs-params">(WebSocketSession session, TextMessage message)</span> <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-type">var</span> <span class="hljs-variable">payload</span> <span class="hljs-operator">=</span> message.getPayload();
+        System.out.println(<span class="hljs-string">"Received: "</span> + payload);
 
-        // 模拟 Agent 处理并返回结果
-        // 实际场景中，这里会调用 Agent 执行引擎
+        <span class="hljs-comment">// 模拟 Agent 处理并返回结果</span>
+        <span class="hljs-comment">// 实际场景中，这里会调用 Agent 执行引擎</span>
         Thread.ofVirtual().start(() -&gt; {
-            try {
-                for (int i = 0; i &lt; 5; i++) {
-                    var progressMsg = String.format(
-                        &quot;{\&quot;type\&quot;:\&quot;agent_progress\&quot;,\&quot;step\&quot;:%d,\&quot;status\&quot;:\&quot;thinking\&quot;}&quot;, i);
-                    session.sendMessage(new TextMessage(progressMsg));
-                    Thread.sleep(1000);
+            <span class="hljs-keyword">try</span> {
+                <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; <span class="hljs-number">5</span>; i++) {
+                    <span class="hljs-type">var</span> <span class="hljs-variable">progressMsg</span> <span class="hljs-operator">=</span> String.format(
+                        <span class="hljs-string">"{\"type\":\"agent_progress\",\"step\":%d,\"status\":\"thinking\"}"</span>, i);
+                    session.sendMessage(<span class="hljs-keyword">new</span> <span class="hljs-title class_">TextMessage</span>(progressMsg));
+                    Thread.sleep(<span class="hljs-number">1000</span>);
                 }
-                session.sendMessage(new TextMessage(
-                    &quot;{\&quot;type\&quot;:\&quot;agent_result\&quot;,\&quot;data\&quot;:\&quot;Task completed successfully\&quot;}&quot;));
-            } catch (IOException | InterruptedException e) {
+                session.sendMessage(<span class="hljs-keyword">new</span> <span class="hljs-title class_">TextMessage</span>(
+                    <span class="hljs-string">"{\"type\":\"agent_result\",\"data\":\"Task completed successfully\"}"</span>));
+            } <span class="hljs-keyword">catch</span> (IOException | InterruptedException e) {
                 e.printStackTrace();
             }
         });
     }
 
-    @Override
-    public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">afterConnectionClosed</span><span class="hljs-params">(WebSocketSession session, CloseStatus status)</span> {
         sessions.remove(session.getId());
-        System.out.println(&quot;WebSocket disconnected: &quot; + session.getId());
+        System.out.println(<span class="hljs-string">"WebSocket disconnected: "</span> + session.getId());
     }
 
-    // 向指定会话推送消息
-    public void pushToSession(String sessionId, String message) throws IOException {
-        var session = sessions.get(sessionId);
-        if (session != null &amp;&amp; session.isOpen()) {
-            session.sendMessage(new TextMessage(message));
+    <span class="hljs-comment">// 向指定会话推送消息</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">pushToSession</span><span class="hljs-params">(String sessionId, String message)</span> <span class="hljs-keyword">throws</span> IOException {
+        <span class="hljs-type">var</span> <span class="hljs-variable">session</span> <span class="hljs-operator">=</span> sessions.get(sessionId);
+        <span class="hljs-keyword">if</span> (session != <span class="hljs-literal">null</span> &amp;&amp; session.isOpen()) {
+            session.sendMessage(<span class="hljs-keyword">new</span> <span class="hljs-title class_">TextMessage</span>(message));
         }
     }
 
-    // 广播消息
-    public void broadcast(String message) {
+    <span class="hljs-comment">// 广播消息</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">broadcast</span><span class="hljs-params">(String message)</span> {
         sessions.values().forEach(session -&gt; {
-            try {
-                if (session.isOpen()) {
-                    session.sendMessage(new TextMessage(message));
+            <span class="hljs-keyword">try</span> {
+                <span class="hljs-keyword">if</span> (session.isOpen()) {
+                    session.sendMessage(<span class="hljs-keyword">new</span> <span class="hljs-title class_">TextMessage</span>(message));
                 }
-            } catch (IOException e) {
+            } <span class="hljs-keyword">catch</span> (IOException e) {
                 e.printStackTrace();
             }
         });
     }
 }
-</code></pre></div>
-<p><strong>WebSocket 配置类：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.context.annotation.Configuration;
-import org.springframework.web.socket.config.annotation.*;
+</code></pre></div><p><strong>WebSocket 配置类：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> org.springframework.context.annotation.Configuration;
+<span class="hljs-keyword">import</span> org.springframework.web.socket.config.annotation.*;
 
-@Configuration
-@EnableWebSocket
-public class WebSocketConfig implements WebSocketConfigurer {
+<span class="hljs-meta">@Configuration</span>
+<span class="hljs-meta">@EnableWebSocket</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">WebSocketConfig</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">WebSocketConfigurer</span> {
 
-    private final AiAgentWebSocketHandler handler;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> AiAgentWebSocketHandler handler;
 
-    public WebSocketConfig(AiAgentWebSocketHandler handler) {
-        this.handler = handler;
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">WebSocketConfig</span><span class="hljs-params">(AiAgentWebSocketHandler handler)</span> {
+        <span class="hljs-built_in">this</span>.handler = handler;
     }
 
-    @Override
-    public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
-        registry.addHandler(handler, &quot;/ws/agent&quot;)
-            .setAllowedOrigins(&quot;*&quot;);  // 生产环境应限制来源
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">registerWebSocketHandlers</span><span class="hljs-params">(WebSocketHandlerRegistry registry)</span> {
+        registry.addHandler(handler, <span class="hljs-string">"/ws/agent"</span>)
+            .setAllowedOrigins(<span class="hljs-string">"*"</span>);  <span class="hljs-comment">// 生产环境应限制来源</span>
     }
 }
-</code></pre></div>
-<p><strong>WebSocket 与 SSE 的选型：</strong></p>
+</code></pre></div><p><strong>WebSocket 与 SSE 的选型：</strong></p>
 <table>
 <thead>
 <tr>
@@ -1563,19 +1524,19 @@ public class WebSocketConfig implements WebSocketConfigurer {
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>需要什么 IO 能力？
 │
 ├── 简单文件读写
-│   └── java.io / java.nio.file.Files
+│   └── java<span class="hljs-selector-class">.io</span> / java<span class="hljs-selector-class">.nio</span><span class="hljs-selector-class">.file</span><span class="hljs-selector-class">.Files</span>
 │
-├── 低并发网络服务（&lt; 1000 连接）
+├── 低并发网络服务（&lt; <span class="hljs-number">1000</span> 连接）
 │   └── BIO + Virtual Threads
 │       （同步编程模型 + 轻量级线程 = 开发效率最优）
 │
-├── 高并发网络服务（&gt; 10000 连接）
+├── 高并发网络服务（&gt; <span class="hljs-number">10000</span> 连接）
 │   ├── 协议简单 → 原生 NIO + Selector
 │   ├── 复杂协议/需要编解码 → Netty
 │   └── HTTP 服务 → Spring Boot (底层 Tomcat/Netty)
 │
 ├── 大文件传输
-│   ├── 纯转发 → FileChannel.transferTo()（sendfile）
+│   ├── 纯转发 → FileChannel<span class="hljs-selector-class">.transferTo</span>()（sendfile）
 │   ├── 需要处理内容 → MappedByteBuffer（mmap）
 │   └── AI 文档上传 → 流式接收 + 异步处理
 │
@@ -1587,39 +1548,37 @@ public class WebSocketConfig implements WebSocketConfigurer {
 │
 └── 消息队列/事件驱动
     └── Netty（Kafka、RocketMQ 的底层）
-</code></pre></div>
-<h3>8.3 Virtual Threads 时代 IO 模型的变化</h3>
+</code></pre></div><h3>8.3 Virtual Threads 时代 IO 模型的变化</h3>
 <p>JDK 21+ Virtual Threads 改变了 IO 模型的选型逻辑：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 以前：高并发 IO 必须用 NIO + Reactor / CompletableFuture
-// 现在：可以用 BIO 风格 + Virtual Threads（底层仍然是 NIO 实现）
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 以前：高并发 IO 必须用 NIO + Reactor / CompletableFuture</span>
+<span class="hljs-comment">// 现在：可以用 BIO 风格 + Virtual Threads（底层仍然是 NIO 实现）</span>
 
-void modernConcurrentIo() throws Exception {
-    try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
-        var futures = new java.util.ArrayList&lt;java.util.concurrent.Future&lt;String&gt;&gt;(1000);
+<span class="hljs-keyword">void</span> <span class="hljs-title function_">modernConcurrentIo</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> Exception {
+    <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">executor</span> <span class="hljs-operator">=</span> Executors.newVirtualThreadPerTaskExecutor()) {
+        <span class="hljs-type">var</span> <span class="hljs-variable">futures</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">java</span>.util.ArrayList&lt;java.util.concurrent.Future&lt;String&gt;&gt;(<span class="hljs-number">1000</span>);
 
-        for (int i = 0; i &lt; 1000; i++) {
-            int taskId = i;
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; <span class="hljs-number">1000</span>; i++) {
+            <span class="hljs-type">int</span> <span class="hljs-variable">taskId</span> <span class="hljs-operator">=</span> i;
             futures.add(executor.submit(() -&gt; {
-                // 同步风格的网络调用
-                // 当 IO 阻塞时，VT 被卸载（unmount），平台线程继续处理其他 VT
-                // IO 就绪后，VT 被重新挂载（mount）到平台线程
-                var url = URI.create(&quot;http://localhost:8080/api/task/&quot; + taskId);
-                try (var client = java.net.http.HttpClient.newHttpClient()) {
-                    var request = java.net.http.HttpRequest.newBuilder(url).GET().build();
-                    var response = client.send(request,
+                <span class="hljs-comment">// 同步风格的网络调用</span>
+                <span class="hljs-comment">// 当 IO 阻塞时，VT 被卸载（unmount），平台线程继续处理其他 VT</span>
+                <span class="hljs-comment">// IO 就绪后，VT 被重新挂载（mount）到平台线程</span>
+                <span class="hljs-type">var</span> <span class="hljs-variable">url</span> <span class="hljs-operator">=</span> URI.create(<span class="hljs-string">"http://localhost:8080/api/task/"</span> + taskId);
+                <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">client</span> <span class="hljs-operator">=</span> java.net.http.HttpClient.newHttpClient()) {
+                    <span class="hljs-type">var</span> <span class="hljs-variable">request</span> <span class="hljs-operator">=</span> java.net.http.HttpRequest.newBuilder(url).GET().build();
+                    <span class="hljs-type">var</span> <span class="hljs-variable">response</span> <span class="hljs-operator">=</span> client.send(request,
                         java.net.http.HttpResponse.BodyHandlers.ofString());
-                    return response.body();
+                    <span class="hljs-keyword">return</span> response.body();
                 }
             }));
         }
 
-        for (var future : futures) {
-            System.out.println(future.get().substring(0, Math.min(100, future.get().length())));
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> future : futures) {
+            System.out.println(future.get().substring(<span class="hljs-number">0</span>, Math.min(<span class="hljs-number">100</span>, future.get().length())));
         }
     }
 }
-</code></pre></div>
-<p><strong>关键认知转变：</strong> Virtual Threads 不替代 NIO，而是改变了&quot;如何使用 NIO&quot;。底层 JDK 已将 <code>SocketChannel</code> 等 IO 操作的阻塞实现改造为通过 Virtual Threads 的 <code>park/unpark</code> 机制触发。开发者可以享受同步编程的简洁性，同时获得 NIO 的高并发能力。</p>
+</code></pre></div><p><strong>关键认知转变：</strong> Virtual Threads 不替代 NIO，而是改变了"如何使用 NIO"。底层 JDK 已将 <code>SocketChannel</code> 等 IO 操作的阻塞实现改造为通过 Virtual Threads 的 <code>park/unpark</code> 机制触发。开发者可以享受同步编程的简洁性，同时获得 NIO 的高并发能力。</p>
 <hr>
 <h2>九、常见问题</h2>
 <h3>Q1: ByteBuffer 的 flip() 到底做了什么？</h3>
@@ -1636,10 +1595,10 @@ void modernConcurrentIo() throws Exception {
 <hr>
 <h2>相关条目</h2>
 <ul>
-<li><a href="#/02-Java平台/语言特性/02-现代Java25深度解析" class="cross-ref" data-ref="02-现代Java25深度解析">02-现代Java25深度解析</a> — Virtual Threads 深入解析：park/unpark 机制与 NIO 的关系</li>
-<li><a href="#/02-Java平台/并发/02-Java并发深度解析" class="cross-ref" data-ref="02-Java并发深度解析">02-Java并发深度解析</a> — Java 并发编程：线程模型、Structured Concurrency、CompletableFuture</li>
-<li><a href="#/01-计算机基础/操作系统/01-操作系统基础" class="cross-ref" data-ref="01-操作系统基础">01-操作系统基础</a> — 操作系统 IO 模型：select/poll/epoll/kqueue 系统调用层分析</li>
-<li><a href="#/04-数据与中间件/消息与搜索/04-Kafka深度解析" class="cross-ref" data-ref="04-Kafka深度解析">04-Kafka深度解析</a> — Kafka 核心设计：零拷贝在 Kafka 中的完整实现路线</li>
+<li><a href="#/02-Java平台/语言特性/02-现代Java25深度解析" class="cross-ref">02-现代Java25深度解析</a> — Virtual Threads 深入解析：park/unpark 机制与 NIO 的关系</li>
+<li><a href="#/02-Java平台/并发/02-Java并发深度解析" class="cross-ref">02-Java并发深度解析</a> — Java 并发编程：线程模型、Structured Concurrency、CompletableFuture</li>
+<li><a href="#/01-计算机基础/操作系统/01-操作系统基础" class="cross-ref">01-操作系统基础</a> — 操作系统 IO 模型：select/poll/epoll/kqueue 系统调用层分析</li>
+<li><a href="#/04-数据与中间件/消息与搜索/04-Kafka深度解析" class="cross-ref">04-Kafka深度解析</a> — Kafka 核心设计：零拷贝在 Kafka 中的完整实现路线</li>
 </ul>
-</div>
+</body></html></div>
 </article>

@@ -1,15 +1,15 @@
 
-<article class="kb-entry" data-path="/06-云原生与SRE/Linux基础/06-Linux运维实战基础">
+<article class="kb-entry" data-path="/06-云原生与SRE">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=06">06-云原生与SRE</a></div>
     <h1>Linux 运维实战基础</h1>
-    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#linux</span><span class="badge badge-tag">#performance</span><span class="badge badge-tag">#troubleshooting</span><span class="badge badge-tag">#systemd</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#linux</span><span class="badge badge-tag">#performance</span><span class="badge badge-tag">#troubleshooting</span><span class="badge badge-tag">#systemd</span><span class="badge badge-tag">#cgroup</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html" target="_blank" rel="noopener" class="source-link" title="Linux Kernel cgroup v2 官方文档">Linux Kernel cgroup v2 官方文档</a><a href="https://systemd.io/" target="_blank" rel="noopener" class="source-link" title="systemd 官方文档">systemd 官方文档</a><a href="https://man7.org/linux/man-pages/" target="_blank" rel="noopener" class="source-link" title="Linux man-pages 官方手册页">Linux man-pages 官方手册页</a><a href="https://www.brendangregg.com/linuxperf.html" target="_blank" rel="noopener" class="source-link" title="Brendan Gregg — 《Systems Performance: Enterprise and the Cloud》">Brendan Gregg — 《Systems Performance: Enterprise and the Cloud》</a><a href="https://docs.docker.com/engine/security/rootless/" target="_blank" rel="noopener" class="source-link" title="Docker 官方文档 — Rootless 模式与 Namespace 隔离">Docker 官方文档 — Rootless 模式与 Namespace 隔离</a></small></div>
   </div>
-  <div class="entry-body"><h1>Linux 运维实战基础</h1>
+  <div class="entry-body"><html><head></head><body><h1>Linux 运维实战基础</h1>
 <h2>概述</h2>
 <p>Linux 运维能力是 Java 工程师排查线上问题的底层基础。无论是分析 CPU 飙升、诊断内存泄漏、解读 OOM Killer 日志，还是理解容器资源隔离原理，都离不开对 Linux 性能工具链、进程管理、systemd、cgroup 和 namespace 的深入掌握。</p>
-<p>本文面向 Java 开发者，聚焦日常排障和生产环境运维中最常用的 Linux 知识和命令，以实战视角组织内容，避免陷入手册式的罗列。读完本文后，你将能够独立完成从&quot;发现异常&quot;到&quot;定位根因&quot;的完整排障链路。</p>
+<p>本文面向 Java 开发者，聚焦日常排障和生产环境运维中最常用的 Linux 知识和命令，以实战视角组织内容，避免陷入手册式的罗列。读完本文后，你将能够独立完成从"发现异常"到"定位根因"的完整排障链路。</p>
 <hr>
 <h2>一、性能诊断命令</h2>
 <h3>1.1 top / htop — 系统全局视图</h3>
@@ -79,9 +79,8 @@
 </ul>
 <p><code>htop</code> 是 top 的增强版，提供彩色输出、鼠标操作、进程树视图（F5），以及更直观的 CPU/内存柱状图。推荐日常使用。</p>
 <h3>1.2 iostat — 磁盘 IO 分析</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash">iostat -x 1          # 每秒输出扩展统计
-</code></pre></div>
-<p>关键输出列：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash">iostat -x 1          <span class="hljs-comment"># 每秒输出扩展统计</span>
+</code></pre></div><p>关键输出列：</p>
 <table>
 <thead>
 <tr>
@@ -118,13 +117,11 @@
 </tbody></table>
 <p><strong>注意：</strong> <code>%util</code> 接近 100% 不代表一定存在性能问题。对于 SSD（尤其是 NVMe），设备可以并行处理多个请求，<code>%util</code> 可能很高但 <code>await</code> 仍然很低。真正判断 IO 瓶颈应结合 <code>await</code> 和应用程序的响应时间。</p>
 <h3>1.3 vmstat — 虚拟内存统计</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash">vmstat 1             # 每秒输出
-</code></pre></div>
-<p><strong>核心输出分区解读：</strong></p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>procs -----------memory---------- ---swap-- -----io---- -system-- ------cpu-----
- r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st
-</code></pre></div>
-<ul>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash">vmstat 1             <span class="hljs-comment"># 每秒输出</span>
+</code></pre></div><p><strong>核心输出分区解读：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-comment">procs</span> <span class="hljs-literal">-----------</span><span class="hljs-comment">memory</span><span class="hljs-literal">----------</span> <span class="hljs-literal">---</span><span class="hljs-comment">swap</span><span class="hljs-literal">--</span> <span class="hljs-literal">-----</span><span class="hljs-comment">io</span><span class="hljs-literal">----</span> <span class="hljs-literal">-</span><span class="hljs-comment">system</span><span class="hljs-literal">--</span> <span class="hljs-literal">------</span><span class="hljs-comment">cpu</span><span class="hljs-literal">-----</span>
+ <span class="hljs-comment">r  b   swpd   free   buff  cache   si   so    bi    bo   in   cs us sy id wa st</span>
+</code></pre></div><ul>
 <li><strong>procs r（运行队列）</strong>：正在运行和等待 CPU 的进程数。r &gt; CPU 核数，说明 CPU 是瓶颈</li>
 <li><strong>procs b（阻塞）</strong>：不可中断睡眠的进程数，通常等待 IO。b &gt; 0 持续存在，检查磁盘</li>
 <li><strong>memory buff/cache</strong>：缓冲区（块设备元数据）和页缓存（文件内容）。Linux 会积极使用空闲内存做缓存，用 <code>free -h</code> 看 <code>available</code> 才准确</li>
@@ -134,75 +131,66 @@
 </ul>
 <h3>1.4 sar — 历史性能数据收集</h3>
 <p>sar 属于 sysstat 工具包，能定时采集并保存历史性能数据，是事后分析的关键工具。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># 确保 sysstat 服务运行
-systemctl enable --now sysstat
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-comment"># 确保 sysstat 服务运行</span>
+systemctl <span class="hljs-built_in">enable</span> --now sysstat
 
-# 常用查询
-sar -n DEV 1 5        # 网络接口流量统计（rxpck/s txpck/s rxkB/s txkB/s）
-sar -r                # 内存使用历史（kbmemfree kbmemused %memused）
-sar -q                # 系统负载历史（runq-sz plist-sz ldavg-1 ldavg-5 ldavg-15）
-sar -b                # IO 统计历史（tps rtps wtps bread/s bwrtn/s）
-sar -u                # CPU 使用历史
-sar -n TCP,ETCP       # TCP 连接统计（active/s被动打开、重传段）
-</code></pre></div>
-<p>sar 的独特价值在于它可以回答&quot;昨晚凌晨 3 点系统为什么慢了&quot;这类历史问题。默认数据保留 7-30 天（取决于发行版配置）。</p>
+<span class="hljs-comment"># 常用查询</span>
+sar -n DEV 1 5        <span class="hljs-comment"># 网络接口流量统计（rxpck/s txpck/s rxkB/s txkB/s）</span>
+sar -r                <span class="hljs-comment"># 内存使用历史（kbmemfree kbmemused %memused）</span>
+sar -q                <span class="hljs-comment"># 系统负载历史（runq-sz plist-sz ldavg-1 ldavg-5 ldavg-15）</span>
+sar -b                <span class="hljs-comment"># IO 统计历史（tps rtps wtps bread/s bwrtn/s）</span>
+sar -u                <span class="hljs-comment"># CPU 使用历史</span>
+sar -n TCP,ETCP       <span class="hljs-comment"># TCP 连接统计（active/s被动打开、重传段）</span>
+</code></pre></div><p>sar 的独特价值在于它可以回答"昨晚凌晨 3 点系统为什么慢了"这类历史问题。默认数据保留 7-30 天（取决于发行版配置）。</p>
 <h3>1.5 pidstat — 进程级性能分析</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash">pidstat -p $PID 1       # 指定进程每秒 CPU 统计
-pidstat -t -p $PID 1    # 线程级 CPU 统计（定位 Java 线程的关键）
-pidstat -d -p $PID 1    # 进程 IO 统计（kB_rd/s kB_wr/s）
-pidstat -r -p $PID 1    # 进程内存统计（VSZ RSS %MEM）
-pidstat -w -p $PID 1    # 上下文切换统计（cswch/s自愿 nvcswch/s非自愿）
-pidstat -l              # 显示完整命令路径
-</code></pre></div>
-<p><strong>实战技巧：</strong> 当 top 显示某 Java 进程 CPU 100% 时，<code>pidstat -t -p $PID 1</code> 找出高 CPU 的线程 TID，然后通过 jstack 定位具体代码。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash">pidstat -p <span class="hljs-variable">$PID</span> 1       <span class="hljs-comment"># 指定进程每秒 CPU 统计</span>
+pidstat -t -p <span class="hljs-variable">$PID</span> 1    <span class="hljs-comment"># 线程级 CPU 统计（定位 Java 线程的关键）</span>
+pidstat -d -p <span class="hljs-variable">$PID</span> 1    <span class="hljs-comment"># 进程 IO 统计（kB_rd/s kB_wr/s）</span>
+pidstat -r -p <span class="hljs-variable">$PID</span> 1    <span class="hljs-comment"># 进程内存统计（VSZ RSS %MEM）</span>
+pidstat -w -p <span class="hljs-variable">$PID</span> 1    <span class="hljs-comment"># 上下文切换统计（cswch/s自愿 nvcswch/s非自愿）</span>
+pidstat -l              <span class="hljs-comment"># 显示完整命令路径</span>
+</code></pre></div><p><strong>实战技巧：</strong> 当 top 显示某 Java 进程 CPU 100% 时，<code>pidstat -t -p $PID 1</code> 找出高 CPU 的线程 TID，然后通过 jstack 定位具体代码。</p>
 <h3>1.6 mpstat — 每核 CPU 统计</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash">mpstat -P ALL 1        # 每核每秒统计
-</code></pre></div>
-<p>常用于排查软中断不均问题：网卡多队列与 CPU 亲和性配置不当，会导致个别 CPU 核心的 <code>%soft</code> 飙升（&gt;10-20%），而其他核心闲置。此时应调整 <code>/proc/irq/*/smp_affinity</code> 或网卡多队列配置。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash">mpstat -P ALL 1        <span class="hljs-comment"># 每核每秒统计</span>
+</code></pre></div><p>常用于排查软中断不均问题：网卡多队列与 CPU 亲和性配置不当，会导致个别 CPU 核心的 <code>%soft</code> 飙升（&gt;10-20%），而其他核心闲置。此时应调整 <code>/proc/irq/*/smp_affinity</code> 或网卡多队列配置。</p>
 <h3>1.7 free — 内存概览</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash">free -h               # 人类可读格式
-</code></pre></div>
-<p><strong>buffer 和 cache 的区别：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash">free -h               <span class="hljs-comment"># 人类可读格式</span>
+</code></pre></div><p><strong>buffer 和 cache 的区别：</strong></p>
 <ul>
 <li><strong>buffer</strong>：块设备（如磁盘）的元数据缓存，如 inode、目录项</li>
 <li><strong>cache</strong>：文件的页缓存（page cache），即文件内容的缓存</li>
 </ul>
 <p>两者都可以在内存紧张时被内核回收。因此判断内存是否够用，应看 <strong>available</strong> 列而非 free 列。<code>available</code> = free + 可回收的 buffer/cache + 其他可释放内存。当 <code>available</code> 持续低于总内存的 10% 时，考虑扩容或排查内存泄漏。</p>
 <h3>1.8 df / du — 磁盘空间</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash">df -h                 # 文件系统级别使用量
-du -sh /opt/app/*     # 目录级别大小统计
-du -h --max-depth=1 /opt/app   # 按一层深度展示
-</code></pre></div>
-<p><strong>快速查找大文件：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash">find /opt/app -type f -size +100M -exec ls -lh {} \;    # 查找 &gt;100MB 的文件
-</code></pre></div>
-<p>生产环境推荐 <code>ncdu</code>（NCurses Disk Usage），提供交互式的磁盘空间分析，适合在服务器上快速定位空间占用源。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-built_in">df</span> -h                 <span class="hljs-comment"># 文件系统级别使用量</span>
+<span class="hljs-built_in">du</span> -sh /opt/app/*     <span class="hljs-comment"># 目录级别大小统计</span>
+<span class="hljs-built_in">du</span> -h --max-depth=1 /opt/app   <span class="hljs-comment"># 按一层深度展示</span>
+</code></pre></div><p><strong>快速查找大文件：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash">find /opt/app -<span class="hljs-built_in">type</span> f -size +100M -<span class="hljs-built_in">exec</span> <span class="hljs-built_in">ls</span> -lh {} \;    <span class="hljs-comment"># 查找 &gt;100MB 的文件</span>
+</code></pre></div><p>生产环境推荐 <code>ncdu</code>（NCurses Disk Usage），提供交互式的磁盘空间分析，适合在服务器上快速定位空间占用源。</p>
 <hr>
 <h2>二、网络诊断</h2>
 <h3>2.1 ss — Socket 统计（替代 netstat）</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash">ss -tlnp              # 查看所有 TCP 监听端口及对应进程
-ss -s                 # 汇总统计（TCP/UDP/RAW 各类 socket 数量）
-ss -tanp state time-wait | wc -l   # 统计 TIME_WAIT 连接数
-</code></pre></div>
-<p><strong>Recv-Q 与 Send-Q：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash">ss -tlnp              <span class="hljs-comment"># 查看所有 TCP 监听端口及对应进程</span>
+ss -s                 <span class="hljs-comment"># 汇总统计（TCP/UDP/RAW 各类 socket 数量）</span>
+ss -tanp state time-wait | <span class="hljs-built_in">wc</span> -l   <span class="hljs-comment"># 统计 TIME_WAIT 连接数</span>
+</code></pre></div><p><strong>Recv-Q 与 Send-Q：</strong></p>
 <ul>
 <li>对于 LISTEN 状态的 socket，<code>Send-Q</code> 表示 backlog（全连接队列最大长度），<code>Recv-Q</code> 表示当前已完成三次握手但未被 <code>accept()</code> 取走的连接数。如果 Recv-Q &gt; 0，说明应用程序来不及处理新连接</li>
 <li>对于 ESTAB 状态的 socket，<code>Recv-Q</code> 表示内核接收缓冲区中未被进程读取的数据量，<code>Send-Q</code> 表示已发送但未被对端 ACK 的数据量。非零值说明有数据积压</li>
 </ul>
 <p><strong>连接状态过滤：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash">ss -tan state established    # 所有 ESTABLISHED 连接
-ss -tan state time-wait      # TIME_WAIT 连接
-ss -tan state close-wait     # CLOSE_WAIT（常见泄漏状态）
-</code></pre></div>
-<p><strong>TIME_WAIT 过多：</strong> 短连接场景（如频繁的 HTTP/1.0 请求）下，大量 TIME_WAIT 可能耗尽本地端口。内核参数可调整：<code>net.ipv4.tcp_tw_reuse = 1</code>。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash">ss -tan state established    <span class="hljs-comment"># 所有 ESTABLISHED 连接</span>
+ss -tan state time-wait      <span class="hljs-comment"># TIME_WAIT 连接</span>
+ss -tan state close-wait     <span class="hljs-comment"># CLOSE_WAIT（常见泄漏状态）</span>
+</code></pre></div><p><strong>TIME_WAIT 过多：</strong> 短连接场景（如频繁的 HTTP/1.0 请求）下，大量 TIME_WAIT 可能耗尽本地端口。内核参数可调整：<code>net.ipv4.tcp_tw_reuse = 1</code>。</p>
 <p><strong>CLOSE_WAIT 堆积：</strong> 这是真正的 Bug 信号。CLOSE_WAIT 表示对端已关闭连接，但本地进程没有调用 <code>close()</code>。在 Java 中通常意味着忘记关闭 Socket/连接池泄漏，或 finally 块中未释放资源。</p>
 <h3>2.2 tcpdump — 网络抓包</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash">tcpdump -i eth0 port 8080 -w capture.pcap   # 抓包保存为 pcap 文件
-tcpdump -i eth0 host 10.0.1.5 -A            # ASCII 输出，查看 HTTP 明文
-tcpdump -i eth0 tcp and src net 192.168.1.0/24 -c 100  # 最多抓 100 个包
-tcpdump -r capture.pcap -nn                 # 读取并显示 pcap 文件（不解析端口/主机名）
-</code></pre></div>
-<p><strong>常用过滤表达式：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash">tcpdump -i eth0 port 8080 -w capture.pcap   <span class="hljs-comment"># 抓包保存为 pcap 文件</span>
+tcpdump -i eth0 host 10.0.1.5 -A            <span class="hljs-comment"># ASCII 输出，查看 HTTP 明文</span>
+tcpdump -i eth0 tcp and src net 192.168.1.0/24 -c 100  <span class="hljs-comment"># 最多抓 100 个包</span>
+tcpdump -r capture.pcap -nn                 <span class="hljs-comment"># 读取并显示 pcap 文件（不解析端口/主机名）</span>
+</code></pre></div><p><strong>常用过滤表达式：</strong></p>
 <table>
 <thead>
 <tr>
@@ -237,43 +225,38 @@ tcpdump -r capture.pcap -nn                 # 读取并显示 pcap 文件（不�
 </tbody></table>
 <p><strong>注意事项：</strong> 高流量生产环境沿网卡抓包会极大消耗 CPU。先用 BPF 过滤表达式缩小范围，必要时使用 <code>-s</code> 指定 snaplen 限制每个包的截取长度。</p>
 <h3>2.3 tshark — Wireshark 命令行版</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash">tshark -r capture.pcap -Y &quot;http.request&quot;                  # 过滤 HTTP 请求
-tshark -r capture.pcap -z io,stat,5,&quot;tcp.port==8080&quot;      # IO 统计（5秒间隔）
-tshark -r capture.pcap -q -z conv,tcp                     # TCP 会话统计
-</code></pre></div>
-<h3>2.4 curl — HTTP 客户端诊断</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash">curl -v https://api.example.com           # 详细输出（包含 TLS 握手、请求/响应头）
-curl -w &quot;@curl-format.txt&quot; https://...    # 自定义格式化输出
-</code></pre></div>
-<p><strong>格式化文件 <code>curl-format.txt</code>（性能分析专用）：</strong></p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>time_namelookup:  %{time_namelookup}\n      # DNS 解析耗时
-time_connect:     %{time_connect}\n         # TCP 连接建立耗时
-time_appconnect:  %{time_appconnect}\n      # TLS 握手耗时
-time_starttransfer: %{time_starttransfer}\n # 收到第一个字节耗时
-time_total:       %{time_total}\n           # 总耗时
-</code></pre></div>
-<p>通过解析各阶段耗时，可以判断延迟发生在哪个环节（DNS连接TCP握手指向TLS握手应用程序处理传输）。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash">tshark -r capture.pcap -Y <span class="hljs-string">"http.request"</span>                  <span class="hljs-comment"># 过滤 HTTP 请求</span>
+tshark -r capture.pcap -z io,<span class="hljs-built_in">stat</span>,5,<span class="hljs-string">"tcp.port==8080"</span>      <span class="hljs-comment"># IO 统计（5秒间隔）</span>
+tshark -r capture.pcap -q -z conv,tcp                     <span class="hljs-comment"># TCP 会话统计</span>
+</code></pre></div><h3>2.4 curl — HTTP 客户端诊断</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash">curl -v https://api.example.com           <span class="hljs-comment"># 详细输出（包含 TLS 握手、请求/响应头）</span>
+curl -w <span class="hljs-string">"@curl-format.txt"</span> https://...    <span class="hljs-comment"># 自定义格式化输出</span>
+</code></pre></div><p><strong>格式化文件 <code>curl-format.txt</code>（性能分析专用）：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-symbol">time_namelookup:</span>  %{time_namelookup}\n      <span class="hljs-meta"># DNS 解析耗时</span>
+<span class="hljs-symbol">time_connect:</span>     %{time_connect}\n         <span class="hljs-meta"># TCP 连接建立耗时</span>
+<span class="hljs-symbol">time_appconnect:</span>  %{time_appconnect}\n      <span class="hljs-meta"># TLS 握手耗时</span>
+<span class="hljs-symbol">time_starttransfer:</span> %{time_starttransfer}\n <span class="hljs-meta"># 收到第一个字节耗时</span>
+<span class="hljs-symbol">time_total:</span>       %{time_total}\n           <span class="hljs-meta"># 总耗时</span>
+</code></pre></div><p>通过解析各阶段耗时，可以判断延迟发生在哪个环节（DNS连接TCP握手指向TLS握手应用程序处理传输）。</p>
 <p><strong>其他常用选项：</strong></p>
 <ul>
-<li><code>-H &quot;Authorization: Bearer xxx&quot;</code>：自定义请求头</li>
-<li><code>-X POST -d &#39;{&quot;key&quot;:&quot;value&quot;}&#39;</code>：指定方法和请求体</li>
+<li><code>-H "Authorization: Bearer xxx"</code>：自定义请求头</li>
+<li><code>-X POST -d '{"key":"value"}'</code>：指定方法和请求体</li>
 <li><code>-o /dev/null -s</code>：静默模式，不输出响应体</li>
 <li><code>-k</code>：跳过 TLS 证书验证（仅测试用）</li>
 </ul>
 <h3>2.5 mtr — 路由追踪增强版</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash">mtr -r -c 100 10.0.1.5        # 发送 100 个包并输出报告
-mtr -i 0.5 10.0.1.5           # 0.5 秒间隔的实时交互界面
-</code></pre></div>
-<p>mtr 结合了 <code>traceroute</code> 和 <code>ping</code> 的能力，持续发送探测包并统计每一跳的丢包率和延迟分布。注意：中间节点的丢包可能是路由器控制平面限速（ICMP rate limiting），不代表数据平面真实丢包。只有最后一跳的丢包率才是可靠的端到端指标。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash">mtr -r -c 100 10.0.1.5        <span class="hljs-comment"># 发送 100 个包并输出报告</span>
+mtr -i 0.5 10.0.1.5           <span class="hljs-comment"># 0.5 秒间隔的实时交互界面</span>
+</code></pre></div><p>mtr 结合了 <code>traceroute</code> 和 <code>ping</code> 的能力，持续发送探测包并统计每一跳的丢包率和延迟分布。注意：中间节点的丢包可能是路由器控制平面限速（ICMP rate limiting），不代表数据平面真实丢包。只有最后一跳的丢包率才是可靠的端到端指标。</p>
 <h3>2.6 nslookup / dig — DNS 诊断</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash">nslookup example.com                              # 简单 A 记录查询
-dig example.com +short                            # 仅输出 IP
-dig example.com +trace                            # 从根服务器递归追踪
-dig example.com MX                                # MX 记录
-dig example.com CNAME                             # CNAME 记录
-dig @8.8.8.8 example.com                          # 指定 DNS 服务器
-</code></pre></div>
-<h3>2.7 iptables / nftables 基础</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash">nslookup example.com                              <span class="hljs-comment"># 简单 A 记录查询</span>
+dig example.com +short                            <span class="hljs-comment"># 仅输出 IP</span>
+dig example.com +trace                            <span class="hljs-comment"># 从根服务器递归追踪</span>
+dig example.com MX                                <span class="hljs-comment"># MX 记录</span>
+dig example.com CNAME                             <span class="hljs-comment"># CNAME 记录</span>
+dig @8.8.8.8 example.com                          <span class="hljs-comment"># 指定 DNS 服务器</span>
+</code></pre></div><h3>2.7 iptables / nftables 基础</h3>
 <p><strong>四表五链模型：</strong></p>
 <table>
 <thead>
@@ -305,20 +288,18 @@ dig @8.8.8.8 example.com                          # 指定 DNS 服务器
 </tr>
 </tbody></table>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>数据包流向：
-PREROUTING → (路由决策) → INPUT → 本地进程
+PREROUTING → (路由决策) → <span class="hljs-literal">INPUT</span> → 本地进程
                          → FORWARD → POSTROUTING → 发出
-              本地进程 → OUTPUT → POSTROUTING → 发出
-</code></pre></div>
-<p><strong>nftables</strong> 是现代替代方案，将 iptables 的多个工具（iptables/ip6tables/arptables/ebtables）统一为一个框架，语法更简洁、规则管理更高效。截至 2024 年，主流发行版已默认 nftables。</p>
+              本地进程 → <span class="hljs-literal">OUTPUT</span> → POSTROUTING → 发出
+</code></pre></div><p><strong>nftables</strong> 是现代替代方案，将 iptables 的多个工具（iptables/ip6tables/arptables/ebtables）统一为一个框架，语法更简洁、规则管理更高效。截至 2024 年，主流发行版已默认 nftables。</p>
 <hr>
 <h2>三、进程管理</h2>
 <h3>3.1 ps — 进程快照</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash">ps aux                # BSD 风格，显示所有用户所有进程
-ps -ef                # Unix 风格，-e 所有进程 -f 完整格式
-ps -eo pid,tid,class,rtprio,ni,pri,psr,pcpu,stat,comm --sort=-pcpu | head -20
-                      # 自定义列 + 按 CPU 降序
-</code></pre></div>
-<p><strong>字段说明：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash">ps aux                <span class="hljs-comment"># BSD 风格，显示所有用户所有进程</span>
+ps -ef                <span class="hljs-comment"># Unix 风格，-e 所有进程 -f 完整格式</span>
+ps -eo pid,tid,class,rtprio,ni,pri,psr,pcpu,<span class="hljs-built_in">stat</span>,<span class="hljs-built_in">comm</span> --<span class="hljs-built_in">sort</span>=-pcpu | <span class="hljs-built_in">head</span> -20
+                      <span class="hljs-comment"># 自定义列 + 按 CPU 降序</span>
+</code></pre></div><p><strong>字段说明：</strong></p>
 <ul>
 <li><code>ni</code>：nice 值（-20 到 19，越低优先级越高）</li>
 <li><code>stat</code>：进程状态（R运行/S睡眠/D不可中断睡眠/Z僵尸/T停止）</li>
@@ -326,28 +307,25 @@ ps -eo pid,tid,class,rtprio,ni,pri,psr,pcpu,stat,comm --sort=-pcpu | head -20
 <li><code>wchan</code>：进程当前阻塞在哪个内核函数（ps -eo pid,wchan,comm）</li>
 </ul>
 <h3>3.2 pstree — 进程树</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash">pstree -p            # 树形显示 + PID
-pstree -p $PID       # 查看某进程的子进程树
-</code></pre></div>
-<h3>3.3 lsof — 列出打开的文件</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash">lsof -i :8080                         # 查看哪个进程占用了 8080 端口
-lsof -p $PID                          # 进程打开的所有文件（含 socket、pipe、普通文件）
-lsof -u tomcat                        # 指定用户打开的所有文件
-lsof /var/log/app.log                 # 哪些进程正在写这个日志文件
-lsof +D /opt/app                      # 目录下被打开的所有文件
-lsof -c java                          # 命令名以 java 开头的进程
-</code></pre></div>
-<p>常用场景：端口被占用、文件被删除但空间未释放、查看进程打开了哪些 socket 连接。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash">pstree -p            <span class="hljs-comment"># 树形显示 + PID</span>
+pstree -p <span class="hljs-variable">$PID</span>       <span class="hljs-comment"># 查看某进程的子进程树</span>
+</code></pre></div><h3>3.3 lsof — 列出打开的文件</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash">lsof -i :8080                         <span class="hljs-comment"># 查看哪个进程占用了 8080 端口</span>
+lsof -p <span class="hljs-variable">$PID</span>                          <span class="hljs-comment"># 进程打开的所有文件（含 socket、pipe、普通文件）</span>
+lsof -u tomcat                        <span class="hljs-comment"># 指定用户打开的所有文件</span>
+lsof /var/log/app.log                 <span class="hljs-comment"># 哪些进程正在写这个日志文件</span>
+lsof +D /opt/app                      <span class="hljs-comment"># 目录下被打开的所有文件</span>
+lsof -c java                          <span class="hljs-comment"># 命令名以 java 开头的进程</span>
+</code></pre></div><p>常用场景：端口被占用、文件被删除但空间未释放、查看进程打开了哪些 socket 连接。</p>
 <h3>3.4 strace — 系统调用追踪</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash">strace -p $PID                           # attach 到运行中的进程
-strace -f -p $PID                        # 跟踪子进程
-strace -e trace=network -p $PID          # 只看网络相关系统调用
-strace -e trace=file -p $PID             # 只看文件操作
-strace -c -p $PID                        # 汇总统计（各系统调用次数、耗时、错误率）
-strace -T -e trace=futex -p $PID         # 显示每个系统调用的耗时（定位锁等待）
-strace -o /tmp/strace.log -p $PID        # 输出到文件
-</code></pre></div>
-<p><strong>常见 Java 场景下的 strace 使用：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash">strace -p <span class="hljs-variable">$PID</span>                           <span class="hljs-comment"># attach 到运行中的进程</span>
+strace -f -p <span class="hljs-variable">$PID</span>                        <span class="hljs-comment"># 跟踪子进程</span>
+strace -e trace=network -p <span class="hljs-variable">$PID</span>          <span class="hljs-comment"># 只看网络相关系统调用</span>
+strace -e trace=file -p <span class="hljs-variable">$PID</span>             <span class="hljs-comment"># 只看文件操作</span>
+strace -c -p <span class="hljs-variable">$PID</span>                        <span class="hljs-comment"># 汇总统计（各系统调用次数、耗时、错误率）</span>
+strace -T -e trace=futex -p <span class="hljs-variable">$PID</span>         <span class="hljs-comment"># 显示每个系统调用的耗时（定位锁等待）</span>
+strace -o /tmp/strace.log -p <span class="hljs-variable">$PID</span>        <span class="hljs-comment"># 输出到文件</span>
+</code></pre></div><p><strong>常见 Java 场景下的 strace 使用：</strong></p>
 <ul>
 <li><code>-e trace=futex</code> 查看锁竞争（频繁的 FUTEX_WAIT 意味着 synchronized 或 Lock 竞争）</li>
 <li><code>-e trace=epoll_wait</code> 查看 IO 等待时间</li>
@@ -404,52 +382,50 @@ strace -o /tmp/strace.log -p $PID        # 输出到文件
 </tbody></table>
 <p><strong>SIGQUIT 对 Java 的特殊意义：</strong> 向 JVM 发送 SIGQUIT（<code>kill -3 $PID</code>）不会终止进程，而是向标准输出打印所有线程的完整堆栈信息。这是线上快速获取线程状态的标准手段。堆栈会输出到 JVM 的 stdout（通常是 catalina.out 或应用日志文件）。</p>
 <h3>3.6 后台进程管理</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># 启动后台进程
-java -jar app.jar &amp;              # 后台运行，仍受 shell 控制
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-comment"># 启动后台进程</span>
+java -jar app.jar &amp;              <span class="hljs-comment"># 后台运行，仍受 shell 控制</span>
 
-# nohup：忽略 SIGHUP，关闭终端后进程不退出
-nohup java -jar app.jar &gt; app.log 2&gt;&amp;1 &amp;
+<span class="hljs-comment"># nohup：忽略 SIGHUP，关闭终端后进程不退出</span>
+<span class="hljs-built_in">nohup</span> java -jar app.jar &gt; app.log 2&gt;&amp;1 &amp;
 
-# disown：从 shell 的 job 列表中移除
+<span class="hljs-comment"># disown：从 shell 的 job 列表中移除</span>
 java -jar app.jar &amp;
-disown                           # 移除最近的后台 job
+<span class="hljs-built_in">disown</span>                           <span class="hljs-comment"># 移除最近的后台 job</span>
 
-# 查看与恢复
-jobs                             # 查看当前 shell 的 job 列表
-fg %1                            # 将 job 1 恢复到前台
-bg %1                            # 将 job 1 恢复到后台运行
-</code></pre></div>
-<p><strong>最佳实践：</strong> 生产环境永远不要用 <code>nohup &amp;</code>，应使用 systemd service 管理 Java 进程。</p>
+<span class="hljs-comment"># 查看与恢复</span>
+<span class="hljs-built_in">jobs</span>                             <span class="hljs-comment"># 查看当前 shell 的 job 列表</span>
+<span class="hljs-built_in">fg</span> %1                            <span class="hljs-comment"># 将 job 1 恢复到前台</span>
+<span class="hljs-built_in">bg</span> %1                            <span class="hljs-comment"># 将 job 1 恢复到后台运行</span>
+</code></pre></div><p><strong>最佳实践：</strong> 生产环境永远不要用 <code>nohup &amp;</code>，应使用 systemd service 管理 Java 进程。</p>
 <hr>
 <h2>四、systemd</h2>
 <h3>4.1 Unit 文件结构</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-ini"># /etc/systemd/system/my-app.service
-[Unit]
-Description=My Java Application
-After=network-online.target          # 网络就绪后启动
-Wants=network-online.target
-Requires=postgresql.service          # 强依赖（PostgreSQL 启动失败则本服务不启动）
+<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-ini"><span class="hljs-comment"># /etc/systemd/system/my-app.service</span>
+<span class="hljs-section">[Unit]</span>
+<span class="hljs-attr">Description</span>=My Java Application
+<span class="hljs-attr">After</span>=network-<span class="hljs-literal">on</span>line.target          <span class="hljs-comment"># 网络就绪后启动</span>
+<span class="hljs-attr">Wants</span>=network-<span class="hljs-literal">on</span>line.target
+<span class="hljs-attr">Requires</span>=postgresql.service          <span class="hljs-comment"># 强依赖（PostgreSQL 启动失败则本服务不启动）</span>
 
-[Service]
-Type=simple                          # simple | forking | oneshot | notify
-User=appuser
-Group=appgroup
-WorkingDirectory=/opt/app
-ExecStart=/usr/bin/java -jar /opt/app/app.jar
-ExecStop=/bin/kill -TERM $MAINPID
-Restart=on-failure                   # no | always | on-success | on-failure | on-abnormal
-RestartSec=10
-TimeoutStopSec=30                    # 30 秒内未正常退出则 SIGKILL
-Environment=&quot;JAVA_OPTS=-Xms2g -Xmx2g&quot;
-EnvironmentFile=/etc/app/env.conf    # 从文件加载环境变量
-SuccessExitStatus=143                # 将 SIGTERM 的退出码当作正常退出
-StandardOutput=journal               # 日志输出到 journald
-StandardError=journal
+<span class="hljs-section">[Service]</span>
+<span class="hljs-attr">Type</span>=simple                          <span class="hljs-comment"># simple | forking | oneshot | notify</span>
+<span class="hljs-attr">User</span>=appuser
+<span class="hljs-attr">Group</span>=appgroup
+<span class="hljs-attr">WorkingDirectory</span>=/opt/app
+<span class="hljs-attr">ExecStart</span>=/usr/bin/java -jar /opt/app/app.jar
+<span class="hljs-attr">ExecStop</span>=/bin/kill -TERM <span class="hljs-variable">$MAINPID</span>
+<span class="hljs-attr">Restart</span>=<span class="hljs-literal">on</span>-failure                   <span class="hljs-comment"># no | always | on-success | on-failure | on-abnormal</span>
+<span class="hljs-attr">RestartSec</span>=<span class="hljs-number">10</span>
+<span class="hljs-attr">TimeoutStopSec</span>=<span class="hljs-number">30</span>                    <span class="hljs-comment"># 30 秒内未正常退出则 SIGKILL</span>
+<span class="hljs-attr">Environment</span>=<span class="hljs-string">"JAVA_OPTS=-Xms2g -Xmx2g"</span>
+<span class="hljs-attr">EnvironmentFile</span>=/etc/app/env.conf    <span class="hljs-comment"># 从文件加载环境变量</span>
+<span class="hljs-attr">SuccessExitStatus</span>=<span class="hljs-number">143</span>                <span class="hljs-comment"># 将 SIGTERM 的退出码当作正常退出</span>
+<span class="hljs-attr">StandardOutput</span>=journal               <span class="hljs-comment"># 日志输出到 journald</span>
+<span class="hljs-attr">StandardError</span>=journal
 
-[Install]
-WantedBy=multi-user.target
-</code></pre></div>
-<p><strong>Type 说明：</strong></p>
+<span class="hljs-section">[Install]</span>
+<span class="hljs-attr">WantedBy</span>=multi-user.target
+</code></pre></div><p><strong>Type 说明：</strong></p>
 <ul>
 <li><strong>simple</strong>（最常用，也是默认值）：ExecStart 启动的进程就是主进程。适用于 Java 应用（前台运行）</li>
 <li><strong>forking</strong>：进程会 fork 后退出父进程，子进程继续运行。常用于 nginx、Redis 等传统守护进程</li>
@@ -457,44 +433,41 @@ WantedBy=multi-user.target
 <li><strong>notify</strong>：进程启动后通过 <code>sd_notify()</code> 通知 systemd 已就绪。支持 Type=notify 的应用可获得更精确的就绪检测</li>
 </ul>
 <h3>4.2 journalctl — 日志查询</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash">journalctl -u my-app                         # 查看指定服务的所有日志
-journalctl -u my-app -f                      # follow 模式，实时查看
-journalctl -u my-app --since &quot;2026-07-20 10:00:00&quot; --until &quot;2026-07-20 11:00:00&quot;
-journalctl -u my-app -p err                  # 只看 ERROR 及以上级别
-journalctl -u my-app -o json                 # JSON 结构化输出（便于程序解析）
-journalctl --disk-usage                      # 日志占用磁盘空间
-journalctl --vacuum-size=500M                # 清理日志至 500MB 以内
-</code></pre></div>
-<p><strong>日志级别：</strong> emerg(0) alert(1) crit(2) err(3) warning(4) notice(5) info(6) debug(7)</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash">journalctl -u my-app                         <span class="hljs-comment"># 查看指定服务的所有日志</span>
+journalctl -u my-app -f                      <span class="hljs-comment"># follow 模式，实时查看</span>
+journalctl -u my-app --since <span class="hljs-string">"2026-07-20 10:00:00"</span> --<span class="hljs-keyword">until</span> <span class="hljs-string">"2026-07-20 11:00:00"</span>
+journalctl -u my-app -p err                  <span class="hljs-comment"># 只看 ERROR 及以上级别</span>
+journalctl -u my-app -o json                 <span class="hljs-comment"># JSON 结构化输出（便于程序解析）</span>
+journalctl --disk-usage                      <span class="hljs-comment"># 日志占用磁盘空间</span>
+journalctl --vacuum-size=500M                <span class="hljs-comment"># 清理日志至 500MB 以内</span>
+</code></pre></div><p><strong>日志级别：</strong> emerg(0) alert(1) crit(2) err(3) warning(4) notice(5) info(6) debug(7)</p>
 <h3>4.3 systemctl — 服务管理</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash">systemctl start my-app
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash">systemctl start my-app
 systemctl stop my-app
 systemctl restart my-app
-systemctl reload my-app           # 重新加载配置（需 ExecReload 定义）
+systemctl reload my-app           <span class="hljs-comment"># 重新加载配置（需 ExecReload 定义）</span>
 systemctl status my-app
-systemctl enable my-app           # 开机自启
-systemctl disable my-app
-systemctl mask my-app             # 禁止启动（创建到 /dev/null 的软链接）
+systemctl <span class="hljs-built_in">enable</span> my-app           <span class="hljs-comment"># 开机自启</span>
+systemctl <span class="hljs-built_in">disable</span> my-app
+systemctl mask my-app             <span class="hljs-comment"># 禁止启动（创建到 /dev/null 的软链接）</span>
 systemctl unmask my-app
-systemctl daemon-reload           # 修改 unit 文件后重新加载
-systemctl list-unit-files --type=service
-systemctl list-units --state=failed   # 查看启动失败的服务
-</code></pre></div>
-<h3>4.4 Timer — 替代 Cron</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-ini"># /etc/systemd/system/my-backup.timer
-[Timer]
-OnCalendar=daily                  # 每天一次，等价于 &quot;*-*-* 00:00:00&quot;
-# OnCalendar=*-*-* 02:30:00       # 每天凌晨 2:30
-# OnCalendar=Mon..Fri 10:00       # 工作日 10:00
-# OnBootSec=5min                  # 启动后 5 分钟
-OnUnitActiveSec=1h               # 上次任务启动后 1 小时
-Persistent=true                   # 如果上次执行被跳过，系统启动后补执行
-RandomizedDelaySec=300           # 随机延迟最多 5 分钟（分散负载）
+systemctl daemon-reload           <span class="hljs-comment"># 修改 unit 文件后重新加载</span>
+systemctl list-unit-files --<span class="hljs-built_in">type</span>=service
+systemctl list-units --state=failed   <span class="hljs-comment"># 查看启动失败的服务</span>
+</code></pre></div><h3>4.4 Timer — 替代 Cron</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-ini"><span class="hljs-comment"># /etc/systemd/system/my-backup.timer</span>
+<span class="hljs-section">[Timer]</span>
+<span class="hljs-attr">OnCalendar</span>=daily                  <span class="hljs-comment"># 每天一次，等价于 "*-*-* 00:00:00"</span>
+<span class="hljs-comment"># OnCalendar=*-*-* 02:30:00       # 每天凌晨 2:30</span>
+<span class="hljs-comment"># OnCalendar=Mon..Fri 10:00       # 工作日 10:00</span>
+<span class="hljs-comment"># OnBootSec=5min                  # 启动后 5 分钟</span>
+<span class="hljs-attr">OnUnitActiveSec</span>=<span class="hljs-number">1</span>h               <span class="hljs-comment"># 上次任务启动后 1 小时</span>
+<span class="hljs-attr">Persistent</span>=<span class="hljs-literal">true</span>                   <span class="hljs-comment"># 如果上次执行被跳过，系统启动后补执行</span>
+<span class="hljs-attr">RandomizedDelaySec</span>=<span class="hljs-number">300</span>           <span class="hljs-comment"># 随机延迟最多 5 分钟（分散负载）</span>
 
-[Install]
-WantedBy=timers.target
-</code></pre></div>
-<p><strong>timer 相比 cron 的优势：</strong></p>
+<span class="hljs-section">[Install]</span>
+<span class="hljs-attr">WantedBy</span>=timers.target
+</code></pre></div><p><strong>timer 相比 cron 的优势：</strong></p>
 <ul>
 <li>精度到微秒（cron 分钟级）</li>
 <li>与 service 单元紧密绑定，自动处理依赖和日志</li>
@@ -506,78 +479,73 @@ WantedBy=timers.target
 <h2>五、cgroup v2</h2>
 <h3>5.1 统一层级结构</h3>
 <p>cgroup v1 中，每个子系统（CPU/memory/blkio 等）有独立的层级树，一个进程可以属于不同层级树的不同位置，管理复杂且易出错。cgroup v2 采用<strong>单一层级结构</strong>，所有控制器挂载在同一棵树 <code>/sys/fs/cgroup/</code> 下。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash">ls /sys/fs/cgroup/
-# 输出：cgroup.controllers  cgroup.subtree_control  ...
-#       system.slice/  user.slice/  init.scope/
-</code></pre></div>
-<ul>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-built_in">ls</span> /sys/fs/cgroup/
+<span class="hljs-comment"># 输出：cgroup.controllers  cgroup.subtree_control  ...</span>
+<span class="hljs-comment">#       system.slice/  user.slice/  init.scope/</span>
+</code></pre></div><ul>
 <li><code>cgroup.controllers</code>：当前 cgroup 可用的控制器列表（cpuset cpu io memory hugetlb pids rdma）</li>
 <li><code>cgroup.subtree_control</code>：启用了哪些控制器可以下发给子 cgroup</li>
 </ul>
 <h3>5.2 CPU 限制</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># cpu.max 格式：$MAX $PERIOD
-echo &quot;200000 1000000&quot; &gt; /sys/fs/cgroup/myapp/cpu.max
-# 表示每 1 秒（1,000,000 微秒 = 1 秒）最多使用 0.2 秒 CPU
-# 等价于 0.2 个 CPU 核心
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-comment"># cpu.max 格式：$MAX $PERIOD</span>
+<span class="hljs-built_in">echo</span> <span class="hljs-string">"200000 1000000"</span> &gt; /sys/fs/cgroup/myapp/cpu.max
+<span class="hljs-comment"># 表示每 1 秒（1,000,000 微秒 = 1 秒）最多使用 0.2 秒 CPU</span>
+<span class="hljs-comment"># 等价于 0.2 个 CPU 核心</span>
 
-# cpu.weight：优先级权重（替代 cgroup v1 的 cpu.shares）
-echo 100 &gt; /sys/fs/cgroup/myapp/cpu.weight
-# 默认 100，范围 1-10000。当 CPU 竞争时，高权重获得更多 CPU 时间
-</code></pre></div>
-<p><strong>Docker 对应关系：</strong></p>
+<span class="hljs-comment"># cpu.weight：优先级权重（替代 cgroup v1 的 cpu.shares）</span>
+<span class="hljs-built_in">echo</span> 100 &gt; /sys/fs/cgroup/myapp/cpu.weight
+<span class="hljs-comment"># 默认 100，范围 1-10000。当 CPU 竞争时，高权重获得更多 CPU 时间</span>
+</code></pre></div><p><strong>Docker 对应关系：</strong></p>
 <ul>
-<li><code>--cpus=2.0</code> → <code>cpu.max = &quot;200000 100000&quot;</code>（不设 period 的简化形式，2 个核 = 200%）</li>
+<li><code>--cpus=2.0</code> → <code>cpu.max = "200000 100000"</code>（不设 period 的简化形式，2 个核 = 200%）</li>
 <li><code>--cpu-shares</code> → <code>cpu.weight</code></li>
 </ul>
 <h3>5.3 Memory 限制</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># memory.max：硬限制（OOM Killer 触发边界）
-echo &quot;2147483648&quot; &gt; /sys/fs/cgroup/myapp/memory.max  # 2GB
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-comment"># memory.max：硬限制（OOM Killer 触发边界）</span>
+<span class="hljs-built_in">echo</span> <span class="hljs-string">"2147483648"</span> &gt; /sys/fs/cgroup/myapp/memory.max  <span class="hljs-comment"># 2GB</span>
 
-# memory.high：软限制（超过后限流但不直接杀进程）
-echo &quot;1610612736&quot; &gt; /sys/fs/cgroup/myapp/memory.high  # 1.5GB
+<span class="hljs-comment"># memory.high：软限制（超过后限流但不直接杀进程）</span>
+<span class="hljs-built_in">echo</span> <span class="hljs-string">"1610612736"</span> &gt; /sys/fs/cgroup/myapp/memory.high  <span class="hljs-comment"># 1.5GB</span>
 
-# memory.low：尽力保护（内存紧张时尽量不回收，但不保证）
-echo &quot;1073741824&quot; &gt; /sys/fs/cgroup/myapp/memory.low    # 1GB
-</code></pre></div>
-<p><strong>三个层级的行为：</strong></p>
+<span class="hljs-comment"># memory.low：尽力保护（内存紧张时尽量不回收，但不保证）</span>
+<span class="hljs-built_in">echo</span> <span class="hljs-string">"1073741824"</span> &gt; /sys/fs/cgroup/myapp/memory.low    <span class="hljs-comment"># 1GB</span>
+</code></pre></div><p><strong>三个层级的行为：</strong></p>
 <ol>
 <li><code>memory.low</code>：内存回收时尽量保护的底线。如果全局内存充足，low 不起作用；内存紧张时，比 low 低的 cgroup 先被回收</li>
-<li><code>memory.high</code>：超过 high 值时，进程会被限流（throttle），并触发内存回收，但不会被 OOM Kill。给应用&quot;刹车&quot;的时间</li>
+<li><code>memory.high</code>：超过 high 值时，进程会被限流（throttle），并触发内存回收，但不会被 OOM Kill。给应用"刹车"的时间</li>
 <li><code>memory.max</code>：超过 max 值时触发 OOM Killer，进程被 kill</li>
 </ol>
 <p><strong>最佳实践：</strong> Docker 的 <code>--memory</code> 映射为 <code>memory.max</code>（硬限制）。给 Java 应用设置 container memory limit 时，务必同步设置 <code>-Xmx</code> 低于 limit，为 Metaspace、线程栈、堆外内存预留空间。推荐 JVM 堆 = 容器内存 * 75%，例如 2GB 容器的 <code>-Xmx</code> 设为 1.5GB。</p>
 <h3>5.4 IO 限制</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># io.max：格式 &lt;设备号&gt; &lt;读写类型&gt; &lt;上限&gt;
-# 读写类型：rbps(读字节)/wbps(写字节)/riops(读IOPS)/wiops(写IOPS)
-echo &quot;8:0 wbps=104857600&quot; &gt; /sys/fs/cgroup/myapp/io.max
-# 限制 8:0 设备（sda）写吞吐为 100MB/s
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-comment"># io.max：格式 &lt;设备号&gt; &lt;读写类型&gt; &lt;上限&gt;</span>
+<span class="hljs-comment"># 读写类型：rbps(读字节)/wbps(写字节)/riops(读IOPS)/wiops(写IOPS)</span>
+<span class="hljs-built_in">echo</span> <span class="hljs-string">"8:0 wbps=104857600"</span> &gt; /sys/fs/cgroup/myapp/io.max
+<span class="hljs-comment"># 限制 8:0 设备（sda）写吞吐为 100MB/s</span>
 
-# io.weight：IO 优先级权重（同 CPU 权重逻辑）
-echo 500 &gt; /sys/fs/cgroup/myapp/io.weight
-</code></pre></div>
-<h3>5.5 cgroupfs 手动操作</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># 创建 cgroup
-mkdir /sys/fs/cgroup/myapp
+<span class="hljs-comment"># io.weight：IO 优先级权重（同 CPU 权重逻辑）</span>
+<span class="hljs-built_in">echo</span> 500 &gt; /sys/fs/cgroup/myapp/io.weight
+</code></pre></div><h3>5.5 cgroupfs 手动操作</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-comment"># 创建 cgroup</span>
+<span class="hljs-built_in">mkdir</span> /sys/fs/cgroup/myapp
 
-# 查看有哪些控制器可用
-cat /sys/fs/cgroup/cgroup.controllers
+<span class="hljs-comment"># 查看有哪些控制器可用</span>
+<span class="hljs-built_in">cat</span> /sys/fs/cgroup/cgroup.controllers
 
-# 启用控制器给子 cgroup 使用
-echo &quot;+cpu +memory +io&quot; &gt; /sys/fs/cgroup/cgroup.subtree_control
+<span class="hljs-comment"># 启用控制器给子 cgroup 使用</span>
+<span class="hljs-built_in">echo</span> <span class="hljs-string">"+cpu +memory +io"</span> &gt; /sys/fs/cgroup/cgroup.subtree_control
 
-# 限制 CPU
-echo &quot;50000 100000&quot; &gt; /sys/fs/cgroup/myapp/cpu.max     # 0.5 核
+<span class="hljs-comment"># 限制 CPU</span>
+<span class="hljs-built_in">echo</span> <span class="hljs-string">"50000 100000"</span> &gt; /sys/fs/cgroup/myapp/cpu.max     <span class="hljs-comment"># 0.5 核</span>
 
-# 限制内存
-echo &quot;1073741824&quot; &gt; /sys/fs/cgroup/myapp/memory.max     # 1GB
+<span class="hljs-comment"># 限制内存</span>
+<span class="hljs-built_in">echo</span> <span class="hljs-string">"1073741824"</span> &gt; /sys/fs/cgroup/myapp/memory.max     <span class="hljs-comment"># 1GB</span>
 
-# 将进程加入 cgroup
-echo $PID &gt; /sys/fs/cgroup/myapp/cgroup.procs
+<span class="hljs-comment"># 将进程加入 cgroup</span>
+<span class="hljs-built_in">echo</span> <span class="hljs-variable">$PID</span> &gt; /sys/fs/cgroup/myapp/cgroup.procs
 
-# 查看 cgroup 中的进程
-cat /sys/fs/cgroup/myapp/cgroup.procs
-</code></pre></div>
-<h3>5.6 Docker / K8s 中的 cgroup</h3>
+<span class="hljs-comment"># 查看 cgroup 中的进程</span>
+<span class="hljs-built_in">cat</span> /sys/fs/cgroup/myapp/cgroup.procs
+</code></pre></div><h3>5.6 Docker / K8s 中的 cgroup</h3>
 <table>
 <thead>
 <tr>
@@ -676,159 +644,148 @@ cat /sys/fs/cgroup/myapp/cgroup.procs
 <p>每个容器拥有独立的网络栈，包括虚拟网卡（veth pair 的一端）、IP 地址、路由表和 iptables 规则。</p>
 <p><strong>veth pair 工作原理：</strong></p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>容器 eth0 (veth1)  ←→  veth2 (宿主机，接入 docker0 网桥)
-</code></pre></div>
-<p>Docker 默认的 <code>docker0</code> 网桥充当虚拟交换机，所有容器的 veth pair 接入这个网桥，实现容器间二层互通。出容器流量经过 SNAT（iptables MASQUERADE）访问外网。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># 查看容器的 veth pair
-ip link show           # 宿主机所有网络接口
-ip addr show docker0   # docker0 网桥
+</code></pre></div><p>Docker 默认的 <code>docker0</code> 网桥充当虚拟交换机，所有容器的 veth pair 接入这个网桥，实现容器间二层互通。出容器流量经过 SNAT（iptables MASQUERADE）访问外网。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-comment"># 查看容器的 veth pair</span>
+ip <span class="hljs-built_in">link</span> show           <span class="hljs-comment"># 宿主机所有网络接口</span>
+ip addr show docker0   <span class="hljs-comment"># docker0 网桥</span>
 
-# 从宿主机进入容器的 network namespace
-nsenter -t $CONTAINER_PID -n ip addr
-</code></pre></div>
-<h3>6.4 Mount Namespace</h3>
+<span class="hljs-comment"># 从宿主机进入容器的 network namespace</span>
+nsenter -t <span class="hljs-variable">$CONTAINER_PID</span> -n ip addr
+</code></pre></div><h3>6.4 Mount Namespace</h3>
 <p>容器启动时，Docker 将容器镜像的各层（layer）通过 overlay2 联合挂载，形成容器的根文件系统。容器内的 <code>mount</code> 操作只在当前 mount namespace 内可见，不会影响宿主机。</p>
 <h3>6.5 User Namespace — Rootless 容器</h3>
 <p>User namespace 允许将容器内的 UID 0（root）映射为宿主机上的普通用户（如 UID 1000）。即使攻击者逃逸出容器，也只是获得了宿主机上的普通用户权限。</p>
 <p><strong>UID 映射示例：</strong></p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>容器内 UID 0 (root)  →  宿主机 UID 100000
-容器内 UID 1-65536    →  宿主机 UID 100001-165536
-</code></pre></div>
-<p>Rootless Docker（Docker 20.10+）利用 User Namespace 实现无需 root 权限运行 Docker daemon，是安全加固的最佳实践。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>容器内 <span class="hljs-built_in">UID</span> <span class="hljs-number">0</span> (root)  →  宿主机 <span class="hljs-built_in">UID</span> <span class="hljs-number">100000</span>
+容器内 <span class="hljs-built_in">UID</span> <span class="hljs-number">1</span><span class="hljs-number">-65536</span>    →  宿主机 <span class="hljs-built_in">UID</span> <span class="hljs-number">100001</span><span class="hljs-number">-165536</span>
+</code></pre></div><p>Rootless Docker（Docker 20.10+）利用 User Namespace 实现无需 root 权限运行 Docker daemon，是安全加固的最佳实践。</p>
 <hr>
 <h2>七、Shell 脚本</h2>
 <h3>7.1 变量操作</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash">NAME=&quot;world&quot;
-echo &quot;Hello, ${NAME}&quot;
-echo &quot;Length: ${#NAME}&quot;                    # 变量长度
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash">NAME=<span class="hljs-string">"world"</span>
+<span class="hljs-built_in">echo</span> <span class="hljs-string">"Hello, <span class="hljs-variable">${NAME}</span>"</span>
+<span class="hljs-built_in">echo</span> <span class="hljs-string">"Length: <span class="hljs-variable">${#NAME}</span>"</span>                    <span class="hljs-comment"># 变量长度</span>
 
-# 默认值
-echo &quot;${UNDEFINED:-default value}&quot;         # 变量未定义时使用默认值
-echo &quot;${UNDEFINED:=default value}&quot;         # 同上，同时赋值给变量
-echo &quot;${UNDEFINED:?error: VAR is unset}&quot;  # 未定义时报错退出（set -u 模式）
+<span class="hljs-comment"># 默认值</span>
+<span class="hljs-built_in">echo</span> <span class="hljs-string">"<span class="hljs-variable">${UNDEFINED:-default value}</span>"</span>         <span class="hljs-comment"># 变量未定义时使用默认值</span>
+<span class="hljs-built_in">echo</span> <span class="hljs-string">"<span class="hljs-variable">${UNDEFINED:=default value}</span>"</span>         <span class="hljs-comment"># 同上，同时赋值给变量</span>
+<span class="hljs-built_in">echo</span> <span class="hljs-string">"<span class="hljs-variable">${UNDEFINED:?error: VAR is unset}</span>"</span>  <span class="hljs-comment"># 未定义时报错退出（set -u 模式）</span>
 
-# 字符串截取
-STR=&quot;Hello World&quot;
-echo &quot;${STR:0:5}&quot;       # 输出 &quot;Hello&quot;（offset:0, length:5）
-echo &quot;${STR:6}&quot;         # 输出 &quot;World&quot;（offset:6 到末尾）
-echo &quot;${STR#Hello }&quot;    # 从左边删除最短匹配，输出 &quot;World&quot;
-echo &quot;${STR##* }&quot;       # 从左边删除最长匹配，输出 &quot;World&quot;
-echo &quot;${STR%.txt}&quot;      # 从右边删除最短匹配（常用于去文件扩展名）
-</code></pre></div>
-<h3>7.2 条件判断</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># [ ] 和 <span class="broken-ref" title="未找到: "></span> 的区别
-# [ ] 是 POSIX 标准的 test 命令，兼容性好但功能有限
-# <span class="broken-ref" title="未找到: "></span> 是 bash 扩展，支持正则匹配和更多操作符
+<span class="hljs-comment"># 字符串截取</span>
+STR=<span class="hljs-string">"Hello World"</span>
+<span class="hljs-built_in">echo</span> <span class="hljs-string">"<span class="hljs-variable">${STR:0:5}</span>"</span>       <span class="hljs-comment"># 输出 "Hello"（offset:0, length:5）</span>
+<span class="hljs-built_in">echo</span> <span class="hljs-string">"<span class="hljs-variable">${STR:6}</span>"</span>         <span class="hljs-comment"># 输出 "World"（offset:6 到末尾）</span>
+<span class="hljs-built_in">echo</span> <span class="hljs-string">"<span class="hljs-variable">${STR#Hello }</span>"</span>    <span class="hljs-comment"># 从左边删除最短匹配，输出 "World"</span>
+<span class="hljs-built_in">echo</span> <span class="hljs-string">"<span class="hljs-variable">${STR##* }</span>"</span>       <span class="hljs-comment"># 从左边删除最长匹配，输出 "World"</span>
+<span class="hljs-built_in">echo</span> <span class="hljs-string">"<span class="hljs-variable">${STR%.txt}</span>"</span>      <span class="hljs-comment"># 从右边删除最短匹配（常用于去文件扩展名）</span>
+</code></pre></div><h3>7.2 条件判断</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-comment"># [ ] 和 [[ ]] 的区别</span>
+<span class="hljs-comment"># [ ] 是 POSIX 标准的 test 命令，兼容性好但功能有限</span>
+<span class="hljs-comment"># [[ ]] 是 bash 扩展，支持正则匹配和更多操作符</span>
 
-if [[ &quot;$NAME&quot; =~ ^[A-Z][a-z]+$ ]]; then    # 正则匹配（仅 <span class="broken-ref" title="未找到: "></span> 支持）
-    echo &quot;匹配&quot;
-fi
+<span class="hljs-keyword">if</span> [[ <span class="hljs-string">"<span class="hljs-variable">$NAME</span>"</span> =~ ^[A-Z][a-z]+$ ]]; <span class="hljs-keyword">then</span>    <span class="hljs-comment"># 正则匹配（仅 [[ ]] 支持）</span>
+    <span class="hljs-built_in">echo</span> <span class="hljs-string">"匹配"</span>
+<span class="hljs-keyword">fi</span>
 
-# 文件测试
-<span class="broken-ref" title="未找到: -f /etc/passwd">-f /etc/passwd</span>   # 是否是普通文件
-<span class="broken-ref" title="未找到: -d /opt/app">-d /opt/app</span>      # 是否是目录
-<span class="broken-ref" title="未找到: -x /usr/bin/java">-x /usr/bin/java</span> # 是否可执行
-<span class="broken-ref" title="未找到: -s /var/log/app.log">-s /var/log/app.log</span>  # 文件非空
+<span class="hljs-comment"># 文件测试</span>
+[[ -f /etc/passwd ]]   <span class="hljs-comment"># 是否是普通文件</span>
+[[ -d /opt/app ]]      <span class="hljs-comment"># 是否是目录</span>
+[[ -x /usr/bin/java ]] <span class="hljs-comment"># 是否可执行</span>
+[[ -s /var/log/app.log ]]  <span class="hljs-comment"># 文件非空</span>
 
-# 数值比较
-<span class="broken-ref" title="未找到: $CPU_USE -gt 80">$CPU_USE -gt 80</span>  # &gt;80
-<span class="broken-ref" title="未找到: $COUNT -ge 10">$COUNT -ge 10</span>    # &gt;=10
-</code></pre></div>
-<h3>7.3 循环结构</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># for 循环
-for service in nginx redis postgresql; do
-    systemctl status &quot;$service&quot;
-done
+<span class="hljs-comment"># 数值比较</span>
+[[ <span class="hljs-variable">$CPU_USE</span> -gt 80 ]]  <span class="hljs-comment"># &gt;80</span>
+[[ <span class="hljs-variable">$COUNT</span> -ge 10 ]]    <span class="hljs-comment"># &gt;=10</span>
+</code></pre></div><h3>7.3 循环结构</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-comment"># for 循环</span>
+<span class="hljs-keyword">for</span> service <span class="hljs-keyword">in</span> nginx redis postgresql; <span class="hljs-keyword">do</span>
+    systemctl status <span class="hljs-string">"<span class="hljs-variable">$service</span>"</span>
+<span class="hljs-keyword">done</span>
 
-# while read 逐行处理（注意管道子 shell 陷阱）
-# 错误写法（管道右侧在子 shell 中，COUNT 不会影响父 shell）：
-cat file.txt | while read line; do COUNT=$((COUNT+1)); done
+<span class="hljs-comment"># while read 逐行处理（注意管道子 shell 陷阱）</span>
+<span class="hljs-comment"># 错误写法（管道右侧在子 shell 中，COUNT 不会影响父 shell）：</span>
+<span class="hljs-built_in">cat</span> file.txt | <span class="hljs-keyword">while</span> <span class="hljs-built_in">read</span> line; <span class="hljs-keyword">do</span> COUNT=$((COUNT+<span class="hljs-number">1</span>)); <span class="hljs-keyword">done</span>
 
-# 正确写法（使用进程替换，避免子 shell）：
-while IFS= read -r line; do
-    COUNT=$((COUNT+1))
-done &lt; &lt;(cat file.txt)
-# 或使用输入重定向：
-while IFS= read -r line; do ...; done &lt; file.txt
-</code></pre></div>
-<p><strong>管道子 shell 陷阱：</strong> Bash 中管道 <code>|</code> 的每个命令都在子 shell 中执行。在 <code>while</code> 循环中修改的变量，循环结束后在父 shell 中不可见。解决方案是使用进程替换 <code>&lt; &lt;(...)</code> 或输入重定向。</p>
+<span class="hljs-comment"># 正确写法（使用进程替换，避免子 shell）：</span>
+<span class="hljs-keyword">while</span> IFS= <span class="hljs-built_in">read</span> -r line; <span class="hljs-keyword">do</span>
+    COUNT=$((COUNT+<span class="hljs-number">1</span>))
+<span class="hljs-keyword">done</span> &lt; &lt;(<span class="hljs-built_in">cat</span> file.txt)
+<span class="hljs-comment"># 或使用输入重定向：</span>
+<span class="hljs-keyword">while</span> IFS= <span class="hljs-built_in">read</span> -r line; <span class="hljs-keyword">do</span> ...; <span class="hljs-keyword">done</span> &lt; file.txt
+</code></pre></div><p><strong>管道子 shell 陷阱：</strong> Bash 中管道 <code>|</code> 的每个命令都在子 shell 中执行。在 <code>while</code> 循环中修改的变量，循环结束后在父 shell 中不可见。解决方案是使用进程替换 <code>&lt; &lt;(...)</code> 或输入重定向。</p>
 <h3>7.4 函数</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash">check_port() {
-    local port=$1            # local 限制作用域
-    local host=${2:-localhost}  # 默认参数
-    if nc -z &quot;$host&quot; &quot;$port&quot; 2&gt;/dev/null; then
-        echo &quot;端口 $host:$port 可达&quot;
-        return 0             # 返回退出码
-    else
-        echo &quot;端口 $host:$port 不可达&quot;
-        return 1
-    fi
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-function"><span class="hljs-title">check_port</span></span>() {
+    <span class="hljs-built_in">local</span> port=<span class="hljs-variable">$1</span>            <span class="hljs-comment"># local 限制作用域</span>
+    <span class="hljs-built_in">local</span> host=<span class="hljs-variable">${2:-localhost}</span>  <span class="hljs-comment"># 默认参数</span>
+    <span class="hljs-keyword">if</span> nc -z <span class="hljs-string">"<span class="hljs-variable">$host</span>"</span> <span class="hljs-string">"<span class="hljs-variable">$port</span>"</span> 2&gt;/dev/null; <span class="hljs-keyword">then</span>
+        <span class="hljs-built_in">echo</span> <span class="hljs-string">"端口 <span class="hljs-variable">$host</span>:<span class="hljs-variable">$port</span> 可达"</span>
+        <span class="hljs-built_in">return</span> 0             <span class="hljs-comment"># 返回退出码</span>
+    <span class="hljs-keyword">else</span>
+        <span class="hljs-built_in">echo</span> <span class="hljs-string">"端口 <span class="hljs-variable">$host</span>:<span class="hljs-variable">$port</span> 不可达"</span>
+        <span class="hljs-built_in">return</span> 1
+    <span class="hljs-keyword">fi</span>
 }
 
-# 参数：$1 $2 ... $@（所有参数列表） $#（参数个数）
-# 返回值：return 0-255（退出码），如需返回字符串用 echo + $(命令替换)
-</code></pre></div>
-<h3>7.5 错误处理</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash">set -e              # 任何命令返回非零值时立即退出
-set -u              # 使用未定义变量时报错
-set -o pipefail     # 管道中任何命令失败，整个管道返回失败
+<span class="hljs-comment"># 参数：$1 $2 ... $@（所有参数列表） $#（参数个数）</span>
+<span class="hljs-comment"># 返回值：return 0-255（退出码），如需返回字符串用 echo + $(命令替换)</span>
+</code></pre></div><h3>7.5 错误处理</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-built_in">set</span> -e              <span class="hljs-comment"># 任何命令返回非零值时立即退出</span>
+<span class="hljs-built_in">set</span> -u              <span class="hljs-comment"># 使用未定义变量时报错</span>
+<span class="hljs-built_in">set</span> -o pipefail     <span class="hljs-comment"># 管道中任何命令失败，整个管道返回失败</span>
 
-# 综合使用（推荐每一脚本都加）：
-set -euo pipefail
+<span class="hljs-comment"># 综合使用（推荐每一脚本都加）：</span>
+<span class="hljs-built_in">set</span> -euo pipefail
 
-# trap 捕获错误并清理
-cleanup() {
-    echo &quot;清理临时文件...&quot;
-    rm -f /tmp/myapp-*.tmp
+<span class="hljs-comment"># trap 捕获错误并清理</span>
+<span class="hljs-function"><span class="hljs-title">cleanup</span></span>() {
+    <span class="hljs-built_in">echo</span> <span class="hljs-string">"清理临时文件..."</span>
+    <span class="hljs-built_in">rm</span> -f /tmp/myapp-*.tmp
 }
-trap cleanup EXIT            # 脚本退出时执行（正常或异常退出均触发）
-trap &#39;echo &quot;错误发生在行 $LINENO&quot;&#39; ERR   # 命令出错时触发
-</code></pre></div>
-<h3>7.6 常用一行脚本</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># awk：按列提取、求和、去重
-awk &#39;{print $1}&#39; access.log | sort | uniq -c | sort -rn           # IP 访问量 Top N
-awk &#39;{sum+=$NF} END {print sum}&#39; data.txt                          # 最后一列求和
-awk &#39;{count[$1]++} END {for(k in count) print k, count[k]}&#39; data.csv  # 按第一列分组计数
+<span class="hljs-built_in">trap</span> cleanup EXIT            <span class="hljs-comment"># 脚本退出时执行（正常或异常退出均触发）</span>
+<span class="hljs-built_in">trap</span> <span class="hljs-string">'echo "错误发生在行 $LINENO"'</span> ERR   <span class="hljs-comment"># 命令出错时触发</span>
+</code></pre></div><h3>7.6 常用一行脚本</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-comment"># awk：按列提取、求和、去重</span>
+awk <span class="hljs-string">'{print $1}'</span> access.log | <span class="hljs-built_in">sort</span> | <span class="hljs-built_in">uniq</span> -c | <span class="hljs-built_in">sort</span> -rn           <span class="hljs-comment"># IP 访问量 Top N</span>
+awk <span class="hljs-string">'{sum+=$NF} END {print sum}'</span> data.txt                          <span class="hljs-comment"># 最后一列求和</span>
+awk <span class="hljs-string">'{count[$1]++} END {for(k in count) print k, count[k]}'</span> data.csv  <span class="hljs-comment"># 按第一列分组计数</span>
 
-# sed：替换、删除
-sed -i &#39;s/old/new/g&#39; file.txt                                      # 原地替换
-sed -i &#39;/^$/d&#39; file.txt                                             # 删除空行
+<span class="hljs-comment"># sed：替换、删除</span>
+sed -i <span class="hljs-string">'s/old/new/g'</span> file.txt                                      <span class="hljs-comment"># 原地替换</span>
+sed -i <span class="hljs-string">'/^$/d'</span> file.txt                                             <span class="hljs-comment"># 删除空行</span>
 
-# sort + uniq：计数和去重
-sort file.txt | uniq -c | sort -rn | head -10                       # 出现次数 Top 10
+<span class="hljs-comment"># sort + uniq：计数和去重</span>
+<span class="hljs-built_in">sort</span> file.txt | <span class="hljs-built_in">uniq</span> -c | <span class="hljs-built_in">sort</span> -rn | <span class="hljs-built_in">head</span> -10                       <span class="hljs-comment"># 出现次数 Top 10</span>
 
-# xargs：并行执行
-find . -name &quot;*.log&quot; -print0 | xargs -0 -P 4 gzip                   # 4 进程并行压缩
-docker ps -q | xargs docker stats --no-stream                       # 所有容器资源统计
+<span class="hljs-comment"># xargs：并行执行</span>
+find . -name <span class="hljs-string">"*.log"</span> -print0 | xargs -0 -P 4 gzip                   <span class="hljs-comment"># 4 进程并行压缩</span>
+docker ps -q | xargs docker stats --no-stream                       <span class="hljs-comment"># 所有容器资源统计</span>
 
-# find + exec：批量操作
-find /opt/app/logs -name &quot;*.log&quot; -mtime +7 -exec rm -f {} \;       # 删除 7 天前日志
-find /opt/app -type f -size +100M -exec ls -lh {} \;               # 查找大文件
-</code></pre></div>
-<hr>
+<span class="hljs-comment"># find + exec：批量操作</span>
+find /opt/app/logs -name <span class="hljs-string">"*.log"</span> -mtime +7 -<span class="hljs-built_in">exec</span> <span class="hljs-built_in">rm</span> -f {} \;       <span class="hljs-comment"># 删除 7 天前日志</span>
+find /opt/app -<span class="hljs-built_in">type</span> f -size +100M -<span class="hljs-built_in">exec</span> <span class="hljs-built_in">ls</span> -lh {} \;               <span class="hljs-comment"># 查找大文件</span>
+</code></pre></div><hr>
 <h2>八、Java 运维场景</h2>
 <h3>8.1 OOM 时的系统状态诊断</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># 1. 查看内核 OOM 日志
-dmesg -T | grep -i &#39;killed process&#39;     # -T 显示人类可读时间戳
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-comment"># 1. 查看内核 OOM 日志</span>
+dmesg -T | grep -i <span class="hljs-string">'killed process'</span>     <span class="hljs-comment"># -T 显示人类可读时间戳</span>
 
-# 2. 查看 OOM score（值越高越容易被 kill）
-cat /proc/$PID/oom_score               # 当前分数
-cat /proc/$PID/oom_score_adj           # 调整因子（-1000 到 1000，-1000 完全豁免）
+<span class="hljs-comment"># 2. 查看 OOM score（值越高越容易被 kill）</span>
+<span class="hljs-built_in">cat</span> /proc/<span class="hljs-variable">$PID</span>/oom_score               <span class="hljs-comment"># 当前分数</span>
+<span class="hljs-built_in">cat</span> /proc/<span class="hljs-variable">$PID</span>/oom_score_adj           <span class="hljs-comment"># 调整因子（-1000 到 1000，-1000 完全豁免）</span>
 
-# 3. 系统日志中的 OOM Killer 记录
-grep -i &#39;out of memory&#39; /var/log/syslog
+<span class="hljs-comment"># 3. 系统日志中的 OOM Killer 记录</span>
+grep -i <span class="hljs-string">'out of memory'</span> /var/log/syslog
 journalctl -k | grep -i oom
-</code></pre></div>
-<p><strong>OOM Killer 决策逻辑：</strong> 内核根据 <code>oom_score</code> 选择进程 kill。<code>oom_score</code> 综合考虑进程的内存占用、运行时间、优先级等因素。Docker 守护进程默认 <code>oom_score_adj=-500</code>，降低了被 kill 的概率。Java 进程在生产环境中通常设置 <code>oom_score_adj=-500</code> 或更低优先清理。</p>
+</code></pre></div><p><strong>OOM Killer 决策逻辑：</strong> 内核根据 <code>oom_score</code> 选择进程 kill。<code>oom_score</code> 综合考虑进程的内存占用、运行时间、优先级等因素。Docker 守护进程默认 <code>oom_score_adj=-500</code>，降低了被 kill 的概率。Java 进程在生产环境中通常设置 <code>oom_score_adj=-500</code> 或更低优先清理。</p>
 <h3>8.2 JVM 内存映射分析</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># pmap：进程内存映射详情
-pmap -x $PID | sort -k3 -rn | head -20
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-comment"># pmap：进程内存映射详情</span>
+pmap -x <span class="hljs-variable">$PID</span> | <span class="hljs-built_in">sort</span> -k3 -rn | <span class="hljs-built_in">head</span> -20
 
-# 关注指标：
-# - anon（匿名内存）：Java 堆 + 线程栈，是内存占用大头
-# - RSS：实际常驻物理内存
-# - Dirty：脏页（已修改待写回），高 Dirty 说明内存分配活跃
-</code></pre></div>
-<p><strong>pmap 输出解读：</strong></p>
+<span class="hljs-comment"># 关注指标：</span>
+<span class="hljs-comment"># - anon（匿名内存）：Java 堆 + 线程栈，是内存占用大头</span>
+<span class="hljs-comment"># - RSS：实际常驻物理内存</span>
+<span class="hljs-comment"># - Dirty：脏页（已修改待写回），高 Dirty 说明内存分配活跃</span>
+</code></pre></div><p><strong>pmap 输出解读：</strong></p>
 <ul>
 <li>大块的 <code>anon</code> 区域（几百 MB 到几 GB）通常是 Java 堆</li>
 <li>1024KB 大小的 <code>anon</code> 区域通常是线程栈（<code>-Xss</code> 决定大小）</li>
@@ -836,23 +793,22 @@ pmap -x $PID | sort -k3 -rn | head -20
 </ul>
 <h3>8.3 线程堆栈 + 系统调用关联分析</h3>
 <p><strong>完整排障链路：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># Step 1: 找到高 CPU 进程
-top -H -p $PID
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-comment"># Step 1: 找到高 CPU 进程</span>
+top -H -p <span class="hljs-variable">$PID</span>
 
-# Step 2: 找到高 CPU 线程（TID，即轻量级进程的 PID）
-# 假设 TID = 12345
+<span class="hljs-comment"># Step 2: 找到高 CPU 线程（TID，即轻量级进程的 PID）</span>
+<span class="hljs-comment"># 假设 TID = 12345</span>
 
-# Step 3: 转换 TID 为十六进制（jstack 中线程 ID 是十六进制）
-printf &quot;%x\n&quot; 12345   # 输出 0x3039
+<span class="hljs-comment"># Step 3: 转换 TID 为十六进制（jstack 中线程 ID 是十六进制）</span>
+<span class="hljs-built_in">printf</span> <span class="hljs-string">"%x\n"</span> 12345   <span class="hljs-comment"># 输出 0x3039</span>
 
-# Step 4: 在 jstack 输出中搜索这个十六进制 TID
-jstack $PID | grep -A 20 &quot;0x3039&quot;
-# 找到对应线程的堆栈，分析代码路径
+<span class="hljs-comment"># Step 4: 在 jstack 输出中搜索这个十六进制 TID</span>
+jstack <span class="hljs-variable">$PID</span> | grep -A 20 <span class="hljs-string">"0x3039"</span>
+<span class="hljs-comment"># 找到对应线程的堆栈，分析代码路径</span>
 
-# Step 5: 如果需要了解该线程到底在等什么（系统调用层面）
-strace -T -p 12345    # 查看该线程当前和最近阻塞的系统调用
-</code></pre></div>
-<p><strong>典型问题场景：</strong></p>
+<span class="hljs-comment"># Step 5: 如果需要了解该线程到底在等什么（系统调用层面）</span>
+strace -T -p 12345    <span class="hljs-comment"># 查看该线程当前和最近阻塞的系统调用</span>
+</code></pre></div><p><strong>典型问题场景：</strong></p>
 <ul>
 <li><code>jstack</code> 显示线程 <code>BLOCKED</code> + <code>strace -e trace=futex</code> 显示 <code>FUTEX_WAIT</code> 长时间等待 → 锁竞争</li>
 <li><code>jstack</code> 显示 <code>RUNNABLE</code> + CPU 高 → 检查是否有死循环或密集计算</li>
@@ -863,125 +819,123 @@ strace -T -p 12345    # 查看该线程当前和最近阻塞的系统调用
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>发现问题（监控告警/用户反馈）
     │
     ▼
-top → 确认高 CPU / 高内存 / 高负载的进程
+top → 确认高 CPU <span class="hljs-regexp">/ 高内存 /</span> 高负载的进程
     │
-    ├── CPU 高 → pidstat -t -p $PID → 定位高 CPU 线程
-    │       → jstack 转换 16 进制 → 分析 Java 代码路径
+    ├── CPU 高 → pidstat -t -p <span class="hljs-variable">$PID</span> → 定位高 CPU 线程
+    │       → jstack 转换 <span class="hljs-number">16</span> 进制 → 分析 Java 代码路径
     │       → strace -T 跟踪系统调用耗时
     │
-    ├── 内存高 → pmap -x $PID → 确认堆/栈/堆外分布
-    │       → jcmd $PID GC.heap_info → 确认堆使用情况
-    │       → jcmd $PID VM.native_memory summary → Native Memory Tracking
+    ├── 内存高 → pmap -x <span class="hljs-variable">$PID</span> → 确认堆<span class="hljs-regexp">/栈/</span>堆外分布
+    │       → jcmd <span class="hljs-variable">$PID</span> GC.heap_info → 确认堆使用情况
+    │       → jcmd <span class="hljs-variable">$PID</span> VM.native_memory summary → Native Memory Tracking
     │
-    ├── 线程多 → pstree -p $PID | wc -l → jstack 统计线程状态
+    ├── 线程多 → pstree -p <span class="hljs-variable">$PID</span> | wc -l → jstack 统计线程状态
     │       → 检查是否线程泄漏（未使用线程池或未关闭）
     │
-    └── IO 高 → iostat -x → pidstat -d -p $PID
-            → lsof -p $PID | wc -l → 检查打开文件数
-</code></pre></div>
-<hr>
+    └── IO 高 → iostat -x → pidstat -d -p <span class="hljs-variable">$PID</span>
+            → lsof -p <span class="hljs-variable">$PID</span> | wc -l → 检查打开文件数
+</code></pre></div><hr>
 <h2>九、代码示例</h2>
 <h3>示例一：Java 应用健康检查 Shell 脚本</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash">#!/bin/bash
-set -euo pipefail
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-meta">#!/bin/bash</span>
+<span class="hljs-built_in">set</span> -euo pipefail
 
-APP_NAME=&quot;my-java-app&quot;
-PID_FILE=&quot;/var/run/${APP_NAME}.pid&quot;
-HTTP_URL=&quot;http://localhost:8080/actuator/health&quot;
-LOG_FILE=&quot;/var/log/${APP_NAME}-health.log&quot;
+APP_NAME=<span class="hljs-string">"my-java-app"</span>
+PID_FILE=<span class="hljs-string">"/var/run/<span class="hljs-variable">${APP_NAME}</span>.pid"</span>
+HTTP_URL=<span class="hljs-string">"http://localhost:8080/actuator/health"</span>
+LOG_FILE=<span class="hljs-string">"/var/log/<span class="hljs-variable">${APP_NAME}</span>-health.log"</span>
 
-log() {
-    echo &quot;[$(date &#39;+%Y-%m-%d %H:%M:%S&#39;)] $*&quot; | tee -a &quot;$LOG_FILE&quot;
+<span class="hljs-function"><span class="hljs-title">log</span></span>() {
+    <span class="hljs-built_in">echo</span> <span class="hljs-string">"[<span class="hljs-subst">$(date '+%Y-%m-%d %H:%M:%S')</span>] $*"</span> | <span class="hljs-built_in">tee</span> -a <span class="hljs-string">"<span class="hljs-variable">$LOG_FILE</span>"</span>
 }
 
-# 1. 检查进程是否存在
-if <span class="broken-ref" title="未找到: ! -f &quot;$PID_FILE&quot;">! -f &quot;$PID_FILE&quot;</span>; then
-    log &quot;ERROR: PID 文件 $PID_FILE 不存在&quot;
-    exit 1
-fi
+<span class="hljs-comment"># 1. 检查进程是否存在</span>
+<span class="hljs-keyword">if</span> [[ ! -f <span class="hljs-string">"<span class="hljs-variable">$PID_FILE</span>"</span> ]]; <span class="hljs-keyword">then</span>
+    <span class="hljs-built_in">log</span> <span class="hljs-string">"ERROR: PID 文件 <span class="hljs-variable">$PID_FILE</span> 不存在"</span>
+    <span class="hljs-built_in">exit</span> 1
+<span class="hljs-keyword">fi</span>
 
-PID=$(cat &quot;$PID_FILE&quot;)
-if ! kill -0 &quot;$PID&quot; 2&gt;/dev/null; then
-    log &quot;ERROR: 进程 $PID 不存在&quot;
-    exit 2
-fi
-log &quot;进程 $PID 存在&quot;
+PID=$(<span class="hljs-built_in">cat</span> <span class="hljs-string">"<span class="hljs-variable">$PID_FILE</span>"</span>)
+<span class="hljs-keyword">if</span> ! <span class="hljs-built_in">kill</span> -0 <span class="hljs-string">"<span class="hljs-variable">$PID</span>"</span> 2&gt;/dev/null; <span class="hljs-keyword">then</span>
+    <span class="hljs-built_in">log</span> <span class="hljs-string">"ERROR: 进程 <span class="hljs-variable">$PID</span> 不存在"</span>
+    <span class="hljs-built_in">exit</span> 2
+<span class="hljs-keyword">fi</span>
+<span class="hljs-built_in">log</span> <span class="hljs-string">"进程 <span class="hljs-variable">$PID</span> 存在"</span>
 
-# 2. 检查端口是否监听
-if ! ss -tlnp | grep -q &quot;:$PORT.*$PID&quot;; then
-    log &quot;ERROR: 端口 $PORT 未被进程 $PID 监听&quot;
-    exit 3
-fi
-log &quot;端口 $PORT 监听正常&quot;
+<span class="hljs-comment"># 2. 检查端口是否监听</span>
+<span class="hljs-keyword">if</span> ! ss -tlnp | grep -q <span class="hljs-string">":<span class="hljs-variable">$PORT</span>.*<span class="hljs-variable">$PID</span>"</span>; <span class="hljs-keyword">then</span>
+    <span class="hljs-built_in">log</span> <span class="hljs-string">"ERROR: 端口 <span class="hljs-variable">$PORT</span> 未被进程 <span class="hljs-variable">$PID</span> 监听"</span>
+    <span class="hljs-built_in">exit</span> 3
+<span class="hljs-keyword">fi</span>
+<span class="hljs-built_in">log</span> <span class="hljs-string">"端口 <span class="hljs-variable">$PORT</span> 监听正常"</span>
 
-# 3. 检查 HTTP Health Endpoint
-HTTP_CODE=$(curl -s -o /dev/null -w &quot;%{http_code}&quot; --max-time 5 &quot;$HTTP_URL&quot; 2&gt;/dev/null || echo &quot;000&quot;)
-if <span class="broken-ref" title="未找到: &quot;$HTTP_CODE&quot; != &quot;200&quot;">&quot;$HTTP_CODE&quot; != &quot;200&quot;</span>; then
-    log &quot;ERROR: Health endpoint 返回 $HTTP_CODE&quot;
-    exit 4
-fi
-log &quot;Health endpoint 正常 (HTTP 200)&quot;
+<span class="hljs-comment"># 3. 检查 HTTP Health Endpoint</span>
+HTTP_CODE=$(curl -s -o /dev/null -w <span class="hljs-string">"%{http_code}"</span> --max-time 5 <span class="hljs-string">"<span class="hljs-variable">$HTTP_URL</span>"</span> 2&gt;/dev/null || <span class="hljs-built_in">echo</span> <span class="hljs-string">"000"</span>)
+<span class="hljs-keyword">if</span> [[ <span class="hljs-string">"<span class="hljs-variable">$HTTP_CODE</span>"</span> != <span class="hljs-string">"200"</span> ]]; <span class="hljs-keyword">then</span>
+    <span class="hljs-built_in">log</span> <span class="hljs-string">"ERROR: Health endpoint 返回 <span class="hljs-variable">$HTTP_CODE</span>"</span>
+    <span class="hljs-built_in">exit</span> 4
+<span class="hljs-keyword">fi</span>
+<span class="hljs-built_in">log</span> <span class="hljs-string">"Health endpoint 正常 (HTTP 200)"</span>
 
-log &quot;健康检查通过&quot;
-exit 0
-</code></pre></div>
-<h3>示例二：使用 JDK 25 ProcessHandle API 监控系统资源</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.time.Duration;
-import java.time.Instant;
+<span class="hljs-built_in">log</span> <span class="hljs-string">"健康检查通过"</span>
+<span class="hljs-built_in">exit</span> 0
+</code></pre></div><h3>示例二：使用 JDK 25 ProcessHandle API 监控系统资源</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> java.time.Duration;
+<span class="hljs-keyword">import</span> java.time.Instant;
 
-/**
+<span class="hljs-comment">/**
  * 利用 JDK 25 的 ProcessHandle API 获取进程和系统信息，
  * 替代传统的 shell 调用（如 ps/top/free），更适合 Java 程序的资源监控。
- */
-public class SystemResourceMonitor {
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">SystemResourceMonitor</span> {
 
-    public record SystemMetrics(
-            int cpuCores,
-            double processCpuPercent,
-            long processRssBytes,
-            long systemTotalMemory,
-            long systemFreeMemory,
-            int threadCount,
-            long openFileDescriptors
-    ) {}
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">SystemMetrics</span><span class="hljs-params">(
+            <span class="hljs-type">int</span> cpuCores,
+            <span class="hljs-type">double</span> processCpuPercent,
+            <span class="hljs-type">long</span> processRssBytes,
+            <span class="hljs-type">long</span> systemTotalMemory,
+            <span class="hljs-type">long</span> systemFreeMemory,
+            <span class="hljs-type">int</span> threadCount,
+            <span class="hljs-type">long</span> openFileDescriptors
+    )</span> {}
 
-    public static SystemMetrics collect() {
-        var handle = ProcessHandle.current();
-        var info = handle.info();
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> SystemMetrics <span class="hljs-title function_">collect</span><span class="hljs-params">()</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">handle</span> <span class="hljs-operator">=</span> ProcessHandle.current();
+        <span class="hljs-type">var</span> <span class="hljs-variable">info</span> <span class="hljs-operator">=</span> handle.info();
 
-        // CPU 使用率：采样两次计算差值
-        var snapshot1 = handle.cpuDuration().orElse(Duration.ZERO);
-        var time1 = Instant.now();
-        try { Thread.sleep(100); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
-        var snapshot2 = handle.cpuDuration().orElse(Duration.ZERO);
-        var time2 = Instant.now();
+        <span class="hljs-comment">// CPU 使用率：采样两次计算差值</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">snapshot1</span> <span class="hljs-operator">=</span> handle.cpuDuration().orElse(Duration.ZERO);
+        <span class="hljs-type">var</span> <span class="hljs-variable">time1</span> <span class="hljs-operator">=</span> Instant.now();
+        <span class="hljs-keyword">try</span> { Thread.sleep(<span class="hljs-number">100</span>); } <span class="hljs-keyword">catch</span> (InterruptedException e) { Thread.currentThread().interrupt(); }
+        <span class="hljs-type">var</span> <span class="hljs-variable">snapshot2</span> <span class="hljs-operator">=</span> handle.cpuDuration().orElse(Duration.ZERO);
+        <span class="hljs-type">var</span> <span class="hljs-variable">time2</span> <span class="hljs-operator">=</span> Instant.now();
 
-        var cpuDelta = snapshot2.minus(snapshot1).toNanos();
-        var timeDelta = Duration.between(time1, time2).toNanos();
-        double cpuPercent = (double) cpuDelta / timeDelta * 100;
+        <span class="hljs-type">var</span> <span class="hljs-variable">cpuDelta</span> <span class="hljs-operator">=</span> snapshot2.minus(snapshot1).toNanos();
+        <span class="hljs-type">var</span> <span class="hljs-variable">timeDelta</span> <span class="hljs-operator">=</span> Duration.between(time1, time2).toNanos();
+        <span class="hljs-type">double</span> <span class="hljs-variable">cpuPercent</span> <span class="hljs-operator">=</span> (<span class="hljs-type">double</span>) cpuDelta / timeDelta * <span class="hljs-number">100</span>;
 
-        // 内存：通过 OperatingSystemMXBean 获取更详细的数据
-        var osBean = java.lang.management.ManagementFactory.getOperatingSystemMXBean();
+        <span class="hljs-comment">// 内存：通过 OperatingSystemMXBean 获取更详细的数据</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">osBean</span> <span class="hljs-operator">=</span> java.lang.management.ManagementFactory.getOperatingSystemMXBean();
 
-        long rssBytes = 0;
-        if (osBean instanceof com.sun.management.OperatingSystemMXBean extendedOsBean) {
+        <span class="hljs-type">long</span> <span class="hljs-variable">rssBytes</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">if</span> (osBean <span class="hljs-keyword">instanceof</span> com.sun.management.OperatingSystemMXBean extendedOsBean) {
             rssBytes = extendedOsBean.getTotalMemorySize() - extendedOsBean.getFreeMemorySize();
         }
 
-        return new SystemMetrics(
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">SystemMetrics</span>(
                 Runtime.getRuntime().availableProcessors(),
-                Math.min(cpuPercent, 100.0),
+                Math.min(cpuPercent, <span class="hljs-number">100.0</span>),
                 rssBytes,
                 ((com.sun.management.OperatingSystemMXBean) osBean).getTotalMemorySize(),
                 ((com.sun.management.OperatingSystemMXBean) osBean).getFreeMemorySize(),
-                handle.children().mapToInt(c -&gt; 1).sum() + 1,
-                info.totalCpuDuration().isPresent() ? 0 : -1 // 需要 OS 特定方式获取
+                handle.children().mapToInt(c -&gt; <span class="hljs-number">1</span>).sum() + <span class="hljs-number">1</span>,
+                info.totalCpuDuration().isPresent() ? <span class="hljs-number">0</span> : -<span class="hljs-number">1</span> <span class="hljs-comment">// 需要 OS 特定方式获取</span>
         );
     }
 
-    public static void main(String[] args) {
-        var metrics = collect();
-        System.out.printf(&quot;&quot;&quot;
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">main</span><span class="hljs-params">(String[] args)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">metrics</span> <span class="hljs-operator">=</span> collect();
+        System.out.printf(<span class="hljs-string">"""
                 系统资源监控:
                   CPU 核心数:    %d
                   进程 CPU 使用率: %.2f%%
@@ -989,125 +943,122 @@ public class SystemResourceMonitor {
                   系统总内存:     %d MB
                   系统空闲内存:   %d MB
                   线程数:         %d
-                &quot;&quot;&quot;,
+                """</span>,
                 metrics.cpuCores(),
                 metrics.processCpuPercent(),
-                metrics.processRssBytes() / (1024 * 1024),
-                metrics.systemTotalMemory() / (1024 * 1024),
-                metrics.systemFreeMemory() / (1024 * 1024),
+                metrics.processRssBytes() / (<span class="hljs-number">1024</span> * <span class="hljs-number">1024</span>),
+                metrics.systemTotalMemory() / (<span class="hljs-number">1024</span> * <span class="hljs-number">1024</span>),
+                metrics.systemFreeMemory() / (<span class="hljs-number">1024</span> * <span class="hljs-number">1024</span>),
                 metrics.threadCount()
         );
     }
 }
-</code></pre></div>
-<h3>示例三：Spring Boot Actuator + OS 指标收集暴露 Prometheus 格式</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import io.micrometer.core.instrument.Gauge;
-import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.binder.MeterBinder;
-import org.springframework.stereotype.Component;
+</code></pre></div><h3>示例三：Spring Boot Actuator + OS 指标收集暴露 Prometheus 格式</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> io.micrometer.core.instrument.Gauge;
+<span class="hljs-keyword">import</span> io.micrometer.core.instrument.MeterRegistry;
+<span class="hljs-keyword">import</span> io.micrometer.core.instrument.binder.MeterBinder;
+<span class="hljs-keyword">import</span> org.springframework.stereotype.Component;
 
-import java.io.IOException;
-import java.lang.management.ManagementFactory;
-import java.lang.management.OperatingSystemMXBean;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
+<span class="hljs-keyword">import</span> java.io.IOException;
+<span class="hljs-keyword">import</span> java.lang.management.ManagementFactory;
+<span class="hljs-keyword">import</span> java.lang.management.OperatingSystemMXBean;
+<span class="hljs-keyword">import</span> java.nio.file.Files;
+<span class="hljs-keyword">import</span> java.nio.file.Path;
+<span class="hljs-keyword">import</span> java.nio.file.Paths;
 
-/**
+<span class="hljs-comment">/**
  * 自定义 Micrometer MeterBinder，将 OS 级别指标（CPU、内存、磁盘）注册到
  * Prometheus Metrics Endpoint，配合 Spring Boot Actuator 暴露。
  * Spring Boot Actuator 默认已暴露 JVM 指标，本类补充 OS 级别指标。
- */
-@Component
-public class OsMetricsBinder implements MeterBinder {
+ */</span>
+<span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">OsMetricsBinder</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">MeterBinder</span> {
 
-    @Override
-    public void bindTo(MeterRegistry registry) {
-        var osBean = ManagementFactory.getPlatformMXBean(OperatingSystemMXBean.class);
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">bindTo</span><span class="hljs-params">(MeterRegistry registry)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">osBean</span> <span class="hljs-operator">=</span> ManagementFactory.getPlatformMXBean(OperatingSystemMXBean.class);
 
-        // CPU 使用率（进程级别）
-        Gauge.builder(&quot;os.process.cpu.usage&quot;, osBean, bean -&gt; {
-                    try {
-                        return ((com.sun.management.OperatingSystemMXBean) bean).getProcessCpuLoad();
-                    } catch (Exception e) {
-                        return Double.NaN;
+        <span class="hljs-comment">// CPU 使用率（进程级别）</span>
+        Gauge.builder(<span class="hljs-string">"os.process.cpu.usage"</span>, osBean, bean -&gt; {
+                    <span class="hljs-keyword">try</span> {
+                        <span class="hljs-keyword">return</span> ((com.sun.management.OperatingSystemMXBean) bean).getProcessCpuLoad();
+                    } <span class="hljs-keyword">catch</span> (Exception e) {
+                        <span class="hljs-keyword">return</span> Double.NaN;
                     }
                 })
-                .description(&quot;进程 CPU 使用率 (0.0-1.0)&quot;)
+                .description(<span class="hljs-string">"进程 CPU 使用率 (0.0-1.0)"</span>)
                 .register(registry);
 
-        // 系统 CPU 使用率
-        Gauge.builder(&quot;os.system.cpu.usage&quot;, osBean, bean -&gt; {
-                    try {
-                        return ((com.sun.management.OperatingSystemMXBean) bean).getCpuLoad();
-                    } catch (Exception e) {
-                        return Double.NaN;
+        <span class="hljs-comment">// 系统 CPU 使用率</span>
+        Gauge.builder(<span class="hljs-string">"os.system.cpu.usage"</span>, osBean, bean -&gt; {
+                    <span class="hljs-keyword">try</span> {
+                        <span class="hljs-keyword">return</span> ((com.sun.management.OperatingSystemMXBean) bean).getCpuLoad();
+                    } <span class="hljs-keyword">catch</span> (Exception e) {
+                        <span class="hljs-keyword">return</span> Double.NaN;
                     }
                 })
-                .description(&quot;系统整体 CPU 使用率 (0.0-1.0)&quot;)
+                .description(<span class="hljs-string">"系统整体 CPU 使用率 (0.0-1.0)"</span>)
                 .register(registry);
 
-        // 系统总内存和空闲内存
-        Gauge.builder(&quot;os.system.memory.total.bytes&quot;, osBean,
+        <span class="hljs-comment">// 系统总内存和空闲内存</span>
+        Gauge.builder(<span class="hljs-string">"os.system.memory.total.bytes"</span>, osBean,
                         bean -&gt; ((com.sun.management.OperatingSystemMXBean) bean).getTotalMemorySize())
-                .description(&quot;系统总物理内存（字节）&quot;)
+                .description(<span class="hljs-string">"系统总物理内存（字节）"</span>)
                 .register(registry);
 
-        Gauge.builder(&quot;os.system.memory.free.bytes&quot;, osBean,
+        Gauge.builder(<span class="hljs-string">"os.system.memory.free.bytes"</span>, osBean,
                         bean -&gt; ((com.sun.management.OperatingSystemMXBean) bean).getFreeMemorySize())
-                .description(&quot;系统空闲物理内存（字节）&quot;)
+                .description(<span class="hljs-string">"系统空闲物理内存（字节）"</span>)
                 .register(registry);
 
-        // 磁盘使用率（根分区）
-        Gauge.builder(&quot;os.disk.usage.percent&quot;, this, self -&gt; self.getDiskUsagePercent(&quot;/&quot;))
-                .description(&quot;磁盘分区使用率 (%)&quot;)
-                .tag(&quot;mount&quot;, &quot;/&quot;)
+        <span class="hljs-comment">// 磁盘使用率（根分区）</span>
+        Gauge.builder(<span class="hljs-string">"os.disk.usage.percent"</span>, <span class="hljs-built_in">this</span>, self -&gt; self.getDiskUsagePercent(<span class="hljs-string">"/"</span>))
+                .description(<span class="hljs-string">"磁盘分区使用率 (%)"</span>)
+                .tag(<span class="hljs-string">"mount"</span>, <span class="hljs-string">"/"</span>)
                 .register(registry);
 
-        // 磁盘可用空间
-        Gauge.builder(&quot;os.disk.free.bytes&quot;, this, self -&gt; self.getDiskFreeBytes(&quot;/&quot;))
-                .description(&quot;磁盘分区可用空间（字节）&quot;)
-                .tag(&quot;mount&quot;, &quot;/&quot;)
+        <span class="hljs-comment">// 磁盘可用空间</span>
+        Gauge.builder(<span class="hljs-string">"os.disk.free.bytes"</span>, <span class="hljs-built_in">this</span>, self -&gt; self.getDiskFreeBytes(<span class="hljs-string">"/"</span>))
+                .description(<span class="hljs-string">"磁盘分区可用空间（字节）"</span>)
+                .tag(<span class="hljs-string">"mount"</span>, <span class="hljs-string">"/"</span>)
                 .register(registry);
     }
 
-    private double getDiskUsagePercent(String path) {
-        try {
-            var store = Files.getFileStore(Paths.get(path));
-            long total = store.getTotalSpace();
-            long free = store.getUsableSpace();
-            if (total &gt; 0) {
-                return (double) (total - free) / total * 100;
+    <span class="hljs-keyword">private</span> <span class="hljs-type">double</span> <span class="hljs-title function_">getDiskUsagePercent</span><span class="hljs-params">(String path)</span> {
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-type">var</span> <span class="hljs-variable">store</span> <span class="hljs-operator">=</span> Files.getFileStore(Paths.get(path));
+            <span class="hljs-type">long</span> <span class="hljs-variable">total</span> <span class="hljs-operator">=</span> store.getTotalSpace();
+            <span class="hljs-type">long</span> <span class="hljs-variable">free</span> <span class="hljs-operator">=</span> store.getUsableSpace();
+            <span class="hljs-keyword">if</span> (total &gt; <span class="hljs-number">0</span>) {
+                <span class="hljs-keyword">return</span> (<span class="hljs-type">double</span>) (total - free) / total * <span class="hljs-number">100</span>;
             }
-        } catch (IOException ignored) {
+        } <span class="hljs-keyword">catch</span> (IOException ignored) {
         }
-        return Double.NaN;
+        <span class="hljs-keyword">return</span> Double.NaN;
     }
 
-    private long getDiskFreeBytes(String path) {
-        try {
-            return Files.getFileStore(Paths.get(path)).getUsableSpace();
-        } catch (IOException ignored) {
-            return -1;
+    <span class="hljs-keyword">private</span> <span class="hljs-type">long</span> <span class="hljs-title function_">getDiskFreeBytes</span><span class="hljs-params">(String path)</span> {
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-keyword">return</span> Files.getFileStore(Paths.get(path)).getUsableSpace();
+        } <span class="hljs-keyword">catch</span> (IOException ignored) {
+            <span class="hljs-keyword">return</span> -<span class="hljs-number">1</span>;
         }
     }
 }
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># application.yml — Actuator 配置暴露 Prometheus 端点
-management:
-  endpoints:
-    web:
-      exposure:
-        include: health,info,metrics,prometheus
-  metrics:
-    export:
-      prometheus:
-        enabled: true
-    tags:
-      application: ${spring.application.name}
-      environment: ${ENV:dev}
-</code></pre></div>
-<p>访问 <code>GET /actuator/prometheus</code> 即可获得包含 JVM + OS 指标的 Prometheus 格式数据，可直接被 Prometheus server 抓取。</p>
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-comment"># application.yml — Actuator 配置暴露 Prometheus 端点</span>
+<span class="hljs-attr">management:</span>
+  <span class="hljs-attr">endpoints:</span>
+    <span class="hljs-attr">web:</span>
+      <span class="hljs-attr">exposure:</span>
+        <span class="hljs-attr">include:</span> <span class="hljs-string">health,info,metrics,prometheus</span>
+  <span class="hljs-attr">metrics:</span>
+    <span class="hljs-attr">export:</span>
+      <span class="hljs-attr">prometheus:</span>
+        <span class="hljs-attr">enabled:</span> <span class="hljs-literal">true</span>
+    <span class="hljs-attr">tags:</span>
+      <span class="hljs-attr">application:</span> <span class="hljs-string">${spring.application.name}</span>
+      <span class="hljs-attr">environment:</span> <span class="hljs-string">${ENV:dev}</span>
+</code></pre></div><p>访问 <code>GET /actuator/prometheus</code> 即可获得包含 JVM + OS 指标的 Prometheus 格式数据，可直接被 Prometheus server 抓取。</p>
 <hr>
 <h2>常见问题</h2>
 <p><strong>Q1: Java 进程假死（端口监听但不响应）如何诊断？</strong></p>
@@ -1117,7 +1068,7 @@ management:
 <li><code>netstat -s | grep -i listen</code> — 查看是否有 <code>ListenOverflows</code> 和 <code>ListenDrops</code>，表示全连接队列溢出</li>
 <li><code>jstack $PID</code> — 检查所有线程状态。如果大部分线程 <code>BLOCKED</code> 或 <code>WAITING</code>，可能是死锁或资源耗尽</li>
 <li>用 <code>strace -p $PID -e trace=accept</code> 查看是否在调用 <code>accept()</code>，如果没有，说明事件循环/IO 线程已经不工作了</li>
-<li>检查 GC 日志 — Full GC 频繁会导致长时间 STW（Stop-The-World），应用看起来像&quot;假死&quot;</li>
+<li>检查 GC 日志 — Full GC 频繁会导致长时间 STW（Stop-The-World），应用看起来像"假死"</li>
 <li>检查线程数 — <code>cat /proc/$PID/status | grep Threads</code>，如果线程数达到 <code>ulimit -u</code> 上限，新连接无法处理</li>
 </ol>
 <p><strong>Q2: <code>su</code> 和 <code>su -</code> 的区别及环境变量问题？</strong></p>
@@ -1151,10 +1102,10 @@ management:
 <hr>
 <h2>相关条目</h2>
 <ul>
-<li><a href="#/06-云原生与SRE/容器与编排/06-Docker与Kubernetes云原生部署" class="cross-ref" data-ref="06-Docker与Kubernetes云原生部署">06-Docker与Kubernetes云原生部署</a> — 容器和 K8s 的完整部署实践</li>
-<li><a href="#/?d=02" class="cross-ref domain-ref">02-JVM内存与GC调优</a> — JVM 层面内存诊断与 GC 调优</li>
-<li><a href="#/?d=05" class="cross-ref domain-ref">05-弹性设计与容错</a> — Resilience4j 限流熔断与高可用设计</li>
-<li><a href="#/06-云原生与SRE/可观测性与CI/06-OpenTelemetry可观测性体系" class="cross-ref" data-ref="06-OpenTelemetry可观测性体系">06-OpenTelemetry可观测性体系</a> — 可观测性三支柱与 Java 集成</li>
+<li><a href="#/06-云原生与SRE/容器与编排/06-Docker与Kubernetes云原生部署" class="cross-ref">06-Docker与Kubernetes云原生部署</a> — 容器和 K8s 的完整部署实践</li>
+<li><span class="broken-ref" title="未找到: 02-JVM内存与GC调优">02-JVM内存与GC调优</span> — JVM 层面内存诊断与 GC 调优</li>
+<li><span class="broken-ref" title="未找到: 05-弹性设计与容错">05-弹性设计与容错</span> — Resilience4j 限流熔断与高可用设计</li>
+<li><a href="#/06-云原生与SRE/可观测性与CI/06-OpenTelemetry可观测性体系" class="cross-ref">06-OpenTelemetry可观测性体系</a> — 可观测性三支柱与 Java 集成</li>
 </ul>
-</div>
+</body></html></div>
 </article>

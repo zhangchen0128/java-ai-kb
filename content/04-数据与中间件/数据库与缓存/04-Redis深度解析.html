@@ -1,12 +1,12 @@
 
-<article class="kb-entry" data-path="/04-数据与中间件/数据库与缓存/04-Redis深度解析">
+<article class="kb-entry" data-path="/04-数据与中间件">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=04">04-数据与中间件</a></div>
     <h1>Redis 深度解析</h1>
-    <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#redis</span><span class="badge badge-tag">#sds</span><span class="badge badge-tag">#rdb</span><span class="badge badge-tag">#aof</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#redis</span><span class="badge badge-tag">#sds</span><span class="badge badge-tag">#rdb</span><span class="badge badge-tag">#aof</span><span class="badge badge-tag">#sentinel</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://redis.io/docs/latest/" target="_blank" rel="noopener" class="source-link" title="Redis 7.x 官方文档">Redis 7.x 官方文档</a><a href="https://github.com/redis/redis" target="_blank" rel="noopener" class="source-link" title="Redis 源码（SDS、quicklist、skiplist 实现）">Redis 源码（SDS、quicklist、skiplist 实现）</a><a href="https://redisbook.com/" target="_blank" rel="noopener" class="source-link" title="《Redis 设计与实现》— 黄健宏，Redis 内部数据结构与机制">《Redis 设计与实现》— 黄健宏，Redis 内部数据结构与机制</a></small></div>
   </div>
-  <div class="entry-body"><h1>Redis 深度解析</h1>
+  <div class="entry-body"><html><head></head><body><h1>Redis 深度解析</h1>
 <h2>概述</h2>
 <p>Redis 是高性能的内存键值存储，广泛用于缓存、分布式锁、消息队列、限流和实时数据场景。在 AI 应用中，Redis Vector Search 为实时语义缓存和低延迟向量检索提供了新可能。</p>
 <p>本文深入 Redis 内部数据结构实现、持久化机制、高可用架构、分布式锁原理、缓存策略模式，以及 Java 客户端选择和 AI 场景应用。</p>
@@ -14,16 +14,15 @@
 <h2>一、数据结构深入</h2>
 <h3>1.1 String — SDS（Simple Dynamic String）</h3>
 <p>Redis 不直接使用 C 字符串，而是实现了 SDS：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">c</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-c">// Redis 7.x sds.h（简化）
-typedef char *sds;
-struct __attribute__ ((__packed__)) sdshdr64 {
-    uint64_t len;    // 已使用长度（O(1) 获取）
-    uint64_t alloc;  // 分配的总容量（不含头和空终止符）
-    unsigned char flags; // sdshdr 类型标识
-    char buf[];      // 实际数据
+<div class="code-block"><div class="code-header"><span class="code-lang">c</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-c"><span class="hljs-comment">// Redis 7.x sds.h（简化）</span>
+<span class="hljs-keyword">typedef</span> <span class="hljs-type">char</span> *sds;
+<span class="hljs-class"><span class="hljs-keyword">struct</span> __<span class="hljs-title">attribute__</span> ((__<span class="hljs-title">packed__</span>)) <span class="hljs-title">sdshdr64</span> {</span>
+    <span class="hljs-type">uint64_t</span> len;    <span class="hljs-comment">// 已使用长度（O(1) 获取）</span>
+    <span class="hljs-type">uint64_t</span> alloc;  <span class="hljs-comment">// 分配的总容量（不含头和空终止符）</span>
+    <span class="hljs-type">unsigned</span> <span class="hljs-type">char</span> flags; <span class="hljs-comment">// sdshdr 类型标识</span>
+    <span class="hljs-type">char</span> buf[];      <span class="hljs-comment">// 实际数据</span>
 };
-</code></pre></div>
-<p><strong>与 C 字符串的优势：</strong></p>
+</code></pre></div><p><strong>与 C 字符串的优势：</strong></p>
 <ul>
 <li>O(1) 获取长度（len 字段）</li>
 <li>杜绝缓冲区溢出（alloc 预分配）</li>
@@ -33,20 +32,18 @@ struct __attribute__ ((__packed__)) sdshdr64 {
 <h3>1.2 Hash — ziplist 到 hashtable 的演进</h3>
 <p><strong>小哈希使用 ziplist：</strong> 连续内存块的紧凑结构，存储相邻的 field-value 对。</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>ziplist 触发条件（可配置）：
-- hash-max-ziplist-entries = 512
-- hash-max-ziplist-value = 64
-</code></pre></div>
-<p><strong>大哈希使用 hashtable：</strong> 标准链式哈希表，使用 MurmurHash2 算法，渐进式 rehash。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">c</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-c">// dict.h（简化）
-typedef struct dict {
+- <span class="hljs-built_in">hash</span>-<span class="hljs-built_in">max</span>-ziplist-entries = <span class="hljs-number">512</span>
+- <span class="hljs-built_in">hash</span>-<span class="hljs-built_in">max</span>-ziplist-value = <span class="hljs-number">64</span>
+</code></pre></div><p><strong>大哈希使用 hashtable：</strong> 标准链式哈希表，使用 MurmurHash2 算法，渐进式 rehash。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">c</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-c"><span class="hljs-comment">// dict.h（简化）</span>
+<span class="hljs-keyword">typedef</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">dict</span> {</span>
     dictType *type;
-    dictEntry **ht_table[2];  // 两个哈希表，用于渐进式 rehash
-    unsigned long ht_used[2];
-    long rehashidx;           // -1 表示未在 rehash
-    int16_t pauserehash;
+    dictEntry **ht_table[<span class="hljs-number">2</span>];  <span class="hljs-comment">// 两个哈希表，用于渐进式 rehash</span>
+    <span class="hljs-type">unsigned</span> <span class="hljs-type">long</span> ht_used[<span class="hljs-number">2</span>];
+    <span class="hljs-type">long</span> rehashidx;           <span class="hljs-comment">// -1 表示未在 rehash</span>
+    <span class="hljs-type">int16_t</span> pauserehash;
 } dict;
-</code></pre></div>
-<p><strong>渐进式 rehash 流程：</strong></p>
+</code></pre></div><p><strong>渐进式 rehash 流程：</strong></p>
 <ol>
 <li>为 <code>ht_table[1]</code> 分配内存（通常为 <code>ht_table[0]</code> 已使用的 2 倍）</li>
 <li><code>rehashidx = 0</code>，开始渐进迁移</li>
@@ -56,61 +53,56 @@ typedef struct dict {
 </ol>
 <h3>1.3 List — quicklist</h3>
 <p>Redis 7.x 使用 quicklist（ziplist + linkedlist 的混合体）：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>quicklist
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-attribute">quicklist</span>
 ┌──────────┐   ┌──────────┐   ┌──────────┐
 │ listNode │──▶│ listNode │──▶│ listNode │
 │ ziplist  │   │ ziplist  │   │ ziplist  │
 └──────────┘   └──────────┘   └──────────┘
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-ini"># quicklist 参数
-list-max-ziplist-size = -2  # 每个 ziplist 最大 8KB
-list-compress-depth = 0     # 不压缩（1 表示两端不压缩中间压缩）
-</code></pre></div>
-<h3>1.4 ZSet — skiplist + dict</h3>
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-ini"><span class="hljs-comment"># quicklist 参数</span>
+<span class="hljs-attr">list-max-ziplist-size</span> = -<span class="hljs-number">2</span>  <span class="hljs-comment"># 每个 ziplist 最大 8KB</span>
+<span class="hljs-attr">list-compress-depth</span> = <span class="hljs-number">0</span>     <span class="hljs-comment"># 不压缩（1 表示两端不压缩中间压缩）</span>
+</code></pre></div><h3>1.4 ZSet — skiplist + dict</h3>
 <p>有序集合使用跳表 + 哈希表的组合：<code>dict</code> 提供 O(1) 按成员查分值，<code>skiplist</code> 提供 O(log N) 范围查询。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">c</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-c">// server.h（简化）
-typedef struct zskiplistNode {
-    sds ele;                    // 成员
-    double score;               // 分值
-    struct zskiplistNode *backward; // 后退指针
-    struct zskiplistLevel {
-        struct zskiplistNode *forward;
-        unsigned long span;     // 到下一节点的跨度（用于计算 rank）
-    } level[];                  // 多层索引
+<div class="code-block"><div class="code-header"><span class="code-lang">c</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-c"><span class="hljs-comment">// server.h（简化）</span>
+<span class="hljs-keyword">typedef</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">zskiplistNode</span> {</span>
+    sds ele;                    <span class="hljs-comment">// 成员</span>
+    <span class="hljs-type">double</span> score;               <span class="hljs-comment">// 分值</span>
+    <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">zskiplistNode</span> *<span class="hljs-title">backward</span>;</span> <span class="hljs-comment">// 后退指针</span>
+    <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">zskiplistLevel</span> {</span>
+        <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">zskiplistNode</span> *<span class="hljs-title">forward</span>;</span>
+        <span class="hljs-type">unsigned</span> <span class="hljs-type">long</span> span;     <span class="hljs-comment">// 到下一节点的跨度（用于计算 rank）</span>
+    } level[];                  <span class="hljs-comment">// 多层索引</span>
 } zskiplistNode;
 
-typedef struct zskiplist {
-    struct zskiplistNode *header, *tail;
-    unsigned long length;
-    int level;                  // 当前最大层数
+<span class="hljs-keyword">typedef</span> <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">zskiplist</span> {</span>
+    <span class="hljs-class"><span class="hljs-keyword">struct</span> <span class="hljs-title">zskiplistNode</span> *<span class="hljs-title">header</span>, *<span class="hljs-title">tail</span>;</span>
+    <span class="hljs-type">unsigned</span> <span class="hljs-type">long</span> length;
+    <span class="hljs-type">int</span> level;                  <span class="hljs-comment">// 当前最大层数</span>
 } zskiplist;
-</code></pre></div>
-<p><strong>跳表层数随机生成：</strong> 每层有 25% 概率增加一层（p=0.25），因此平均层数 = 1/(1-p) = 1.33 层。</p>
+</code></pre></div><p><strong>跳表层数随机生成：</strong> 每层有 25% 概率增加一层（p=0.25），因此平均层数 = 1/(1-p) = 1.33 层。</p>
 <h3>1.5 Stream — 消费组与 ACK</h3>
 <p>Stream 是 Redis 5.0 引入的持久化消息队列，支持消费组、ACK 机制和死信处理。</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Stream 内部结构（radix tree 按消息 ID 组织）：
 stream
 ├── consumer_group_1
-│   ├── consumer_A: pending_ids = [id1, id3]
-│   └── consumer_B: pending_ids = [id2]
+│   ├── consumer_A: pending_ids = <span class="hljs-comment">[id1, id3]</span>
+│   └── consumer_B: pending_ids = <span class="hljs-comment">[id2]</span>
 └── consumer_group_2
-    └── consumer_C: pending_ids = [id4]
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># 创建消费组
+    └── consumer_C: pending_ids = <span class="hljs-comment">[id4]</span>
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-comment"># 创建消费组</span>
 XGROUP CREATE mystream mygroup $ MKSTREAM
 
-# 消费消息（消费者 A）
+<span class="hljs-comment"># 消费消息（消费者 A）</span>
 XREADGROUP GROUP mygroup consumer_a COUNT 2 BLOCK 5000 STREAMS mystream &gt;
 
-# 确认消息
+<span class="hljs-comment"># 确认消息</span>
 XACK mystream mygroup 1692632086370-0
 
-# 处理死信（pending 超过 60 秒未 ACK 的消息）
+<span class="hljs-comment"># 处理死信（pending 超过 60 秒未 ACK 的消息）</span>
 XPENDING mystream mygroup - + 100
-# 认领超时消息
+<span class="hljs-comment"># 认领超时消息</span>
 XCLAIM mystream mygroup consumer_b 60000 1692632086370-0
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>二、持久化机制</h2>
 <h3>2.1 RDB（Redis Database）</h3>
 <p><strong>触发时机：</strong></p>
@@ -120,21 +112,19 @@ XCLAIM mystream mygroup consumer_b 60000 1692632086370-0
 </ul>
 <p><strong>COW（Copy-On-Write）原理：</strong></p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>BGSAVE 过程：
-1. fork() 子进程（父进程内存页表复制，数据页标记为只读）
-2. 父进程继续处理命令，写操作时触发页错误 → 内核复制页 → 标记可写
-3. 子进程读取原始数据页，写入 RDB 文件
-4. 子进程完成后通知父进程，替换旧 RDB
-</code></pre></div>
-<p><strong>RDB 调优：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-ini">save 900 1     # 900秒内1次修改 → 触发
-save 300 10    # 300秒内10次修改
-save 60 10000  # 60秒内10000次修改
+<span class="hljs-bullet">1.</span> fork() 子进程（父进程内存页表复制，数据页标记为只读）
+<span class="hljs-bullet">2.</span> 父进程继续处理命令，写操作时触发页错误 → 内核复制页 → 标记可写
+<span class="hljs-bullet">3.</span> 子进程读取原始数据页，写入 RDB 文件
+<span class="hljs-bullet">4.</span> 子进程完成后通知父进程，替换旧 RDB
+</code></pre></div><p><strong>RDB 调优：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-ini">save 900 1     <span class="hljs-comment"># 900秒内1次修改 → 触发</span>
+save 300 10    <span class="hljs-comment"># 300秒内10次修改</span>
+save 60 10000  <span class="hljs-comment"># 60秒内10000次修改</span>
 
-rdbcompression yes       # LZF 压缩
-rdbchecksum yes          # CRC64 校验
+rdbcompression yes       <span class="hljs-comment"># LZF 压缩</span>
+rdbchecksum yes          <span class="hljs-comment"># CRC64 校验</span>
 stop-writes-on-bgsave-error yes
-</code></pre></div>
-<h3>2.2 AOF（Append Only File）</h3>
+</code></pre></div><h3>2.2 AOF（Append Only File）</h3>
 <p><strong>fsync 策略：</strong></p>
 <table>
 <thead>
@@ -166,15 +156,14 @@ stop-writes-on-bgsave-error yes
 </tbody></table>
 <p><strong>AOF 重写机制：</strong></p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>重写前（AOF 文件）：
-SET counter 1
-INCR counter
-INCR counter
-INCR counter
+<span class="hljs-keyword">SET</span> counter <span class="hljs-comment">1</span>
+INCR <span class="hljs-comment">counter</span>
+INCR <span class="hljs-comment">counter</span>
+INCR <span class="hljs-comment">counter</span>
 
 重写后：
-SET counter 4
-</code></pre></div>
-<p>重写过程：</p>
+<span class="hljs-keyword">SET</span> <span class="hljs-comment">counter 4</span>
+</code></pre></div><p>重写过程：</p>
 <ol>
 <li><code>BGREWRITEAOF</code> → fork 子进程</li>
 <li>子进程读取数据库当前状态，写入新 AOF</li>
@@ -183,9 +172,8 @@ SET counter 4
 <li>原子 rename 替换旧 AOF</li>
 </ol>
 <h3>2.3 混合持久化（Redis 4.0+）</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-ini">aof-use-rdb-preamble yes
-</code></pre></div>
-<p>混合持久化将 RDB 快照 + AOF 增量日志结合：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-ini">aof-use-rdb-preamble yes
+</code></pre></div><p>混合持久化将 RDB 快照 + AOF 增量日志结合：</p>
 <ol>
 <li>AOF 重写时，先写入 RDB 格式的快照</li>
 <li>快照后的命令以 AOF 格式追加</li>
@@ -196,43 +184,38 @@ SET counter 4
 <h3>3.1 主从复制</h3>
 <p><strong>全量复制流程：</strong></p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Slave                              Master
-  | --- PSYNC ? -1 ---------------&gt; |  （首次：请求全量）
-  |                                  |  fork → BGSAVE
-  | &lt;-- FULLRESYNC &lt;replid&gt; 0 ---- | 
-  |                                  |  发送 RDB
-  | &lt;-- RDB 文件传输 ------------- |
-  |                                  加载 RDB
-  | --- PSYNC &lt;replid&gt; &lt;offset&gt; --&gt; |  （请求增量同步）
-  | &lt;-- 增量数据（replication buffer）
-</code></pre></div>
-<p><strong>部分复制（PSYNC）：</strong></p>
+  |<span class="hljs-string"> --- PSYNC ? -1 ---------------&gt; </span>|<span class="hljs-string">  （首次：请求全量）
+  </span>|<span class="hljs-string">                                  </span>|<span class="hljs-string">  fork → BGSAVE
+  </span>|<span class="hljs-string"> &lt;-- FULLRESYNC &lt;replid&gt; 0 ---- </span>|<span class="hljs-string"> 
+  </span>|<span class="hljs-string">                                  </span>|<span class="hljs-string">  发送 RDB
+  </span>|<span class="hljs-string"> &lt;-- RDB 文件传输 ------------- </span>|
+  |<span class="hljs-string">                                  加载 RDB
+  </span>|<span class="hljs-string"> --- PSYNC &lt;replid&gt; &lt;offset&gt; --&gt; </span>|<span class="hljs-string">  （请求增量同步）
+  </span>|<span class="hljs-string"> &lt;-- 增量数据（replication buffer）</span>
+</code></pre></div><p><strong>部分复制（PSYNC）：</strong></p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Slave                              Master
-  | --- PSYNC &lt;replid&gt; &lt;offset&gt; --&gt; |
-  |                                  |  检查 replication backlog
-  |                                  |  如果 offset 在 backlog 范围内
-  | &lt;-- CONTINUE ----------------- |  （增量同步）
-  |                                  |  否则
-  | &lt;-- FULLRESYNC --------------  |  （全量同步）
-</code></pre></div>
-<p>关键参数：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-ini">repl-backlog-size = 64mb      # 复制积压缓冲区大小
-repl-backlog-ttl = 3600       # 1 小时后未使用释放
-</code></pre></div>
-<h3>3.2 Sentinel</h3>
+  |<span class="hljs-string"> --- PSYNC &lt;replid&gt; &lt;offset&gt; --&gt; </span>|
+  |<span class="hljs-string">                                  </span>|<span class="hljs-string">  检查 replication backlog
+  </span>|<span class="hljs-string">                                  </span>|<span class="hljs-string">  如果 offset 在 backlog 范围内
+  </span>|<span class="hljs-string"> &lt;-- CONTINUE ----------------- </span>|<span class="hljs-string">  （增量同步）
+  </span>|<span class="hljs-string">                                  </span>|<span class="hljs-string">  否则
+  </span>|<span class="hljs-string"> &lt;-- FULLRESYNC --------------  </span>|<span class="hljs-string">  （全量同步）</span>
+</code></pre></div><p>关键参数：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-ini"><span class="hljs-attr">repl-backlog-size</span> = <span class="hljs-number">64</span>mb      <span class="hljs-comment"># 复制积压缓冲区大小</span>
+<span class="hljs-attr">repl-backlog-ttl</span> = <span class="hljs-number">3600</span>       <span class="hljs-comment"># 1 小时后未使用释放</span>
+</code></pre></div><h3>3.2 Sentinel</h3>
 <p>Sentinel 解决主从架构的故障自动转移问题。</p>
 <p><strong>主观下线（SDOWN）vs 客观下线（ODOWN）：</strong></p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Sentinel 节点判断链路：
-PING 超时 → SDOWN（单 Sentinel 认为下线）
+<span class="hljs-built_in">PING</span> 超时 → SDOWN（单 Sentinel 认为下线）
          → 询问其他 Sentinel → quorum 个确认 → ODOWN（共识下线）
-</code></pre></div>
-<p><strong>领头选举（Leader Election）：</strong></p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>1. 发现 ODOWN 的 Sentinel 发起选举（epoch 自增）
-2. 向其他 Sentinel 发送 is-master-down-by-addr（含 runid）
-3. 收到请求的 Sentinel：先到先得（同一 epoch 内）
-4. 获得多数票（&gt; N/2）的 Sentinel 成为 Leader
-5. Leader 执行故障转移
-</code></pre></div>
-<p><strong>故障转移步骤：</strong></p>
+</code></pre></div><p><strong>领头选举（Leader Election）：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-bullet">1.</span> 发现 ODOWN 的 Sentinel 发起选举（epoch 自增）
+<span class="hljs-bullet">2.</span> 向其他 Sentinel 发送 is-master-down-by-addr（含 runid）
+<span class="hljs-bullet">3.</span> 收到请求的 Sentinel：先到先得（同一 epoch 内）
+<span class="hljs-bullet">4.</span> 获得多数票（&gt; N/2）的 Sentinel 成为 Leader
+<span class="hljs-bullet">5.</span> Leader 执行故障转移
+</code></pre></div><p><strong>故障转移步骤：</strong></p>
 <ol>
 <li>选出新主（优先级最高 &gt; 复制偏移最大 &gt; runid 最小）</li>
 <li>从节点 <code>SLAVEOF NEW_MASTER</code></li>
@@ -240,109 +223,101 @@ PING 超时 → SDOWN（单 Sentinel 认为下线）
 </ol>
 <h3>3.3 Cluster</h3>
 <p>Redis Cluster 使用哈希槽（16384 个）分片数据。</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>CRC16(key) % 16384 → 哈希槽 → 负责的节点
-</code></pre></div>
-<p><strong>MOVED vs ASK 重定向：</strong></p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Client                         Node A (槽 0-5000)
-  | --- GET key{slot=6000} ---&gt; |
-  | &lt;-- MOVED 6000 192.168.1.3:6379 （永久重定向）
-  |                              客户端更新槽位映射表
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-built_in">CRC16</span>(key) % <span class="hljs-number">16384</span> → 哈希槽 → 负责的节点
+</code></pre></div><p><strong>MOVED vs ASK 重定向：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Client                         Node A (槽 <span class="hljs-number">0</span><span class="hljs-number">-5000</span>)
+  | <span class="hljs-type">--- GET</span> key{slot=<span class="hljs-number">6000</span>} ---&gt; |
+  <span class="hljs-type">| &lt;-- MOVED</span> <span class="hljs-number">6000</span> <span class="hljs-number">192.168</span><span class="hljs-number">.1</span><span class="hljs-number">.3</span>:<span class="hljs-number">6379</span> （永久重定向）
+  |                              <span class="hljs-type">客户端更新槽位映射表
 
-Client                         Node B (槽 5001-10000)
-  | --- GET key{slot=6000} ---&gt; |
-  |                              正在迁移，本地无此 key
-  | &lt;-- ASK 6000 192.168.1.3:6379 （临时重定向）
-  | --- ASKING → GET key ------&gt; | (Node C)
-</code></pre></div>
-<p><strong>客户端路由策略（Lettuce 实现）：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Lettuce 集群客户端自动处理 MOVED/ASK
-var client = RedisClusterClient.create(&quot;redis://localhost:7000,localhost:7001&quot;);
-var connection = client.connect();
-var commands = connection.sync();
-commands.set(&quot;key&quot;, &quot;value&quot;); // 自动路由到正确节点
-</code></pre></div>
-<hr>
+Client</span>                         Node B (槽 <span class="hljs-number">5001</span><span class="hljs-number">-10000</span>)
+  | <span class="hljs-type">--- GET</span> key{slot=<span class="hljs-number">6000</span>} ---&gt; |
+  <span class="hljs-type">|                              正在迁移，本地无此 key</span>
+  | <span class="hljs-type">&lt;-- ASK</span> <span class="hljs-number">6000</span> <span class="hljs-number">192.168</span><span class="hljs-number">.1</span><span class="hljs-number">.3</span>:<span class="hljs-number">6379</span> （临时重定向）
+  | <span class="hljs-type">--- ASKING</span> → GET key ------&gt; | <span class="hljs-type">(Node</span> C)
+</code></pre></div><p><strong>客户端路由策略（Lettuce 实现）：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// Lettuce 集群客户端自动处理 MOVED/ASK</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">client</span> <span class="hljs-operator">=</span> RedisClusterClient.create(<span class="hljs-string">"redis://localhost:7000,localhost:7001"</span>);
+<span class="hljs-type">var</span> <span class="hljs-variable">connection</span> <span class="hljs-operator">=</span> client.connect();
+<span class="hljs-type">var</span> <span class="hljs-variable">commands</span> <span class="hljs-operator">=</span> connection.sync();
+commands.set(<span class="hljs-string">"key"</span>, <span class="hljs-string">"value"</span>); <span class="hljs-comment">// 自动路由到正确节点</span>
+</code></pre></div><hr>
 <h2>四、分布式锁</h2>
 <h3>4.1 Redisson 看门狗（Watchdog）</h3>
-<p>Redisson 解决了简单 SET NX PX 锁的&quot;锁提前释放&quot;问题：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 1. 获取锁
-RLock lock = redisson.getLock(&quot;order:123:lock&quot;);
+<p>Redisson 解决了简单 SET NX PX 锁的"锁提前释放"问题：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 1. 获取锁</span>
+<span class="hljs-type">RLock</span> <span class="hljs-variable">lock</span> <span class="hljs-operator">=</span> redisson.getLock(<span class="hljs-string">"order:123:lock"</span>);
 
-// 自动续期（看门狗每 10 秒检查，持锁超时 30 秒）
-lock.lock();  // 等价于 lock.lock(30, TimeUnit.SECONDS)
+<span class="hljs-comment">// 自动续期（看门狗每 10 秒检查，持锁超时 30 秒）</span>
+lock.lock();  <span class="hljs-comment">// 等价于 lock.lock(30, TimeUnit.SECONDS)</span>
 
-try {
-    // 业务逻辑
-} finally {
+<span class="hljs-keyword">try</span> {
+    <span class="hljs-comment">// 业务逻辑</span>
+} <span class="hljs-keyword">finally</span> {
     lock.unlock();
 }
-</code></pre></div>
-<p><strong>看门狗原理（Redisson 源码分析）：</strong></p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>lock() 流程：
-1. Lua 脚本：SETNX + PEXPIRE（原子）
-2. 定时任务（netty timer）：
-   - 每 internalLockLeaseTime/3 = 10s 执行一次
+</code></pre></div><p><strong>看门狗原理（Redisson 源码分析）：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-keyword">lock</span>() 流程：
+<span class="hljs-number">1.</span> Lua 脚本：SETNX + PEXPIRE（原子）
+<span class="hljs-number">2.</span> 定时任务（netty timer）：
+   - 每 internalLockLeaseTime/<span class="hljs-number">3</span> = <span class="hljs-number">10</span>s 执行一次
    - 检查锁是否还被当前线程持有
-   - 如果持有 → PEXPIRE 续期到 30s
-3. unlock() 时取消定时任务
+   - 如果持有 → PEXPIRE 续期到 <span class="hljs-number">30</span>s
+<span class="hljs-number">3.</span> unlock() 时取消定时任务
 
 Lua 续期脚本（简化）：
-if redis.call(&#39;hexists&#39;, KEYS[1], ARGV[2]) == 1 then
-    return redis.call(&#39;pexpire&#39;, KEYS[1], ARGV[1])
-end
-</code></pre></div>
-<h3>4.2 红锁（RedLock）争议</h3>
+<span class="hljs-keyword">if</span> redis.<span class="hljs-keyword">call</span>(<span class="hljs-string">'hexists'</span>, KEYS[<span class="hljs-number">1</span>], ARGV[<span class="hljs-number">2</span>]) == <span class="hljs-number">1</span> <span class="hljs-keyword">then</span>
+    <span class="hljs-keyword">return</span> redis.<span class="hljs-keyword">call</span>(<span class="hljs-string">'pexpire'</span>, KEYS[<span class="hljs-number">1</span>], ARGV[<span class="hljs-number">1</span>])
+<span class="hljs-keyword">end</span>
+</code></pre></div><h3>4.2 红锁（RedLock）争议</h3>
 <p>Martin Kleppmann 在《How to do distributed locking》中指出红锁的问题：</p>
 <ol>
-<li><strong>时钟跳跃：</strong> 如果获取锁后 GC/时钟跳跃，锁可能在&quot;还持有&quot;的幻觉中过期</li>
+<li><strong>时钟跳跃：</strong> 如果获取锁后 GC/时钟跳跃，锁可能在"还持有"的幻觉中过期</li>
 <li><strong>Fencing Token：</strong> 应附带单调递增的 token，资源服务器需要校验</li>
 </ol>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Redisson 的红锁实现
-RLock lock1 = redisson1.getLock(&quot;lock&quot;);
-RLock lock2 = redisson2.getLock(&quot;lock&quot;);
-RLock lock3 = redisson3.getLock(&quot;lock&quot;);
-RedissonRedLock redLock = new RedissonRedLock(lock1, lock2, lock3);
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// Redisson 的红锁实现</span>
+<span class="hljs-type">RLock</span> <span class="hljs-variable">lock1</span> <span class="hljs-operator">=</span> redisson1.getLock(<span class="hljs-string">"lock"</span>);
+<span class="hljs-type">RLock</span> <span class="hljs-variable">lock2</span> <span class="hljs-operator">=</span> redisson2.getLock(<span class="hljs-string">"lock"</span>);
+<span class="hljs-type">RLock</span> <span class="hljs-variable">lock3</span> <span class="hljs-operator">=</span> redisson3.getLock(<span class="hljs-string">"lock"</span>);
+<span class="hljs-type">RedissonRedLock</span> <span class="hljs-variable">redLock</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RedissonRedLock</span>(lock1, lock2, lock3);
 
 redLock.lock();
-try {
-    // 关键资源操作
-} finally {
+<span class="hljs-keyword">try</span> {
+    <span class="hljs-comment">// 关键资源操作</span>
+} <span class="hljs-keyword">finally</span> {
     redLock.unlock();
 }
-</code></pre></div>
-<p><strong>生产建议：</strong> 在多数场景中，单 Redis 实例 + Redisson 看门狗 已足够。红锁仅在对一致性有极高要求且可接受复杂度和性能开销时使用。更严格的一致性场景应使用 ZooKeeper 或数据库锁。</p>
+</code></pre></div><p><strong>生产建议：</strong> 在多数场景中，单 Redis 实例 + Redisson 看门狗 已足够。红锁仅在对一致性有极高要求且可接受复杂度和性能开销时使用。更严格的一致性场景应使用 ZooKeeper 或数据库锁。</p>
 <h3>4.3 SET NX PX 原子性</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Jedis 方式（SET NX PX 原子命令）
-String result = jedis.set(&quot;lock:key&quot;, &quot;unique_value&quot;,
-        SetParams.setParams().nx().px(30000));
-if (&quot;OK&quot;.equals(result)) {
-    try {
-        // 业务逻辑
-    } finally {
-        // Lua 脚本原子释放（确保释放的是自己持有的锁）
-        String script = &quot;&quot;&quot;
-            if redis.call(&#39;get&#39;, KEYS[1]) == ARGV[1] then
-                return redis.call(&#39;del&#39;, KEYS[1])
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// Jedis 方式（SET NX PX 原子命令）</span>
+<span class="hljs-type">String</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> jedis.set(<span class="hljs-string">"lock:key"</span>, <span class="hljs-string">"unique_value"</span>,
+        SetParams.setParams().nx().px(<span class="hljs-number">30000</span>));
+<span class="hljs-keyword">if</span> (<span class="hljs-string">"OK"</span>.equals(result)) {
+    <span class="hljs-keyword">try</span> {
+        <span class="hljs-comment">// 业务逻辑</span>
+    } <span class="hljs-keyword">finally</span> {
+        <span class="hljs-comment">// Lua 脚本原子释放（确保释放的是自己持有的锁）</span>
+        <span class="hljs-type">String</span> <span class="hljs-variable">script</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
+            if redis.call('get', KEYS[1]) == ARGV[1] then
+                return redis.call('del', KEYS[1])
             else
                 return 0
-            end&quot;&quot;&quot;;
-        jedis.eval(script, List.of(&quot;lock:key&quot;), List.of(&quot;unique_value&quot;));
+            end"""</span>;
+        jedis.eval(script, List.of(<span class="hljs-string">"lock:key"</span>), List.of(<span class="hljs-string">"unique_value"</span>));
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>五、缓存策略</h2>
 <h3>5.1 Cache-Aside 模式</h3>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>读操作：
-1. 查缓存
-2. 命中 → 返回
-3. 未命中 → 查 DB → 写缓存 → 返回
+<span class="hljs-bullet">1.</span> 查缓存
+<span class="hljs-bullet">2.</span> 命中 → 返回
+<span class="hljs-bullet">3.</span> 未命中 → 查 DB → 写缓存 → 返回
 
 写操作：
-1. 更新 DB
-2. 删除缓存（而非更新缓存）
-</code></pre></div>
-<p><strong>为什么是删除缓存而非更新？</strong></p>
+<span class="hljs-bullet">1.</span> 更新 DB
+<span class="hljs-bullet">2.</span> 删除缓存（而非更新缓存）
+</code></pre></div><p><strong>为什么是删除缓存而非更新？</strong></p>
 <ul>
 <li>更新缓存+更新DB之间存在时序问题</li>
 <li>如果写入顺序是 写DB→写缓存，并发读写可能导致缓存脏数据</li>
@@ -366,72 +341,70 @@ if (&quot;OK&quot;.equals(result)) {
 </tr>
 </tbody></table>
 <h3>5.2 延迟双删</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
-public class UserService {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">UserService</span> {
 
-    private final UserRepository userRepo;
-    private final StringRedisTemplate redis;
-    private final TaskExecutor taskExecutor;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> UserRepository userRepo;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> StringRedisTemplate redis;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> TaskExecutor taskExecutor;
 
-    // 延迟双删策略
-    public void updateUser(Long userId, UserDto dto) {
-        // 1. 第一次删除缓存
-        redis.delete(&quot;user:&quot; + userId);
+    <span class="hljs-comment">// 延迟双删策略</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">updateUser</span><span class="hljs-params">(Long userId, UserDto dto)</span> {
+        <span class="hljs-comment">// 1. 第一次删除缓存</span>
+        redis.delete(<span class="hljs-string">"user:"</span> + userId);
 
-        // 2. 更新数据库
+        <span class="hljs-comment">// 2. 更新数据库</span>
         userRepo.update(userId, dto);
 
-        // 3. 延迟第二次删除（异步，等待并发读完成）
+        <span class="hljs-comment">// 3. 延迟第二次删除（异步，等待并发读完成）</span>
         taskExecutor.execute(() -&gt; {
-            try {
-                Thread.sleep(500); // 视业务场景调整
-            } catch (InterruptedException e) {
+            <span class="hljs-keyword">try</span> {
+                Thread.sleep(<span class="hljs-number">500</span>); <span class="hljs-comment">// 视业务场景调整</span>
+            } <span class="hljs-keyword">catch</span> (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
-            redis.delete(&quot;user:&quot; + userId);
+            redis.delete(<span class="hljs-string">"user:"</span> + userId);
         });
     }
 }
-</code></pre></div>
-<h3>5.3 布隆过滤器穿透防护</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Configuration
-public class BloomFilterConfig {
+</code></pre></div><h3>5.3 布隆过滤器穿透防护</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Configuration</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">BloomFilterConfig</span> {
 
-    @Bean
-    public BloomFilter&lt;String&gt; userIdBloomFilter() {
-        // Guava 本地布隆过滤器
-        return BloomFilter.create(
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-keyword">public</span> BloomFilter&lt;String&gt; <span class="hljs-title function_">userIdBloomFilter</span><span class="hljs-params">()</span> {
+        <span class="hljs-comment">// Guava 本地布隆过滤器</span>
+        <span class="hljs-keyword">return</span> BloomFilter.create(
                 Funnels.stringFunnel(StandardCharsets.UTF_8),
-                1_000_000,  // 期望元素数
-                0.01        // 误判率 1%
+                <span class="hljs-number">1_000_000</span>,  <span class="hljs-comment">// 期望元素数</span>
+                <span class="hljs-number">0.01</span>        <span class="hljs-comment">// 误判率 1%</span>
         );
     }
 }
 
-// 结合 Redis 模块布隆过滤器（更推荐，共享状态）
-// BF.RESERVE user:bloom 0.01 1000000
-// BF.ADD user:bloom &quot;user_123&quot;
-// BF.EXISTS user:bloom &quot;user_123&quot;
+<span class="hljs-comment">// 结合 Redis 模块布隆过滤器（更推荐，共享状态）</span>
+<span class="hljs-comment">// BF.RESERVE user:bloom 0.01 1000000</span>
+<span class="hljs-comment">// BF.ADD user:bloom "user_123"</span>
+<span class="hljs-comment">// BF.EXISTS user:bloom "user_123"</span>
 
-@Service
-public class UserQueryService {
+<span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">UserQueryService</span> {
 
-    public User getUser(String userId) {
-        // 1. 布隆过滤器快速排除不存在的 key
-        Boolean exists = redis.opsForValue()
+    <span class="hljs-keyword">public</span> User <span class="hljs-title function_">getUser</span><span class="hljs-params">(String userId)</span> {
+        <span class="hljs-comment">// 1. 布隆过滤器快速排除不存在的 key</span>
+        <span class="hljs-type">Boolean</span> <span class="hljs-variable">exists</span> <span class="hljs-operator">=</span> redis.opsForValue()
                 .getOperations().execute((RedisCallback&lt;Boolean&gt;) conn -&gt;
-                        conn.execute(&quot;BF.EXISTS&quot;, &quot;user:bloom&quot;.getBytes(), userId.getBytes()));
+                        conn.execute(<span class="hljs-string">"BF.EXISTS"</span>, <span class="hljs-string">"user:bloom"</span>.getBytes(), userId.getBytes()));
 
-        if (Boolean.FALSE.equals(exists)) {
-            return null; // 一定不存在，无需查 DB
+        <span class="hljs-keyword">if</span> (Boolean.FALSE.equals(exists)) {
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">null</span>; <span class="hljs-comment">// 一定不存在，无需查 DB</span>
         }
 
-        // 2. 查缓存 / 查 DB
-        // ...
+        <span class="hljs-comment">// 2. 查缓存 / 查 DB</span>
+        <span class="hljs-comment">// ...</span>
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>六、Java 客户端对比</h2>
 <h3>6.1 Lettuce vs Jedis</h3>
 <table>
@@ -474,157 +447,147 @@ public class UserQueryService {
 </tr>
 </tbody></table>
 <p><strong>Lettuce 异步 API 示例：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 异步 API
-var future = redisAsyncCommands.get(&quot;key&quot;);
-future.thenAccept(value -&gt; System.out.println(&quot;Got: &quot; + value));
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 异步 API</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">future</span> <span class="hljs-operator">=</span> redisAsyncCommands.get(<span class="hljs-string">"key"</span>);
+future.thenAccept(value -&gt; System.out.println(<span class="hljs-string">"Got: "</span> + value));
 
-// 响应式 API
-redisReactiveCommands.get(&quot;key&quot;)
-        .map(value -&gt; &quot;Processed: &quot; + value)
+<span class="hljs-comment">// 响应式 API</span>
+redisReactiveCommands.get(<span class="hljs-string">"key"</span>)
+        .map(value -&gt; <span class="hljs-string">"Processed: "</span> + value)
         .subscribe(System.out::println);
-</code></pre></div>
-<h3>6.2 Spring Data Redis 配置</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">spring:
-  data:
-    redis:
-      host: localhost
-      port: 6379
-      password: ${REDIS_PASSWORD}
-      lettuce:
-        pool:
-          max-active: 16
-          max-idle: 8
-          min-idle: 4
-          max-wait: 2000ms
-      timeout: 3000ms
-      cluster:
-        nodes:
-          - 192.168.1.10:6379
-          - 192.168.1.11:6379
-          - 192.168.1.12:6379
-</code></pre></div>
-<hr>
+</code></pre></div><h3>6.2 Spring Data Redis 配置</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-attr">spring:</span>
+  <span class="hljs-attr">data:</span>
+    <span class="hljs-attr">redis:</span>
+      <span class="hljs-attr">host:</span> <span class="hljs-string">localhost</span>
+      <span class="hljs-attr">port:</span> <span class="hljs-number">6379</span>
+      <span class="hljs-attr">password:</span> <span class="hljs-string">${REDIS_PASSWORD}</span>
+      <span class="hljs-attr">lettuce:</span>
+        <span class="hljs-attr">pool:</span>
+          <span class="hljs-attr">max-active:</span> <span class="hljs-number">16</span>
+          <span class="hljs-attr">max-idle:</span> <span class="hljs-number">8</span>
+          <span class="hljs-attr">min-idle:</span> <span class="hljs-number">4</span>
+          <span class="hljs-attr">max-wait:</span> <span class="hljs-string">2000ms</span>
+      <span class="hljs-attr">timeout:</span> <span class="hljs-string">3000ms</span>
+      <span class="hljs-attr">cluster:</span>
+        <span class="hljs-attr">nodes:</span>
+          <span class="hljs-bullet">-</span> <span class="hljs-number">192.168</span><span class="hljs-number">.1</span><span class="hljs-number">.10</span><span class="hljs-string">:6379</span>
+          <span class="hljs-bullet">-</span> <span class="hljs-number">192.168</span><span class="hljs-number">.1</span><span class="hljs-number">.11</span><span class="hljs-string">:6379</span>
+          <span class="hljs-bullet">-</span> <span class="hljs-number">192.168</span><span class="hljs-number">.1</span><span class="hljs-number">.12</span><span class="hljs-string">:6379</span>
+</code></pre></div><hr>
 <h2>七、AI 场景：Redis Vector Search</h2>
 <h3>7.1 向量索引创建</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># 创建向量索引（余弦距离）
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-comment"># 创建向量索引（余弦距离）</span>
 FT.CREATE idx:docs ON HASH PREFIX 1 doc:
   SCHEMA text TEXT content VARCHAR
   embedding VECTOR FLAT 6 TYPE FLOAT32 DIM 1536 DISTANCE_METRIC COSINE
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
-public class RedisVectorService {
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">RedisVectorService</span> {
 
-    private final RedissonClient redisson;
-    private final EmbeddingModel embeddingModel;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> RedissonClient redisson;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> EmbeddingModel embeddingModel;
 
-    // 添加文档向量
-    public void addDocument(String docId, String content, float[] embedding) {
-        var key = &quot;doc:&quot; + docId;
-        var map = new HashMap&lt;String, Object&gt;();
-        map.put(&quot;content&quot;, content);
-        map.put(&quot;embedding&quot;, embeddingToBytes(embedding));
+    <span class="hljs-comment">// 添加文档向量</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">addDocument</span><span class="hljs-params">(String docId, String content, <span class="hljs-type">float</span>[] embedding)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">key</span> <span class="hljs-operator">=</span> <span class="hljs-string">"doc:"</span> + docId;
+        <span class="hljs-type">var</span> <span class="hljs-variable">map</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">HashMap</span>&lt;String, Object&gt;();
+        map.put(<span class="hljs-string">"content"</span>, content);
+        map.put(<span class="hljs-string">"embedding"</span>, embeddingToBytes(embedding));
         redisson.getMap(key).putAll(map);
     }
 
-    private byte[] embeddingToBytes(float[] embedding) {
-        var buffer = ByteBuffer.allocate(embedding.length * Float.BYTES);
+    <span class="hljs-keyword">private</span> <span class="hljs-type">byte</span>[] embeddingToBytes(<span class="hljs-type">float</span>[] embedding) {
+        <span class="hljs-type">var</span> <span class="hljs-variable">buffer</span> <span class="hljs-operator">=</span> ByteBuffer.allocate(embedding.length * Float.BYTES);
         buffer.order(ByteOrder.LITTLE_ENDIAN);
-        for (var val : embedding) {
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> val : embedding) {
             buffer.putFloat(val);
         }
-        return buffer.array();
+        <span class="hljs-keyword">return</span> buffer.array();
     }
 }
-</code></pre></div>
-<h3>7.2 KNN 查询</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># KNN 搜索（返回最近 10 个）
-FT.SEARCH idx:docs &quot;*=&gt;[KNN 10 @embedding $vec AS dist]&quot;
+</code></pre></div><h3>7.2 KNN 查询</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-comment"># KNN 搜索（返回最近 10 个）</span>
+FT.SEARCH idx:docs <span class="hljs-string">"*=&gt;[KNN 10 @embedding <span class="hljs-variable">$vec</span> AS dist]"</span>
   SORTBY dist
   PARAMS 2 vec &lt;binary_blob&gt;
   RETURN 3 content dist
   DIALECT 2
-</code></pre></div>
-<h3>7.3 语义缓存</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
-public class SemanticCacheService {
+</code></pre></div><h3>7.3 语义缓存</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">SemanticCacheService</span> {
 
-    private final EmbeddingModel embeddingModel;
-    private final StringRedisTemplate redis;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> EmbeddingModel embeddingModel;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> StringRedisTemplate redis;
 
-    public record CachedResponse(String query, String response, long timestamp) {}
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">CachedResponse</span><span class="hljs-params">(String query, String response, <span class="hljs-type">long</span> timestamp)</span> {}
 
-    public Optional&lt;CachedResponse&gt; findSimilarQuery(String userQuery, double threshold) {
-        var queryEmbedding = embeddingModel.embed(userQuery);
+    <span class="hljs-keyword">public</span> Optional&lt;CachedResponse&gt; <span class="hljs-title function_">findSimilarQuery</span><span class="hljs-params">(String userQuery, <span class="hljs-type">double</span> threshold)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">queryEmbedding</span> <span class="hljs-operator">=</span> embeddingModel.embed(userQuery);
 
-        // FT.SEARCH 执行 KNN 查找语义相似的已缓存查询
-        // 如果相似度 &gt; threshold，返回缓存的响应
-        // 否则返回 empty，触发实际 LLM 调用并写入缓存
-        // ...
-        return Optional.empty();
+        <span class="hljs-comment">// FT.SEARCH 执行 KNN 查找语义相似的已缓存查询</span>
+        <span class="hljs-comment">// 如果相似度 &gt; threshold，返回缓存的响应</span>
+        <span class="hljs-comment">// 否则返回 empty，触发实际 LLM 调用并写入缓存</span>
+        <span class="hljs-comment">// ...</span>
+        <span class="hljs-keyword">return</span> Optional.empty();
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>八、常见问题</h2>
 <h3>8.1 热 Key / 大 Key</h3>
 <p><strong>热 Key 应对：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 1. 本地缓存前置（Caffeine + Redis）
-@Cacheable(cacheNames = &quot;hot-products&quot;, key = &quot;#productId&quot;)
-public Product getProduct(Long productId) { ... }
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 1. 本地缓存前置（Caffeine + Redis）</span>
+<span class="hljs-meta">@Cacheable(cacheNames = "hot-products", key = "#productId")</span>
+<span class="hljs-keyword">public</span> Product <span class="hljs-title function_">getProduct</span><span class="hljs-params">(Long productId)</span> { ... }
 
-// 2. key 分片（冗余多份 + 随机访问其一）
-String key = &quot;product:&quot; + productId + &quot;:&quot; + ThreadLocalRandom.current().nextInt(10);
-</code></pre></div>
-<p><strong>大 Key 检测与处理：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># 检测
+<span class="hljs-comment">// 2. key 分片（冗余多份 + 随机访问其一）</span>
+<span class="hljs-type">String</span> <span class="hljs-variable">key</span> <span class="hljs-operator">=</span> <span class="hljs-string">"product:"</span> + productId + <span class="hljs-string">":"</span> + ThreadLocalRandom.current().nextInt(<span class="hljs-number">10</span>);
+</code></pre></div><p><strong>大 Key 检测与处理：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-comment"># 检测</span>
 redis-cli --bigkeys
-redis-cli MEMORY USAGE big:hash:key
+redis-cli MEMORY USAGE big:<span class="hljs-built_in">hash</span>:key
 
-# 异步删除（Redis 4.0+，避免阻塞）
-UNLINK big:hash:key
-</code></pre></div>
-<h3>8.2 缓存雪崩 / 击穿</h3>
+<span class="hljs-comment"># 异步删除（Redis 4.0+，避免阻塞）</span>
+UNLINK big:<span class="hljs-built_in">hash</span>:key
+</code></pre></div><h3>8.2 缓存雪崩 / 击穿</h3>
 <p><strong>雪崩（大量 key 同时过期）：</strong> 随机 TTL（base_ttl + random_ttl），多级缓存，熔断降级。</p>
 <p><strong>击穿（热点 key 过期时大量请求直达 DB）：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public String getWithMutex(String key) {
-    var value = redis.opsForValue().get(key);
-    if (value != null) return value;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> String <span class="hljs-title function_">getWithMutex</span><span class="hljs-params">(String key)</span> {
+    <span class="hljs-type">var</span> <span class="hljs-variable">value</span> <span class="hljs-operator">=</span> redis.opsForValue().get(key);
+    <span class="hljs-keyword">if</span> (value != <span class="hljs-literal">null</span>) <span class="hljs-keyword">return</span> value;
 
-    // 加互斥锁
-    var lockKey = &quot;lock:&quot; + key;
-    try {
-        if (redis.opsForValue().setIfAbsent(lockKey, &quot;1&quot;, 10, TimeUnit.SECONDS)) {
-            // 查 DB
+    <span class="hljs-comment">// 加互斥锁</span>
+    <span class="hljs-type">var</span> <span class="hljs-variable">lockKey</span> <span class="hljs-operator">=</span> <span class="hljs-string">"lock:"</span> + key;
+    <span class="hljs-keyword">try</span> {
+        <span class="hljs-keyword">if</span> (redis.opsForValue().setIfAbsent(lockKey, <span class="hljs-string">"1"</span>, <span class="hljs-number">10</span>, TimeUnit.SECONDS)) {
+            <span class="hljs-comment">// 查 DB</span>
             value = db.query(key);
-            redis.opsForValue().set(key, value, 30, TimeUnit.MINUTES);
-        } else {
-            Thread.sleep(50); // 等持锁线程写入缓存
-            return getWithMutex(key);  // 重试
+            redis.opsForValue().set(key, value, <span class="hljs-number">30</span>, TimeUnit.MINUTES);
+        } <span class="hljs-keyword">else</span> {
+            Thread.sleep(<span class="hljs-number">50</span>); <span class="hljs-comment">// 等持锁线程写入缓存</span>
+            <span class="hljs-keyword">return</span> getWithMutex(key);  <span class="hljs-comment">// 重试</span>
         }
-    } finally {
+    } <span class="hljs-keyword">finally</span> {
         redis.delete(lockKey);
     }
-    return value;
+    <span class="hljs-keyword">return</span> value;
 }
-</code></pre></div>
-<h3>8.3 集群扩容与数据倾斜</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># 查看槽位分布
+</code></pre></div><h3>8.3 集群扩容与数据倾斜</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-comment"># 查看槽位分布</span>
 redis-cli CLUSTER NODES
 redis-cli CLUSTER SLOTS
 
-# 重新分片（在线）
+<span class="hljs-comment"># 重新分片（在线）</span>
 redis-cli --cluster reshard 192.168.1.10:6379 \
   --cluster-from &lt;source_node_id&gt; \
   --cluster-to &lt;target_node_id&gt; \
   --cluster-slots 1000
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>相关条目</h2>
 <ul>
-<li><a href="#/04-数据与中间件/数据库与缓存/04-PostgreSQL与pgvector深度解析" class="cross-ref" data-ref="04-PostgreSQL与pgvector深度解析">04-PostgreSQL与pgvector深度解析</a> — PostgreSQL 深度解析</li>
-<li><a href="#/05-分布式架构/事务与一致性/05-缓存策略与多级缓存架构" class="cross-ref" data-ref="05-缓存策略与多级缓存架构">05-缓存策略与多级缓存架构</a> — 缓存策略与多级缓存</li>
-<li><a href="#/05-分布式架构/弹性设计/05-幂等设计与分布式锁" class="cross-ref" data-ref="05-幂等设计与分布式锁">05-幂等设计与分布式锁</a> — 幂等性与分布式锁</li>
-<li><a href="#/04-数据与中间件/消息与搜索/04-Kafka深度解析" class="cross-ref" data-ref="04-Kafka深度解析">04-Kafka深度解析</a> — Kafka 消息队列</li>
+<li><a href="#/04-数据与中间件/数据库与缓存/04-PostgreSQL与pgvector深度解析" class="cross-ref">04-PostgreSQL与pgvector深度解析</a> — PostgreSQL 深度解析</li>
+<li><a href="#/05-分布式架构/事务与一致性/05-缓存策略与多级缓存架构" class="cross-ref">05-缓存策略与多级缓存架构</a> — 缓存策略与多级缓存</li>
+<li><a href="#/05-分布式架构/弹性设计/05-幂等设计与分布式锁" class="cross-ref">05-幂等设计与分布式锁</a> — 幂等性与分布式锁</li>
+<li><a href="#/04-数据与中间件/消息与搜索/04-Kafka深度解析" class="cross-ref">04-Kafka深度解析</a> — Kafka 消息队列</li>
 </ul>
-</div>
+</body></html></div>
 </article>

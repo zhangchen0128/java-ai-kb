@@ -1,12 +1,12 @@
 
-<article class="kb-entry" data-path="/13-AI协议/13-MCP协议与JavaSDK">
+<article class="kb-entry" data-path="/13-AI协议">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=13">13-AI协议</a></div>
     <h1>MCP协议深入与Java SDK实战</h1>
-    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#mcp</span><span class="badge badge-tag">#model-context-protocol</span><span class="badge badge-tag">#java</span><span class="badge badge-tag">#spring-ai</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#mcp</span><span class="badge badge-tag">#model-context-protocol</span><span class="badge badge-tag">#java</span><span class="badge badge-tag">#spring-ai</span><span class="badge badge-tag">#tool-calling</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://modelcontextprotocol.io/specification/2025-06-18/" target="_blank" rel="noopener" class="source-link" title="MCP官方规范 2025-06-18版本">MCP官方规范 2025-06-18版本</a><a href="https://modelcontextprotocol.io/sdk/java/mcp-server" target="_blank" rel="noopener" class="source-link" title="MCP Java SDK官方文档 - Server端">MCP Java SDK官方文档 - Server端</a><a href="https://modelcontextprotocol.io/sdk/java/mcp-client" target="_blank" rel="noopener" class="source-link" title="MCP Java SDK官方文档 - Client端">MCP Java SDK官方文档 - Client端</a><a href="https://docs.spring.io/spring-ai/reference/api/mcp.html" target="_blank" rel="noopener" class="source-link" title="Spring AI MCP集成文档">Spring AI MCP集成文档</a></small></div>
   </div>
-  <div class="entry-body"><h1>MCP协议深入与Java SDK实战</h1>
+  <div class="entry-body"><html><head></head><body><h1>MCP协议深入与Java SDK实战</h1>
 <h2>一、MCP架构深入</h2>
 <h3>1.1 三层模型</h3>
 <p>MCP（Model Context Protocol）定义了三层架构模型，每一层职责清晰：</p>
@@ -16,23 +16,21 @@
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌─────────────────────────────────────┐
 │              AI Host                │
 │  ┌──────────┐  ┌──────────────────┐ │
-│  │ LLM      │  │ MCP Client Mgr   │ │
+│  │ LLM      │  │ MCP<span class="hljs-built_in"> Client </span>Mgr   │ │
 │  │ (Claude) │  │  ┌────────────┐  │ │
-│  └──────────┘  │  │ MCP Client │──┼─┼──→ MCP Server A (Database)
+│  └──────────┘  │  │ MCP<span class="hljs-built_in"> Client </span>│──┼─┼──→ MCP<span class="hljs-built_in"> Server </span>A (Database)
 │                │  ├────────────┤  │ │
-│                │  │ MCP Client │──┼─┼──→ MCP Server B (Filesystem)
+│                │  │ MCP<span class="hljs-built_in"> Client </span>│──┼─┼──→ MCP<span class="hljs-built_in"> Server </span>B (Filesystem)
 │                │  └────────────┘  │ │
 │                └──────────────────┘ │
 └─────────────────────────────────────┘
-</code></pre></div>
-<h3>1.2 Transport层</h3>
+</code></pre></div><h3>1.2 Transport层</h3>
 <p>MCP定义了两种标准Transport方式：</p>
 <p><strong>stdio Transport</strong>：Server作为子进程运行，Client通过标准输入/输出与Server通信。使用JSON-RPC 2.0编码消息，以换行符分隔。这种方式的优势是安全隔离好，Server无法主动访问网络；劣势是只能在本机使用。</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Client启动Server子进程 → fork/exec java -jar my-mcp-server.jar
-消息格式: JSON-RPC 2.0 + 换行符分隔
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Client启动Server子进程 → <span class="hljs-keyword">fork</span>/<span class="hljs-keyword">exec</span> java -jar <span class="hljs-keyword">my</span>-mcp-server.jar
+消息格式: JSON-RPC <span class="hljs-number">2.0</span> + 换行符分隔
 每条消息独占一行（不支持消息体内换行）
-</code></pre></div>
-<p><strong>Streamable HTTP Transport</strong>：Server作为HTTP服务运行，Client通过HTTP请求与之通信。支持Server到Client的推送（通过SSE），适合远程部署场景。</p>
+</code></pre></div><p><strong>Streamable HTTP Transport</strong>：Server作为HTTP服务运行，Client通过HTTP请求与之通信。支持Server到Client的推送（通过SSE），适合远程部署场景。</p>
 <h3>1.3 核心原语</h3>
 <p>MCP定义了三种核心原语，对应AI应用与外部世界交互的三种模式：</p>
 <p><strong>Tools（工具调用）</strong>：Tools是Server暴露的可调用函数，LLM通过function calling机制发现并调用。每个Tool有名称、描述、输入Schema（JSON Schema）。典型场景：查询数据库、发送邮件、创建Jira工单。</p>
@@ -41,39 +39,38 @@
 <h2>二、MCP协议交互流程</h2>
 <h3>2.1 初始化握手</h3>
 <p>MCP协议的生命周期从初始化握手开始：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Client → Server: initialize {
-  &quot;jsonrpc&quot;: &quot;2.0&quot;,
-  &quot;method&quot;: &quot;initialize&quot;,
-  &quot;params&quot;: {
-    &quot;protocolVersion&quot;: &quot;2025-06-18&quot;,
-    &quot;capabilities&quot;: {
-      &quot;roots&quot;: {&quot;listChanged&quot;: true},
-      &quot;sampling&quot;: {}
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-built_in">Client</span> → <span class="hljs-built_in">Server</span>: initialize {
+  <span class="hljs-string">"jsonrpc"</span>: <span class="hljs-string">"2.0"</span>,
+  <span class="hljs-string">"method"</span>: <span class="hljs-string">"initialize"</span>,
+  <span class="hljs-string">"params"</span>: {
+    <span class="hljs-string">"protocolVersion"</span>: <span class="hljs-string">"2025-06-18"</span>,
+    <span class="hljs-string">"capabilities"</span>: {
+      <span class="hljs-string">"roots"</span>: {<span class="hljs-string">"listChanged"</span>: <span class="hljs-literal">true</span>},
+      <span class="hljs-string">"sampling"</span>: {}
     },
-    &quot;clientInfo&quot;: {
-      &quot;name&quot;: &quot;my-ai-app&quot;,
-      &quot;version&quot;: &quot;1.0.0&quot;
+    <span class="hljs-string">"clientInfo"</span>: {
+      <span class="hljs-string">"name"</span>: <span class="hljs-string">"my-ai-app"</span>,
+      <span class="hljs-string">"version"</span>: <span class="hljs-string">"1.0.0"</span>
     }
   }
 }
 
-Server → Client: {
-  &quot;result&quot;: {
-    &quot;protocolVersion&quot;: &quot;2025-06-18&quot;,
-    &quot;capabilities&quot;: {
-      &quot;tools&quot;: {&quot;listChanged&quot;: true},
-      &quot;resources&quot;: {&quot;subscribe&quot;: true, &quot;listChanged&quot;: true}
+<span class="hljs-built_in">Server</span> → <span class="hljs-built_in">Client</span>: {
+  <span class="hljs-string">"result"</span>: {
+    <span class="hljs-string">"protocolVersion"</span>: <span class="hljs-string">"2025-06-18"</span>,
+    <span class="hljs-string">"capabilities"</span>: {
+      <span class="hljs-string">"tools"</span>: {<span class="hljs-string">"listChanged"</span>: <span class="hljs-literal">true</span>},
+      <span class="hljs-string">"resources"</span>: {<span class="hljs-string">"subscribe"</span>: <span class="hljs-literal">true</span>, <span class="hljs-string">"listChanged"</span>: <span class="hljs-literal">true</span>}
     },
-    &quot;serverInfo&quot;: {
-      &quot;name&quot;: &quot;database-mcp-server&quot;,
-      &quot;version&quot;: &quot;2.3.0&quot;
+    <span class="hljs-string">"serverInfo"</span>: {
+      <span class="hljs-string">"name"</span>: <span class="hljs-string">"database-mcp-server"</span>,
+      <span class="hljs-string">"version"</span>: <span class="hljs-string">"2.3.0"</span>
     }
   }
 }
 
-Client → Server: {&quot;jsonrpc&quot;: &quot;2.0&quot;, &quot;method&quot;: &quot;notifications/initialized&quot;}
-</code></pre></div>
-<h3>2.2 能力协商（Capabilities）</h3>
+<span class="hljs-built_in">Client</span> → <span class="hljs-built_in">Server</span>: {<span class="hljs-string">"jsonrpc"</span>: <span class="hljs-string">"2.0"</span>, <span class="hljs-string">"method"</span>: <span class="hljs-string">"notifications/initialized"</span>}
+</code></pre></div><h3>2.2 能力协商（Capabilities）</h3>
 <p>双方在initialize阶段交换capabilities，声明各自支持的功能。关键capability项：</p>
 <ul>
 <li><code>tools</code>：Server可提供工具调用能力，<code>listChanged</code>表示工具列表可动态变化</li>
@@ -83,105 +80,102 @@ Client → Server: {&quot;jsonrpc&quot;: &quot;2.0&quot;, &quot;method&quot;: &q
 <li><code>elicitation</code>：Client可向用户请求输入</li>
 </ul>
 <h3>2.3 Tools查询与调用</h3>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>// 列出所有工具
-Client → Server: {&quot;method&quot;: &quot;tools/list&quot;}
-Server → Client: {
-  &quot;tools&quot;: [
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-comment">// 列出所有工具</span>
+<span class="hljs-built_in">Client</span> → <span class="hljs-built_in">Server</span>: {<span class="hljs-string">"method"</span>: <span class="hljs-string">"tools/list"</span>}
+<span class="hljs-built_in">Server</span> → <span class="hljs-built_in">Client</span>: {
+  <span class="hljs-string">"tools"</span>: [
     {
-      &quot;name&quot;: &quot;query_table&quot;,
-      &quot;description&quot;: &quot;在指定表中执行SELECT查询&quot;,
-      &quot;inputSchema&quot;: {
-        &quot;type&quot;: &quot;object&quot;,
-        &quot;properties&quot;: {
-          &quot;sql&quot;: {&quot;type&quot;: &quot;string&quot;, &quot;description&quot;: &quot;SQL查询语句&quot;},
-          &quot;params&quot;: {&quot;type&quot;: &quot;array&quot;, &quot;items&quot;: {&quot;type&quot;: &quot;string&quot;}}
+      <span class="hljs-string">"name"</span>: <span class="hljs-string">"query_table"</span>,
+      <span class="hljs-string">"description"</span>: <span class="hljs-string">"在指定表中执行SELECT查询"</span>,
+      <span class="hljs-string">"inputSchema"</span>: {
+        <span class="hljs-string">"type"</span>: <span class="hljs-string">"object"</span>,
+        <span class="hljs-string">"properties"</span>: {
+          <span class="hljs-string">"sql"</span>: {<span class="hljs-string">"type"</span>: <span class="hljs-string">"string"</span>, <span class="hljs-string">"description"</span>: <span class="hljs-string">"SQL查询语句"</span>},
+          <span class="hljs-string">"params"</span>: {<span class="hljs-string">"type"</span>: <span class="hljs-string">"array"</span>, <span class="hljs-string">"items"</span>: {<span class="hljs-string">"type"</span>: <span class="hljs-string">"string"</span>}}
         },
-        &quot;required&quot;: [&quot;sql&quot;]
+        <span class="hljs-string">"required"</span>: [<span class="hljs-string">"sql"</span>]
       }
     }
   ]
 }
 
-// 调用工具
-Client → Server: {
-  &quot;method&quot;: &quot;tools/call&quot;,
-  &quot;params&quot;: {
-    &quot;name&quot;: &quot;query_table&quot;,
-    &quot;arguments&quot;: {&quot;sql&quot;: &quot;SELECT * FROM users WHERE age &gt; ?&quot;, &quot;params&quot;: [&quot;18&quot;]}
+<span class="hljs-comment">// 调用工具</span>
+<span class="hljs-built_in">Client</span> → <span class="hljs-built_in">Server</span>: {
+  <span class="hljs-string">"method"</span>: <span class="hljs-string">"tools/call"</span>,
+  <span class="hljs-string">"params"</span>: {
+    <span class="hljs-string">"name"</span>: <span class="hljs-string">"query_table"</span>,
+    <span class="hljs-string">"arguments"</span>: {<span class="hljs-string">"sql"</span>: <span class="hljs-string">"SELECT * FROM users WHERE age &gt; ?"</span>, <span class="hljs-string">"params"</span>: [<span class="hljs-string">"18"</span>]}
   }
 }
-Server → Client: {
-  &quot;content&quot;: [{&quot;type&quot;: &quot;text&quot;, &quot;text&quot;: &quot;{\&quot;rows\&quot;: [...], \&quot;rowCount\&quot;: 42}&quot;}]
+<span class="hljs-built_in">Server</span> → <span class="hljs-built_in">Client</span>: {
+  <span class="hljs-string">"content"</span>: [{<span class="hljs-string">"type"</span>: <span class="hljs-string">"text"</span>, <span class="hljs-string">"text"</span>: <span class="hljs-string">"{\"rows\": [...], \"rowCount\": 42}"</span>}]
 }
-</code></pre></div>
-<h3>2.4 Resources查询与读取</h3>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>// 列出资源
-Client → Server: {&quot;method&quot;: &quot;resources/list&quot;}
-// 读取资源
-Client → Server: {
-  &quot;method&quot;: &quot;resources/read&quot;,
-  &quot;params&quot;: {&quot;uri&quot;: &quot;schema://tables/users&quot;}
+</code></pre></div><h3>2.4 Resources查询与读取</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-comment">// 列出资源</span>
+<span class="hljs-built_in">Client</span> → <span class="hljs-built_in">Server</span>: {<span class="hljs-string">"method"</span>: <span class="hljs-string">"resources/list"</span>}
+<span class="hljs-comment">// 读取资源</span>
+<span class="hljs-built_in">Client</span> → <span class="hljs-built_in">Server</span>: {
+  <span class="hljs-string">"method"</span>: <span class="hljs-string">"resources/read"</span>,
+  <span class="hljs-string">"params"</span>: {<span class="hljs-string">"uri"</span>: <span class="hljs-string">"schema://tables/users"</span>}
 }
-</code></pre></div>
-<h3>2.5 Sampling与Elicitation</h3>
+</code></pre></div><h3>2.5 Sampling与Elicitation</h3>
 <p><strong>Sampling</strong>允许Server请求Client调用LLM，实现Server端的智能处理。Server发送<code>sampling/createMessage</code>请求，Client调用LLM并返回结果。</p>
 <p><strong>Elicitation</strong>允许Server向用户请求输入。当Server执行操作需要用户确认或额外信息时，发送<code>elicitation/create</code>请求。这在敏感操作（删除数据、财务操作）场景中非常重要。</p>
 <h3>2.6 Authorization流程</h3>
 <p>MCP支持OAuth 2.0 / OIDC授权。对于HTTP Transport，Client在请求头中携带Bearer Token。授权流程：Client发现Server的Authorization Server → 发起OAuth 2.0流程 → 获取Access Token → 后续请求携带Token。</p>
 <h2>三、Java MCP SDK使用</h2>
 <h3>3.1 Maven依赖</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;!-- MCP Java SDK (JDK 25, Spring Boot 4.x) --&gt;
-&lt;dependency&gt;
-    &lt;groupId&gt;io.modelcontextprotocol.sdk&lt;/groupId&gt;
-    &lt;artifactId&gt;mcp&lt;/artifactId&gt;
-    &lt;version&gt;0.14.0&lt;/version&gt;
-&lt;/dependency&gt;
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-xml"><span class="hljs-comment">&lt;!-- MCP Java SDK (JDK 25, Spring Boot 4.x) --&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>io.modelcontextprotocol.sdk<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>mcp<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">version</span>&gt;</span>0.14.0<span class="hljs-tag">&lt;/<span class="hljs-name">version</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
 
-&lt;!-- Spring AI MCP Boot Starter --&gt;
-&lt;dependency&gt;
-    &lt;groupId&gt;org.springframework.ai&lt;/groupId&gt;
-    &lt;artifactId&gt;spring-ai-mcp-server-spring-boot-starter&lt;/artifactId&gt;
-    &lt;version&gt;2.1.0&lt;/version&gt;
-&lt;/dependency&gt;
-</code></pre></div>
-<h3>3.2 构建MCP Server</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// McpServerConfiguration.java
-import io.modelcontextprotocol.server.McpServer;
-import io.modelcontextprotocol.server.McpServerFeatures;
-import io.modelcontextprotocol.server.transport.StdioServerTransport;
-import io.modelcontextprotocol.spec.McpSchema;
+<span class="hljs-comment">&lt;!-- Spring AI MCP Boot Starter --&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.ai<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-ai-mcp-server-spring-boot-starter<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">version</span>&gt;</span>2.1.0<span class="hljs-tag">&lt;/<span class="hljs-name">version</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+</code></pre></div><h3>3.2 构建MCP Server</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// McpServerConfiguration.java</span>
+<span class="hljs-keyword">import</span> io.modelcontextprotocol.server.McpServer;
+<span class="hljs-keyword">import</span> io.modelcontextprotocol.server.McpServerFeatures;
+<span class="hljs-keyword">import</span> io.modelcontextprotocol.server.transport.StdioServerTransport;
+<span class="hljs-keyword">import</span> io.modelcontextprotocol.spec.McpSchema;
 
-public class McpServerConfiguration {
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">McpServerConfiguration</span> {
 
-    public static void main(String[] args) {
-        // 1. 创建Server实例
-        var server = McpServer.sync(
-            McpServer.ServerInfo.create(&quot;database-mcp-server&quot;, &quot;2.3.0&quot;)
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">main</span><span class="hljs-params">(String[] args)</span> {
+        <span class="hljs-comment">// 1. 创建Server实例</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">server</span> <span class="hljs-operator">=</span> McpServer.sync(
+            McpServer.ServerInfo.create(<span class="hljs-string">"database-mcp-server"</span>, <span class="hljs-string">"2.3.0"</span>)
         )
-        .serverInfo(McpServer.ServerInfo.create(&quot;database-mcp-server&quot;, &quot;2.3.0&quot;))
+        .serverInfo(McpServer.ServerInfo.create(<span class="hljs-string">"database-mcp-server"</span>, <span class="hljs-string">"2.3.0"</span>))
         .capabilities(McpSchema.ServerCapabilities.builder()
-            .tools(true)      // 启用工具能力
-            .resources(true, true) // 启用资源能力，支持订阅
+            .tools(<span class="hljs-literal">true</span>)      <span class="hljs-comment">// 启用工具能力</span>
+            .resources(<span class="hljs-literal">true</span>, <span class="hljs-literal">true</span>) <span class="hljs-comment">// 启用资源能力，支持订阅</span>
             .build())
         .build();
 
-        // 2. 注册Tool
+        <span class="hljs-comment">// 2. 注册Tool</span>
         server.addTool(
             McpServerFeatures.SyncToolSpecification.builder()
-                .name(&quot;query_table&quot;)
-                .description(&quot;在数据库表中执行SELECT查询&quot;)
+                .name(<span class="hljs-string">"query_table"</span>)
+                .description(<span class="hljs-string">"在数据库表中执行SELECT查询"</span>)
                 .inputSchema(McpSchema.JsonSchema.builder()
-                    .type(&quot;object&quot;)
-                    .property(&quot;sql&quot;, McpSchema.JsonSchema.builder()
-                        .type(&quot;string&quot;)
-                        .description(&quot;要执行的SELECT语句&quot;)
+                    .type(<span class="hljs-string">"object"</span>)
+                    .property(<span class="hljs-string">"sql"</span>, McpSchema.JsonSchema.builder()
+                        .type(<span class="hljs-string">"string"</span>)
+                        .description(<span class="hljs-string">"要执行的SELECT语句"</span>)
                         .build())
-                    .required(java.util.List.of(&quot;sql&quot;))
+                    .required(java.util.List.of(<span class="hljs-string">"sql"</span>))
                     .build())
                 .handler((exchange, request) -&gt; {
-                    var sql = request.arguments().get(&quot;sql&quot;).toString();
-                    var result = DatabaseService.query(sql);
-                    return McpSchema.CallToolResult.builder()
+                    <span class="hljs-type">var</span> <span class="hljs-variable">sql</span> <span class="hljs-operator">=</span> request.arguments().get(<span class="hljs-string">"sql"</span>).toString();
+                    <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> DatabaseService.query(sql);
+                    <span class="hljs-keyword">return</span> McpSchema.CallToolResult.builder()
                         .content(java.util.List.of(
                             McpSchema.TextContent.builder()
                                 .text(JacksonUtils.toJson(result))
@@ -192,18 +186,18 @@ public class McpServerConfiguration {
                 .build()
         );
 
-        // 3. 注册Resource
+        <span class="hljs-comment">// 3. 注册Resource</span>
         server.addResource(
             McpServerFeatures.SyncResourceSpecification.builder()
-                .uri(&quot;schema://status&quot;)
-                .name(&quot;数据库连接状态&quot;)
-                .description(&quot;返回当前数据库的连接状态信息&quot;)
-                .mimeType(&quot;application/json&quot;)
+                .uri(<span class="hljs-string">"schema://status"</span>)
+                .name(<span class="hljs-string">"数据库连接状态"</span>)
+                .description(<span class="hljs-string">"返回当前数据库的连接状态信息"</span>)
+                .mimeType(<span class="hljs-string">"application/json"</span>)
                 .handler(exchange -&gt; McpSchema.ReadResourceResult.builder()
                     .contents(java.util.List.of(
                         McpSchema.TextResourceContents.builder()
-                            .uri(&quot;schema://status&quot;)
-                            .mimeType(&quot;application/json&quot;)
+                            .uri(<span class="hljs-string">"schema://status"</span>)
+                            .mimeType(<span class="hljs-string">"application/json"</span>)
                             .text(JacksonUtils.toJson(DatabaseService.getStatus()))
                             .build()
                     ))
@@ -211,21 +205,21 @@ public class McpServerConfiguration {
                 .build()
         );
 
-        // 4. 注册Resource Template
+        <span class="hljs-comment">// 4. 注册Resource Template</span>
         server.addResourceTemplate(
             McpServerFeatures.SyncResourceTemplateSpecification.builder()
-                .uriTemplate(&quot;schema://tables/{tableName}&quot;)
-                .name(&quot;表结构信息&quot;)
-                .description(&quot;获取指定数据库表的结构信息&quot;)
-                .mimeType(&quot;application/json&quot;)
+                .uriTemplate(<span class="hljs-string">"schema://tables/{tableName}"</span>)
+                .name(<span class="hljs-string">"表结构信息"</span>)
+                .description(<span class="hljs-string">"获取指定数据库表的结构信息"</span>)
+                .mimeType(<span class="hljs-string">"application/json"</span>)
                 .handler((exchange, request) -&gt; {
-                    var tableName = request.pathVariables().get(&quot;tableName&quot;);
-                    var schema = DatabaseService.describeTable(tableName);
-                    return McpSchema.ReadResourceResult.builder()
+                    <span class="hljs-type">var</span> <span class="hljs-variable">tableName</span> <span class="hljs-operator">=</span> request.pathVariables().get(<span class="hljs-string">"tableName"</span>);
+                    <span class="hljs-type">var</span> <span class="hljs-variable">schema</span> <span class="hljs-operator">=</span> DatabaseService.describeTable(tableName);
+                    <span class="hljs-keyword">return</span> McpSchema.ReadResourceResult.builder()
                         .contents(java.util.List.of(
                             McpSchema.TextResourceContents.builder()
-                                .uri(&quot;schema://tables/&quot; + tableName)
-                                .mimeType(&quot;application/json&quot;)
+                                .uri(<span class="hljs-string">"schema://tables/"</span> + tableName)
+                                .mimeType(<span class="hljs-string">"application/json"</span>)
                                 .text(JacksonUtils.toJson(schema))
                                 .build()
                         ))
@@ -234,187 +228,184 @@ public class McpServerConfiguration {
                 .build()
         );
 
-        // 5. 启动stdio Transport
-        var transport = new StdioServerTransport();
+        <span class="hljs-comment">// 5. 启动stdio Transport</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">transport</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StdioServerTransport</span>();
         server.connect(transport).join();
 
-        System.out.println(&quot;Database MCP Server started via stdio&quot;);
+        System.out.println(<span class="hljs-string">"Database MCP Server started via stdio"</span>);
     }
 }
-</code></pre></div>
-<h3>3.3 构建MCP Client</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// McpClientConfiguration.java
-import io.modelcontextprotocol.client.McpClient;
-import io.modelcontextprotocol.client.McpSyncClient;
-import io.modelcontextprotocol.client.transport.StdioClientTransport;
-import io.modelcontextprotocol.client.transport.HttpClientTransport;
+</code></pre></div><h3>3.3 构建MCP Client</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// McpClientConfiguration.java</span>
+<span class="hljs-keyword">import</span> io.modelcontextprotocol.client.McpClient;
+<span class="hljs-keyword">import</span> io.modelcontextprotocol.client.McpSyncClient;
+<span class="hljs-keyword">import</span> io.modelcontextprotocol.client.transport.StdioClientTransport;
+<span class="hljs-keyword">import</span> io.modelcontextprotocol.client.transport.HttpClientTransport;
 
-public class McpClientConfiguration {
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">McpClientConfiguration</span> {
 
-    // === stdio方式连接 ===
-    public static McpSyncClient createStdioClient() {
-        // 启动Server子进程，通过stdio通信
-        var transport = new StdioClientTransport(
-            new StdioClientTransport.Parameters(
-                &quot;java&quot;,                                    // 命令
-                java.util.List.of(&quot;-jar&quot;, &quot;database-mcp-server.jar&quot;) // 参数
+    <span class="hljs-comment">// === stdio方式连接 ===</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> McpSyncClient <span class="hljs-title function_">createStdioClient</span><span class="hljs-params">()</span> {
+        <span class="hljs-comment">// 启动Server子进程，通过stdio通信</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">transport</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StdioClientTransport</span>(
+            <span class="hljs-keyword">new</span> <span class="hljs-title class_">StdioClientTransport</span>.Parameters(
+                <span class="hljs-string">"java"</span>,                                    <span class="hljs-comment">// 命令</span>
+                java.util.List.of(<span class="hljs-string">"-jar"</span>, <span class="hljs-string">"database-mcp-server.jar"</span>) <span class="hljs-comment">// 参数</span>
             )
         );
 
-        var client = McpClient.sync(transport)
-            .requestTimeout(java.time.Duration.ofSeconds(30))
+        <span class="hljs-type">var</span> <span class="hljs-variable">client</span> <span class="hljs-operator">=</span> McpClient.sync(transport)
+            .requestTimeout(java.time.Duration.ofSeconds(<span class="hljs-number">30</span>))
             .capabilities(McpSchema.ClientCapabilities.builder()
-                .roots(true)
+                .roots(<span class="hljs-literal">true</span>)
                 .sampling()
                 .build())
             .clientInfo(McpSchema.Implementation.builder()
-                .name(&quot;my-ai-app&quot;)
-                .version(&quot;1.0.0&quot;)
+                .name(<span class="hljs-string">"my-ai-app"</span>)
+                .version(<span class="hljs-string">"1.0.0"</span>)
                 .build())
             .build();
 
         client.initialize();
-        return client;
+        <span class="hljs-keyword">return</span> client;
     }
 
-    // === HTTP方式连接（远程） ===
-    public static McpSyncClient createHttpClient() {
-        var transport = new HttpClientTransport(
-            &quot;https://mcp-server.example.com&quot;,
-            java.util.Map.of(&quot;Authorization&quot;, &quot;Bearer &quot; + System.getenv(&quot;MCP_TOKEN&quot;))
+    <span class="hljs-comment">// === HTTP方式连接（远程） ===</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> McpSyncClient <span class="hljs-title function_">createHttpClient</span><span class="hljs-params">()</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">transport</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">HttpClientTransport</span>(
+            <span class="hljs-string">"https://mcp-server.example.com"</span>,
+            java.util.Map.of(<span class="hljs-string">"Authorization"</span>, <span class="hljs-string">"Bearer "</span> + System.getenv(<span class="hljs-string">"MCP_TOKEN"</span>))
         );
 
-        var client = McpClient.sync(transport)
-            .requestTimeout(java.time.Duration.ofSeconds(60))
+        <span class="hljs-type">var</span> <span class="hljs-variable">client</span> <span class="hljs-operator">=</span> McpClient.sync(transport)
+            .requestTimeout(java.time.Duration.ofSeconds(<span class="hljs-number">60</span>))
             .build();
 
         client.initialize();
-        return client;
+        <span class="hljs-keyword">return</span> client;
     }
 
-    // === 使用Client调用Tool ===
-    public static void useClient(McpSyncClient client) {
-        // 列出所有Tools
-        var tools = client.listTools();
-        System.out.println(&quot;Available tools: &quot; + tools.tools().size());
+    <span class="hljs-comment">// === 使用Client调用Tool ===</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">useClient</span><span class="hljs-params">(McpSyncClient client)</span> {
+        <span class="hljs-comment">// 列出所有Tools</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">tools</span> <span class="hljs-operator">=</span> client.listTools();
+        System.out.println(<span class="hljs-string">"Available tools: "</span> + tools.tools().size());
 
-        // 调用Tool
-        var result = client.callTool(
+        <span class="hljs-comment">// 调用Tool</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> client.callTool(
             McpSchema.CallToolRequest.builder()
-                .name(&quot;query_table&quot;)
+                .name(<span class="hljs-string">"query_table"</span>)
                 .arguments(java.util.Map.of(
-                    &quot;sql&quot;, &quot;SELECT * FROM users WHERE status = ?&quot;,
-                    &quot;params&quot;, java.util.List.of(&quot;active&quot;)
+                    <span class="hljs-string">"sql"</span>, <span class="hljs-string">"SELECT * FROM users WHERE status = ?"</span>,
+                    <span class="hljs-string">"params"</span>, java.util.List.of(<span class="hljs-string">"active"</span>)
                 ))
                 .build()
         );
 
-        // 处理结果
-        for (var content : result.content()) {
-            if (content instanceof McpSchema.TextContent text) {
-                System.out.println(&quot;Query result: &quot; + text.text());
+        <span class="hljs-comment">// 处理结果</span>
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> content : result.content()) {
+            <span class="hljs-keyword">if</span> (content <span class="hljs-keyword">instanceof</span> McpSchema.TextContent text) {
+                System.out.println(<span class="hljs-string">"Query result: "</span> + text.text());
             }
         }
 
-        // 列出Resources
-        var resources = client.listResources();
+        <span class="hljs-comment">// 列出Resources</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">resources</span> <span class="hljs-operator">=</span> client.listResources();
         resources.resources().forEach(r -&gt;
-            System.out.println(&quot;Resource: &quot; + r.uri() + &quot; - &quot; + r.name())
+            System.out.println(<span class="hljs-string">"Resource: "</span> + r.uri() + <span class="hljs-string">" - "</span> + r.name())
         );
 
-        // 读取Resource
-        var resource = client.readResource(
+        <span class="hljs-comment">// 读取Resource</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">resource</span> <span class="hljs-operator">=</span> client.readResource(
             McpSchema.ReadResourceRequest.builder()
-                .uri(&quot;schema://tables/users&quot;)
+                .uri(<span class="hljs-string">"schema://tables/users"</span>)
                 .build()
         );
     }
 
-    // === Virtual Threads 异步调用 ===
-    public static void asyncExample(McpSyncClient client) {
-        try (var executor = java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
-            var future1 = executor.submit(() -&gt; {
-                var result = client.callTool(
+    <span class="hljs-comment">// === Virtual Threads 异步调用 ===</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">asyncExample</span><span class="hljs-params">(McpSyncClient client)</span> {
+        <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">executor</span> <span class="hljs-operator">=</span> java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">future1</span> <span class="hljs-operator">=</span> executor.submit(() -&gt; {
+                <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> client.callTool(
                     McpSchema.CallToolRequest.builder()
-                        .name(&quot;query_table&quot;)
-                        .arguments(java.util.Map.of(&quot;sql&quot;, &quot;SELECT COUNT(*) FROM orders&quot;))
+                        .name(<span class="hljs-string">"query_table"</span>)
+                        .arguments(java.util.Map.of(<span class="hljs-string">"sql"</span>, <span class="hljs-string">"SELECT COUNT(*) FROM orders"</span>))
                         .build()
                 );
-                System.out.println(&quot;Order count: &quot; + result);
-                return result;
+                System.out.println(<span class="hljs-string">"Order count: "</span> + result);
+                <span class="hljs-keyword">return</span> result;
             });
 
-            var future2 = executor.submit(() -&gt; {
-                var result = client.callTool(
+            <span class="hljs-type">var</span> <span class="hljs-variable">future2</span> <span class="hljs-operator">=</span> executor.submit(() -&gt; {
+                <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> client.callTool(
                     McpSchema.CallToolRequest.builder()
-                        .name(&quot;query_table&quot;)
-                        .arguments(java.util.Map.of(&quot;sql&quot;, &quot;SELECT COUNT(*) FROM users&quot;))
+                        .name(<span class="hljs-string">"query_table"</span>)
+                        .arguments(java.util.Map.of(<span class="hljs-string">"sql"</span>, <span class="hljs-string">"SELECT COUNT(*) FROM users"</span>))
                         .build()
                 );
-                System.out.println(&quot;User count: &quot; + result);
-                return result;
+                System.out.println(<span class="hljs-string">"User count: "</span> + result);
+                <span class="hljs-keyword">return</span> result;
             });
 
             future1.get();
             future2.get();
-        } catch (Exception e) {
+        } <span class="hljs-keyword">catch</span> (Exception e) {
             Thread.currentThread().interrupt();
         }
     }
 }
-</code></pre></div>
-<h3>3.4 Spring AI MCP集成</h3>
+</code></pre></div><h3>3.4 Spring AI MCP集成</h3>
 <p>Spring AI提供了自动发现MCP Tool并注册到ToolRegistry的能力：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// SpringAiMcpConfig.java
-import org.springframework.ai.mcp.server.McpServerProperties;
-import org.springframework.ai.tool.ToolRegistry;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// SpringAiMcpConfig.java</span>
+<span class="hljs-keyword">import</span> org.springframework.ai.mcp.server.McpServerProperties;
+<span class="hljs-keyword">import</span> org.springframework.ai.tool.ToolRegistry;
+<span class="hljs-keyword">import</span> org.springframework.context.annotation.Bean;
+<span class="hljs-keyword">import</span> org.springframework.context.annotation.Configuration;
 
-@Configuration
-public class SpringAiMcpConfig {
+<span class="hljs-meta">@Configuration</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">SpringAiMcpConfig</span> {
 
-    // Spring Boot自动配置会发现类路径上的@Tool注解方法
-    // 并自动注册为MCP Tool
+    <span class="hljs-comment">// Spring Boot自动配置会发现类路径上的@Tool注解方法</span>
+    <span class="hljs-comment">// 并自动注册为MCP Tool</span>
 
-    @Bean
-    McpServerProperties mcpServerProperties() {
-        var props = new McpServerProperties();
+    <span class="hljs-meta">@Bean</span>
+    McpServerProperties <span class="hljs-title function_">mcpServerProperties</span><span class="hljs-params">()</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">props</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">McpServerProperties</span>();
         props.setType(McpServerProperties.ServerType.SYNC);
-        props.setName(&quot;spring-ai-mcp-server&quot;);
-        props.setVersion(&quot;1.0.0&quot;);
-        return props;
+        props.setName(<span class="hljs-string">"spring-ai-mcp-server"</span>);
+        props.setVersion(<span class="hljs-string">"1.0.0"</span>);
+        <span class="hljs-keyword">return</span> props;
     }
 
-    // 可选：手动注册额外Tool
-    @Bean
-    ToolRegistry customToolRegistry() {
-        return ToolRegistry.builder()
-            .tool(&quot;health_check&quot;, toolContext -&gt; {
-                return &quot;{\&quot;status\&quot;: \&quot;healthy\&quot;, \&quot;timestamp\&quot;: \&quot;&quot;
-                    + java.time.Instant.now() + &quot;\&quot;}&quot;;
+    <span class="hljs-comment">// 可选：手动注册额外Tool</span>
+    <span class="hljs-meta">@Bean</span>
+    ToolRegistry <span class="hljs-title function_">customToolRegistry</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">return</span> ToolRegistry.builder()
+            .tool(<span class="hljs-string">"health_check"</span>, toolContext -&gt; {
+                <span class="hljs-keyword">return</span> <span class="hljs-string">"{\"status\": \"healthy\", \"timestamp\": \""</span>
+                    + java.time.Instant.now() + <span class="hljs-string">"\"}"</span>;
             })
-            .description(&quot;健康检查工具，返回服务运行状态&quot;)
+            .description(<span class="hljs-string">"健康检查工具，返回服务运行状态"</span>)
             .build();
     }
 }
 
-// 在application.yml中配置
-// spring:
-//   ai:
-//     mcp:
-//       server:
-//         name: &quot;my-ai-server&quot;
-//         version: &quot;1.0.0&quot;
-//         type: SYNC
-//       client:
-//         type: ASYNC
-//         sse:
-//           connections:
-//             database:
-//               url: &quot;http://localhost:8080/mcp&quot;
-</code></pre></div>
-<h3>3.5 Transport选择指南</h3>
+<span class="hljs-comment">// 在application.yml中配置</span>
+<span class="hljs-comment">// spring:</span>
+<span class="hljs-comment">//   ai:</span>
+<span class="hljs-comment">//     mcp:</span>
+<span class="hljs-comment">//       server:</span>
+<span class="hljs-comment">//         name: "my-ai-server"</span>
+<span class="hljs-comment">//         version: "1.0.0"</span>
+<span class="hljs-comment">//         type: SYNC</span>
+<span class="hljs-comment">//       client:</span>
+<span class="hljs-comment">//         type: ASYNC</span>
+<span class="hljs-comment">//         sse:</span>
+<span class="hljs-comment">//           connections:</span>
+<span class="hljs-comment">//             database:</span>
+<span class="hljs-comment">//               url: "http://localhost:8080/mcp"</span>
+</code></pre></div><h3>3.5 Transport选择指南</h3>
 <p>在实际开发中，Transport的选择直接影响系统架构和服务部署方式。以下是两种Transport的详细对比和适用场景分析：</p>
 <table>
 <thead>
@@ -443,144 +434,141 @@ public class SpringAiMcpConfig {
 <p><strong>选择建议</strong>：本地开发和桌面应用首选stdio，因为部署简单且天然安全隔离；生产环境的微服务架构中，MCP Server应作为独立服务部署，使用HTTP Transport并配置认证、限流、监控等基础设施；混合场景下，可以在本地使用stdio连接开发工具MCP Server，同时通过HTTP连接远程的企业级MCP服务。</p>
 <h2>四、安全性最佳实践</h2>
 <h3>4.1 工具权限白名单</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// ToolSecurityFilter.java
-public class ToolSecurityFilter {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// ToolSecurityFilter.java</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ToolSecurityFilter</span> {
 
-    private static final java.util.Set&lt;String&gt; ALLOWED_TOOLS = java.util.Set.of(
-        &quot;query_table&quot;, &quot;describe_table&quot;, &quot;list_tables&quot;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> java.util.Set&lt;String&gt; ALLOWED_TOOLS = java.util.Set.of(
+        <span class="hljs-string">"query_table"</span>, <span class="hljs-string">"describe_table"</span>, <span class="hljs-string">"list_tables"</span>
     );
 
-    private static final java.util.Set&lt;String&gt; READ_ONLY_TOOLS = java.util.Set.of(
-        &quot;query_table&quot;, &quot;describe_table&quot;, &quot;list_tables&quot;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> java.util.Set&lt;String&gt; READ_ONLY_TOOLS = java.util.Set.of(
+        <span class="hljs-string">"query_table"</span>, <span class="hljs-string">"describe_table"</span>, <span class="hljs-string">"list_tables"</span>
     );
 
-    /**
+    <span class="hljs-comment">/**
      * 校验工具是否在白名单中
-     */
-    public static void validateTool(String toolName) {
-        if (!ALLOWED_TOOLS.contains(toolName)) {
-            throw new SecurityException(&quot;Tool not allowed: &quot; + toolName);
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">validateTool</span><span class="hljs-params">(String toolName)</span> {
+        <span class="hljs-keyword">if</span> (!ALLOWED_TOOLS.contains(toolName)) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">SecurityException</span>(<span class="hljs-string">"Tool not allowed: "</span> + toolName);
         }
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 仅允许只读操作
-     */
-    public static void ensureReadOnly(String toolName) {
-        if (!READ_ONLY_TOOLS.contains(toolName)) {
-            throw new SecurityException(&quot;Write operations are not permitted: &quot; + toolName);
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">ensureReadOnly</span><span class="hljs-params">(String toolName)</span> {
+        <span class="hljs-keyword">if</span> (!READ_ONLY_TOOLS.contains(toolName)) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">SecurityException</span>(<span class="hljs-string">"Write operations are not permitted: "</span> + toolName);
         }
     }
 }
-</code></pre></div>
-<h3>4.2 参数校验</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// ParameterValidator.java
-public class ParameterValidator {
+</code></pre></div><h3>4.2 参数校验</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// ParameterValidator.java</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ParameterValidator</span> {
 
-    /**
+    <span class="hljs-comment">/**
      * 校验SQL注入防护
-     */
-    public static void validateSql(String sql) {
-        // 仅允许SELECT语句
-        var trimmed = sql.trim().toUpperCase();
-        if (!trimmed.startsWith(&quot;SELECT&quot;)) {
-            throw new IllegalArgumentException(&quot;Only SELECT statements are allowed&quot;);
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">validateSql</span><span class="hljs-params">(String sql)</span> {
+        <span class="hljs-comment">// 仅允许SELECT语句</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">trimmed</span> <span class="hljs-operator">=</span> sql.trim().toUpperCase();
+        <span class="hljs-keyword">if</span> (!trimmed.startsWith(<span class="hljs-string">"SELECT"</span>)) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">IllegalArgumentException</span>(<span class="hljs-string">"Only SELECT statements are allowed"</span>);
         }
 
-        // 禁止危险关键字
-        var dangerous = java.util.Set.of(&quot;DROP&quot;, &quot;DELETE&quot;, &quot;TRUNCATE&quot;, &quot;ALTER&quot;,
-                                         &quot;INSERT&quot;, &quot;UPDATE&quot;, &quot;CREATE&quot;, &quot;EXEC&quot;, &quot;EXECUTE&quot;);
-        for (var keyword : dangerous) {
-            if (trimmed.contains(keyword)) {
-                throw new IllegalArgumentException(
-                    &quot;Dangerous SQL keyword detected: &quot; + keyword);
+        <span class="hljs-comment">// 禁止危险关键字</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">dangerous</span> <span class="hljs-operator">=</span> java.util.Set.of(<span class="hljs-string">"DROP"</span>, <span class="hljs-string">"DELETE"</span>, <span class="hljs-string">"TRUNCATE"</span>, <span class="hljs-string">"ALTER"</span>,
+                                         <span class="hljs-string">"INSERT"</span>, <span class="hljs-string">"UPDATE"</span>, <span class="hljs-string">"CREATE"</span>, <span class="hljs-string">"EXEC"</span>, <span class="hljs-string">"EXECUTE"</span>);
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> keyword : dangerous) {
+            <span class="hljs-keyword">if</span> (trimmed.contains(keyword)) {
+                <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">IllegalArgumentException</span>(
+                    <span class="hljs-string">"Dangerous SQL keyword detected: "</span> + keyword);
             }
         }
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 校验表名（防止路径遍历）
-     */
-    public static void validateTableName(String tableName) {
-        if (tableName == null || tableName.isBlank()) {
-            throw new IllegalArgumentException(&quot;Table name cannot be empty&quot;);
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">validateTableName</span><span class="hljs-params">(String tableName)</span> {
+        <span class="hljs-keyword">if</span> (tableName == <span class="hljs-literal">null</span> || tableName.isBlank()) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">IllegalArgumentException</span>(<span class="hljs-string">"Table name cannot be empty"</span>);
         }
-        if (!tableName.matches(&quot;^[a-zA-Z_][a-zA-Z0-9_]*$&quot;)) {
-            throw new IllegalArgumentException(&quot;Invalid table name format: &quot; + tableName);
+        <span class="hljs-keyword">if</span> (!tableName.matches(<span class="hljs-string">"^[a-zA-Z_][a-zA-Z0-9_]*$"</span>)) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">IllegalArgumentException</span>(<span class="hljs-string">"Invalid table name format: "</span> + tableName);
         }
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 参数数量限制
-     */
-    public static void validateParamCount(java.util.List&lt;?&gt; params, int maxParams) {
-        if (params != null &amp;&amp; params.size() &gt; maxParams) {
-            throw new IllegalArgumentException(
-                &quot;Too many parameters: &quot; + params.size() + &quot; (max: &quot; + maxParams + &quot;)&quot;);
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">validateParamCount</span><span class="hljs-params">(java.util.List&lt;?&gt; params, <span class="hljs-type">int</span> maxParams)</span> {
+        <span class="hljs-keyword">if</span> (params != <span class="hljs-literal">null</span> &amp;&amp; params.size() &gt; maxParams) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">IllegalArgumentException</span>(
+                <span class="hljs-string">"Too many parameters: "</span> + params.size() + <span class="hljs-string">" (max: "</span> + maxParams + <span class="hljs-string">")"</span>);
         }
     }
 }
-</code></pre></div>
-<h3>4.3 调用审计</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// AuditLogger.java
-public class AuditLogger {
+</code></pre></div><h3>4.3 调用审计</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// AuditLogger.java</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">AuditLogger</span> {
 
-    private static final java.util.logging.Logger logger =
-        java.util.logging.Logger.getLogger(&quot;mcp-audit&quot;);
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> java.util.logging.<span class="hljs-type">Logger</span> <span class="hljs-variable">logger</span> <span class="hljs-operator">=</span>
+        java.util.logging.Logger.getLogger(<span class="hljs-string">"mcp-audit"</span>);
 
-    /**
+    <span class="hljs-comment">/**
      * 记录每次工具调用
-     */
-    public record AuditEntry(
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">AuditEntry</span><span class="hljs-params">(
         String toolName,
         java.util.Map&lt;String, Object&gt; arguments,
         String clientId,
         java.time.Instant timestamp,
-        boolean success,
+        <span class="hljs-type">boolean</span> success,
         String errorMessage
-    ) {}
+    )</span> {}
 
-    private static final java.util.List&lt;AuditEntry&gt; auditLog =
-        java.util.Collections.synchronizedList(new java.util.ArrayList&lt;&gt;());
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> java.util.List&lt;AuditEntry&gt; auditLog =
+        java.util.Collections.synchronizedList(<span class="hljs-keyword">new</span> <span class="hljs-title class_">java</span>.util.ArrayList&lt;&gt;());
 
-    public static void log(String toolName, java.util.Map&lt;String, Object&gt; args,
-                           String clientId, boolean success, String error) {
-        var entry = new AuditEntry(
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">log</span><span class="hljs-params">(String toolName, java.util.Map&lt;String, Object&gt; args,
+                           String clientId, <span class="hljs-type">boolean</span> success, String error)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">entry</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">AuditEntry</span>(
             toolName,
-            sanitize(args),  // 脱敏处理
+            sanitize(args),  <span class="hljs-comment">// 脱敏处理</span>
             clientId,
             java.time.Instant.now(),
             success,
             error
         );
         auditLog.add(entry);
-        logger.info(&quot;AUDIT: &quot; + entry);
+        logger.info(<span class="hljs-string">"AUDIT: "</span> + entry);
     }
 
-    private static java.util.Map&lt;String, Object&gt; sanitize(
-            java.util.Map&lt;String, Object&gt; args) {
-        // 移除敏感字段如密码、Token
-        var sanitized = new java.util.HashMap&lt;&gt;(args);
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> java.util.Map&lt;String, Object&gt; <span class="hljs-title function_">sanitize</span><span class="hljs-params">(
+            java.util.Map&lt;String, Object&gt; args)</span> {
+        <span class="hljs-comment">// 移除敏感字段如密码、Token</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">sanitized</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">java</span>.util.HashMap&lt;&gt;(args);
         sanitized.keySet().removeIf(k -&gt;
-            k.toLowerCase().contains(&quot;password&quot;) ||
-            k.toLowerCase().contains(&quot;token&quot;) ||
-            k.toLowerCase().contains(&quot;secret&quot;)
+            k.toLowerCase().contains(<span class="hljs-string">"password"</span>) ||
+            k.toLowerCase().contains(<span class="hljs-string">"token"</span>) ||
+            k.toLowerCase().contains(<span class="hljs-string">"secret"</span>)
         );
-        return java.util.Map.copyOf(sanitized);
+        <span class="hljs-keyword">return</span> java.util.Map.copyOf(sanitized);
     }
 
-    public static java.util.List&lt;AuditEntry&gt; getAuditLog() {
-        return java.util.List.copyOf(auditLog);
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> java.util.List&lt;AuditEntry&gt; <span class="hljs-title function_">getAuditLog</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">return</span> java.util.List.copyOf(auditLog);
     }
 }
-</code></pre></div>
-<h2>五、MCP Apps概念</h2>
+</code></pre></div><h2>五、MCP Apps概念</h2>
 <h3>5.1 什么是MCP App</h3>
-<p>MCP Apps是MCP生态中相对较新的概念，它的提出是为了解决&quot;如何复用和组合多个MCP Server能力&quot;的问题。随着MCP生态的繁荣，出现了大量MCP Server——从数据库查询到文件操作、从日历管理到邮件发送。每个Server独立工作没有问题，但当一个AI应用需要同时使用多个Server的能力时，问题就出现了：如何管理多个连接？如何协调跨Server的操作？如何确保整体安全性？</p>
-<p>MCP App正是为解决这些痛点而设计的。一个MCP App将多个MCP Server的能力聚合在一起，对外暴露为一个&quot;超级Server&quot;。它不仅仅是简单的代理转发，而是在聚合的基础上提供了编排能力，允许定义跨Server的工作流。</p>
+<p>MCP Apps是MCP生态中相对较新的概念，它的提出是为了解决"如何复用和组合多个MCP Server能力"的问题。随着MCP生态的繁荣，出现了大量MCP Server——从数据库查询到文件操作、从日历管理到邮件发送。每个Server独立工作没有问题，但当一个AI应用需要同时使用多个Server的能力时，问题就出现了：如何管理多个连接？如何协调跨Server的操作？如何确保整体安全性？</p>
+<p>MCP App正是为解决这些痛点而设计的。一个MCP App将多个MCP Server的能力聚合在一起，对外暴露为一个"超级Server"。它不仅仅是简单的代理转发，而是在聚合的基础上提供了编排能力，允许定义跨Server的工作流。</p>
 <h3>5.2 核心特性</h3>
 <p>MCP App的关键特性包括以下几个方面：</p>
-<p><strong>聚合（Aggregation）</strong>：MCP App可以将多个独立MCP Server的Tool和Resource组合在一起，对外暴露统一的API。例如，一个&quot;数据分析MCP App&quot;可以聚合PostgreSQL MCP Server（数据查询）、ClickHouse MCP Server（实时分析）、S3 MCP Server（结果存储）的能力。</p>
+<p><strong>聚合（Aggregation）</strong>：MCP App可以将多个独立MCP Server的Tool和Resource组合在一起，对外暴露统一的API。例如，一个"数据分析MCP App"可以聚合PostgreSQL MCP Server（数据查询）、ClickHouse MCP Server（实时分析）、S3 MCP Server（结果存储）的能力。</p>
 <p><strong>编排（Orchestration）</strong>：MCP App可以定义Tool之间的调用顺序和数据流转。例如，先调用数据库查询Tool获取原始数据，再调用数据分析Tool处理数据，最后调用文件存储Tool保存结果。编排逻辑在App层面实现，对Client透明。</p>
 <p><strong>隔离（Isolation）</strong>：每个MCP App在独立的安全沙箱中运行。App可以限制某些Tool的访问权限，或者对参数进行转换/过滤后再转发。这种隔离机制使得不同用户或不同场景可以使用同一个底层MCP Server，但具有不同的权限和限制。</p>
 <p><strong>分发（Distribution）</strong>：MCP App可以打包为一个独立的分发单元，包含所有依赖的MCP Server配置、编排逻辑和安全策略。开发者可以像发布npm包或Docker镜像一样发布MCP App。</p>
@@ -592,108 +580,108 @@ public class AuditLogger {
 <p><strong>场景三：研发效能平台</strong>。MCP App聚合了Jira MCP Server（项目管理）、GitHub MCP Server（代码仓库）、Jenkins MCP Server（CI/CD），为开发团队提供一站式研发协作能力。</p>
 <h2>六、完整示例：Database MCP Server</h2>
 <p>以下是完整的Database MCP Server实现，包含Tools和Resources：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// DatabaseMcpServer.java - 完整可运行的Database MCP Server
-package com.example.mcp.server;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// DatabaseMcpServer.java - 完整可运行的Database MCP Server</span>
+<span class="hljs-keyword">package</span> com.example.mcp.server;
 
-import io.modelcontextprotocol.server.McpServer;
-import io.modelcontextprotocol.server.McpServerFeatures;
-import io.modelcontextprotocol.server.transport.StdioServerTransport;
-import io.modelcontextprotocol.spec.McpSchema;
+<span class="hljs-keyword">import</span> io.modelcontextprotocol.server.McpServer;
+<span class="hljs-keyword">import</span> io.modelcontextprotocol.server.McpServerFeatures;
+<span class="hljs-keyword">import</span> io.modelcontextprotocol.server.transport.StdioServerTransport;
+<span class="hljs-keyword">import</span> io.modelcontextprotocol.spec.McpSchema;
 
-import javax.sql.DataSource;
-import java.sql.ResultSet;
-import java.time.Instant;
-import java.util.*;
+<span class="hljs-keyword">import</span> javax.sql.DataSource;
+<span class="hljs-keyword">import</span> java.sql.ResultSet;
+<span class="hljs-keyword">import</span> java.time.Instant;
+<span class="hljs-keyword">import</span> java.util.*;
 
-/**
+<span class="hljs-comment">/**
  * 完整Database MCP Server实现
  * Tools: query_table, describe_table, list_tables, db_stats
  * Resources: schema://tables/{name}, schema://status
  * 
  * 运行方式: java -jar database-mcp-server.jar
  * MCP Client通过stdio子进程通信连接此Server
- */
-public class DatabaseMcpServer {
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">DatabaseMcpServer</span> {
 
-    // 模拟数据库连接池
-    private static final DataSource dataSource = HikariDataSourceFactory.create();
+    <span class="hljs-comment">// 模拟数据库连接池</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">DataSource</span> <span class="hljs-variable">dataSource</span> <span class="hljs-operator">=</span> HikariDataSourceFactory.create();
 
-    public static void main(String[] args) {
-        var server = buildServer();
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">main</span><span class="hljs-params">(String[] args)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">server</span> <span class="hljs-operator">=</span> buildServer();
         
-        // 注册优雅关闭
+        <span class="hljs-comment">// 注册优雅关闭</span>
         Runtime.getRuntime().addShutdownHook(
             Thread.ofVirtual().unstarted(() -&gt; {
-                System.out.println(&quot;Shutting down Database MCP Server...&quot;);
+                System.out.println(<span class="hljs-string">"Shutting down Database MCP Server..."</span>);
                 server.closeGracefully();
             })
         );
 
-        // 通过stdio启动
-        var transport = new StdioServerTransport();
+        <span class="hljs-comment">// 通过stdio启动</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">transport</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StdioServerTransport</span>();
         server.connect(transport).join();
         
-        System.err.println(&quot;Database MCP Server v2.3.0 started (stdio)&quot;);
+        System.err.println(<span class="hljs-string">"Database MCP Server v2.3.0 started (stdio)"</span>);
     }
 
-    private static McpServer buildServer() {
-        var server = McpServer.sync(
-            McpServer.ServerInfo.create(&quot;database-mcp-server&quot;, &quot;2.3.0&quot;)
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> McpServer <span class="hljs-title function_">buildServer</span><span class="hljs-params">()</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">server</span> <span class="hljs-operator">=</span> McpServer.sync(
+            McpServer.ServerInfo.create(<span class="hljs-string">"database-mcp-server"</span>, <span class="hljs-string">"2.3.0"</span>)
         )
         .capabilities(McpSchema.ServerCapabilities.builder()
-            .tools(true)
-            .resources(true, true)
+            .tools(<span class="hljs-literal">true</span>)
+            .resources(<span class="hljs-literal">true</span>, <span class="hljs-literal">true</span>)
             .build())
         .build();
 
-        // ===== Tools 注册 =====
+        <span class="hljs-comment">// ===== Tools 注册 =====</span>
 
-        // Tool 1: query_table - 执行SELECT查询
+        <span class="hljs-comment">// Tool 1: query_table - 执行SELECT查询</span>
         server.addTool(McpServerFeatures.SyncToolSpecification.builder()
-            .name(&quot;query_table&quot;)
-            .description(&quot;在数据库表中执行只读SELECT查询。仅支持SELECT语句。支持参数化查询防止SQL注入。&quot;)
+            .name(<span class="hljs-string">"query_table"</span>)
+            .description(<span class="hljs-string">"在数据库表中执行只读SELECT查询。仅支持SELECT语句。支持参数化查询防止SQL注入。"</span>)
             .inputSchema(McpSchema.JsonSchema.builder()
-                .type(&quot;object&quot;)
-                .property(&quot;sql&quot;, McpSchema.JsonSchema.builder()
-                    .type(&quot;string&quot;)
-                    .description(&quot;SELECT查询语句，可使用?占位符&quot;)
+                .type(<span class="hljs-string">"object"</span>)
+                .property(<span class="hljs-string">"sql"</span>, McpSchema.JsonSchema.builder()
+                    .type(<span class="hljs-string">"string"</span>)
+                    .description(<span class="hljs-string">"SELECT查询语句，可使用?占位符"</span>)
                     .build())
-                .property(&quot;params&quot;, McpSchema.JsonSchema.builder()
-                    .type(&quot;array&quot;)
-                    .description(&quot;查询参数，按顺序替换SQL中的?占位符&quot;)
-                    .items(McpSchema.JsonSchema.builder().type(&quot;string&quot;).build())
+                .property(<span class="hljs-string">"params"</span>, McpSchema.JsonSchema.builder()
+                    .type(<span class="hljs-string">"array"</span>)
+                    .description(<span class="hljs-string">"查询参数，按顺序替换SQL中的?占位符"</span>)
+                    .items(McpSchema.JsonSchema.builder().type(<span class="hljs-string">"string"</span>).build())
                     .build())
-                .property(&quot;limit&quot;, McpSchema.JsonSchema.builder()
-                    .type(&quot;integer&quot;)
-                    .description(&quot;返回最大行数，默认100，最大1000&quot;)
-                    .defaultValue(100)
+                .property(<span class="hljs-string">"limit"</span>, McpSchema.JsonSchema.builder()
+                    .type(<span class="hljs-string">"integer"</span>)
+                    .description(<span class="hljs-string">"返回最大行数，默认100，最大1000"</span>)
+                    .defaultValue(<span class="hljs-number">100</span>)
                     .build())
-                .required(List.of(&quot;sql&quot;))
+                .required(List.of(<span class="hljs-string">"sql"</span>))
                 .build())
             .handler((exchange, request) -&gt; {
-                var sql = (String) request.arguments().get(&quot;sql&quot;);
-                @SuppressWarnings(&quot;unchecked&quot;)
-                var params = (List&lt;String&gt;) request.arguments().getOrDefault(&quot;params&quot;, List.of());
-                var limit = ((Number) request.arguments().getOrDefault(&quot;limit&quot;, 100)).intValue();
+                <span class="hljs-type">var</span> <span class="hljs-variable">sql</span> <span class="hljs-operator">=</span> (String) request.arguments().get(<span class="hljs-string">"sql"</span>);
+                <span class="hljs-meta">@SuppressWarnings("unchecked")</span>
+                <span class="hljs-type">var</span> <span class="hljs-variable">params</span> <span class="hljs-operator">=</span> (List&lt;String&gt;) request.arguments().getOrDefault(<span class="hljs-string">"params"</span>, List.of());
+                <span class="hljs-type">var</span> <span class="hljs-variable">limit</span> <span class="hljs-operator">=</span> ((Number) request.arguments().getOrDefault(<span class="hljs-string">"limit"</span>, <span class="hljs-number">100</span>)).intValue();
                 
-                // 安全校验
+                <span class="hljs-comment">// 安全校验</span>
                 ParameterValidator.validateSql(sql);
-                ParameterValidator.validateParamCount(params, 20);
-                limit = Math.min(limit, 1000);
+                ParameterValidator.validateParamCount(params, <span class="hljs-number">20</span>);
+                limit = Math.min(limit, <span class="hljs-number">1000</span>);
                 
-                // 自动追加LIMIT
-                if (!sql.toUpperCase().contains(&quot;LIMIT&quot;)) {
-                    sql = sql + &quot; LIMIT &quot; + limit;
+                <span class="hljs-comment">// 自动追加LIMIT</span>
+                <span class="hljs-keyword">if</span> (!sql.toUpperCase().contains(<span class="hljs-string">"LIMIT"</span>)) {
+                    sql = sql + <span class="hljs-string">" LIMIT "</span> + limit;
                 }
                 
-                // 执行查询
-                var result = executeQuery(sql, params);
+                <span class="hljs-comment">// 执行查询</span>
+                <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> executeQuery(sql, params);
                 
-                // 审计
-                AuditLogger.log(&quot;query_table&quot;, request.arguments(), 
-                    exchange.getClientId(), true, null);
+                <span class="hljs-comment">// 审计</span>
+                AuditLogger.log(<span class="hljs-string">"query_table"</span>, request.arguments(), 
+                    exchange.getClientId(), <span class="hljs-literal">true</span>, <span class="hljs-literal">null</span>);
                 
-                return McpSchema.CallToolResult.builder()
+                <span class="hljs-keyword">return</span> McpSchema.CallToolResult.builder()
                     .content(List.of(
                         McpSchema.TextContent.builder()
                             .text(formatQueryResult(result))
@@ -703,27 +691,27 @@ public class DatabaseMcpServer {
             })
             .build());
 
-        // Tool 2: describe_table - 查看表结构
+        <span class="hljs-comment">// Tool 2: describe_table - 查看表结构</span>
         server.addTool(McpServerFeatures.SyncToolSpecification.builder()
-            .name(&quot;describe_table&quot;)
-            .description(&quot;获取指定数据库表的结构信息，包括列名、数据类型、是否可空、默认值、注释等。&quot;)
+            .name(<span class="hljs-string">"describe_table"</span>)
+            .description(<span class="hljs-string">"获取指定数据库表的结构信息，包括列名、数据类型、是否可空、默认值、注释等。"</span>)
             .inputSchema(McpSchema.JsonSchema.builder()
-                .type(&quot;object&quot;)
-                .property(&quot;tableName&quot;, McpSchema.JsonSchema.builder()
-                    .type(&quot;string&quot;)
-                    .description(&quot;要查看的表名&quot;)
+                .type(<span class="hljs-string">"object"</span>)
+                .property(<span class="hljs-string">"tableName"</span>, McpSchema.JsonSchema.builder()
+                    .type(<span class="hljs-string">"string"</span>)
+                    .description(<span class="hljs-string">"要查看的表名"</span>)
                     .build())
-                .required(List.of(&quot;tableName&quot;))
+                .required(List.of(<span class="hljs-string">"tableName"</span>))
                 .build())
             .handler((exchange, request) -&gt; {
-                var tableName = (String) request.arguments().get(&quot;tableName&quot;);
+                <span class="hljs-type">var</span> <span class="hljs-variable">tableName</span> <span class="hljs-operator">=</span> (String) request.arguments().get(<span class="hljs-string">"tableName"</span>);
                 ParameterValidator.validateTableName(tableName);
                 
-                var schema = getTableSchema(tableName);
-                AuditLogger.log(&quot;describe_table&quot;, request.arguments(),
-                    exchange.getClientId(), true, null);
+                <span class="hljs-type">var</span> <span class="hljs-variable">schema</span> <span class="hljs-operator">=</span> getTableSchema(tableName);
+                AuditLogger.log(<span class="hljs-string">"describe_table"</span>, request.arguments(),
+                    exchange.getClientId(), <span class="hljs-literal">true</span>, <span class="hljs-literal">null</span>);
                 
-                return McpSchema.CallToolResult.builder()
+                <span class="hljs-keyword">return</span> McpSchema.CallToolResult.builder()
                     .content(List.of(
                         McpSchema.TextContent.builder()
                             .text(JacksonUtils.toJson(schema))
@@ -733,24 +721,24 @@ public class DatabaseMcpServer {
             })
             .build());
 
-        // Tool 3: list_tables - 列出所有表
+        <span class="hljs-comment">// Tool 3: list_tables - 列出所有表</span>
         server.addTool(McpServerFeatures.SyncToolSpecification.builder()
-            .name(&quot;list_tables&quot;)
-            .description(&quot;列出数据库中所有的表名及简要描述&quot;)
+            .name(<span class="hljs-string">"list_tables"</span>)
+            .description(<span class="hljs-string">"列出数据库中所有的表名及简要描述"</span>)
             .inputSchema(McpSchema.JsonSchema.builder()
-                .type(&quot;object&quot;)
-                .property(&quot;schema&quot;, McpSchema.JsonSchema.builder()
-                    .type(&quot;string&quot;)
-                    .description(&quot;数据库schema名，默认为public&quot;)
-                    .defaultValue(&quot;public&quot;)
+                .type(<span class="hljs-string">"object"</span>)
+                .property(<span class="hljs-string">"schema"</span>, McpSchema.JsonSchema.builder()
+                    .type(<span class="hljs-string">"string"</span>)
+                    .description(<span class="hljs-string">"数据库schema名，默认为public"</span>)
+                    .defaultValue(<span class="hljs-string">"public"</span>)
                     .build())
                 .build())
             .handler((exchange, request) -&gt; {
-                var schemaName = (String) request.arguments()
-                    .getOrDefault(&quot;schema&quot;, &quot;public&quot;);
-                var tables = listAllTables(schemaName);
+                <span class="hljs-type">var</span> <span class="hljs-variable">schemaName</span> <span class="hljs-operator">=</span> (String) request.arguments()
+                    .getOrDefault(<span class="hljs-string">"schema"</span>, <span class="hljs-string">"public"</span>);
+                <span class="hljs-type">var</span> <span class="hljs-variable">tables</span> <span class="hljs-operator">=</span> listAllTables(schemaName);
                 
-                return McpSchema.CallToolResult.builder()
+                <span class="hljs-keyword">return</span> McpSchema.CallToolResult.builder()
                     .content(List.of(
                         McpSchema.TextContent.builder()
                             .text(JacksonUtils.toJson(tables))
@@ -760,25 +748,25 @@ public class DatabaseMcpServer {
             })
             .build());
 
-        // Tool 4: db_stats - 数据库统计信息
+        <span class="hljs-comment">// Tool 4: db_stats - 数据库统计信息</span>
         server.addTool(McpServerFeatures.SyncToolSpecification.builder()
-            .name(&quot;db_stats&quot;)
-            .description(&quot;获取数据库整体统计信息：总表数、总行数估算、连接数等&quot;)
+            .name(<span class="hljs-string">"db_stats"</span>)
+            .description(<span class="hljs-string">"获取数据库整体统计信息：总表数、总行数估算、连接数等"</span>)
             .inputSchema(McpSchema.JsonSchema.builder()
-                .type(&quot;object&quot;)
+                .type(<span class="hljs-string">"object"</span>)
                 .properties(Map.of())
                 .build())
             .handler((exchange, request) -&gt; {
-                var stats = Map.of(
-                    &quot;totalTables&quot;, 42,
-                    &quot;estimatedTotalRows&quot;, 1_250_000L,
-                    &quot;activeConnections&quot;, 8,
-                    &quot;uptime&quot;, &quot;72h 15m&quot;,
-                    &quot;version&quot;, &quot;PostgreSQL 17.2&quot;,
-                    &quot;timestamp&quot;, Instant.now().toString()
+                <span class="hljs-type">var</span> <span class="hljs-variable">stats</span> <span class="hljs-operator">=</span> Map.of(
+                    <span class="hljs-string">"totalTables"</span>, <span class="hljs-number">42</span>,
+                    <span class="hljs-string">"estimatedTotalRows"</span>, <span class="hljs-number">1_250_000L</span>,
+                    <span class="hljs-string">"activeConnections"</span>, <span class="hljs-number">8</span>,
+                    <span class="hljs-string">"uptime"</span>, <span class="hljs-string">"72h 15m"</span>,
+                    <span class="hljs-string">"version"</span>, <span class="hljs-string">"PostgreSQL 17.2"</span>,
+                    <span class="hljs-string">"timestamp"</span>, Instant.now().toString()
                 );
                 
-                return McpSchema.CallToolResult.builder()
+                <span class="hljs-keyword">return</span> McpSchema.CallToolResult.builder()
                     .content(List.of(
                         McpSchema.TextContent.builder()
                             .text(JacksonUtils.toJson(stats))
@@ -788,28 +776,28 @@ public class DatabaseMcpServer {
             })
             .build());
 
-        // ===== Resources 注册 =====
+        <span class="hljs-comment">// ===== Resources 注册 =====</span>
 
-        // Resource 1: 服务器状态
+        <span class="hljs-comment">// Resource 1: 服务器状态</span>
         server.addResource(McpServerFeatures.SyncResourceSpecification.builder()
-            .uri(&quot;schema://status&quot;)
-            .name(&quot;数据库连接状态&quot;)
-            .description(&quot;返回MCP Server当前的数据库连接状态和健康信息&quot;)
-            .mimeType(&quot;application/json&quot;)
+            .uri(<span class="hljs-string">"schema://status"</span>)
+            .name(<span class="hljs-string">"数据库连接状态"</span>)
+            .description(<span class="hljs-string">"返回MCP Server当前的数据库连接状态和健康信息"</span>)
+            .mimeType(<span class="hljs-string">"application/json"</span>)
             .handler(exchange -&gt; {
-                var status = Map.of(
-                    &quot;connected&quot;, true,
-                    &quot;serverVersion&quot;, &quot;2.3.0&quot;,
-                    &quot;databaseVersion&quot;, &quot;PostgreSQL 17.2&quot;,
-                    &quot;poolSize&quot;, 10,
-                    &quot;activeConnections&quot;, 3,
-                    &quot;uptime&quot;, &quot;72h 15m&quot;
+                <span class="hljs-type">var</span> <span class="hljs-variable">status</span> <span class="hljs-operator">=</span> Map.of(
+                    <span class="hljs-string">"connected"</span>, <span class="hljs-literal">true</span>,
+                    <span class="hljs-string">"serverVersion"</span>, <span class="hljs-string">"2.3.0"</span>,
+                    <span class="hljs-string">"databaseVersion"</span>, <span class="hljs-string">"PostgreSQL 17.2"</span>,
+                    <span class="hljs-string">"poolSize"</span>, <span class="hljs-number">10</span>,
+                    <span class="hljs-string">"activeConnections"</span>, <span class="hljs-number">3</span>,
+                    <span class="hljs-string">"uptime"</span>, <span class="hljs-string">"72h 15m"</span>
                 );
-                return McpSchema.ReadResourceResult.builder()
+                <span class="hljs-keyword">return</span> McpSchema.ReadResourceResult.builder()
                     .contents(List.of(
                         McpSchema.TextResourceContents.builder()
-                            .uri(&quot;schema://status&quot;)
-                            .mimeType(&quot;application/json&quot;)
+                            .uri(<span class="hljs-string">"schema://status"</span>)
+                            .mimeType(<span class="hljs-string">"application/json"</span>)
                             .text(JacksonUtils.toJson(status))
                             .build()
                     ))
@@ -817,24 +805,24 @@ public class DatabaseMcpServer {
             })
             .build());
 
-        // Resource Template: 动态表结构
+        <span class="hljs-comment">// Resource Template: 动态表结构</span>
         server.addResourceTemplate(
             McpServerFeatures.SyncResourceTemplateSpecification.builder()
-                .uriTemplate(&quot;schema://tables/{tableName}&quot;)
-                .name(&quot;表结构详情&quot;)
-                .description(&quot;获取指定表(tableName)的完整结构定义，包括所有列信息、索引、约束&quot;)
-                .mimeType(&quot;application/json&quot;)
+                .uriTemplate(<span class="hljs-string">"schema://tables/{tableName}"</span>)
+                .name(<span class="hljs-string">"表结构详情"</span>)
+                .description(<span class="hljs-string">"获取指定表(tableName)的完整结构定义，包括所有列信息、索引、约束"</span>)
+                .mimeType(<span class="hljs-string">"application/json"</span>)
                 .handler((exchange, request) -&gt; {
-                    var tableName = request.pathVariables().get(&quot;tableName&quot;);
+                    <span class="hljs-type">var</span> <span class="hljs-variable">tableName</span> <span class="hljs-operator">=</span> request.pathVariables().get(<span class="hljs-string">"tableName"</span>);
                     ParameterValidator.validateTableName(tableName);
                     
-                    var tableInfo = getTableFullInfo(tableName);
+                    <span class="hljs-type">var</span> <span class="hljs-variable">tableInfo</span> <span class="hljs-operator">=</span> getTableFullInfo(tableName);
                     
-                    return McpSchema.ReadResourceResult.builder()
+                    <span class="hljs-keyword">return</span> McpSchema.ReadResourceResult.builder()
                         .contents(List.of(
                             McpSchema.TextResourceContents.builder()
-                                .uri(&quot;schema://tables/&quot; + tableName)
-                                .mimeType(&quot;application/json&quot;)
+                                .uri(<span class="hljs-string">"schema://tables/"</span> + tableName)
+                                .mimeType(<span class="hljs-string">"application/json"</span>)
                                 .text(JacksonUtils.toJson(tableInfo))
                                 .build()
                         ))
@@ -842,126 +830,124 @@ public class DatabaseMcpServer {
                 })
                 .build());
 
-        return server;
+        <span class="hljs-keyword">return</span> server;
     }
 
-    // ===== 模拟数据库操作 =====
+    <span class="hljs-comment">// ===== 模拟数据库操作 =====</span>
 
-    record ColumnInfo(String name, String type, boolean nullable, 
-                      String defaultValue, String comment) {}
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">ColumnInfo</span><span class="hljs-params">(String name, String type, <span class="hljs-type">boolean</span> nullable, 
+                      String defaultValue, String comment)</span> {}
 
-    record TableInfo(String name, List&lt;ColumnInfo&gt; columns, 
-                     List&lt;String&gt; indexes, List&lt;String&gt; constraints) {}
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">TableInfo</span><span class="hljs-params">(String name, List&lt;ColumnInfo&gt; columns, 
+                     List&lt;String&gt; indexes, List&lt;String&gt; constraints)</span> {}
 
-    static QueryResult executeQuery(String sql, List&lt;String&gt; params) {
-        // 模拟查询：实际应使用JDBC PreparedStatement
-        var columns = List.of(&quot;id&quot;, &quot;name&quot;, &quot;email&quot;, &quot;created_at&quot;);
-        var rows = new ArrayList&lt;List&lt;Object&gt;&gt;();
-        for (int i = 1; i &lt;= 5; i++) {
-            rows.add(List.of(i, &quot;User &quot; + i, &quot;user&quot; + i + &quot;@example.com&quot;,
+    <span class="hljs-keyword">static</span> QueryResult <span class="hljs-title function_">executeQuery</span><span class="hljs-params">(String sql, List&lt;String&gt; params)</span> {
+        <span class="hljs-comment">// 模拟查询：实际应使用JDBC PreparedStatement</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">columns</span> <span class="hljs-operator">=</span> List.of(<span class="hljs-string">"id"</span>, <span class="hljs-string">"name"</span>, <span class="hljs-string">"email"</span>, <span class="hljs-string">"created_at"</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">rows</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;List&lt;Object&gt;&gt;();
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">1</span>; i &lt;= <span class="hljs-number">5</span>; i++) {
+            rows.add(List.of(i, <span class="hljs-string">"User "</span> + i, <span class="hljs-string">"user"</span> + i + <span class="hljs-string">"@example.com"</span>,
                 Instant.now().minus(java.time.Duration.ofDays(i)).toString()));
         }
-        return new QueryResult(columns, rows, rows.size(), sql);
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">QueryResult</span>(columns, rows, rows.size(), sql);
     }
 
-    record QueryResult(List&lt;String&gt; columns, List&lt;List&lt;Object&gt;&gt; rows, 
-                       int rowCount, String executedSql) {}
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">QueryResult</span><span class="hljs-params">(List&lt;String&gt; columns, List&lt;List&lt;Object&gt;&gt; rows, 
+                       <span class="hljs-type">int</span> rowCount, String executedSql)</span> {}
 
-    static String formatQueryResult(QueryResult result) {
-        var sb = new StringBuilder();
-        sb.append(&quot;SQL: &quot;).append(result.executedSql()).append(&quot;\n&quot;);
-        sb.append(&quot;Rows: &quot;).append(result.rowCount()).append(&quot;\n&quot;);
-        sb.append(&quot;Columns: &quot;).append(String.join(&quot;, &quot;, result.columns())).append(&quot;\n&quot;);
-        sb.append(&quot;---\n&quot;);
-        for (var row : result.rows()) {
-            sb.append(String.join(&quot; | &quot;, 
-                row.stream().map(Object::toString).toList())).append(&quot;\n&quot;);
+    <span class="hljs-keyword">static</span> String <span class="hljs-title function_">formatQueryResult</span><span class="hljs-params">(QueryResult result)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">sb</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>();
+        sb.append(<span class="hljs-string">"SQL: "</span>).append(result.executedSql()).append(<span class="hljs-string">"\n"</span>);
+        sb.append(<span class="hljs-string">"Rows: "</span>).append(result.rowCount()).append(<span class="hljs-string">"\n"</span>);
+        sb.append(<span class="hljs-string">"Columns: "</span>).append(String.join(<span class="hljs-string">", "</span>, result.columns())).append(<span class="hljs-string">"\n"</span>);
+        sb.append(<span class="hljs-string">"---\n"</span>);
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> row : result.rows()) {
+            sb.append(String.join(<span class="hljs-string">" | "</span>, 
+                row.stream().map(Object::toString).toList())).append(<span class="hljs-string">"\n"</span>);
         }
-        return sb.toString();
+        <span class="hljs-keyword">return</span> sb.toString();
     }
 
-    static List&lt;Map&lt;String, String&gt;&gt; listAllTables(String schema) {
-        return List.of(
-            Map.of(&quot;name&quot;, &quot;users&quot;, &quot;description&quot;, &quot;用户信息表&quot;, &quot;rows&quot;, &quot;10,230&quot;),
-            Map.of(&quot;name&quot;, &quot;orders&quot;, &quot;description&quot;, &quot;订单记录表&quot;, &quot;rows&quot;, &quot;52,481&quot;),
-            Map.of(&quot;name&quot;, &quot;products&quot;, &quot;description&quot;, &quot;产品目录表&quot;, &quot;rows&quot;, &quot;1,024&quot;)
+    <span class="hljs-keyword">static</span> List&lt;Map&lt;String, String&gt;&gt; <span class="hljs-title function_">listAllTables</span><span class="hljs-params">(String schema)</span> {
+        <span class="hljs-keyword">return</span> List.of(
+            Map.of(<span class="hljs-string">"name"</span>, <span class="hljs-string">"users"</span>, <span class="hljs-string">"description"</span>, <span class="hljs-string">"用户信息表"</span>, <span class="hljs-string">"rows"</span>, <span class="hljs-string">"10,230"</span>),
+            Map.of(<span class="hljs-string">"name"</span>, <span class="hljs-string">"orders"</span>, <span class="hljs-string">"description"</span>, <span class="hljs-string">"订单记录表"</span>, <span class="hljs-string">"rows"</span>, <span class="hljs-string">"52,481"</span>),
+            Map.of(<span class="hljs-string">"name"</span>, <span class="hljs-string">"products"</span>, <span class="hljs-string">"description"</span>, <span class="hljs-string">"产品目录表"</span>, <span class="hljs-string">"rows"</span>, <span class="hljs-string">"1,024"</span>)
         );
     }
 
-    static List&lt;ColumnInfo&gt; getTableSchema(String tableName) {
-        return switch (tableName) {
-            case &quot;users&quot; -&gt; List.of(
-                new ColumnInfo(&quot;id&quot;, &quot;BIGINT&quot;, false, &quot;auto_increment&quot;, &quot;主键&quot;),
-                new ColumnInfo(&quot;name&quot;, &quot;VARCHAR(100)&quot;, false, null, &quot;用户名&quot;),
-                new ColumnInfo(&quot;email&quot;, &quot;VARCHAR(255)&quot;, false, null, &quot;邮箱地址&quot;),
-                new ColumnInfo(&quot;status&quot;, &quot;VARCHAR(20)&quot;, true, &quot;&#39;active&#39;&quot;, &quot;状态&quot;),
-                new ColumnInfo(&quot;created_at&quot;, &quot;TIMESTAMP&quot;, false, &quot;CURRENT_TIMESTAMP&quot;, &quot;创建时间&quot;)
+    <span class="hljs-keyword">static</span> List&lt;ColumnInfo&gt; <span class="hljs-title function_">getTableSchema</span><span class="hljs-params">(String tableName)</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">switch</span> (tableName) {
+            <span class="hljs-keyword">case</span> <span class="hljs-string">"users"</span> -&gt; List.of(
+                <span class="hljs-keyword">new</span> <span class="hljs-title class_">ColumnInfo</span>(<span class="hljs-string">"id"</span>, <span class="hljs-string">"BIGINT"</span>, <span class="hljs-literal">false</span>, <span class="hljs-string">"auto_increment"</span>, <span class="hljs-string">"主键"</span>),
+                <span class="hljs-keyword">new</span> <span class="hljs-title class_">ColumnInfo</span>(<span class="hljs-string">"name"</span>, <span class="hljs-string">"VARCHAR(100)"</span>, <span class="hljs-literal">false</span>, <span class="hljs-literal">null</span>, <span class="hljs-string">"用户名"</span>),
+                <span class="hljs-keyword">new</span> <span class="hljs-title class_">ColumnInfo</span>(<span class="hljs-string">"email"</span>, <span class="hljs-string">"VARCHAR(255)"</span>, <span class="hljs-literal">false</span>, <span class="hljs-literal">null</span>, <span class="hljs-string">"邮箱地址"</span>),
+                <span class="hljs-keyword">new</span> <span class="hljs-title class_">ColumnInfo</span>(<span class="hljs-string">"status"</span>, <span class="hljs-string">"VARCHAR(20)"</span>, <span class="hljs-literal">true</span>, <span class="hljs-string">"'active'"</span>, <span class="hljs-string">"状态"</span>),
+                <span class="hljs-keyword">new</span> <span class="hljs-title class_">ColumnInfo</span>(<span class="hljs-string">"created_at"</span>, <span class="hljs-string">"TIMESTAMP"</span>, <span class="hljs-literal">false</span>, <span class="hljs-string">"CURRENT_TIMESTAMP"</span>, <span class="hljs-string">"创建时间"</span>)
             );
-            case &quot;orders&quot; -&gt; List.of(
-                new ColumnInfo(&quot;id&quot;, &quot;BIGINT&quot;, false, &quot;auto_increment&quot;, &quot;主键&quot;),
-                new ColumnInfo(&quot;user_id&quot;, &quot;BIGINT&quot;, false, null, &quot;用户ID外键&quot;),
-                new ColumnInfo(&quot;total&quot;, &quot;DECIMAL(10,2)&quot;, false, null, &quot;订单总额&quot;),
-                new ColumnInfo(&quot;status&quot;, &quot;VARCHAR(20)&quot;, false, &quot;&#39;pending&#39;&quot;, &quot;订单状态&quot;)
+            <span class="hljs-keyword">case</span> <span class="hljs-string">"orders"</span> -&gt; List.of(
+                <span class="hljs-keyword">new</span> <span class="hljs-title class_">ColumnInfo</span>(<span class="hljs-string">"id"</span>, <span class="hljs-string">"BIGINT"</span>, <span class="hljs-literal">false</span>, <span class="hljs-string">"auto_increment"</span>, <span class="hljs-string">"主键"</span>),
+                <span class="hljs-keyword">new</span> <span class="hljs-title class_">ColumnInfo</span>(<span class="hljs-string">"user_id"</span>, <span class="hljs-string">"BIGINT"</span>, <span class="hljs-literal">false</span>, <span class="hljs-literal">null</span>, <span class="hljs-string">"用户ID外键"</span>),
+                <span class="hljs-keyword">new</span> <span class="hljs-title class_">ColumnInfo</span>(<span class="hljs-string">"total"</span>, <span class="hljs-string">"DECIMAL(10,2)"</span>, <span class="hljs-literal">false</span>, <span class="hljs-literal">null</span>, <span class="hljs-string">"订单总额"</span>),
+                <span class="hljs-keyword">new</span> <span class="hljs-title class_">ColumnInfo</span>(<span class="hljs-string">"status"</span>, <span class="hljs-string">"VARCHAR(20)"</span>, <span class="hljs-literal">false</span>, <span class="hljs-string">"'pending'"</span>, <span class="hljs-string">"订单状态"</span>)
             );
-            default -&gt; throw new IllegalArgumentException(&quot;Unknown table: &quot; + tableName);
+            <span class="hljs-keyword">default</span> -&gt; <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">IllegalArgumentException</span>(<span class="hljs-string">"Unknown table: "</span> + tableName);
         };
     }
 
-    static Map&lt;String, Object&gt; getTableFullInfo(String tableName) {
-        return Map.of(
-            &quot;name&quot;, tableName,
-            &quot;columns&quot;, getTableSchema(tableName),
-            &quot;indexes&quot;, List.of(&quot;idx_&quot; + tableName + &quot;_status&quot;, &quot;idx_&quot; + tableName + &quot;_created_at&quot;),
-            &quot;constraints&quot;, List.of(&quot;pk_&quot; + tableName, &quot;fk_&quot; + tableName + &quot;_user_id&quot;)
+    <span class="hljs-keyword">static</span> Map&lt;String, Object&gt; <span class="hljs-title function_">getTableFullInfo</span><span class="hljs-params">(String tableName)</span> {
+        <span class="hljs-keyword">return</span> Map.of(
+            <span class="hljs-string">"name"</span>, tableName,
+            <span class="hljs-string">"columns"</span>, getTableSchema(tableName),
+            <span class="hljs-string">"indexes"</span>, List.of(<span class="hljs-string">"idx_"</span> + tableName + <span class="hljs-string">"_status"</span>, <span class="hljs-string">"idx_"</span> + tableName + <span class="hljs-string">"_created_at"</span>),
+            <span class="hljs-string">"constraints"</span>, List.of(<span class="hljs-string">"pk_"</span> + tableName, <span class="hljs-string">"fk_"</span> + tableName + <span class="hljs-string">"_user_id"</span>)
         );
     }
 }
 
-// ===== 辅助工厂类 =====
-class HikariDataSourceFactory {
-    static DataSource create() {
-        // 返回模拟DataSource，实际应配置HikariCP
-        return null; // 示例中不实现真实连接
+<span class="hljs-comment">// ===== 辅助工厂类 =====</span>
+<span class="hljs-keyword">class</span> <span class="hljs-title class_">HikariDataSourceFactory</span> {
+    <span class="hljs-keyword">static</span> DataSource <span class="hljs-title function_">create</span><span class="hljs-params">()</span> {
+        <span class="hljs-comment">// 返回模拟DataSource，实际应配置HikariCP</span>
+        <span class="hljs-keyword">return</span> <span class="hljs-literal">null</span>; <span class="hljs-comment">// 示例中不实现真实连接</span>
     }
 }
 
-// ===== JSON工具类 =====
-class JacksonUtils {
-    private static final com.fasterxml.jackson.databind.ObjectMapper mapper =
-        new com.fasterxml.jackson.databind.ObjectMapper()
-            .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule())
+<span class="hljs-comment">// ===== JSON工具类 =====</span>
+<span class="hljs-keyword">class</span> <span class="hljs-title class_">JacksonUtils</span> {
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> com.fasterxml.jackson.databind.<span class="hljs-type">ObjectMapper</span> <span class="hljs-variable">mapper</span> <span class="hljs-operator">=</span>
+        <span class="hljs-keyword">new</span> <span class="hljs-title class_">com</span>.fasterxml.jackson.databind.ObjectMapper()
+            .registerModule(<span class="hljs-keyword">new</span> <span class="hljs-title class_">com</span>.fasterxml.jackson.datatype.jsr310.JavaTimeModule())
             .disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
 
-    static String toJson(Object obj) {
-        try {
-            return mapper.writerWithDefaultPrettyPrinter().writeValueAsString(obj);
-        } catch (Exception e) {
-            return &quot;{\&quot;error\&quot;: \&quot;&quot; + e.getMessage() + &quot;\&quot;}&quot;;
+    <span class="hljs-keyword">static</span> String <span class="hljs-title function_">toJson</span><span class="hljs-params">(Object obj)</span> {
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-keyword">return</span> mapper.writerWithDefaultPrettyPrinter().writeValueAsString(obj);
+        } <span class="hljs-keyword">catch</span> (Exception e) {
+            <span class="hljs-keyword">return</span> <span class="hljs-string">"{\"error\": \""</span> + e.getMessage() + <span class="hljs-string">"\"}"</span>;
         }
     }
 }
-</code></pre></div>
-<h2>七、常见问题与最佳实践</h2>
+</code></pre></div><h2>七、常见问题与最佳实践</h2>
 <h3>7.1 架构设计类</h3>
 <p><strong>Q1: stdio Transport中如何处理Server崩溃？</strong></p>
 <p>使用进程监控机制，Client检测到子进程退出后自动重启。配合指数退避策略防止频繁重启：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">var retryCount = 0;
-var maxRetries = 5;
-while (retryCount &lt; maxRetries) {
-    try {
-        var transport = new StdioClientTransport(params);
-        var client = McpClient.sync(transport).build();
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-type">var</span> <span class="hljs-variable">retryCount</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+<span class="hljs-type">var</span> <span class="hljs-variable">maxRetries</span> <span class="hljs-operator">=</span> <span class="hljs-number">5</span>;
+<span class="hljs-keyword">while</span> (retryCount &lt; maxRetries) {
+    <span class="hljs-keyword">try</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">transport</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StdioClientTransport</span>(params);
+        <span class="hljs-type">var</span> <span class="hljs-variable">client</span> <span class="hljs-operator">=</span> McpClient.sync(transport).build();
         client.initialize();
-        // 使用client...
-        break;
-    } catch (Exception e) {
+        <span class="hljs-comment">// 使用client...</span>
+        <span class="hljs-keyword">break</span>;
+    } <span class="hljs-keyword">catch</span> (Exception e) {
         retryCount++;
-        var backoff = (long) Math.pow(2, retryCount) * 1000;
+        <span class="hljs-type">var</span> <span class="hljs-variable">backoff</span> <span class="hljs-operator">=</span> (<span class="hljs-type">long</span>) Math.pow(<span class="hljs-number">2</span>, retryCount) * <span class="hljs-number">1000</span>;
         Thread.sleep(backoff);
     }
 }
-</code></pre></div>
-<p><strong>Q2: 如何处理大结果集？</strong></p>
+</code></pre></div><p><strong>Q2: 如何处理大结果集？</strong></p>
 <p>MCP协议建议对大数据集使用分页。Tool应支持limit/offset参数，或使用Resource的流式读取。避免单次返回超过1000行数据。对于超大结果集的场景（如导出全表数据），建议采用异步模式：Tool接受任务后立即返回taskId，Client通过轮询获取处理进度。</p>
 <p><strong>Q3: Server端状态管理？</strong></p>
 <p>MCP Server的设计原则是Stateless——每个请求应独立处理，不依赖之前的请求状态。对于需要持久状态的场景（如数据库连接池、配置缓存），使用单例模式或依赖注入在Server生命周期内管理。连接级别的状态（如用户认证信息）可以通过Transport层的元数据传递，但不建议在Server内部维护复杂的会话状态。</p>
@@ -971,12 +957,11 @@ while (retryCount &lt; maxRetries) {
 <h3>7.2 性能优化类</h3>
 <p><strong>Q5: 如何使用Virtual Threads优化MCP Server吞吐量？</strong></p>
 <p>JDK 25的Virtual Threads是MCP Server的理想并发模型。每个Tool调用可以在独立的Virtual Thread中执行，无需担心线程池耗尽。典型的配置方式：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 在MCP Server中使用Virtual Threads
-var server = McpServer.async(serverInfo)  // 使用async模式
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 在MCP Server中使用Virtual Threads</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">server</span> <span class="hljs-operator">=</span> McpServer.async(serverInfo)  <span class="hljs-comment">// 使用async模式</span>
     .executor(Executors.newVirtualThreadPerTaskExecutor())
     .build();
-</code></pre></div>
-<p>Virtual Threads的优势在IO密集型场景中尤为明显——例如数据库查询MCP Server，大部分时间在等待数据库响应，使用Virtual Threads可以用极少的内存开销支持数千个并发Tool调用。</p>
+</code></pre></div><p>Virtual Threads的优势在IO密集型场景中尤为明显——例如数据库查询MCP Server，大部分时间在等待数据库响应，使用Virtual Threads可以用极少的内存开销支持数千个并发Tool调用。</p>
 <p><strong>Q6: MCP Tool的响应时间优化？</strong></p>
 <ul>
 <li>对于查询类Tool，确保底层查询有合适的索引</li>
@@ -987,7 +972,7 @@ var server = McpServer.async(serverInfo)  // 使用async模式
 <h3>7.3 安全类</h3>
 <p><strong>Q7: 如何防止LLM通过MCP执行危险操作？</strong></p>
 <p>这是一个多层次的安全问题。第一层是Server端的权限控制——Tool应拒绝执行危险操作（如SQL DROP TABLE）。第二层是Host端的用户确认——在Claude Desktop等Host中，用户可以配置哪些Tool需要每次确认。第三层是LLM的指令约束——在System Prompt中明确禁止生成危险操作。</p>
-<p>最佳实践是&quot;默认拒绝&quot;原则：Tool默认只提供只读操作，任何写操作都需要在Server端和Host端双重授权。</p>
+<p>最佳实践是"默认拒绝"原则：Tool默认只提供只读操作，任何写操作都需要在Server端和Host端双重授权。</p>
 <p><strong>Q8: MCP Server如何防止数据泄露？</strong></p>
 <ul>
 <li>资源访问使用最小权限原则：Server连接数据库时使用的账号只授予必要的表/列权限</li>
@@ -1023,162 +1008,161 @@ var server = McpServer.async(serverInfo)  // 使用async模式
 <li><code>required</code>：必填字段数组</li>
 <li><code>enum</code>：枚举值约束</li>
 <li><code>oneOf</code> / <code>anyOf</code> / <code>allOf</code>：逻辑组合（如参数可以是字符串或数字）</li>
-<li><code>$ref</code>：引用复用，避免重复定义（如 <code>&quot;$ref&quot;: &quot;#/definitions/address&quot;</code>）</li>
+<li><code>$ref</code>：引用复用，避免重复定义（如 <code>"$ref": "#/definitions/address"</code>）</li>
 <li><code>description</code>：字段说明，供 LLM 理解参数语义</li>
 </ul>
 <p><strong>OpenAPI 规范</strong>（原 Swagger）是 RESTful API 的描述标准，定义了 API 端点、请求/响应格式、认证方式等。虽然 MCP 不是 RESTful 协议，但其概念模型与 OpenAPI 惊人地相似：MCP 的 <code>tools/list</code> 方法返回 Tool 列表，相当于 OpenAPI 的 <code>GET /openapi.json</code> 返回所有 API 操作；MCP 的 <code>tools/call</code> 执行具体工具，相当于 OpenAPI 的 API 端点调用。</p>
-<p>理解这种对应关系有助于快速上手 MCP——如果你熟悉 OpenAPI，就可以将 MCP Server 理解为&quot;为 AI 优化的 API 网关&quot;，将 MCP Tool 理解为&quot;带 AI 级别语义描述的 API 端点&quot;。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// JDK 25 + Spring Boot 4.x — JSON Schema / OpenAPI 定义示例
+<p>理解这种对应关系有助于快速上手 MCP——如果你熟悉 OpenAPI，就可以将 MCP Server 理解为"为 AI 优化的 API 网关"，将 MCP Tool 理解为"带 AI 级别语义描述的 API 端点"。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// JDK 25 + Spring Boot 4.x — JSON Schema / OpenAPI 定义示例</span>
 
-// === 示例1：JSON Schema 定义一个数据库查询 Tool 的参数 ===
-public class DatabaseQueryToolSchema {
-    public static String getInputSchema() {
-        return &quot;&quot;&quot;
+<span class="hljs-comment">// === 示例1：JSON Schema 定义一个数据库查询 Tool 的参数 ===</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">DatabaseQueryToolSchema</span> {
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> String <span class="hljs-title function_">getInputSchema</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-string">"""
         {
-          &quot;type&quot;: &quot;object&quot;,
-          &quot;properties&quot;: {
-            &quot;query&quot;: {
-              &quot;type&quot;: &quot;string&quot;,
-              &quot;description&quot;: &quot;要执行的SQL查询语句（仅支持SELECT）&quot;
+          "type": "object",
+          "properties": {
+            "query": {
+              "type": "string",
+              "description": "要执行的SQL查询语句（仅支持SELECT）"
             },
-            &quot;params&quot;: {
-              &quot;type&quot;: &quot;array&quot;,
-              &quot;items&quot;: { &quot;type&quot;: &quot;string&quot; },
-              &quot;description&quot;: &quot;查询参数数组，按 ? 占位符顺序&quot;
+            "params": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "查询参数数组，按 ? 占位符顺序"
             },
-            &quot;maxRows&quot;: {
-              &quot;type&quot;: &quot;integer&quot;,
-              &quot;minimum&quot;: 1,
-              &quot;maximum&quot;: 1000,
-              &quot;default&quot;: 100,
-              &quot;description&quot;: &quot;返回的最大行数&quot;
+            "maxRows": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000,
+              "default": 100,
+              "description": "返回的最大行数"
             },
-            &quot;database&quot;: {
-              &quot;type&quot;: &quot;string&quot;,
-              &quot;enum&quot;: [&quot;production_replica&quot;, &quot;analytics&quot;, &quot;archive&quot;],
-              &quot;default&quot;: &quot;analytics&quot;,
-              &quot;description&quot;: &quot;目标数据库&quot;
+            "database": {
+              "type": "string",
+              "enum": ["production_replica", "analytics", "archive"],
+              "default": "analytics",
+              "description": "目标数据库"
             }
           },
-          &quot;required&quot;: [&quot;query&quot;]
+          "required": ["query"]
         }
-        &quot;&quot;&quot;;
+        """</span>;
     }
 }
 
-// === 示例2：OpenAPI 规范定义一个 Agent API 端点 ===
-// 文件：agent-api-openapi.yaml（Spring Boot 4.x 中通过 OpenAPI bean 暴露）
-import io.swagger.v3.oas.models.*;
-import io.swagger.v3.oas.models.info.Info;
-import io.swagger.v3.oas.models.media.*;
-import io.swagger.v3.oas.models.parameters.*;
-import io.swagger.v3.oas.models.responses.*;
-import io.swagger.v3.oas.models.security.*;
-import io.swagger.v3.oas.models.PathItem.*;
-import io.swagger.v3.oas.models.Paths;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
+<span class="hljs-comment">// === 示例2：OpenAPI 规范定义一个 Agent API 端点 ===</span>
+<span class="hljs-comment">// 文件：agent-api-openapi.yaml（Spring Boot 4.x 中通过 OpenAPI bean 暴露）</span>
+<span class="hljs-keyword">import</span> io.swagger.v3.oas.models.*;
+<span class="hljs-keyword">import</span> io.swagger.v3.oas.models.info.Info;
+<span class="hljs-keyword">import</span> io.swagger.v3.oas.models.media.*;
+<span class="hljs-keyword">import</span> io.swagger.v3.oas.models.parameters.*;
+<span class="hljs-keyword">import</span> io.swagger.v3.oas.models.responses.*;
+<span class="hljs-keyword">import</span> io.swagger.v3.oas.models.security.*;
+<span class="hljs-keyword">import</span> io.swagger.v3.oas.models.PathItem.*;
+<span class="hljs-keyword">import</span> io.swagger.v3.oas.models.Paths;
+<span class="hljs-keyword">import</span> org.springframework.context.annotation.Bean;
+<span class="hljs-keyword">import</span> org.springframework.context.annotation.Configuration;
 
-@Configuration
-public class AgentOpenApiConfig {
+<span class="hljs-meta">@Configuration</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">AgentOpenApiConfig</span> {
 
-    @Bean
-    public OpenAPI agentOpenAPI() {
-        return new OpenAPI()
-            .info(new Info()
-                .title(&quot;Agent Platform API&quot;)
-                .version(&quot;2.0.0&quot;)
-                .description(&quot;多Agent平台的HTTP API，同时暴露为MCP Server&quot;))
-            .addSecurityItem(new SecurityRequirement()
-                .addList(&quot;bearerAuth&quot;))
-            .paths(new Paths()
-                .addPathItem(&quot;/agents/{agentId}/tasks&quot;, new PathItem()
-                    .post(new Operation()
-                        .operationId(&quot;createAgentTask&quot;)
-                        .summary(&quot;向指定Agent提交任务&quot;)
-                        .requestBody(new RequestBody()
-                            .required(true)
-                            .content(new Content()
-                                .addMediaType(&quot;application/json&quot;,
-                                    new MediaType()
-                                        .schema(new Schema&lt;&gt;()
-                                            .addProperty(&quot;prompt&quot;,
-                                                new StringSchema()
-                                                    .description(&quot;任务描述&quot;))
-                                            .addProperty(&quot;maxSteps&quot;,
-                                                new IntegerSchema()
-                                                    .defaultValue(10))))))
-                        .responses(new ApiResponses()
-                            .addApiResponse(&quot;200&quot;, new ApiResponse()
-                                .description(&quot;任务提交成功&quot;)
-                                .content(new Content()
-                                    .addMediaType(&quot;application/json&quot;,
-                                        new MediaType()
-                                            .schema(new Schema&lt;&gt;()
-                                                .addProperty(&quot;taskId&quot;,
-                                                    new StringSchema())
-                                                .addProperty(&quot;status&quot;,
-                                                    new StringSchema()
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-keyword">public</span> OpenAPI <span class="hljs-title function_">agentOpenAPI</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">OpenAPI</span>()
+            .info(<span class="hljs-keyword">new</span> <span class="hljs-title class_">Info</span>()
+                .title(<span class="hljs-string">"Agent Platform API"</span>)
+                .version(<span class="hljs-string">"2.0.0"</span>)
+                .description(<span class="hljs-string">"多Agent平台的HTTP API，同时暴露为MCP Server"</span>))
+            .addSecurityItem(<span class="hljs-keyword">new</span> <span class="hljs-title class_">SecurityRequirement</span>()
+                .addList(<span class="hljs-string">"bearerAuth"</span>))
+            .paths(<span class="hljs-keyword">new</span> <span class="hljs-title class_">Paths</span>()
+                .addPathItem(<span class="hljs-string">"/agents/{agentId}/tasks"</span>, <span class="hljs-keyword">new</span> <span class="hljs-title class_">PathItem</span>()
+                    .post(<span class="hljs-keyword">new</span> <span class="hljs-title class_">Operation</span>()
+                        .operationId(<span class="hljs-string">"createAgentTask"</span>)
+                        .summary(<span class="hljs-string">"向指定Agent提交任务"</span>)
+                        .requestBody(<span class="hljs-keyword">new</span> <span class="hljs-title class_">RequestBody</span>()
+                            .required(<span class="hljs-literal">true</span>)
+                            .content(<span class="hljs-keyword">new</span> <span class="hljs-title class_">Content</span>()
+                                .addMediaType(<span class="hljs-string">"application/json"</span>,
+                                    <span class="hljs-keyword">new</span> <span class="hljs-title class_">MediaType</span>()
+                                        .schema(<span class="hljs-keyword">new</span> <span class="hljs-title class_">Schema</span>&lt;&gt;()
+                                            .addProperty(<span class="hljs-string">"prompt"</span>,
+                                                <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringSchema</span>()
+                                                    .description(<span class="hljs-string">"任务描述"</span>))
+                                            .addProperty(<span class="hljs-string">"maxSteps"</span>,
+                                                <span class="hljs-keyword">new</span> <span class="hljs-title class_">IntegerSchema</span>()
+                                                    .defaultValue(<span class="hljs-number">10</span>))))))
+                        .responses(<span class="hljs-keyword">new</span> <span class="hljs-title class_">ApiResponses</span>()
+                            .addApiResponse(<span class="hljs-string">"200"</span>, <span class="hljs-keyword">new</span> <span class="hljs-title class_">ApiResponse</span>()
+                                .description(<span class="hljs-string">"任务提交成功"</span>)
+                                .content(<span class="hljs-keyword">new</span> <span class="hljs-title class_">Content</span>()
+                                    .addMediaType(<span class="hljs-string">"application/json"</span>,
+                                        <span class="hljs-keyword">new</span> <span class="hljs-title class_">MediaType</span>()
+                                            .schema(<span class="hljs-keyword">new</span> <span class="hljs-title class_">Schema</span>&lt;&gt;()
+                                                .addProperty(<span class="hljs-string">"taskId"</span>,
+                                                    <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringSchema</span>())
+                                                .addProperty(<span class="hljs-string">"status"</span>,
+                                                    <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringSchema</span>()
                                                         ._enum(List.of(
-                                                            &quot;pending&quot;, &quot;running&quot;,
-                                                            &quot;completed&quot;, &quot;failed&quot;))))))))
-                        .addParametersItem(new Parameter()
-                            .name(&quot;agentId&quot;)
-                            .in(&quot;path&quot;)
-                            .required(true)
-                            .schema(new StringSchema()))))));
+                                                            <span class="hljs-string">"pending"</span>, <span class="hljs-string">"running"</span>,
+                                                            <span class="hljs-string">"completed"</span>, <span class="hljs-string">"failed"</span>))))))))
+                        .addParametersItem(<span class="hljs-keyword">new</span> <span class="hljs-title class_">Parameter</span>()
+                            .name(<span class="hljs-string">"agentId"</span>)
+                            .in(<span class="hljs-string">"path"</span>)
+                            .required(<span class="hljs-literal">true</span>)
+                            .schema(<span class="hljs-keyword">new</span> <span class="hljs-title class_">StringSchema</span>()))))));
     }
 }
 
-// === 示例3：JSON Schema → MCP Tool 注册 ===
-// 将 JSON Schema 参数定义注册为 MCP Tool
-public class McpToolRegistrationDemo {
-    public static void main(String[] args) {
-        var server = McpServer.builder()
-            .serverInfo(&quot;db-query-server&quot;, &quot;1.0.0&quot;)
-            .transport(new HttpServletTransport(8080))
-            .capabilities(ToolCapabilities.of(true, false))
+<span class="hljs-comment">// === 示例3：JSON Schema → MCP Tool 注册 ===</span>
+<span class="hljs-comment">// 将 JSON Schema 参数定义注册为 MCP Tool</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">McpToolRegistrationDemo</span> {
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">main</span><span class="hljs-params">(String[] args)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">server</span> <span class="hljs-operator">=</span> McpServer.builder()
+            .serverInfo(<span class="hljs-string">"db-query-server"</span>, <span class="hljs-string">"1.0.0"</span>)
+            .transport(<span class="hljs-keyword">new</span> <span class="hljs-title class_">HttpServletTransport</span>(<span class="hljs-number">8080</span>))
+            .capabilities(ToolCapabilities.of(<span class="hljs-literal">true</span>, <span class="hljs-literal">false</span>))
             .build();
 
-        server.addTool(new Tool(
-            &quot;database_query&quot;,
-            &quot;在指定数据库中执行只读SQL查询&quot;,
+        server.addTool(<span class="hljs-keyword">new</span> <span class="hljs-title class_">Tool</span>(
+            <span class="hljs-string">"database_query"</span>,
+            <span class="hljs-string">"在指定数据库中执行只读SQL查询"</span>,
             DatabaseQueryToolSchema.getInputSchema()
         ), params -&gt; {
-            var query = (String) params.get(&quot;query&quot;);
-            var maxRows = params.getOrDefault(&quot;maxRows&quot;, 100);
-            System.out.println(&quot;执行查询: &quot; + query + &quot; (maxRows=&quot; + maxRows + &quot;)&quot;);
-            return new CallToolResult(&quot;查询结果: [{id:1, name:&#39;Alice&#39;}]&quot;, false);
+            <span class="hljs-type">var</span> <span class="hljs-variable">query</span> <span class="hljs-operator">=</span> (String) params.get(<span class="hljs-string">"query"</span>);
+            <span class="hljs-type">var</span> <span class="hljs-variable">maxRows</span> <span class="hljs-operator">=</span> params.getOrDefault(<span class="hljs-string">"maxRows"</span>, <span class="hljs-number">100</span>);
+            System.out.println(<span class="hljs-string">"执行查询: "</span> + query + <span class="hljs-string">" (maxRows="</span> + maxRows + <span class="hljs-string">")"</span>);
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">CallToolResult</span>(<span class="hljs-string">"查询结果: [{id:1, name:'Alice'}]"</span>, <span class="hljs-literal">false</span>);
         });
 
-        System.out.println(&quot;MCP Server 已启动，支持 1 个 Tool&quot;);
+        System.out.println(<span class="hljs-string">"MCP Server 已启动，支持 1 个 Tool"</span>);
     }
 
-    record Tool(String name, String description, String inputSchema) {}
-    record CallToolResult(String content, boolean isError) {}
-    record ToolCapabilities(boolean listChanged, boolean supportsStreaming) {
-        static ToolCapabilities of(boolean lc, boolean ss) {
-            return new ToolCapabilities(lc, ss);
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">Tool</span><span class="hljs-params">(String name, String description, String inputSchema)</span> {}
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">CallToolResult</span><span class="hljs-params">(String content, <span class="hljs-type">boolean</span> isError)</span> {}
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">ToolCapabilities</span><span class="hljs-params">(<span class="hljs-type">boolean</span> listChanged, <span class="hljs-type">boolean</span> supportsStreaming)</span> {
+        <span class="hljs-keyword">static</span> ToolCapabilities <span class="hljs-title function_">of</span><span class="hljs-params">(<span class="hljs-type">boolean</span> lc, <span class="hljs-type">boolean</span> ss)</span> {
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ToolCapabilities</span>(lc, ss);
         }
     }
 
-    static class McpServer {
-        static Builder builder() { return new Builder(); }
-        static class Builder {
-            Builder serverInfo(String n, String v) { return this; }
-            Builder transport(Object t) { return this; }
-            Builder capabilities(ToolCapabilities c) { return this; }
-            McpServer build() { return new McpServer(); }
+    <span class="hljs-keyword">static</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">McpServer</span> {
+        <span class="hljs-keyword">static</span> Builder <span class="hljs-title function_">builder</span><span class="hljs-params">()</span> { <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Builder</span>(); }
+        <span class="hljs-keyword">static</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">Builder</span> {
+            Builder <span class="hljs-title function_">serverInfo</span><span class="hljs-params">(String n, String v)</span> { <span class="hljs-keyword">return</span> <span class="hljs-built_in">this</span>; }
+            Builder <span class="hljs-title function_">transport</span><span class="hljs-params">(Object t)</span> { <span class="hljs-keyword">return</span> <span class="hljs-built_in">this</span>; }
+            Builder <span class="hljs-title function_">capabilities</span><span class="hljs-params">(ToolCapabilities c)</span> { <span class="hljs-keyword">return</span> <span class="hljs-built_in">this</span>; }
+            McpServer <span class="hljs-title function_">build</span><span class="hljs-params">()</span> { <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">McpServer</span>(); }
         }
-        void addTool(Tool t, java.util.function.Function&lt;Map&lt;String, Object&gt;, CallToolResult&gt; h) {}
+        <span class="hljs-keyword">void</span> <span class="hljs-title function_">addTool</span><span class="hljs-params">(Tool t, java.util.function.Function&lt;Map&lt;String, Object&gt;, CallToolResult&gt; h)</span> {}
     }
 
-    static class HttpServletTransport {
-        HttpServletTransport(int port) {}
+    <span class="hljs-keyword">static</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">HttpServletTransport</span> {
+        HttpServletTransport(<span class="hljs-type">int</span> port) {}
     }
 }
-</code></pre></div>
-<p>掌握 JSON Schema 和 OpenAPI 之后，MCP 就不再是&quot;全新的协议&quot;，而是&quot;为 AI 交互场景精心设计的 JSON-RPC 协议，底层借用了成熟的模式定义和 API 描述标准&quot;。这种连续性使得团队可以快速将现有 OpenAPI 服务包装为 MCP Server，实现从传统 API 到 AI Agent 的无缝升级。</p>
+</code></pre></div><p>掌握 JSON Schema 和 OpenAPI 之后，MCP 就不再是"全新的协议"，而是"为 AI 交互场景精心设计的 JSON-RPC 协议，底层借用了成熟的模式定义和 API 描述标准"。这种连续性使得团队可以快速将现有 OpenAPI 服务包装为 MCP Server，实现从传统 API 到 AI Agent 的无缝升级。</p>
 <hr>
 <p><strong>关键要点</strong>：</p>
 <ul>
@@ -1188,5 +1172,5 @@ public class McpToolRegistrationDemo {
 <li>Java SDK提供了完善的Sync/Async API，配合Virtual Threads可获得极佳并发性能</li>
 <li>安全性是生产部署的首要考虑：白名单、参数校验、审计缺一不可</li>
 </ul>
-</div>
+</body></html></div>
 </article>

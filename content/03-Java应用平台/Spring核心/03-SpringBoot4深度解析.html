@@ -1,37 +1,36 @@
 
-<article class="kb-entry" data-path="/03-Java应用平台/Spring核心/03-SpringBoot4深度解析">
+<article class="kb-entry" data-path="/03-Java应用平台">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=03">03-Java应用平台</a></div>
     <h1>Spring Boot 4 In-Depth</h1>
-    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#spring-boot</span><span class="badge badge-tag">#auto-configuration</span><span class="badge badge-tag">#starter</span><span class="badge badge-tag">#actuator</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#spring-boot</span><span class="badge badge-tag">#auto-configuration</span><span class="badge badge-tag">#starter</span><span class="badge badge-tag">#actuator</span><span class="badge badge-tag">#aot</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://docs.spring.io/spring-boot/reference/" target="_blank" rel="noopener" class="source-link" title="Spring Boot 4.x Reference Documentation — auto-configuration, starter, actuator, AOT, configuration, lifecycle">Spring Boot 4.x Reference Documentation — auto-configuration, starter, actuator, AOT, configuration, lifecycle</a><a href="https://docs.spring.io/spring-boot/specification/configuration-metadata/" target="_blank" rel="noopener" class="source-link" title="Spring Boot Configuration Metadata Specification — @ConfigurationProperties metadata format">Spring Boot Configuration Metadata Specification — @ConfigurationProperties metadata format</a><a href="https://github.com/spring-projects/spring-boot" target="_blank" rel="noopener" class="source-link" title="Spring Boot source code — AutoConfigurationImportSelector, ConditionEvaluator, SpringApplication implementation">Spring Boot source code — AutoConfigurationImportSelector, ConditionEvaluator, SpringApplication implementation</a><a href="https://spring.io/blog" target="_blank" rel="noopener" class="source-link" title="Spring Official Blog — AOT compilation updates, configuration encryption, virtual threads configuration guides">Spring Official Blog — AOT compilation updates, configuration encryption, virtual threads configuration guides</a></small></div>
   </div>
-  <div class="entry-body"><h1>Spring Boot 4 In-Depth</h1>
+  <div class="entry-body"><html><head></head><body><h1>Spring Boot 4 In-Depth</h1>
 <h2>概述</h2>
-<p>Spring Boot 4.x 是 Java 企业应用开发的基石框架，基于 Spring Framework 构建，提供开箱即用的自动配置、嵌入式服务器、生产就绪特性（Actuator）和 AOT 编译支持。本文深入剖析 Spring Boot 的核心机制：自动配置原理、Starter 机制、配置体系、Actuator、AOT 编译、应用启动生命周期以及 Virtual Thread 集成。每一次剖析都从源码级别展开，帮助读者建立&quot;不仅会用，更知其所以然&quot;的技术深度。</p>
+<p>Spring Boot 4.x 是 Java 企业应用开发的基石框架，基于 Spring Framework 构建，提供开箱即用的自动配置、嵌入式服务器、生产就绪特性（Actuator）和 AOT 编译支持。本文深入剖析 Spring Boot 的核心机制：自动配置原理、Starter 机制、配置体系、Actuator、AOT 编译、应用启动生命周期以及 Virtual Thread 集成。每一次剖析都从源码级别展开，帮助读者建立"不仅会用，更知其所以然"的技术深度。</p>
 <p>本文知识点在技术雷达中均为 <strong>Adopt</strong> 象限（AOT/GraalVM 为 Trial，文中已标注），代码示例默认使用 JDK 25 + Spring Boot 4.x 风格。</p>
 <hr>
 <h2>一、自动配置原理</h2>
 <p>自动配置（Auto-Configuration）是 Spring Boot 最核心的设计理念。它试图根据类路径中的依赖、已定义的 Bean 以及各种属性配置，自动推断并配置 Spring 应用。</p>
 <h3>1.1 @SpringBootApplication 的解剖</h3>
 <p><code>@SpringBootApplication</code> 是一个组合注解，等价于同时声明三个注解：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Target(ElementType.TYPE)
-@Retention(RetentionPolicy.RUNTIME)
-@Documented
-@Inherited
-@SpringBootConfiguration    // 1. 标识为配置类
-@EnableAutoConfiguration    // 2. 触发自动配置机制
-@ComponentScan(             // 3. 组件扫描
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Target(ElementType.TYPE)</span>
+<span class="hljs-meta">@Retention(RetentionPolicy.RUNTIME)</span>
+<span class="hljs-meta">@Documented</span>
+<span class="hljs-meta">@Inherited</span>
+<span class="hljs-meta">@SpringBootConfiguration</span>    <span class="hljs-comment">// 1. 标识为配置类</span>
+<span class="hljs-meta">@EnableAutoConfiguration</span>    <span class="hljs-comment">// 2. 触发自动配置机制</span>
+<span class="hljs-meta">@ComponentScan(             // 3. 组件扫描
     excludeFilters = {
         @Filter(type = FilterType.CUSTOM, classes = TypeExcludeFilter.class),
         @Filter(type = FilterType.CUSTOM, classes = AutoConfigurationExcludeFilter.class)
     }
-)
-public @interface SpringBootApplication {
-    // ...属性省略
+)</span>
+<span class="hljs-keyword">public</span> <span class="hljs-meta">@interface</span> SpringBootApplication {
+    <span class="hljs-comment">// ...属性省略</span>
 }
-</code></pre></div>
-<p>三个组成部分的职责：</p>
+</code></pre></div><p>三个组成部分的职责：</p>
 <table>
 <thead>
 <tr>
@@ -55,68 +54,65 @@ public @interface SpringBootApplication {
 <p><strong>关键设计：</strong> <code>@ComponentScan</code> 默认不加 <code>basePackages</code>，意味着扫描范围是声明该注解的类所在的包及其子包。这就是为什么 Spring Boot 主类通常放在根包下。</p>
 <h3>1.2 @EnableAutoConfiguration 的工作链路</h3>
 <p><code>@EnableAutoConfiguration</code> 导入 <code>AutoConfigurationImportSelector</code>，这是自动配置的真正执行者：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Target(ElementType.TYPE)
-@Retention(RetentionPolicy.RUNTIME)
-@Documented
-@Inherited
-@AutoConfigurationPackage        // 记录自动配置的包名，供后续组件扫描
-@Import(AutoConfigurationImportSelector.class)  // 核心：导入选择器
-public @interface EnableAutoConfiguration {
-    String ENABLED_OVERRIDE_PROPERTY = &quot;spring.boot.enableautoconfiguration&quot;;
-    Class&lt;?&gt;[] exclude() default {};
-    String[] excludeName() default {};
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Target(ElementType.TYPE)</span>
+<span class="hljs-meta">@Retention(RetentionPolicy.RUNTIME)</span>
+<span class="hljs-meta">@Documented</span>
+<span class="hljs-meta">@Inherited</span>
+<span class="hljs-meta">@AutoConfigurationPackage</span>        <span class="hljs-comment">// 记录自动配置的包名，供后续组件扫描</span>
+<span class="hljs-meta">@Import(AutoConfigurationImportSelector.class)</span>  <span class="hljs-comment">// 核心：导入选择器</span>
+<span class="hljs-keyword">public</span> <span class="hljs-meta">@interface</span> EnableAutoConfiguration {
+    <span class="hljs-type">String</span> <span class="hljs-variable">ENABLED_OVERRIDE_PROPERTY</span> <span class="hljs-operator">=</span> <span class="hljs-string">"spring.boot.enableautoconfiguration"</span>;
+    Class&lt;?&gt;[] exclude() <span class="hljs-keyword">default</span> {};
+    String[] excludeName() <span class="hljs-keyword">default</span> {};
 }
-</code></pre></div>
-<p><code>AutoConfigurationImportSelector</code> 实现了 <code>DeferredImportSelector</code>，保证自动配置类在所有用户显式配置之后加载。其核心流程：</p>
+</code></pre></div><p><code>AutoConfigurationImportSelector</code> 实现了 <code>DeferredImportSelector</code>，保证自动配置类在所有用户显式配置之后加载。其核心流程：</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>AutoConfigurationImportSelector.selectImports()
   → getAutoConfigurationEntry()
     → getCandidateConfigurations()
-      → ImportCandidates.load(AutoConfiguration.class, classLoader)
-        → 读取 META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports
-          (Spring Boot 3.x+ 已从 spring.factories 迁移至此文件)
+      → ImportCandidates.load(AutoConfiguration.<span class="hljs-keyword">class</span>, classLoader)
+        → 读取 <span class="hljs-keyword">META</span>-<span class="hljs-keyword">INF</span>/spring/org.springframework.<span class="hljs-keyword">boot</span>.autoconfigure.AutoConfiguration.imports
+          (Spring <span class="hljs-keyword">Boot</span> 3.x+ 已从 spring.factories 迁移至此文件)
       → 返回所有候选自动配置类全限定名列表
-    → removeDuplicates()                // 去重
-    → getExclusions()                   // 处理 spring.autoconfigure.exclude 属性
+    → removeDuplicates()                <span class="hljs-comment">// 去重</span>
+    → getExclusions()                   <span class="hljs-comment">// 处理 spring.autoconfigure.exclude 属性</span>
     → filter(configurations, autoConfigurationMetadata)
       → 使用 ConditionEvaluator 逐个评估 @Conditional 系列注解
       → 过滤掉不满足条件的配置类
-    → fireAutoConfigurationImportEvents()  // 发布事件，供 Actuator 展示
+    → fireAutoConfigurationImportEvents()  <span class="hljs-comment">// 发布事件，供 Actuator 展示</span>
     → 返回最终要加载的配置类列表
-</code></pre></div>
-<p>关键代码片段（简化后的逻辑）：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// AutoConfigurationImportSelector 核心方法
-protected AutoConfigurationEntry getAutoConfigurationEntry(
-        AnnotationMetadata annotationMetadata) {
-    if (!isEnabled(annotationMetadata)) {
-        return EMPTY_ENTRY;
+</code></pre></div><p>关键代码片段（简化后的逻辑）：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// AutoConfigurationImportSelector 核心方法</span>
+<span class="hljs-keyword">protected</span> AutoConfigurationEntry <span class="hljs-title function_">getAutoConfigurationEntry</span><span class="hljs-params">(
+        AnnotationMetadata annotationMetadata)</span> {
+    <span class="hljs-keyword">if</span> (!isEnabled(annotationMetadata)) {
+        <span class="hljs-keyword">return</span> EMPTY_ENTRY;
     }
-    var attributes = getAttributes(annotationMetadata);
-    // Step 1: 加载所有候选配置类
-    var configurations = getCandidateConfigurations(annotationMetadata, attributes);
-    // Step 2: 去重
+    <span class="hljs-type">var</span> <span class="hljs-variable">attributes</span> <span class="hljs-operator">=</span> getAttributes(annotationMetadata);
+    <span class="hljs-comment">// Step 1: 加载所有候选配置类</span>
+    <span class="hljs-type">var</span> <span class="hljs-variable">configurations</span> <span class="hljs-operator">=</span> getCandidateConfigurations(annotationMetadata, attributes);
+    <span class="hljs-comment">// Step 2: 去重</span>
     configurations = removeDuplicates(configurations);
-    // Step 3: 处理显式排除
-    var exclusions = getExclusions(annotationMetadata, attributes);
+    <span class="hljs-comment">// Step 3: 处理显式排除</span>
+    <span class="hljs-type">var</span> <span class="hljs-variable">exclusions</span> <span class="hljs-operator">=</span> getExclusions(annotationMetadata, attributes);
     configurations.removeAll(exclusions);
-    // Step 4: 条件过滤（核心步骤）
+    <span class="hljs-comment">// Step 4: 条件过滤（核心步骤）</span>
     configurations = filter(configurations, autoConfigurationMetadata);
-    // Step 5: 发布导入事件
+    <span class="hljs-comment">// Step 5: 发布导入事件</span>
     fireAutoConfigurationImportEvents(configurations, exclusions);
-    return new AutoConfigurationEntry(configurations, exclusions);
+    <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">AutoConfigurationEntry</span>(configurations, exclusions);
 }
 
-// 从 spring.factories → AutoConfiguration.imports 的演变
-protected List&lt;String&gt; getCandidateConfigurations(
-        AnnotationMetadata metadata, AnnotationAttributes attributes) {
-    // Spring Boot 3.x+ 使用专用文件
-    var candidates = ImportCandidates.load(AutoConfiguration.class, getBeanClassLoader())
+<span class="hljs-comment">// 从 spring.factories → AutoConfiguration.imports 的演变</span>
+<span class="hljs-keyword">protected</span> List&lt;String&gt; <span class="hljs-title function_">getCandidateConfigurations</span><span class="hljs-params">(
+        AnnotationMetadata metadata, AnnotationAttributes attributes)</span> {
+    <span class="hljs-comment">// Spring Boot 3.x+ 使用专用文件</span>
+    <span class="hljs-type">var</span> <span class="hljs-variable">candidates</span> <span class="hljs-operator">=</span> ImportCandidates.load(AutoConfiguration.class, getBeanClassLoader())
             .getCandidates();
-    // 早先版本使用 spring.factories 中的 EnableAutoConfiguration key
-    // SpringFactoriesLoader.loadFactoryNames(EnableAutoConfiguration.class, classLoader);
-    return new ArrayList&lt;&gt;(candidates);
+    <span class="hljs-comment">// 早先版本使用 spring.factories 中的 EnableAutoConfiguration key</span>
+    <span class="hljs-comment">// SpringFactoriesLoader.loadFactoryNames(EnableAutoConfiguration.class, classLoader);</span>
+    <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;&gt;(candidates);
 }
-</code></pre></div>
-<h3>1.3 spring.factories → AutoConfiguration.imports 的迁移</h3>
+</code></pre></div><h3>1.3 spring.factories → AutoConfiguration.imports 的迁移</h3>
 <p>自 Spring Boot 3.0 起，自动配置的注册方式发生重大变化：</p>
 <table>
 <thead>
@@ -151,37 +147,37 @@ protected List&lt;String&gt; getCandidateConfigurations(
 <tbody><tr>
 <td><code>@ConditionalOnClass</code></td>
 <td>类路径中存在指定类</td>
-<td>&quot;有 DataSource 在类路径就配置数据源&quot;</td>
+<td>"有 DataSource 在类路径就配置数据源"</td>
 </tr>
 <tr>
 <td><code>@ConditionalOnMissingClass</code></td>
 <td>类路径中不存在指定类</td>
-<td>&quot;没有 H2 就不配置嵌入式数据库&quot;</td>
+<td>"没有 H2 就不配置嵌入式数据库"</td>
 </tr>
 <tr>
 <td><code>@ConditionalOnBean</code></td>
 <td>容器中存在指定 Bean</td>
-<td>&quot;有 DataSource Bean 就配置 JdbcTemplate&quot;</td>
+<td>"有 DataSource Bean 就配置 JdbcTemplate"</td>
 </tr>
 <tr>
 <td><code>@ConditionalOnMissingBean</code></td>
 <td>容器中不存在指定 Bean</td>
-<td>&quot;用户没自己定义 RestTemplate 就自动配置一个&quot;</td>
+<td>"用户没自己定义 RestTemplate 就自动配置一个"</td>
 </tr>
 <tr>
 <td><code>@ConditionalOnProperty</code></td>
 <td>配置属性满足条件</td>
-<td>&quot;spring.datasource.url 有值才配置数据源&quot;</td>
+<td>"spring.datasource.url 有值才配置数据源"</td>
 </tr>
 <tr>
 <td><code>@ConditionalOnResource</code></td>
 <td>类路径中存在指定资源</td>
-<td>&quot;存在 schema.sql 就执行初始化&quot;</td>
+<td>"存在 schema.sql 就执行初始化"</td>
 </tr>
 <tr>
 <td><code>@ConditionalOnWebApplication</code></td>
 <td>当前是 Web 应用</td>
-<td>&quot;Web 环境才配置 DispatcherServlet&quot;</td>
+<td>"Web 环境才配置 DispatcherServlet"</td>
 </tr>
 <tr>
 <td><code>@ConditionalOnExpression</code></td>
@@ -190,17 +186,16 @@ protected List&lt;String&gt; getCandidateConfigurations(
 </tr>
 </tbody></table>
 <p><strong>源码级示例：</strong> DataSourceAutoConfiguration 的条件注解：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@AutoConfiguration
-@ConditionalOnClass({DataSource.class, EmbeddedDatabaseType.class})
-@ConditionalOnMissingBean(type = &quot;io.r2dbc.spi.ConnectionFactory&quot;)
-@EnableConfigurationProperties(DataSourceProperties.class)
-@Import({DataSourcePoolMetadataProvidersConfiguration.class,
-         DataSourceCheckpointRestoreConfiguration.class})
-public class DataSourceAutoConfiguration {
-    // ...
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@AutoConfiguration</span>
+<span class="hljs-meta">@ConditionalOnClass({DataSource.class, EmbeddedDatabaseType.class})</span>
+<span class="hljs-meta">@ConditionalOnMissingBean(type = "io.r2dbc.spi.ConnectionFactory")</span>
+<span class="hljs-meta">@EnableConfigurationProperties(DataSourceProperties.class)</span>
+<span class="hljs-meta">@Import({DataSourcePoolMetadataProvidersConfiguration.class,
+         DataSourceCheckpointRestoreConfiguration.class})</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">DataSourceAutoConfiguration</span> {
+    <span class="hljs-comment">// ...</span>
 }
-</code></pre></div>
-<p>条件评估顺序（从源码 <code>ConditionEvaluator</code> 分析）：</p>
+</code></pre></div><p>条件评估顺序（从源码 <code>ConditionEvaluator</code> 分析）：</p>
 <ol>
 <li><code>@ConditionalOnClass</code> / <code>@ConditionalOnMissingClass</code> — 最先评估，基于类路径</li>
 <li><code>@ConditionalOnBean</code> / <code>@ConditionalOnMissingBean</code> — 第二阶段，需要 BeanFactory</li>
@@ -210,10 +205,9 @@ public class DataSourceAutoConfiguration {
 <p>每个条件失败都会导致该配置类被跳过，其内所有 <code>@Bean</code> 定义都不会注册。</p>
 <h3>1.5 自动配置报告 (Auto-Configuration Report)</h3>
 <p>调试自动配置问题的利器。启用方式：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">properties</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-properties"># application.properties
-logging.level.org.springframework.boot.autoconfigure=DEBUG
-</code></pre></div>
-<p>或在启动时添加 JVM 参数：<code>--debug</code></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">properties</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-properties"><span class="hljs-comment"># application.properties</span>
+<span class="hljs-attr">logging.level.org.springframework.boot.autoconfigure</span>=<span class="hljs-string">DEBUG</span>
+</code></pre></div><p>或在启动时添加 JVM 参数：<code>--debug</code></p>
 <p>报告分为两部分：</p>
 <ul>
 <li><strong>Positive matches</strong> — 匹配成功并生效的自动配置类</li>
@@ -221,16 +215,15 @@ logging.level.org.springframework.boot.autoconfigure=DEBUG
 </ul>
 <p>也可以通过 Actuator 的 <code>/actuator/conditions</code> 端点实时查看（需引入 <code>spring-boot-starter-actuator</code>）。</p>
 <p>示例输出解读：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Positive matches:
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Positive <span class="hljs-keyword">matches</span>:
    DataSourceAutoConfiguration matched:
-      - @ConditionalOnClass found required class &#39;javax.sql.DataSource&#39;
-      - @ConditionalOnMissingBean (types: io.r2dbc.spi.ConnectionFactory) did not find any beans
+      <span class="hljs-operator">-</span> <span class="hljs-variable">@ConditionalOnClass</span> found required class <span class="hljs-string">'javax.sql.DataSource'</span>
+      <span class="hljs-operator">-</span> <span class="hljs-variable">@ConditionalOnMissingBean</span> (types: io.r2dbc.spi.ConnectionFactory) did <span class="hljs-keyword">not</span> find <span class="hljs-keyword">any</span> beans
 
-Negative matches:
-   RabbitAutoConfiguration did not match:
-      - @ConditionalOnClass did not find required class &#39;com.rabbitmq.client.Channel&#39;
-</code></pre></div>
-<p><code>ConditionEvaluationReportAutoConfigurationImportListener</code> 负责收集所有条件评估结果，并在 <code>ApplicationContext</code> 刷新完成后写入日志。Actuator 的 <code>ConditionsReportEndpoint</code> 则通过 <code>ConditionEvaluationReport.get(context.getBeanFactory())</code> 获取报告。</p>
+Negative <span class="hljs-keyword">matches</span>:
+   RabbitAutoConfiguration did <span class="hljs-keyword">not</span> <span class="hljs-keyword">match</span>:
+      <span class="hljs-operator">-</span> <span class="hljs-variable">@ConditionalOnClass</span> did <span class="hljs-keyword">not</span> find required class <span class="hljs-string">'com.rabbitmq.client.Channel'</span>
+</code></pre></div><p><code>ConditionEvaluationReportAutoConfigurationImportListener</code> 负责收集所有条件评估结果，并在 <code>ApplicationContext</code> 刷新完成后写入日志。Actuator 的 <code>ConditionsReportEndpoint</code> 则通过 <code>ConditionEvaluationReport.get(context.getBeanFactory())</code> 获取报告。</p>
 <hr>
 <h2>二、Starter 机制</h2>
 <h3>2.1 Starter 的本质</h3>
@@ -263,223 +256,214 @@ Negative matches:
 </ul>
 <h3>2.2 Starter 的依赖管理策略</h3>
 <p>Spring Boot 通过 <code>spring-boot-dependencies</code> BOM（Bill of Materials）统一管理所有官方 Starter 及其传递依赖的版本。用户只需引入 Starter，无需指定子依赖版本：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;!-- 父 POM 中声明 --&gt;
-&lt;parent&gt;
-    &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
-    &lt;artifactId&gt;spring-boot-starter-parent&lt;/artifactId&gt;
-    &lt;version&gt;4.0.0&lt;/version&gt;
-&lt;/parent&gt;
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-xml"><span class="hljs-comment">&lt;!-- 父 POM 中声明 --&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">parent</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.boot<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-boot-starter-parent<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">version</span>&gt;</span>4.0.0<span class="hljs-tag">&lt;/<span class="hljs-name">version</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">parent</span>&gt;</span>
 
-&lt;!-- 或使用 dependencyManagement 导入 BOM --&gt;
-&lt;dependencyManagement&gt;
-    &lt;dependencies&gt;
-        &lt;dependency&gt;
-            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
-            &lt;artifactId&gt;spring-boot-dependencies&lt;/artifactId&gt;
-            &lt;version&gt;4.0.0&lt;/version&gt;
-            &lt;type&gt;pom&lt;/type&gt;
-            &lt;scope&gt;import&lt;/scope&gt;
-        &lt;/dependency&gt;
-    &lt;/dependencies&gt;
-&lt;/dependencyManagement&gt;
-</code></pre></div>
-<h3>2.3 自定义 Starter 实现（完整示例）</h3>
-<p>下面演示创建一个完整的自定义 Starter，为应用提供&quot;请求日志记录&quot;能力。</p>
+<span class="hljs-comment">&lt;!-- 或使用 dependencyManagement 导入 BOM --&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">dependencyManagement</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">dependencies</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.boot<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-boot-dependencies<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">version</span>&gt;</span>4.0.0<span class="hljs-tag">&lt;/<span class="hljs-name">version</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">type</span>&gt;</span>pom<span class="hljs-tag">&lt;/<span class="hljs-name">type</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">scope</span>&gt;</span>import<span class="hljs-tag">&lt;/<span class="hljs-name">scope</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">dependencies</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependencyManagement</span>&gt;</span>
+</code></pre></div><h3>2.3 自定义 Starter 实现（完整示例）</h3>
+<p>下面演示创建一个完整的自定义 Starter，为应用提供"请求日志记录"能力。</p>
 <p><strong>项目结构：</strong></p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>my-logging-spring-boot-starter/
 ├── pom.xml
-└── src/main/java/com/example/logging/
-    ├── MyLoggingProperties.java          # 配置属性类
-    ├── MyLoggingAutoConfiguration.java   # 自动配置类
-    └── LoggingFilter.java                # 实际功能逻辑
-└── src/main/resources/META-INF/spring/
+└── src<span class="hljs-regexp">/main/</span>java<span class="hljs-regexp">/com/</span>example<span class="hljs-regexp">/logging/</span>
+    ├── MyLoggingProperties.java          <span class="hljs-comment"># 配置属性类</span>
+    ├── MyLoggingAutoConfiguration.java   <span class="hljs-comment"># 自动配置类</span>
+    └── LoggingFilter.java                <span class="hljs-comment"># 实际功能逻辑</span>
+└── src<span class="hljs-regexp">/main/</span>resources<span class="hljs-regexp">/META-INF/</span>spring/
     └── org.springframework.boot.autoconfigure.AutoConfiguration.imports
-</code></pre></div>
-<p><strong>Step 1: pom.xml</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;?xml version=&quot;1.0&quot; encoding=&quot;UTF-8&quot;?&gt;
-&lt;project xmlns=&quot;http://maven.apache.org/POM/4.0.0&quot;
-         xmlns:xsi=&quot;http://www.w3.org/2001/XMLSchema-instance&quot;
-         xsi:schemaLocation=&quot;http://maven.apache.org/POM/4.0.0
-         http://maven.apache.org/xsd/maven-4.0.0.xsd&quot;&gt;
-    &lt;modelVersion&gt;4.0.0&lt;/modelVersion&gt;
+</code></pre></div><p><strong>Step 1: pom.xml</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-xml"><span class="hljs-meta">&lt;?xml version=<span class="hljs-string">"1.0"</span> encoding=<span class="hljs-string">"UTF-8"</span>?&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">project</span> <span class="hljs-attr">xmlns</span>=<span class="hljs-string">"http://maven.apache.org/POM/4.0.0"</span>
+         <span class="hljs-attr">xmlns:xsi</span>=<span class="hljs-string">"http://www.w3.org/2001/XMLSchema-instance"</span>
+         <span class="hljs-attr">xsi:schemaLocation</span>=<span class="hljs-string">"http://maven.apache.org/POM/4.0.0
+         http://maven.apache.org/xsd/maven-4.0.0.xsd"</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">modelVersion</span>&gt;</span>4.0.0<span class="hljs-tag">&lt;/<span class="hljs-name">modelVersion</span>&gt;</span>
 
-    &lt;groupId&gt;com.example&lt;/groupId&gt;
-    &lt;artifactId&gt;my-logging-spring-boot-starter&lt;/artifactId&gt;
-    &lt;version&gt;1.0.0&lt;/version&gt;
-    &lt;packaging&gt;jar&lt;/packaging&gt;
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>com.example<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>my-logging-spring-boot-starter<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">version</span>&gt;</span>1.0.0<span class="hljs-tag">&lt;/<span class="hljs-name">version</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">packaging</span>&gt;</span>jar<span class="hljs-tag">&lt;/<span class="hljs-name">packaging</span>&gt;</span>
 
-    &lt;properties&gt;
-        &lt;java.version&gt;25&lt;/java.version&gt;
-        &lt;spring-boot.version&gt;4.0.0&lt;/spring-boot.version&gt;
-    &lt;/properties&gt;
+    <span class="hljs-tag">&lt;<span class="hljs-name">properties</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">java.version</span>&gt;</span>25<span class="hljs-tag">&lt;/<span class="hljs-name">java.version</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">spring-boot.version</span>&gt;</span>4.0.0<span class="hljs-tag">&lt;/<span class="hljs-name">spring-boot.version</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">properties</span>&gt;</span>
 
-    &lt;dependencyManagement&gt;
-        &lt;dependencies&gt;
-            &lt;dependency&gt;
-                &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
-                &lt;artifactId&gt;spring-boot-dependencies&lt;/artifactId&gt;
-                &lt;version&gt;${spring-boot.version}&lt;/version&gt;
-                &lt;type&gt;pom&lt;/type&gt;
-                &lt;scope&gt;import&lt;/scope&gt;
-            &lt;/dependency&gt;
-        &lt;/dependencies&gt;
-    &lt;/dependencyManagement&gt;
+    <span class="hljs-tag">&lt;<span class="hljs-name">dependencyManagement</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">dependencies</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.boot<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-boot-dependencies<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">version</span>&gt;</span>${spring-boot.version}<span class="hljs-tag">&lt;/<span class="hljs-name">version</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">type</span>&gt;</span>pom<span class="hljs-tag">&lt;/<span class="hljs-name">type</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">scope</span>&gt;</span>import<span class="hljs-tag">&lt;/<span class="hljs-name">scope</span>&gt;</span>
+            <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">dependencies</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">dependencyManagement</span>&gt;</span>
 
-    &lt;dependencies&gt;
-        &lt;!-- 必须：提供自动配置注解和条件注解 --&gt;
-        &lt;dependency&gt;
-            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
-            &lt;artifactId&gt;spring-boot-autoconfigure&lt;/artifactId&gt;
-        &lt;/dependency&gt;
-        &lt;!-- 可选但推荐：生成配置元数据 JSON --&gt;
-        &lt;dependency&gt;
-            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
-            &lt;artifactId&gt;spring-boot-configuration-processor&lt;/artifactId&gt;
-            &lt;optional&gt;true&lt;/optional&gt;
-        &lt;/dependency&gt;
-        &lt;!-- 如果 Starter 依赖 Web 层 --&gt;
-        &lt;dependency&gt;
-            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
-            &lt;artifactId&gt;spring-boot-starter-web&lt;/artifactId&gt;
-            &lt;optional&gt;true&lt;/optional&gt;
-        &lt;/dependency&gt;
-    &lt;/dependencies&gt;
-&lt;/project&gt;
-</code></pre></div>
-<p><strong>Step 2: 配置属性类</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.logging;
+    <span class="hljs-tag">&lt;<span class="hljs-name">dependencies</span>&gt;</span>
+        <span class="hljs-comment">&lt;!-- 必须：提供自动配置注解和条件注解 --&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.boot<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-boot-autoconfigure<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+        <span class="hljs-comment">&lt;!-- 可选但推荐：生成配置元数据 JSON --&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.boot<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-boot-configuration-processor<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">optional</span>&gt;</span>true<span class="hljs-tag">&lt;/<span class="hljs-name">optional</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+        <span class="hljs-comment">&lt;!-- 如果 Starter 依赖 Web 层 --&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.boot<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-boot-starter-web<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">optional</span>&gt;</span>true<span class="hljs-tag">&lt;/<span class="hljs-name">optional</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">dependencies</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">project</span>&gt;</span>
+</code></pre></div><p><strong>Step 2: 配置属性类</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">package</span> com.example.logging;
 
-import org.springframework.boot.context.properties.ConfigurationProperties;
-import org.springframework.boot.context.properties.bind.DefaultValue;
+<span class="hljs-keyword">import</span> org.springframework.boot.context.properties.ConfigurationProperties;
+<span class="hljs-keyword">import</span> org.springframework.boot.context.properties.bind.DefaultValue;
 
-/**
+<span class="hljs-comment">/**
  * 读取 my-logging.* 配置。
  * IDE 可通过 spring-boot-configuration-processor 生成的
  * META-INF/spring-configuration-metadata.json 获得提示。
- */
-@ConfigurationProperties(prefix = &quot;my-logging&quot;)
-public record MyLoggingProperties(
-        @DefaultValue(&quot;true&quot;)   boolean enabled,
-        @DefaultValue(&quot;INFO&quot;)   String level,
-        @DefaultValue(&quot;true&quot;)   boolean includeHeaders,
-        @DefaultValue(&quot;true&quot;)   boolean includeBody,
-        @DefaultValue(&quot;/api/**&quot;) String[] pathPatterns
+ */</span>
+<span class="hljs-meta">@ConfigurationProperties(prefix = "my-logging")</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">MyLoggingProperties</span><span class="hljs-params">(
+        @DefaultValue("<span class="hljs-literal">true</span>")</span>   <span class="hljs-type">boolean</span> enabled,
+        <span class="hljs-meta">@DefaultValue("INFO")</span>   String level,
+        <span class="hljs-meta">@DefaultValue("true")</span>   <span class="hljs-type">boolean</span> includeHeaders,
+        <span class="hljs-meta">@DefaultValue("true")</span>   <span class="hljs-type">boolean</span> includeBody,
+        <span class="hljs-meta">@DefaultValue("/api/**")</span> String[] pathPatterns
 ) {}
-</code></pre></div>
-<p><strong>Step 3: 功能逻辑实现</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.logging;
+</code></pre></div><p><strong>Step 3: 功能逻辑实现</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">package</span> com.example.logging;
 
-import jakarta.servlet.*;
-import jakarta.servlet.http.HttpServletRequest;
-import jakarta.servlet.http.HttpServletResponse;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+<span class="hljs-keyword">import</span> jakarta.servlet.*;
+<span class="hljs-keyword">import</span> jakarta.servlet.http.HttpServletRequest;
+<span class="hljs-keyword">import</span> jakarta.servlet.http.HttpServletResponse;
+<span class="hljs-keyword">import</span> org.slf4j.Logger;
+<span class="hljs-keyword">import</span> org.slf4j.LoggerFactory;
 
-import java.io.IOException;
+<span class="hljs-keyword">import</span> java.io.IOException;
 
-public class LoggingFilter implements Filter {
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">LoggingFilter</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">Filter</span> {
 
-    private static final Logger log = LoggerFactory.getLogger(LoggingFilter.class);
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">Logger</span> <span class="hljs-variable">log</span> <span class="hljs-operator">=</span> LoggerFactory.getLogger(LoggingFilter.class);
 
-    private final MyLoggingProperties properties;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> MyLoggingProperties properties;
 
-    public LoggingFilter(MyLoggingProperties properties) {
-        this.properties = properties;
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">LoggingFilter</span><span class="hljs-params">(MyLoggingProperties properties)</span> {
+        <span class="hljs-built_in">this</span>.properties = properties;
     }
 
-    @Override
-    public void doFilter(ServletRequest request, ServletResponse response,
-                         FilterChain chain) throws IOException, ServletException {
-        if (!properties.enabled()) {
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">doFilter</span><span class="hljs-params">(ServletRequest request, ServletResponse response,
+                         FilterChain chain)</span> <span class="hljs-keyword">throws</span> IOException, ServletException {
+        <span class="hljs-keyword">if</span> (!properties.enabled()) {
             chain.doFilter(request, response);
-            return;
+            <span class="hljs-keyword">return</span>;
         }
 
-        var httpReq = (HttpServletRequest) request;
-        var start = System.currentTimeMillis();
-        try {
+        <span class="hljs-type">var</span> <span class="hljs-variable">httpReq</span> <span class="hljs-operator">=</span> (HttpServletRequest) request;
+        <span class="hljs-type">var</span> <span class="hljs-variable">start</span> <span class="hljs-operator">=</span> System.currentTimeMillis();
+        <span class="hljs-keyword">try</span> {
             chain.doFilter(request, response);
-        } finally {
-            var httpResp = (HttpServletResponse) response;
-            var duration = System.currentTimeMillis() - start;
-            var sb = new StringBuilder();
-            sb.append(httpReq.getMethod()).append(&quot; &quot;)
+        } <span class="hljs-keyword">finally</span> {
+            <span class="hljs-type">var</span> <span class="hljs-variable">httpResp</span> <span class="hljs-operator">=</span> (HttpServletResponse) response;
+            <span class="hljs-type">var</span> <span class="hljs-variable">duration</span> <span class="hljs-operator">=</span> System.currentTimeMillis() - start;
+            <span class="hljs-type">var</span> <span class="hljs-variable">sb</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>();
+            sb.append(httpReq.getMethod()).append(<span class="hljs-string">" "</span>)
               .append(httpReq.getRequestURI())
-              .append(&quot; → &quot;).append(httpResp.getStatus())
-              .append(&quot; (&quot;).append(duration).append(&quot;ms)&quot;);
+              .append(<span class="hljs-string">" → "</span>).append(httpResp.getStatus())
+              .append(<span class="hljs-string">" ("</span>).append(duration).append(<span class="hljs-string">"ms)"</span>);
 
-            if (properties.includeHeaders()) {
-                sb.append(&quot; [headers]&quot;);
+            <span class="hljs-keyword">if</span> (properties.includeHeaders()) {
+                sb.append(<span class="hljs-string">" [headers]"</span>);
             }
-            if (properties.includeBody()) {
-                sb.append(&quot; [body]&quot;);
+            <span class="hljs-keyword">if</span> (properties.includeBody()) {
+                sb.append(<span class="hljs-string">" [body]"</span>);
             }
 
             log.info(sb.toString());
         }
     }
 }
-</code></pre></div>
-<p><strong>Step 4: 自动配置类</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.logging;
+</code></pre></div><p><strong>Step 4: 自动配置类</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">package</span> com.example.logging;
 
-import org.springframework.boot.autoconfigure.AutoConfiguration;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
-import org.springframework.boot.context.properties.EnableConfigurationProperties;
-import org.springframework.boot.web.servlet.FilterRegistrationBean;
-import org.springframework.context.annotation.Bean;
+<span class="hljs-keyword">import</span> org.springframework.boot.autoconfigure.AutoConfiguration;
+<span class="hljs-keyword">import</span> org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+<span class="hljs-keyword">import</span> org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+<span class="hljs-keyword">import</span> org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+<span class="hljs-keyword">import</span> org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
+<span class="hljs-keyword">import</span> org.springframework.boot.context.properties.EnableConfigurationProperties;
+<span class="hljs-keyword">import</span> org.springframework.boot.web.servlet.FilterRegistrationBean;
+<span class="hljs-keyword">import</span> org.springframework.context.annotation.Bean;
 
-import java.util.List;
+<span class="hljs-keyword">import</span> java.util.List;
 
-@AutoConfiguration
-@ConditionalOnWebApplication
-@ConditionalOnClass(Filter.class)
-@ConditionalOnProperty(
-    prefix = &quot;my-logging&quot;,
-    name = &quot;enabled&quot;,
-    havingValue = &quot;true&quot;,
+<span class="hljs-meta">@AutoConfiguration</span>
+<span class="hljs-meta">@ConditionalOnWebApplication</span>
+<span class="hljs-meta">@ConditionalOnClass(Filter.class)</span>
+<span class="hljs-meta">@ConditionalOnProperty(
+    prefix = "my-logging",
+    name = "enabled",
+    havingValue = "true",
     matchIfMissing = true
-)
-@EnableConfigurationProperties(MyLoggingProperties.class)
-public class MyLoggingAutoConfiguration {
+)</span>
+<span class="hljs-meta">@EnableConfigurationProperties(MyLoggingProperties.class)</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">MyLoggingAutoConfiguration</span> {
 
-    @Bean
-    @ConditionalOnMissingBean
-    public LoggingFilter loggingFilter(MyLoggingProperties properties) {
-        return new LoggingFilter(properties);
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-meta">@ConditionalOnMissingBean</span>
+    <span class="hljs-keyword">public</span> LoggingFilter <span class="hljs-title function_">loggingFilter</span><span class="hljs-params">(MyLoggingProperties properties)</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">LoggingFilter</span>(properties);
     }
 
-    @Bean
-    @ConditionalOnMissingBean
-    public FilterRegistrationBean&lt;LoggingFilter&gt; loggingFilterRegistration(
-            LoggingFilter filter, MyLoggingProperties properties) {
-        var registration = new FilterRegistrationBean&lt;&gt;(filter);
-        registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 10);
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-meta">@ConditionalOnMissingBean</span>
+    <span class="hljs-keyword">public</span> FilterRegistrationBean&lt;LoggingFilter&gt; <span class="hljs-title function_">loggingFilterRegistration</span><span class="hljs-params">(
+            LoggingFilter filter, MyLoggingProperties properties)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">registration</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">FilterRegistrationBean</span>&lt;&gt;(filter);
+        registration.setOrder(Ordered.HIGHEST_PRECEDENCE + <span class="hljs-number">10</span>);
         registration.setUrlPatterns(List.of(properties.pathPatterns()));
-        return registration;
+        <span class="hljs-keyword">return</span> registration;
     }
 }
-</code></pre></div>
-<p><strong>Step 5: 自动配置注册文件</strong></p>
+</code></pre></div><p><strong>Step 5: 自动配置注册文件</strong></p>
 <p><code>src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports</code>:</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>com.example.logging.MyLoggingAutoConfiguration
-</code></pre></div>
-<p><strong>Step 6: 使用方引入</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;dependency&gt;
-    &lt;groupId&gt;com.example&lt;/groupId&gt;
-    &lt;artifactId&gt;my-logging-spring-boot-starter&lt;/artifactId&gt;
-    &lt;version&gt;1.0.0&lt;/version&gt;
-&lt;/dependency&gt;
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">properties</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-properties"># application.properties
-my-logging.level=DEBUG
-my-logging.include-body=false
-my-logging.path-patterns=/api/v1/**,/web/**
-</code></pre></div>
-<p><strong>设计要点总结：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>com<span class="hljs-selector-class">.example</span><span class="hljs-selector-class">.logging</span>.MyLoggingAutoConfiguration
+</code></pre></div><p><strong>Step 6: 使用方引入</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>com.example<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>my-logging-spring-boot-starter<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">version</span>&gt;</span>1.0.0<span class="hljs-tag">&lt;/<span class="hljs-name">version</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">properties</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-properties"><span class="hljs-comment"># application.properties</span>
+<span class="hljs-attr">my-logging.level</span>=<span class="hljs-string">DEBUG</span>
+<span class="hljs-attr">my-logging.include-body</span>=<span class="hljs-string">false</span>
+<span class="hljs-attr">my-logging.path-patterns</span>=<span class="hljs-string">/api/v1/**,/web/**</span>
+</code></pre></div><p><strong>设计要点总结：</strong></p>
 <ol>
 <li><code>@ConditionalOnMissingBean</code> 允许用户覆盖默认实现</li>
 <li><code>@ConditionalOnProperty(matchIfMissing = true)</code> 保证默认开启但可关闭</li>
@@ -628,46 +612,44 @@ my-logging.path-patterns=/api/v1/**,/web/**
 </tr>
 </tbody></table>
 <p><code>@ConfigurationProperties</code> 示例（推荐的数据载体 Record 风格）：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@ConfigurationProperties(prefix = &quot;app.cache&quot;)
-public record CacheProperties(
-        @DefaultValue(&quot;LOCAL&quot;) CacheType type,
-        @DefaultValue(&quot;100&quot;) int maxSize,
-        @DefaultValue(&quot;30&quot;) int ttlMinutes,
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@ConfigurationProperties(prefix = "app.cache")</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">CacheProperties</span><span class="hljs-params">(
+        @DefaultValue("LOCAL")</span> CacheType type,
+        <span class="hljs-meta">@DefaultValue("100")</span> <span class="hljs-type">int</span> maxSize,
+        <span class="hljs-meta">@DefaultValue("30")</span> <span class="hljs-type">int</span> ttlMinutes,
         Redis redis
 ) {
-    public record Redis(
-            @DefaultValue(&quot;localhost&quot;) String host,
-            @DefaultValue(&quot;6379&quot;) int port
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">Redis</span><span class="hljs-params">(
+            @DefaultValue("localhost")</span> String host,
+            <span class="hljs-meta">@DefaultValue("6379")</span> <span class="hljs-type">int</span> port
     ) {}
 }
 
-enum CacheType { LOCAL, REDIS }
-</code></pre></div>
-<p>使用方式——通过 <code>@EnableConfigurationProperties</code> 注册：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@AutoConfiguration
-@EnableConfigurationProperties(CacheProperties.class)
-@ConditionalOnProperty(prefix = &quot;app.cache&quot;, name = &quot;enabled&quot;, matchIfMissing = true)
-public class CacheAutoConfiguration {
+<span class="hljs-keyword">enum</span> <span class="hljs-title class_">CacheType</span> { LOCAL, REDIS }
+</code></pre></div><p>使用方式——通过 <code>@EnableConfigurationProperties</code> 注册：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@AutoConfiguration</span>
+<span class="hljs-meta">@EnableConfigurationProperties(CacheProperties.class)</span>
+<span class="hljs-meta">@ConditionalOnProperty(prefix = "app.cache", name = "enabled", matchIfMissing = true)</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">CacheAutoConfiguration</span> {
 
-    @Bean
-    public CacheManager cacheManager(CacheProperties props) {
-        return switch (props.type()) {
-            case LOCAL -&gt; new LocalCacheManager(props.maxSize(), props.ttlMinutes());
-            case REDIS -&gt; new RedisCacheManager(
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-keyword">public</span> CacheManager <span class="hljs-title function_">cacheManager</span><span class="hljs-params">(CacheProperties props)</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">switch</span> (props.type()) {
+            <span class="hljs-keyword">case</span> LOCAL -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">LocalCacheManager</span>(props.maxSize(), props.ttlMinutes());
+            <span class="hljs-keyword">case</span> REDIS -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">RedisCacheManager</span>(
                     props.redis().host(), props.redis().port(), props.ttlMinutes());
         };
     }
 }
-</code></pre></div>
-<h3>3.3 Profiles 机制</h3>
+</code></pre></div><h3>3.3 Profiles 机制</h3>
 <p>Spring Boot 的 Profile 允许根据环境（dev、test、prod）激活不同的配置和 Bean。</p>
 <p><strong>激活方式（按优先级）：</strong></p>
 <ol>
 <li>命令行参数：<code>--spring.profiles.active=prod</code></li>
 <li>OS 环境变量：<code>SPRING_PROFILES_ACTIVE=prod</code></li>
 <li><code>application.properties</code> 中设置 <code>spring.profiles.active=prod</code>（不推荐在此设置环境相关 profile）</li>
-<li>编程式：<code>SpringApplicationBuilder.profiles(&quot;prod&quot;)</code></li>
-<li><code>@ActiveProfiles(&quot;test&quot;)</code> — 测试专用</li>
+<li>编程式：<code>SpringApplicationBuilder.profiles("prod")</code></li>
+<li><code>@ActiveProfiles("test")</code> — 测试专用</li>
 </ol>
 <p><strong>Profile 特定的配置文件：</strong></p>
 <ul>
@@ -675,68 +657,61 @@ public class CacheAutoConfiguration {
 <li>同一目录下 profile 文件优先级高于默认文件</li>
 </ul>
 <p><strong>Profile 表达式（Spring Boot 4.x）：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Bean
-@Profile(&quot;!prod&quot;)  // 非 prod 环境创建
-public DataSource h2DataSource() { ... }
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Bean</span>
+<span class="hljs-meta">@Profile("!prod")</span>  <span class="hljs-comment">// 非 prod 环境创建</span>
+<span class="hljs-keyword">public</span> DataSource <span class="hljs-title function_">h2DataSource</span><span class="hljs-params">()</span> { ... }
 
-@Bean
-@Profile(&quot;prod &amp; cloud&quot;)  // prod 且 cloud 同时激活
-public DataSource cloudDataSource() { ... }
+<span class="hljs-meta">@Bean</span>
+<span class="hljs-meta">@Profile("prod &amp; cloud")</span>  <span class="hljs-comment">// prod 且 cloud 同时激活</span>
+<span class="hljs-keyword">public</span> DataSource <span class="hljs-title function_">cloudDataSource</span><span class="hljs-params">()</span> { ... }
 
-@Bean
-@Profile(&quot;dev | test&quot;)    // dev 或 test 激活
-public DataSource embeddedDataSource() { ... }
-</code></pre></div>
-<h3>3.4 外部化配置</h3>
+<span class="hljs-meta">@Bean</span>
+<span class="hljs-meta">@Profile("dev | test")</span>    <span class="hljs-comment">// dev 或 test 激活</span>
+<span class="hljs-keyword">public</span> DataSource <span class="hljs-title function_">embeddedDataSource</span><span class="hljs-params">()</span> { ... }
+</code></pre></div><h3>3.4 外部化配置</h3>
 <p>除了标准 properties/yml 文件，Spring Boot 支持从多种外部源加载配置：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 方式 1: 命令行指定外部配置文件
-// java -jar app.jar --spring.config.location=/opt/config/application.yml
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 方式 1: 命令行指定外部配置文件</span>
+<span class="hljs-comment">// java -jar app.jar --spring.config.location=/opt/config/application.yml</span>
 
-// 方式 2: 命令行指定额外的配置文件（不替换原有）
-// java -jar app.jar --spring.config.additional-location=/opt/config/
+<span class="hljs-comment">// 方式 2: 命令行指定额外的配置文件（不替换原有）</span>
+<span class="hljs-comment">// java -jar app.jar --spring.config.additional-location=/opt/config/</span>
 
-// 方式 3: 编程式
-var app = new SpringApplication(MyApp.class);
+<span class="hljs-comment">// 方式 3: 编程式</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">app</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">SpringApplication</span>(MyApp.class);
 app.setDefaultProperties(Map.of(
-    &quot;spring.config.location&quot;, &quot;/opt/config/&quot;
+    <span class="hljs-string">"spring.config.location"</span>, <span class="hljs-string">"/opt/config/"</span>
 ));
 app.run(args);
 
-// 方式 4: Config Server (Spring Cloud Config)
-// 通过 spring.cloud.config.uri 指向配置中心
-</code></pre></div>
-<p><strong>配置导入（Spring Boot 4.x）：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">properties</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-properties"># 导入其他配置文件
-spring.config.import=optional:classpath:/extra-config.yml
-spring.config.import=optional:configserver:http://config-server:8888
-</code></pre></div>
-<h3>3.5 配置加密</h3>
+<span class="hljs-comment">// 方式 4: Config Server (Spring Cloud Config)</span>
+<span class="hljs-comment">// 通过 spring.cloud.config.uri 指向配置中心</span>
+</code></pre></div><p><strong>配置导入（Spring Boot 4.x）：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">properties</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-properties"><span class="hljs-comment"># 导入其他配置文件</span>
+<span class="hljs-attr">spring.config.import</span>=<span class="hljs-string">optional:classpath:/extra-config.yml</span>
+<span class="hljs-attr">spring.config.import</span>=<span class="hljs-string">optional:configserver:http://config-server:8888</span>
+</code></pre></div><h3>3.5 配置加密</h3>
 <p>生产环境中敏感配置（数据库密码、API Key）需要加密存储。</p>
 <p><strong>方案一：Jasypt 集成（Spring Boot 2.x 主流方案，4.x 需兼容适配）：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;dependency&gt;
-    &lt;groupId&gt;com.github.ulisesbocchio&lt;/groupId&gt;
-    &lt;artifactId&gt;jasypt-spring-boot-starter&lt;/artifactId&gt;
-    &lt;version&gt;3.0.5&lt;/version&gt;
-&lt;/dependency&gt;
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">properties</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-properties"># 加密值使用 ENC(...) 包裹
-spring.datasource.password=ENC(BKJ3kf2Jk3n...)
-# 解密密钥通过环境变量或启动参数传入（绝不可写入配置文件）
-jasypt.encryptor.password=${JASYPT_ENCRYPTOR_PASSWORD}
-</code></pre></div>
-<p><strong>方案二：Spring Cloud Vault / AWS Secrets Manager / Azure Key Vault（推荐）：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;dependency&gt;
-    &lt;groupId&gt;org.springframework.cloud&lt;/groupId&gt;
-    &lt;artifactId&gt;spring-cloud-starter-vault-config&lt;/artifactId&gt;
-&lt;/dependency&gt;
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">properties</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-properties">spring.cloud.vault.token=${VAULT_TOKEN}
-spring.cloud.vault.scheme=https
-spring.cloud.vault.host=vault.example.com
-spring.cloud.vault.port=8200
-spring.config.import=vault://secret/application
-</code></pre></div>
-<p><strong>最佳实践：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>com.github.ulisesbocchio<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>jasypt-spring-boot-starter<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">version</span>&gt;</span>3.0.5<span class="hljs-tag">&lt;/<span class="hljs-name">version</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">properties</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-properties"><span class="hljs-comment"># 加密值使用 ENC(...) 包裹</span>
+<span class="hljs-attr">spring.datasource.password</span>=<span class="hljs-string">ENC(BKJ3kf2Jk3n...)</span>
+<span class="hljs-comment"># 解密密钥通过环境变量或启动参数传入（绝不可写入配置文件）</span>
+<span class="hljs-attr">jasypt.encryptor.password</span>=<span class="hljs-string">${JASYPT_ENCRYPTOR_PASSWORD}</span>
+</code></pre></div><p><strong>方案二：Spring Cloud Vault / AWS Secrets Manager / Azure Key Vault（推荐）：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.cloud<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-cloud-starter-vault-config<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">properties</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-properties"><span class="hljs-attr">spring.cloud.vault.token</span>=<span class="hljs-string">${VAULT_TOKEN}</span>
+<span class="hljs-attr">spring.cloud.vault.scheme</span>=<span class="hljs-string">https</span>
+<span class="hljs-attr">spring.cloud.vault.host</span>=<span class="hljs-string">vault.example.com</span>
+<span class="hljs-attr">spring.cloud.vault.port</span>=<span class="hljs-string">8200</span>
+<span class="hljs-attr">spring.config.import</span>=<span class="hljs-string">vault://secret/application</span>
+</code></pre></div><p><strong>最佳实践：</strong></p>
 <ul>
 <li>绝不将解密密钥硬编码到源码或配置文件中</li>
 <li>预发/生产环境使用 Secret Manager（Vault / AWS Secrets Manager / K8s Secrets）</li>
@@ -831,174 +806,167 @@ spring.config.import=vault://secret/application
 </tr>
 </tbody></table>
 <h3>4.2 端点暴露策略</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">properties</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-properties"># 默认：仅暴露 health
-management.endpoints.web.exposure.include=health,info
+<div class="code-block"><div class="code-header"><span class="code-lang">properties</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-properties"><span class="hljs-comment"># 默认：仅暴露 health</span>
+<span class="hljs-attr">management.endpoints.web.exposure.include</span>=<span class="hljs-string">health,info</span>
+<span class="hljs-comment">
+# 暴露所有（开发环境）</span>
+<span class="hljs-attr">management.endpoints.web.exposure.include</span>=<span class="hljs-string">*</span>
+<span class="hljs-comment">
+# 精确控制</span>
+<span class="hljs-attr">management.endpoints.web.exposure.include</span>=<span class="hljs-string">health,info,metrics,prometheus</span>
+<span class="hljs-attr">management.endpoints.web.exposure.exclude</span>=<span class="hljs-string">env,beans</span>
+<span class="hljs-comment">
+# 启用 JMX 暴露</span>
+<span class="hljs-attr">management.endpoints.jmx.exposure.include</span>=<span class="hljs-string">health,info</span>
+</code></pre></div><h3>4.3 自定义 HealthIndicator</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> org.springframework.boot.actuate.health.Health;
+<span class="hljs-keyword">import</span> org.springframework.boot.actuate.health.HealthIndicator;
+<span class="hljs-keyword">import</span> org.springframework.stereotype.Component;
 
-# 暴露所有（开发环境）
-management.endpoints.web.exposure.include=*
+<span class="hljs-keyword">import</span> java.net.URI;
+<span class="hljs-keyword">import</span> java.net.http.HttpClient;
+<span class="hljs-keyword">import</span> java.net.http.HttpRequest;
+<span class="hljs-keyword">import</span> java.net.http.HttpResponse;
+<span class="hljs-keyword">import</span> java.time.Duration;
 
-# 精确控制
-management.endpoints.web.exposure.include=health,info,metrics,prometheus
-management.endpoints.web.exposure.exclude=env,beans
+<span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ExternalServiceHealthIndicator</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">HealthIndicator</span> {
 
-# 启用 JMX 暴露
-management.endpoints.jmx.exposure.include=health,info
-</code></pre></div>
-<h3>4.3 自定义 HealthIndicator</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.boot.actuate.health.Health;
-import org.springframework.boot.actuate.health.HealthIndicator;
-import org.springframework.stereotype.Component;
-
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpResponse;
-import java.time.Duration;
-
-@Component
-public class ExternalServiceHealthIndicator implements HealthIndicator {
-
-    private final HttpClient httpClient = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(2))
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">HttpClient</span> <span class="hljs-variable">httpClient</span> <span class="hljs-operator">=</span> HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(<span class="hljs-number">2</span>))
             .build();
 
-    @Override
-    public Health health() {
-        try {
-            var request = HttpRequest.newBuilder()
-                    .uri(URI.create(&quot;https://api.example.com/health&quot;))
-                    .timeout(Duration.ofSeconds(3))
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> Health <span class="hljs-title function_">health</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-type">var</span> <span class="hljs-variable">request</span> <span class="hljs-operator">=</span> HttpRequest.newBuilder()
+                    .uri(URI.create(<span class="hljs-string">"https://api.example.com/health"</span>))
+                    .timeout(Duration.ofSeconds(<span class="hljs-number">3</span>))
                     .GET()
                     .build();
-            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            <span class="hljs-type">var</span> <span class="hljs-variable">response</span> <span class="hljs-operator">=</span> httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
-            if (response.statusCode() == 200) {
-                return Health.up()
-                        .withDetail(&quot;service&quot;, &quot;external-api&quot;)
-                        .withDetail(&quot;latency_ms&quot;, &quot;...&quot;)
+            <span class="hljs-keyword">if</span> (response.statusCode() == <span class="hljs-number">200</span>) {
+                <span class="hljs-keyword">return</span> Health.up()
+                        .withDetail(<span class="hljs-string">"service"</span>, <span class="hljs-string">"external-api"</span>)
+                        .withDetail(<span class="hljs-string">"latency_ms"</span>, <span class="hljs-string">"..."</span>)
                         .build();
-            } else {
-                return Health.down()
-                        .withDetail(&quot;service&quot;, &quot;external-api&quot;)
-                        .withDetail(&quot;status&quot;, response.statusCode())
+            } <span class="hljs-keyword">else</span> {
+                <span class="hljs-keyword">return</span> Health.down()
+                        .withDetail(<span class="hljs-string">"service"</span>, <span class="hljs-string">"external-api"</span>)
+                        .withDetail(<span class="hljs-string">"status"</span>, response.statusCode())
                         .build();
             }
-        } catch (Exception e) {
-            return Health.down(e).build();
+        } <span class="hljs-keyword">catch</span> (Exception e) {
+            <span class="hljs-keyword">return</span> Health.down(e).build();
         }
     }
 }
-</code></pre></div>
-<p><strong>Health 状态聚合：</strong> <code>/actuator/health</code> 会聚合所有 <code>HealthIndicator</code>，取最差状态：</p>
+</code></pre></div><p><strong>Health 状态聚合：</strong> <code>/actuator/health</code> 会聚合所有 <code>HealthIndicator</code>，取最差状态：</p>
 <ul>
-<li>全部 UP → 返回 200 + <code>{&quot;status&quot;:&quot;UP&quot;}</code></li>
-<li>任一 DOWN → 返回 503 + <code>{&quot;status&quot;:&quot;DOWN&quot;}</code> + 详情</li>
+<li>全部 UP → 返回 200 + <code>{"status":"UP"}</code></li>
+<li>任一 DOWN → 返回 503 + <code>{"status":"DOWN"}</code> + 详情</li>
 </ul>
 <p>显示详情需要配置：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">properties</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-properties">management.endpoint.health.show-details=always
-management.endpoint.health.show-components=always
-</code></pre></div>
-<h3>4.4 自定义 Metrics</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">properties</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-properties"><span class="hljs-attr">management.endpoint.health.show-details</span>=<span class="hljs-string">always</span>
+<span class="hljs-attr">management.endpoint.health.show-components</span>=<span class="hljs-string">always</span>
+</code></pre></div><h3>4.4 自定义 Metrics</h3>
 <p>Spring Boot Actuator 基于 Micrometer，支持多种监控系统（Prometheus、Graphite 等）。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import io.micrometer.core.instrument.MeterRegistry;
-import io.micrometer.core.instrument.Timer;
-import org.springframework.stereotype.Component;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> io.micrometer.core.instrument.MeterRegistry;
+<span class="hljs-keyword">import</span> io.micrometer.core.instrument.Timer;
+<span class="hljs-keyword">import</span> org.springframework.stereotype.Component;
 
-import java.util.concurrent.atomic.AtomicLong;
+<span class="hljs-keyword">import</span> java.util.concurrent.atomic.AtomicLong;
 
-@Component
-public class OrderMetrics {
+<span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">OrderMetrics</span> {
 
-    private final AtomicLong activeOrders;
-    private final MeterRegistry registry;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> AtomicLong activeOrders;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> MeterRegistry registry;
 
-    public OrderMetrics(MeterRegistry registry) {
-        this.registry = registry;
-        this.activeOrders = registry.gauge(
-                &quot;orders.active&quot;, new AtomicLong(0));
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">OrderMetrics</span><span class="hljs-params">(MeterRegistry registry)</span> {
+        <span class="hljs-built_in">this</span>.registry = registry;
+        <span class="hljs-built_in">this</span>.activeOrders = registry.gauge(
+                <span class="hljs-string">"orders.active"</span>, <span class="hljs-keyword">new</span> <span class="hljs-title class_">AtomicLong</span>(<span class="hljs-number">0</span>));
     }
 
-    // Counter: 只增不减的计数指标
-    public void recordOrderCreated() {
-        registry.counter(&quot;orders.created.total&quot;).increment();
+    <span class="hljs-comment">// Counter: 只增不减的计数指标</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">recordOrderCreated</span><span class="hljs-params">()</span> {
+        registry.counter(<span class="hljs-string">"orders.created.total"</span>).increment();
     }
 
-    // Timer: 记录耗时的指标
-    public void recordOrderProcessingTime(long millis) {
-        registry.timer(&quot;orders.processing.time&quot;).record(
+    <span class="hljs-comment">// Timer: 记录耗时的指标</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">recordOrderProcessingTime</span><span class="hljs-params">(<span class="hljs-type">long</span> millis)</span> {
+        registry.timer(<span class="hljs-string">"orders.processing.time"</span>).record(
                 Duration.ofMillis(millis));
     }
 
-    // Gauge: 瞬时值（通过回调获取最新值）
-    public void setActiveOrders(long count) {
-        this.activeOrders.set(count);
+    <span class="hljs-comment">// Gauge: 瞬时值（通过回调获取最新值）</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">setActiveOrders</span><span class="hljs-params">(<span class="hljs-type">long</span> count)</span> {
+        <span class="hljs-built_in">this</span>.activeOrders.set(count);
     }
 }
-</code></pre></div>
-<p>配置 Prometheus 暴露：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">properties</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-properties">management.endpoint.prometheus.enabled=true
-management.endpoints.web.exposure.include=health,info,metrics,prometheus
-</code></pre></div>
-<h3>4.5 Actuator 安全配置</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Configuration
-@EnableWebSecurity
-public class ActuatorSecurityConfig {
+</code></pre></div><p>配置 Prometheus 暴露：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">properties</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-properties"><span class="hljs-attr">management.endpoint.prometheus.enabled</span>=<span class="hljs-string">true</span>
+<span class="hljs-attr">management.endpoints.web.exposure.include</span>=<span class="hljs-string">health,info,metrics,prometheus</span>
+</code></pre></div><h3>4.5 Actuator 安全配置</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Configuration</span>
+<span class="hljs-meta">@EnableWebSecurity</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ActuatorSecurityConfig</span> {
 
-    @Bean
-    public SecurityFilterChain actuatorFilterChain(HttpSecurity http) throws Exception {
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-keyword">public</span> SecurityFilterChain <span class="hljs-title function_">actuatorFilterChain</span><span class="hljs-params">(HttpSecurity http)</span> <span class="hljs-keyword">throws</span> Exception {
         http
-            .securityMatcher(&quot;/actuator/**&quot;)
+            .securityMatcher(<span class="hljs-string">"/actuator/**"</span>)
             .authorizeHttpRequests(auth -&gt; auth
-                .requestMatchers(&quot;/actuator/health&quot;, &quot;/actuator/info&quot;).permitAll()
-                .requestMatchers(&quot;/actuator/prometheus&quot;).hasRole(&quot;MONITOR&quot;)
-                .requestMatchers(&quot;/actuator/**&quot;).hasRole(&quot;ADMIN&quot;)
+                .requestMatchers(<span class="hljs-string">"/actuator/health"</span>, <span class="hljs-string">"/actuator/info"</span>).permitAll()
+                .requestMatchers(<span class="hljs-string">"/actuator/prometheus"</span>).hasRole(<span class="hljs-string">"MONITOR"</span>)
+                .requestMatchers(<span class="hljs-string">"/actuator/**"</span>).hasRole(<span class="hljs-string">"ADMIN"</span>)
             )
             .httpBasic(Customizer.withDefaults());
-        return http.build();
+        <span class="hljs-keyword">return</span> http.build();
     }
 }
-</code></pre></div>
-<h3>4.6 自定义 Actuator 端点</h3>
+</code></pre></div><h3>4.6 自定义 Actuator 端点</h3>
 <p><code>@Endpoint</code> 注解让自定义端点自动暴露（通过 Web 和 JMX）：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.boot.actuate.endpoint.annotation.Endpoint;
-import org.springframework.boot.actuate.endpoint.annotation.ReadOperation;
-import org.springframework.boot.actuate.endpoint.annotation.WriteOperation;
-import org.springframework.stereotype.Component;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> org.springframework.boot.actuate.endpoint.annotation.Endpoint;
+<span class="hljs-keyword">import</span> org.springframework.boot.actuate.endpoint.annotation.ReadOperation;
+<span class="hljs-keyword">import</span> org.springframework.boot.actuate.endpoint.annotation.WriteOperation;
+<span class="hljs-keyword">import</span> org.springframework.stereotype.Component;
 
-import java.util.concurrent.atomic.AtomicLong;
+<span class="hljs-keyword">import</span> java.util.concurrent.atomic.AtomicLong;
 
-@Component
-@Endpoint(id = &quot;feature-flags&quot;)
-public class FeatureFlagsEndpoint {
+<span class="hljs-meta">@Component</span>
+<span class="hljs-meta">@Endpoint(id = "feature-flags")</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">FeatureFlagsEndpoint</span> {
 
-    private final Map&lt;String, Boolean&gt; flags = new ConcurrentHashMap&lt;&gt;();
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Map&lt;String, Boolean&gt; flags = <span class="hljs-keyword">new</span> <span class="hljs-title class_">ConcurrentHashMap</span>&lt;&gt;();
 
-    public FeatureFlagsEndpoint() {
-        flags.put(&quot;new-search&quot;, true);
-        flags.put(&quot;beta-recommendation&quot;, false);
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">FeatureFlagsEndpoint</span><span class="hljs-params">()</span> {
+        flags.put(<span class="hljs-string">"new-search"</span>, <span class="hljs-literal">true</span>);
+        flags.put(<span class="hljs-string">"beta-recommendation"</span>, <span class="hljs-literal">false</span>);
     }
 
-    @ReadOperation
-    public Map&lt;String, Boolean&gt; listAll() {
-        return Map.copyOf(flags);
+    <span class="hljs-meta">@ReadOperation</span>
+    <span class="hljs-keyword">public</span> Map&lt;String, Boolean&gt; <span class="hljs-title function_">listAll</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">return</span> Map.copyOf(flags);
     }
 
-    @ReadOperation
-    public Boolean getFlag(@Selector String name) {
-        return flags.get(name);
+    <span class="hljs-meta">@ReadOperation</span>
+    <span class="hljs-keyword">public</span> Boolean <span class="hljs-title function_">getFlag</span><span class="hljs-params">(<span class="hljs-meta">@Selector</span> String name)</span> {
+        <span class="hljs-keyword">return</span> flags.get(name);
     }
 
-    @WriteOperation
-    public void setFlag(String name, boolean enabled) {
+    <span class="hljs-meta">@WriteOperation</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">setFlag</span><span class="hljs-params">(String name, <span class="hljs-type">boolean</span> enabled)</span> {
         flags.put(name, enabled);
     }
 }
-</code></pre></div>
-<p>访问方式：</p>
+</code></pre></div><p>访问方式：</p>
 <ul>
-<li><code>GET /actuator/feature-flags</code> → <code>{&quot;new-search&quot;: true, &quot;beta-recommendation&quot;: false}</code></li>
+<li><code>GET /actuator/feature-flags</code> → <code>{"new-search": true, "beta-recommendation": false}</code></li>
 <li><code>GET /actuator/feature-flags/new-search</code> → <code>true</code></li>
-<li><code>POST /actuator/feature-flags</code> with <code>{&quot;name&quot;:&quot;beta&quot;,&quot;enabled&quot;:true}</code></li>
+<li><code>POST /actuator/feature-flags</code> with <code>{"name":"beta","enabled":true}</code></li>
 </ul>
 <hr>
 <h2>五、AOT 编译</h2>
@@ -1013,104 +981,98 @@ public class FeatureFlagsEndpoint {
 </ol>
 <p><strong>AOT 引擎工作流程：</strong></p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>源代码 → Java 编译 → 字节码 → AOT Processing (Maven/Gradle Plugin)
-  → 生成 SpringFactories.factories 的静态版本
+  → 生成 SpringFactories<span class="hljs-selector-class">.factories</span> 的静态版本
   → 生成反射配置 (reflect-config.json)
   → 生成代理配置 (proxy-config.json)
   → 生成资源配置 (resource-config.json)
   → 生成序列化配置 (serialization-config.json)
   → 生成预初始化的 Bean 定义
-  → GraalVM native-image 编译 → 原生可执行文件
-</code></pre></div>
-<h3>5.2 Maven 构建配置</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;build&gt;
-    &lt;plugins&gt;
-        &lt;plugin&gt;
-            &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
-            &lt;artifactId&gt;spring-boot-maven-plugin&lt;/artifactId&gt;
-            &lt;configuration&gt;
-                &lt;!-- 启用 AOT 处理 --&gt;
-                &lt;aot&gt;true&lt;/aot&gt;
-            &lt;/configuration&gt;
-        &lt;/plugin&gt;
-        &lt;!-- GraalVM Native Image 插件 --&gt;
-        &lt;plugin&gt;
-            &lt;groupId&gt;org.graalvm.buildtools&lt;/groupId&gt;
-            &lt;artifactId&gt;native-maven-plugin&lt;/artifactId&gt;
-        &lt;/plugin&gt;
-    &lt;/plugins&gt;
-&lt;/build&gt;
-</code></pre></div>
-<p><strong>构建命令：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># Step 1: 先执行 AOT 处理并生成原生镜像
+  → GraalVM native-<span class="hljs-selector-tag">image</span> 编译 → 原生可执行文件
+</code></pre></div><h3>5.2 Maven 构建配置</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">build</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">plugins</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">plugin</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.springframework.boot<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-boot-maven-plugin<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">configuration</span>&gt;</span>
+                <span class="hljs-comment">&lt;!-- 启用 AOT 处理 --&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">aot</span>&gt;</span>true<span class="hljs-tag">&lt;/<span class="hljs-name">aot</span>&gt;</span>
+            <span class="hljs-tag">&lt;/<span class="hljs-name">configuration</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">plugin</span>&gt;</span>
+        <span class="hljs-comment">&lt;!-- GraalVM Native Image 插件 --&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">plugin</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.graalvm.buildtools<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>native-maven-plugin<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">plugin</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">plugins</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">build</span>&gt;</span>
+</code></pre></div><p><strong>构建命令：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-comment"># Step 1: 先执行 AOT 处理并生成原生镜像</span>
 mvn -Pnative spring-boot:build-image
 
-# Step 2: 或分步执行（AOT 处理）
+<span class="hljs-comment"># Step 2: 或分步执行（AOT 处理）</span>
 mvn spring-boot:process-aot
 
-# Step 3: 再编译为原生镜像
+<span class="hljs-comment"># Step 3: 再编译为原生镜像</span>
 mvn -Pnative native:compile
-</code></pre></div>
-<h3>5.3 @Reflective 提示和 RuntimeHints API</h3>
+</code></pre></div><h3>5.3 @Reflective 提示和 RuntimeHints API</h3>
 <p>GraalVM 原生镜像在构建时执行静态分析（closed-world assumption），通过 <code>RuntimeHints</code> API 注册反射、资源、序列化等需求：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.aot.hint.*;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.ImportRuntimeHints;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> org.springframework.aot.hint.*;
+<span class="hljs-keyword">import</span> org.springframework.context.annotation.Configuration;
+<span class="hljs-keyword">import</span> org.springframework.context.annotation.ImportRuntimeHints;
 
-@Configuration
-@ImportRuntimeHints(MyRuntimeHints.class)
-public class AotConfig {
+<span class="hljs-meta">@Configuration</span>
+<span class="hljs-meta">@ImportRuntimeHints(MyRuntimeHints.class)</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">AotConfig</span> {
 }
 
-class MyRuntimeHints implements RuntimeHintsRegistrar {
+<span class="hljs-keyword">class</span> <span class="hljs-title class_">MyRuntimeHints</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">RuntimeHintsRegistrar</span> {
 
-    @Override
-    public void registerHints(RuntimeHints hints, ClassLoader classLoader) {
-        // 注册反射
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">registerHints</span><span class="hljs-params">(RuntimeHints hints, ClassLoader classLoader)</span> {
+        <span class="hljs-comment">// 注册反射</span>
         hints.reflection()
                 .registerType(MyDto.class,
                         MemberCategory.INVOKE_DECLARED_CONSTRUCTORS,
                         MemberCategory.INVOKE_DECLARED_METHODS,
                         MemberCategory.DECLARED_FIELDS);
 
-        // 注册资源文件
+        <span class="hljs-comment">// 注册资源文件</span>
         hints.resources()
-                .registerPattern(&quot;data/*.json&quot;)
-                .registerPattern(&quot;templates/*.mustache&quot;);
+                .registerPattern(<span class="hljs-string">"data/*.json"</span>)
+                .registerPattern(<span class="hljs-string">"templates/*.mustache"</span>);
 
-        // 注册序列化
+        <span class="hljs-comment">// 注册序列化</span>
         hints.serialization()
                 .registerType(MySerializableClass.class);
 
-        // 注册 JDK 代理
+        <span class="hljs-comment">// 注册 JDK 代理</span>
         hints.proxies()
                 .registerJdkProxy(MyInterface.class);
     }
 }
-</code></pre></div>
-<p><strong>更便捷的 <code>@Reflective</code> 注解（Spring Boot 4.x 引入）：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.aot.hint.annotation.Reflective;
+</code></pre></div><p><strong>更便捷的 <code>@Reflective</code> 注解（Spring Boot 4.x 引入）：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> org.springframework.aot.hint.annotation.Reflective;
 
-@Reflective  // 表示该类需要进行反射注册
-public record UserCreatedEvent(
+<span class="hljs-meta">@Reflective</span>  <span class="hljs-comment">// 表示该类需要进行反射注册</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">UserCreatedEvent</span><span class="hljs-params">(
         String userId,
         String userName,
         Instant timestamp
-) {}
-</code></pre></div>
-<h3>5.4 代理生成</h3>
+)</span> {}
+</code></pre></div><h3>5.4 代理生成</h3>
 <p>Spring AOP（CGLIB 代理）和 JDK 动态代理在原生镜像中需要预配置：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Interface-based proxy: JDK dynamic proxy
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// Interface-based proxy: JDK dynamic proxy</span>
 hints.proxies()
     .registerJdkProxy(MyService.class);
 
-// 也可以扫描特定包中所有带有 @Transactional 注解的接口
+<span class="hljs-comment">// 也可以扫描特定包中所有带有 @Transactional 注解的接口</span>
 hints.proxies()
     .registerJdkProxy(proxyHint -&gt; proxyHint
         .proxiedInterfaces(MyService.class, AnotherService.class));
-</code></pre></div>
-<h3>5.5 AOT 的限制和注意事项</h3>
+</code></pre></div><h3>5.5 AOT 的限制和注意事项</h3>
 <ul>
-<li>动态类加载：<code>Class.forName(&quot;com.example.&quot; + suffix)</code> 无法在 AOT 时分析，需显式注册</li>
+<li>动态类加载：<code>Class.forName("com.example." + suffix)</code> 无法在 AOT 时分析，需显式注册</li>
 <li>反射使用：所有反射访问的类、方法、字段必须通过 RuntimeHints 注册</li>
 <li>CGLIB 代理：<code>@Configuration</code> 类中的 <code>@Bean</code> 方法若在 AOT 模式下被 CGLIB 代理，可能需调整</li>
 <li>模板引擎：Thymeleaf 等运行时模板引擎在 AOT 模式下功能受限</li>
@@ -1128,123 +1090,117 @@ hints.proxies()
 <h2>六、Lifecycle</h2>
 <h3>6.1 SpringApplication.run() 内部步骤</h3>
 <p><code>SpringApplication.run()</code> 是 Spring Boot 启动的入口。理解其内部步骤对于调试启动问题、自定义启动流程至关重要。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 入口
-public static ConfigurableApplicationContext run(Class&lt;?&gt; primarySource, String... args) {
-    return new SpringApplication(primarySource).run(args);
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 入口</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> ConfigurableApplicationContext <span class="hljs-title function_">run</span><span class="hljs-params">(Class&lt;?&gt; primarySource, String... args)</span> {
+    <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">SpringApplication</span>(primarySource).run(args);
 }
-</code></pre></div>
-<p>内部 <code>run()</code> 方法的 10 个关键步骤：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>1. 创建 BootstrapContext
-   └── 启动早期的共享上下文，管理 BootstrapRegistry
-
-2. 获取 SpringApplicationRunListeners
+</code></pre></div><p>内部 <code>run()</code> 方法的 10 个关键步骤：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-number">1</span>. 创建 <span class="hljs-keyword">BootstrapContext
+</span>   └── 启动早期的共享上下文，管理 <span class="hljs-keyword">BootstrapRegistry
+</span>
+<span class="hljs-number">2</span>. 获取 SpringApplicationRunListeners
    └── 从 spring.factories 加载 SpringApplicationRunListener 实现
    └── 默认：EventPublishingRunListener（将生命周期事件转为 ApplicationEvent）
 
-3. 准备 Environment
+<span class="hljs-number">3</span>. 准备 Environment
    └── 创建或获取 ConfigurableEnvironment
    └── 配置 PropertySources 和 Profiles
    └── 发布 ApplicationEnvironmentPreparedEvent
    └── 此阶段 ApplicationContextInitializer 可修改 Environment
 
-4. 打印 Banner
-   └── 默认 Spring Boot Banner，可通过 banner.txt 或 spring.banner.location 自定义
+<span class="hljs-number">4</span>. 打印 <span class="hljs-keyword">Banner
+</span>   └── 默认 Spring <span class="hljs-keyword">Boot </span><span class="hljs-keyword">Banner，可通过 </span><span class="hljs-keyword">banner.txt </span>或 spring.<span class="hljs-keyword">banner.location </span>自定义
 
-5. 创建 ApplicationContext
+<span class="hljs-number">5</span>. 创建 ApplicationContext
    └── 根据 WebApplicationType 决定：
        ├── SERVLET → AnnotationConfigServletWebServerApplicationContext
        ├── REACTIVE → AnnotationConfigReactiveWebServerApplicationContext
        └── NONE → AnnotationConfigApplicationContext
 
-6. 准备 ApplicationContext
+<span class="hljs-number">6</span>. 准备 ApplicationContext
    └── 设置 Environment
    └── 执行 ApplicationContextInitializer（从 spring.factories 加载）
    └── 注册 primarySource
    └── 发布 ApplicationContextInitializedEvent
 
-7. 加载 Bean 定义
-   └── 扫描 @Configuration、@Component、@Bean 等
+<span class="hljs-number">7</span>. 加载 <span class="hljs-keyword">Bean </span>定义
+   └── 扫描 @Configuration、@Component、@<span class="hljs-keyword">Bean </span>等
    └── 触发 AutoConfigurationImportSelector 加载自动配置类
 
-8. Refresh ApplicationContext
+<span class="hljs-number">8</span>. Refresh ApplicationContext
    └── 调用 AbstractApplicationContext.refresh()（Spring 核心生命周期）
-   └── 该阶段完成：BeanFactory 准备 → Bean 实例化 → Property 注入
-       → BeanPostProcessor 注册和执行 → 国际化 → 事件多播器 → 
-       Register Listeners → 实例化所有单例 Bean → 启动 WebServer
+   └── 该阶段完成：<span class="hljs-keyword">BeanFactory </span>准备 → <span class="hljs-keyword">Bean </span>实例化 → Property 注入
+       → <span class="hljs-keyword">BeanPostProcessor </span>注册和执行 → 国际化 → 事件多播器 → 
+       Register Listeners → 实例化所有单例 <span class="hljs-keyword">Bean </span>→ 启动 WebServer
 
-9. 发布 ApplicationStartedEvent
-   └── Context 刷新完成，WebServer 已启动
+<span class="hljs-number">9</span>. 发布 ApplicationStartedEvent
+   └── <span class="hljs-built_in">Context</span> 刷新完成，WebServer 已启动
    └── ApplicationRunner 和 CommandLineRunner 在此之后执行
 
-10. 发布 ApplicationReadyEvent
+<span class="hljs-number">10</span>. 发布 ApplicationReadyEvent
     └── 应用完全就绪，可接受请求
-</code></pre></div>
-<p><strong>WebApplicationType 的判断逻辑：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">static WebApplicationType deduceFromClasspath() {
-    if (isPresent(&quot;org.springframework.web.reactive.DispatcherHandler&quot;)
-            &amp;&amp; !isPresent(&quot;org.springframework.web.servlet.DispatcherServlet&quot;)) {
-        return WebApplicationType.REACTIVE;
+</code></pre></div><p><strong>WebApplicationType 的判断逻辑：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">static</span> WebApplicationType <span class="hljs-title function_">deduceFromClasspath</span><span class="hljs-params">()</span> {
+    <span class="hljs-keyword">if</span> (isPresent(<span class="hljs-string">"org.springframework.web.reactive.DispatcherHandler"</span>)
+            &amp;&amp; !isPresent(<span class="hljs-string">"org.springframework.web.servlet.DispatcherServlet"</span>)) {
+        <span class="hljs-keyword">return</span> WebApplicationType.REACTIVE;
     }
-    if (!isPresent(&quot;org.springframework.web.servlet.DispatcherServlet&quot;)
-            &amp;&amp; !isPresent(&quot;org.glassfish.jersey.servlet.ServletContainer&quot;)) {
-        return WebApplicationType.NONE;
+    <span class="hljs-keyword">if</span> (!isPresent(<span class="hljs-string">"org.springframework.web.servlet.DispatcherServlet"</span>)
+            &amp;&amp; !isPresent(<span class="hljs-string">"org.glassfish.jersey.servlet.ServletContainer"</span>)) {
+        <span class="hljs-keyword">return</span> WebApplicationType.NONE;
     }
-    return WebApplicationType.SERVLET;
+    <span class="hljs-keyword">return</span> WebApplicationType.SERVLET;
 }
-</code></pre></div>
-<h3>6.2 ApplicationContextInitializer</h3>
+</code></pre></div><h3>6.2 ApplicationContextInitializer</h3>
 <p>在 <code>ApplicationContext</code> 刷新之前修改或增强它。定义方式：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 1. 实现接口
-public class MyContextInitializer implements
-        ApplicationContextInitializer&lt;ConfigurableApplicationContext&gt; {
-    @Override
-    public void initialize(ConfigurableApplicationContext ctx) {
-        // 添加自定义 BeanFactoryPostProcessor
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 1. 实现接口</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">MyContextInitializer</span> <span class="hljs-keyword">implements</span>
+        <span class="hljs-title class_">ApplicationContextInitializer</span>&lt;ConfigurableApplicationContext&gt; {
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">initialize</span><span class="hljs-params">(ConfigurableApplicationContext ctx)</span> {
+        <span class="hljs-comment">// 添加自定义 BeanFactoryPostProcessor</span>
         ctx.addBeanFactoryPostProcessor(
             beanFactory -&gt; {
-                // 在此阶段 Environment 已就绪，但 Bean 尚未实例化
-                var env = ctx.getEnvironment();
-                log.info(&quot;Active profiles: {}&quot;, (Object) env.getActiveProfiles());
+                <span class="hljs-comment">// 在此阶段 Environment 已就绪，但 Bean 尚未实例化</span>
+                <span class="hljs-type">var</span> <span class="hljs-variable">env</span> <span class="hljs-operator">=</span> ctx.getEnvironment();
+                log.info(<span class="hljs-string">"Active profiles: {}"</span>, (Object) env.getActiveProfiles());
             }
         );
     }
 }
 
-// 2. 注册到 spring.factories
-// META-INF/spring.factories
-// org.springframework.context.ApplicationContextInitializer=com.example.MyContextInitializer
+<span class="hljs-comment">// 2. 注册到 spring.factories</span>
+<span class="hljs-comment">// META-INF/spring.factories</span>
+<span class="hljs-comment">// org.springframework.context.ApplicationContextInitializer=com.example.MyContextInitializer</span>
 
-// 3. 或编程式注册
-var app = new SpringApplication(MyApp.class);
-app.addInitializers(new MyContextInitializer());
+<span class="hljs-comment">// 3. 或编程式注册</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">app</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">SpringApplication</span>(MyApp.class);
+app.addInitializers(<span class="hljs-keyword">new</span> <span class="hljs-title class_">MyContextInitializer</span>());
 app.run(args);
-</code></pre></div>
-<h3>6.3 EnvironmentPostProcessor</h3>
+</code></pre></div><h3>6.3 EnvironmentPostProcessor</h3>
 <p>在 <code>Environment</code> 创建后、ApplicationContext 准备前修改环境：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class MyEnvironmentPostProcessor implements EnvironmentPostProcessor {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">MyEnvironmentPostProcessor</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">EnvironmentPostProcessor</span> {
 
-    @Override
-    public void postProcessEnvironment(
-            ConfigurableEnvironment env, SpringApplication application) {
-        // 在此阶段可以：
-        // 1. 添加自定义 PropertySource
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">postProcessEnvironment</span><span class="hljs-params">(
+            ConfigurableEnvironment env, SpringApplication application)</span> {
+        <span class="hljs-comment">// 在此阶段可以：</span>
+        <span class="hljs-comment">// 1. 添加自定义 PropertySource</span>
         env.getPropertySources().addLast(
-            new MapPropertySource(&quot;my-custom&quot;, Map.of(&quot;custom.key&quot;, &quot;value&quot;))
+            <span class="hljs-keyword">new</span> <span class="hljs-title class_">MapPropertySource</span>(<span class="hljs-string">"my-custom"</span>, Map.of(<span class="hljs-string">"custom.key"</span>, <span class="hljs-string">"value"</span>))
         );
 
-        // 2. 从外部服务加载配置
-        // var remoteProps = loadFromRemoteConfigServer();
-        // env.getPropertySources().addFirst(new MapPropertySource(&quot;remote&quot;, remoteProps));
+        <span class="hljs-comment">// 2. 从外部服务加载配置</span>
+        <span class="hljs-comment">// var remoteProps = loadFromRemoteConfigServer();</span>
+        <span class="hljs-comment">// env.getPropertySources().addFirst(new MapPropertySource("remote", remoteProps));</span>
 
-        // 3. 动态激活 Profile
-        // env.addActiveProfile(&quot;dynamic-profile&quot;);
+        <span class="hljs-comment">// 3. 动态激活 Profile</span>
+        <span class="hljs-comment">// env.addActiveProfile("dynamic-profile");</span>
     }
 }
-</code></pre></div>
-<p>同样通过 <code>META-INF/spring.factories</code> 注册：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>org.springframework.boot.env.EnvironmentPostProcessor=com.example.MyEnvironmentPostProcessor
-</code></pre></div>
-<h3>6.4 Listeners 体系</h3>
+</code></pre></div><p>同样通过 <code>META-INF/spring.factories</code> 注册：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>org<span class="hljs-selector-class">.springframework</span><span class="hljs-selector-class">.boot</span><span class="hljs-selector-class">.env</span>.EnvironmentPostProcessor=com<span class="hljs-selector-class">.example</span>.MyEnvironmentPostProcessor
+</code></pre></div><h3>6.4 Listeners 体系</h3>
 <p>Spring Boot 的生命周期事件体系：</p>
 <table>
 <thead>
@@ -1291,47 +1247,45 @@ app.run(args);
 </tr>
 </tbody></table>
 <p><strong>自定义 Listener：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Component
-public class AppLifecycleListener {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">AppLifecycleListener</span> {
 
-    private static final Logger log = LoggerFactory.getLogger(AppLifecycleListener.class);
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">Logger</span> <span class="hljs-variable">log</span> <span class="hljs-operator">=</span> LoggerFactory.getLogger(AppLifecycleListener.class);
 
-    @EventListener
-    public void onReady(ApplicationReadyEvent event) {
-        log.info(&quot;=== Application fully started in {} ms ===&quot;,
+    <span class="hljs-meta">@EventListener</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">onReady</span><span class="hljs-params">(ApplicationReadyEvent event)</span> {
+        log.info(<span class="hljs-string">"=== Application fully started in {} ms ==="</span>,
                 event.getTimeTaken().toMillis());
-        // 执行预热操作
+        <span class="hljs-comment">// 执行预热操作</span>
     }
 
-    @EventListener
-    public void onFailed(ApplicationFailedEvent event) {
-        log.error(&quot;Application failed to start: {}&quot;,
+    <span class="hljs-meta">@EventListener</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">onFailed</span><span class="hljs-params">(ApplicationFailedEvent event)</span> {
+        log.error(<span class="hljs-string">"Application failed to start: {}"</span>,
                 event.getException().getMessage());
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>七、Virtual Thread 配置</h2>
 <h3>7.1 spring.threads.virtual.enabled</h3>
 <p>JDK 25 的 Virtual Threads (JEP 444) 是 Adopt 象限的核心技术。Spring Boot 4.x 通过 <code>spring.threads.virtual.enabled</code> 配置提供声明式支持。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">properties</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-properties"># 启用 Virtual Threads
-spring.threads.virtual.enabled=true
-</code></pre></div>
-<h3>7.2 内部实现：它做了什么</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">properties</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-properties"><span class="hljs-comment"># 启用 Virtual Threads</span>
+<span class="hljs-attr">spring.threads.virtual.enabled</span>=<span class="hljs-string">true</span>
+</code></pre></div><h3>7.2 内部实现：它做了什么</h3>
 <p>当 <code>spring.threads.virtual.enabled=true</code> 时，Spring Boot 自动配置会注册三个关键的 <code>BeanFactoryPostProcessor</code>：</p>
 <p><strong>1. Tomcat 请求处理线程：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 实际源码逻辑简化
-@AutoConfiguration
-@ConditionalOnProperty(prefix = &quot;spring.threads&quot;, name = &quot;virtual.enabled&quot;, havingValue = &quot;true&quot;)
-@ConditionalOnClass(name = &quot;org.apache.tomcat.util.threads.VirtualThreadExecutor&quot;)
-static class VirtualThreadsAutoConfiguration {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 实际源码逻辑简化</span>
+<span class="hljs-meta">@AutoConfiguration</span>
+<span class="hljs-meta">@ConditionalOnProperty(prefix = "spring.threads", name = "virtual.enabled", havingValue = "true")</span>
+<span class="hljs-meta">@ConditionalOnClass(name = "org.apache.tomcat.util.threads.VirtualThreadExecutor")</span>
+<span class="hljs-keyword">static</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">VirtualThreadsAutoConfiguration</span> {
 
-    @Bean
-    static BeanFactoryPostProcessor tomcatVirtualThreads() {
-        return beanFactory -&gt; {
-            if (beanFactory.containsBean(&quot;tomcatProtocolHandlerCustomizer&quot;)) {
-                // 将 Tomcat 的请求处理线程池切换为 Virtual Thread executor
-                // 即：每个请求在一个新的 Virtual Thread 上处理
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-keyword">static</span> BeanFactoryPostProcessor <span class="hljs-title function_">tomcatVirtualThreads</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">return</span> beanFactory -&gt; {
+            <span class="hljs-keyword">if</span> (beanFactory.containsBean(<span class="hljs-string">"tomcatProtocolHandlerCustomizer"</span>)) {
+                <span class="hljs-comment">// 将 Tomcat 的请求处理线程池切换为 Virtual Thread executor</span>
+                <span class="hljs-comment">// 即：每个请求在一个新的 Virtual Thread 上处理</span>
                 beanFactory.getBean(TomcatProtocolHandlerCustomizer.class)
                     .addCustomizer(protocolHandler -&gt;
                         protocolHandler.setExecutor(
@@ -1340,68 +1294,64 @@ static class VirtualThreadsAutoConfiguration {
             }
         };
     }
-</code></pre></div>
-<p><strong>2. @Async 任务执行：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Bean
-@ConditionalOnMissingBean
-public TaskExecutor applicationTaskExecutor() {
-    // 默认的 @Async 执行器切换为 Virtual Thread 执行器
-    return new TaskExecutorAdapter(
+</code></pre></div><p><strong>2. @Async 任务执行：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Bean</span>
+<span class="hljs-meta">@ConditionalOnMissingBean</span>
+<span class="hljs-keyword">public</span> TaskExecutor <span class="hljs-title function_">applicationTaskExecutor</span><span class="hljs-params">()</span> {
+    <span class="hljs-comment">// 默认的 @Async 执行器切换为 Virtual Thread 执行器</span>
+    <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">TaskExecutorAdapter</span>(
         Executors.newVirtualThreadPerTaskExecutor()
     );
 }
-</code></pre></div>
-<p><strong>3. @Scheduled 定时任务：</strong></p>
+</code></pre></div><p><strong>3. @Scheduled 定时任务：</strong></p>
 <p><code>TaskSchedulingAutoConfiguration</code> 检测到 <code>spring.threads.virtual.enabled=true</code> 之后，会为 <code>@Scheduled</code> 注解的方法使用 Virtual Thread 执行器。</p>
 <p><strong>4. Spring Cloud Gateway / WebFlux 适配：</strong></p>
 <p>对于响应式栈，<code>reactor.netty</code> 也支持使用 Virtual Thread 编排。</p>
 <h3>7.3 完整配置示例</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">properties</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-properties"># application.properties
-spring.threads.virtual.enabled=true
+<div class="code-block"><div class="code-header"><span class="code-lang">properties</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-properties"><span class="hljs-comment"># application.properties</span>
+<span class="hljs-attr">spring.threads.virtual.enabled</span>=<span class="hljs-string">true</span>
+<span class="hljs-comment">
+# 可选：控制 Virtual Thread 的最大数量（默认无限制）</span>
+<span class="hljs-attr">spring.threads.virtual.max-threads</span>=<span class="hljs-string">1000</span>
+<span class="hljs-comment">
+# 可选：为特定线程池保留平台线程</span>
+<span class="hljs-comment"># 比如数据库连接池不适合每个查询都创建 Virtual Thread</span>
+<span class="hljs-attr">spring.threads.virtual.exclude-bean-names</span>=<span class="hljs-string">taskScheduler</span>
+</code></pre></div><h3>7.4 代码验证 Virtual Thread 生效</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> io.micrometer.core.instrument.MeterRegistry;
+<span class="hljs-keyword">import</span> org.springframework.boot.context.event.ApplicationReadyEvent;
+<span class="hljs-keyword">import</span> org.springframework.context.event.EventListener;
+<span class="hljs-keyword">import</span> org.springframework.web.bind.annotation.*;
+<span class="hljs-keyword">import</span> org.springframework.scheduling.annotation.Async;
+<span class="hljs-keyword">import</span> org.springframework.stereotype.Service;
 
-# 可选：控制 Virtual Thread 的最大数量（默认无限制）
-spring.threads.virtual.max-threads=1000
+<span class="hljs-meta">@RestController</span>
+<span class="hljs-keyword">class</span> <span class="hljs-title class_">ThreadCheckController</span> {
 
-# 可选：为特定线程池保留平台线程
-# 比如数据库连接池不适合每个查询都创建 Virtual Thread
-spring.threads.virtual.exclude-bean-names=taskScheduler
-</code></pre></div>
-<h3>7.4 代码验证 Virtual Thread 生效</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import io.micrometer.core.instrument.MeterRegistry;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-import org.springframework.context.event.EventListener;
-import org.springframework.web.bind.annotation.*;
-import org.springframework.scheduling.annotation.Async;
-import org.springframework.stereotype.Service;
-
-@RestController
-class ThreadCheckController {
-
-    @GetMapping(&quot;/check-thread&quot;)
-    public Map&lt;String, Object&gt; check() {
-        var current = Thread.currentThread();
-        return Map.of(
-            &quot;name&quot;, current.getName(),
-            &quot;isVirtual&quot;, current.isVirtual(),
-            &quot;threadId&quot;, current.threadId()
+    <span class="hljs-meta">@GetMapping("/check-thread")</span>
+    <span class="hljs-keyword">public</span> Map&lt;String, Object&gt; <span class="hljs-title function_">check</span><span class="hljs-params">()</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">current</span> <span class="hljs-operator">=</span> Thread.currentThread();
+        <span class="hljs-keyword">return</span> Map.of(
+            <span class="hljs-string">"name"</span>, current.getName(),
+            <span class="hljs-string">"isVirtual"</span>, current.isVirtual(),
+            <span class="hljs-string">"threadId"</span>, current.threadId()
         );
     }
 
-    // 预期输出: {&quot;name&quot;:&quot;&quot;, &quot;isVirtual&quot;:true, &quot;threadId&quot;:12345}
+    <span class="hljs-comment">// 预期输出: {"name":"", "isVirtual":true, "threadId":12345}</span>
 }
 
-@Service
-class VirtualThreadDemo {
+<span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">class</span> <span class="hljs-title class_">VirtualThreadDemo</span> {
 
-    @Async
-    public void asyncTask() {
-        var thread = Thread.currentThread();
-        System.out.println(&quot;Async running on virtual thread: &quot; + thread.isVirtual());
-        // 输出: Async running on virtual thread: true
+    <span class="hljs-meta">@Async</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">asyncTask</span><span class="hljs-params">()</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">thread</span> <span class="hljs-operator">=</span> Thread.currentThread();
+        System.out.println(<span class="hljs-string">"Async running on virtual thread: "</span> + thread.isVirtual());
+        <span class="hljs-comment">// 输出: Async running on virtual thread: true</span>
     }
 }
-</code></pre></div>
-<h3>7.5 Virtual Thread 的适用场景与注意事项</h3>
+</code></pre></div><h3>7.5 Virtual Thread 的适用场景与注意事项</h3>
 <p><strong>适合 Virtual Thread 的场景：</strong></p>
 <ul>
 <li>高并发 I/O 密集型任务（HTTP 请求、数据库查询、RPC 调用）</li>
@@ -1416,11 +1366,10 @@ class VirtualThreadDemo {
 <li>需要固定线程数保证资源隔离的场景（如数据库连接池的协调线程）</li>
 </ul>
 <p><strong>诊断 Pin 操作（JDK 25）：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 通过 JFR 事件检测 Virtual Thread 的 Pin 情况
-// 启动参数：-XX:StartFlightRecording:filename=recording.jfr
-// 在 JDK Mission Control 中查看 jdk.VirtualThreadPinned 事件
-</code></pre></div>
-<p><strong>总结对比：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 通过 JFR 事件检测 Virtual Thread 的 Pin 情况</span>
+<span class="hljs-comment">// 启动参数：-XX:StartFlightRecording:filename=recording.jfr</span>
+<span class="hljs-comment">// 在 JDK Mission Control 中查看 jdk.VirtualThreadPinned 事件</span>
+</code></pre></div><p><strong>总结对比：</strong></p>
 <table>
 <thead>
 <tr>
@@ -1469,5 +1418,5 @@ A: 通常不需要调整 HikariCP 连接池本身，因为连接池的连接数�
 <li>03-spring-core-ioc-aop（Spring 核心 IoC/AOP）</li>
 <li>03-spring-mvc-sse（Spring MVC 与 SSE 流式输出）</li>
 </ul>
-</div>
+</body></html></div>
 </article>

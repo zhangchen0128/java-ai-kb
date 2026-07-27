@@ -1,12 +1,12 @@
 
-<article class="kb-entry" data-path="/03-Java应用平台/工程规范/03-Jackson-MapStruct-Validator序列化与校验">
+<article class="kb-entry" data-path="/03-Java应用平台">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=03">03-Java应用平台</a></div>
     <h1>Jackson-MapStruct-Validator序列化与校验</h1>
-    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#jackson</span><span class="badge badge-tag">#mapstruct</span><span class="badge badge-tag">#bean-validation</span><span class="badge badge-tag">#serialization</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#jackson</span><span class="badge badge-tag">#mapstruct</span><span class="badge badge-tag">#bean-validation</span><span class="badge badge-tag">#serialization</span><span class="badge badge-tag">#deserialization</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://github.com/FasterXML/jackson-docs" target="_blank" rel="noopener" class="source-link" title="Jackson Official Documentation — ObjectMapper, annotations, serialization/deserialization">Jackson Official Documentation — ObjectMapper, annotations, serialization/deserialization</a><a href="https://mapstruct.org/documentation/stable/reference/html/" target="_blank" rel="noopener" class="source-link" title="MapStruct Reference Guide — @Mapper, @Mapping, Spring integration">MapStruct Reference Guide — @Mapper, @Mapping, Spring integration</a><a href="https://docs.jboss.org/hibernate/stable/validator/reference/en-US/html_single/" target="_blank" rel="noopener" class="source-link" title="Hibernate Validator Reference — Bean Validation 3.0 (Jakarta Validation)">Hibernate Validator Reference — Bean Validation 3.0 (Jakarta Validation)</a><a href="https://github.com/FasterXML/jackson-core" target="_blank" rel="noopener" class="source-link" title="Jackson source code — ObjectMapper, serializers, deserializers">Jackson source code — ObjectMapper, serializers, deserializers</a></small></div>
   </div>
-  <div class="entry-body"><h1>Jackson、MapStruct、Validator 序列化与校验</h1>
+  <div class="entry-body"><html><head></head><body><h1>Jackson、MapStruct、Validator 序列化与校验</h1>
 <h2>概述</h2>
 <p>JSON 序列化（Jackson）、对象转换（MapStruct）和 Bean 校验（Hibernate Validator）是 Java 后端日常开发中最高频使用的三个基础设施。三者看似独立，但在 DTO 设计、API 交互、AI 工具参数处理等场景中紧密协同。</p>
 <p>本文以 JDK 25 + Spring Boot 4.x 为核心技术栈，深入讲解 Jackson 的核心配置和高级用法（包括 AI 场景中的 JSON Schema 自动生成）、MapStruct 的映射转换、Bean Validation 的校验体系，以及三者在实际项目中的协同模式。</p>
@@ -14,333 +14,324 @@
 <h2>一、Jackson 核心</h2>
 <h3>1.1 ObjectMapper 配置</h3>
 <p>Spring Boot 4.x 自动配置了 <code>ObjectMapper</code>，但生产环境需要根据需求自定义：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Configuration
-public class JacksonConfig {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Configuration</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">JacksonConfig</span> {
 
-    @Bean
-    public Jackson2ObjectMapperBuilderCustomizer jacksonCustomizer() {
-        return builder -&gt; {
-            // 基本配置
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-keyword">public</span> Jackson2ObjectMapperBuilderCustomizer <span class="hljs-title function_">jacksonCustomizer</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">return</span> builder -&gt; {
+            <span class="hljs-comment">// 基本配置</span>
             builder.featuresToEnable(
-                SerializationFeature.INDENT_OUTPUT,          // 开发环境：格式化输出
-                DeserializationFeature.ACCEPT_SINGLE_VALUE_AS_ARRAY // 兼容单值和数组
+                SerializationFeature.INDENT_OUTPUT,          <span class="hljs-comment">// 开发环境：格式化输出</span>
+                DeserializationFeature.ACCEPT_SINGLE_VALUE_AS_ARRAY <span class="hljs-comment">// 兼容单值和数组</span>
             );
             builder.featuresToDisable(
-                SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, // 日期用 ISO-8601 字符串
-                DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, // 忽略未知字段（生产环境推荐）
-                SerializationFeature.FAIL_ON_EMPTY_BEANS        // 允许空 Bean 序列化
+                SerializationFeature.WRITE_DATES_AS_TIMESTAMPS, <span class="hljs-comment">// 日期用 ISO-8601 字符串</span>
+                DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, <span class="hljs-comment">// 忽略未知字段（生产环境推荐）</span>
+                SerializationFeature.FAIL_ON_EMPTY_BEANS        <span class="hljs-comment">// 允许空 Bean 序列化</span>
             );
 
-            // 日期格式
-            builder.dateFormat(new StdDateFormat());
-            // Java 8 时间模块（Spring Boot 自动注册）
-            builder.modules(new JavaTimeModule());
+            <span class="hljs-comment">// 日期格式</span>
+            builder.dateFormat(<span class="hljs-keyword">new</span> <span class="hljs-title class_">StdDateFormat</span>());
+            <span class="hljs-comment">// Java 8 时间模块（Spring Boot 自动注册）</span>
+            builder.modules(<span class="hljs-keyword">new</span> <span class="hljs-title class_">JavaTimeModule</span>());
 
-            // 属性命名策略
+            <span class="hljs-comment">// 属性命名策略</span>
             builder.propertyNamingStrategy(PropertyNamingStrategies.SNAKE_CASE);
         };
     }
 }
-</code></pre></div>
-<h3>1.2 核心注解</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class UserDto {
+</code></pre></div><h3>1.2 核心注解</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">UserDto</span> {
 
-    @JsonProperty(&quot;user_id&quot;) // JSON 字段名映射
-    private Long id;
+    <span class="hljs-meta">@JsonProperty("user_id")</span> <span class="hljs-comment">// JSON 字段名映射</span>
+    <span class="hljs-keyword">private</span> Long id;
 
-    @JsonIgnore // 完全忽略此字段
-    private String password;
+    <span class="hljs-meta">@JsonIgnore</span> <span class="hljs-comment">// 完全忽略此字段</span>
+    <span class="hljs-keyword">private</span> String password;
 
-    @JsonInclude(JsonInclude.Include.NON_NULL) // null 时不序列化
-    private String nickname;
+    <span class="hljs-meta">@JsonInclude(JsonInclude.Include.NON_NULL)</span> <span class="hljs-comment">// null 时不序列化</span>
+    <span class="hljs-keyword">private</span> String nickname;
 
-    @JsonFormat(pattern = &quot;yyyy-MM-dd HH:mm:ss&quot;, timezone = &quot;Asia/Shanghai&quot;)
-    private LocalDateTime createdAt;
+    <span class="hljs-meta">@JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss", timezone = "Asia/Shanghai")</span>
+    <span class="hljs-keyword">private</span> LocalDateTime createdAt;
 
-    @JsonAlias({&quot;email_address&quot;, &quot;mail&quot;}) // 反序列化时的别名
-    private String email;
+    <span class="hljs-meta">@JsonAlias({"email_address", "mail"})</span> <span class="hljs-comment">// 反序列化时的别名</span>
+    <span class="hljs-keyword">private</span> String email;
 
-    @JsonIgnoreProperties(ignoreUnknown = true) // 类级别：忽略未知字段
-    public class NestedObject { /* ... */ }
+    <span class="hljs-meta">@JsonIgnoreProperties(ignoreUnknown = true)</span> <span class="hljs-comment">// 类级别：忽略未知字段</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">NestedObject</span> { <span class="hljs-comment">/* ... */</span> }
 }
-</code></pre></div>
-<h3>1.3 自定义序列化器与反序列化器</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 自定义序列化器：敏感信息脱敏
-public class PhoneMaskSerializer extends StdSerializer&lt;String&gt; {
+</code></pre></div><h3>1.3 自定义序列化器与反序列化器</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 自定义序列化器：敏感信息脱敏</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">PhoneMaskSerializer</span> <span class="hljs-keyword">extends</span> <span class="hljs-title class_">StdSerializer</span>&lt;String&gt; {
 
-    public PhoneMaskSerializer() {
-        super(String.class);
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">PhoneMaskSerializer</span><span class="hljs-params">()</span> {
+        <span class="hljs-built_in">super</span>(String.class);
     }
 
-    @Override
-    public void serialize(String value, JsonGenerator gen, SerializerProvider provider)
-            throws IOException {
-        if (value == null || value.length() &lt; 7) {
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">serialize</span><span class="hljs-params">(String value, JsonGenerator gen, SerializerProvider provider)</span>
+            <span class="hljs-keyword">throws</span> IOException {
+        <span class="hljs-keyword">if</span> (value == <span class="hljs-literal">null</span> || value.length() &lt; <span class="hljs-number">7</span>) {
             gen.writeString(value);
-        } else {
-            // 脱敏：138****5678
-            gen.writeString(value.substring(0, 3) + &quot;****&quot; + value.substring(7));
+        } <span class="hljs-keyword">else</span> {
+            <span class="hljs-comment">// 脱敏：138****5678</span>
+            gen.writeString(value.substring(<span class="hljs-number">0</span>, <span class="hljs-number">3</span>) + <span class="hljs-string">"****"</span> + value.substring(<span class="hljs-number">7</span>));
         }
     }
 }
 
-// 自定义反序列化器：字符串转枚举（兼容大小写）
-public class CaseInsensitiveEnumDeserializer extends StdDeserializer&lt;UserStatus&gt; {
+<span class="hljs-comment">// 自定义反序列化器：字符串转枚举（兼容大小写）</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">CaseInsensitiveEnumDeserializer</span> <span class="hljs-keyword">extends</span> <span class="hljs-title class_">StdDeserializer</span>&lt;UserStatus&gt; {
 
-    public CaseInsensitiveEnumDeserializer() {
-        super(UserStatus.class);
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">CaseInsensitiveEnumDeserializer</span><span class="hljs-params">()</span> {
+        <span class="hljs-built_in">super</span>(UserStatus.class);
     }
 
-    @Override
-    public UserStatus deserialize(JsonParser p, DeserializationContext ctx)
-            throws IOException {
-        var value = p.getValueAsString();
-        return Arrays.stream(UserStatus.values())
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> UserStatus <span class="hljs-title function_">deserialize</span><span class="hljs-params">(JsonParser p, DeserializationContext ctx)</span>
+            <span class="hljs-keyword">throws</span> IOException {
+        <span class="hljs-type">var</span> <span class="hljs-variable">value</span> <span class="hljs-operator">=</span> p.getValueAsString();
+        <span class="hljs-keyword">return</span> Arrays.stream(UserStatus.values())
             .filter(e -&gt; e.name().equalsIgnoreCase(value))
             .findFirst()
-            .orElseThrow(() -&gt; new IllegalArgumentException(&quot;Unknown status: &quot; + value));
+            .orElseThrow(() -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">IllegalArgumentException</span>(<span class="hljs-string">"Unknown status: "</span> + value));
     }
 }
 
-// 使用
-public class UserDto {
-    @JsonSerialize(using = PhoneMaskSerializer.class)
-    private String phone;
+<span class="hljs-comment">// 使用</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">UserDto</span> {
+    <span class="hljs-meta">@JsonSerialize(using = PhoneMaskSerializer.class)</span>
+    <span class="hljs-keyword">private</span> String phone;
 
-    @JsonDeserialize(using = CaseInsensitiveEnumDeserializer.class)
-    private UserStatus status;
+    <span class="hljs-meta">@JsonDeserialize(using = CaseInsensitiveEnumDeserializer.class)</span>
+    <span class="hljs-keyword">private</span> UserStatus status;
 }
-</code></pre></div>
-<h3>1.4 多态处理（@JsonTypeInfo）</h3>
+</code></pre></div><h3>1.4 多态处理（@JsonTypeInfo）</h3>
 <p>AI 工具调用场景中，不同工具的参数结构不同，多态序列化是关键：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 工具调用请求基类
-@JsonTypeInfo(
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 工具调用请求基类</span>
+<span class="hljs-meta">@JsonTypeInfo(
     use = JsonTypeInfo.Id.NAME,
     include = JsonTypeInfo.As.PROPERTY,
-    property = &quot;tool_type&quot; // 类型标识字段
-)
-@JsonSubTypes({
-    @JsonSubTypes.Type(value = WebSearchTool.class, name = &quot;web_search&quot;),
-    @JsonSubTypes.Type(value = DatabaseQueryTool.class, name = &quot;database_query&quot;),
-    @JsonSubTypes.Type(value = FileReadTool.class, name = &quot;file_read&quot;)
-})
-public abstract class ToolCall {
-    private String toolName;
-    // ...
+    property = "tool_type" // 类型标识字段
+)</span>
+<span class="hljs-meta">@JsonSubTypes({
+    @JsonSubTypes.Type(value = WebSearchTool.class, name = "web_search"),
+    @JsonSubTypes.Type(value = DatabaseQueryTool.class, name = "database_query"),
+    @JsonSubTypes.Type(value = FileReadTool.class, name = "file_read")
+})</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">abstract</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ToolCall</span> {
+    <span class="hljs-keyword">private</span> String toolName;
+    <span class="hljs-comment">// ...</span>
 }
 
-public class WebSearchTool extends ToolCall {
-    private String query;
-    private int maxResults;
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">WebSearchTool</span> <span class="hljs-keyword">extends</span> <span class="hljs-title class_">ToolCall</span> {
+    <span class="hljs-keyword">private</span> String query;
+    <span class="hljs-keyword">private</span> <span class="hljs-type">int</span> maxResults;
 }
 
-public class DatabaseQueryTool extends ToolCall {
-    private String sql;
-    private String database;
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">DatabaseQueryTool</span> <span class="hljs-keyword">extends</span> <span class="hljs-title class_">ToolCall</span> {
+    <span class="hljs-keyword">private</span> String sql;
+    <span class="hljs-keyword">private</span> String database;
 }
 
-// 序列化结果（根据实际类型自动添加 tool_type）：
-// {&quot;tool_type&quot;: &quot;web_search&quot;, &quot;toolName&quot;: &quot;search&quot;, &quot;query&quot;: &quot;Java AI&quot;, &quot;maxResults&quot;: 10}
-</code></pre></div>
-<h3>1.5 JSON Schema 生成（AI 场景）</h3>
+<span class="hljs-comment">// 序列化结果（根据实际类型自动添加 tool_type）：</span>
+<span class="hljs-comment">// {"tool_type": "web_search", "toolName": "search", "query": "Java AI", "maxResults": 10}</span>
+</code></pre></div><h3>1.5 JSON Schema 生成（AI 场景）</h3>
 <p>在 AI Tool Calling 中，需要根据 Java 类自动生成 JSON Schema 供模型理解工具参数：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import com.fasterxml.jackson.databind.*;
-import com.fasterxml.jackson.module.jsonSchema.JsonSchemaGenerator;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> com.fasterxml.jackson.databind.*;
+<span class="hljs-keyword">import</span> com.fasterxml.jackson.<span class="hljs-keyword">module</span>.jsonSchema.JsonSchemaGenerator;
 
-public class ToolSchemaGenerator {
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ToolSchemaGenerator</span> {
 
-    private final ObjectMapper mapper;
-    private final JsonSchemaGenerator schemaGenerator;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> ObjectMapper mapper;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> JsonSchemaGenerator schemaGenerator;
 
-    public ToolSchemaGenerator() {
-        this.mapper = new ObjectMapper();
-        this.schemaGenerator = new JsonSchemaGenerator(mapper);
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">ToolSchemaGenerator</span><span class="hljs-params">()</span> {
+        <span class="hljs-built_in">this</span>.mapper = <span class="hljs-keyword">new</span> <span class="hljs-title class_">ObjectMapper</span>();
+        <span class="hljs-built_in">this</span>.schemaGenerator = <span class="hljs-keyword">new</span> <span class="hljs-title class_">JsonSchemaGenerator</span>(mapper);
     }
 
-    // 从 Java 类自动生成 JSON Schema
-    public String generateSchema(Class&lt;?&gt; toolClass) throws Exception {
-        var schema = schemaGenerator.generateSchema(toolClass);
-        return mapper.writerWithDefaultPrettyPrinter()
+    <span class="hljs-comment">// 从 Java 类自动生成 JSON Schema</span>
+    <span class="hljs-keyword">public</span> String <span class="hljs-title function_">generateSchema</span><span class="hljs-params">(Class&lt;?&gt; toolClass)</span> <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-type">var</span> <span class="hljs-variable">schema</span> <span class="hljs-operator">=</span> schemaGenerator.generateSchema(toolClass);
+        <span class="hljs-keyword">return</span> mapper.writerWithDefaultPrettyPrinter()
             .writeValueAsString(schema);
     }
 
-    // 从方法参数生成 OpenAI Function Calling 格式的 schema
-    public Map&lt;String, Object&gt; generateFunctionSchema(Method method) {
-        var schema = new LinkedHashMap&lt;String, Object&gt;();
-        schema.put(&quot;type&quot;, &quot;object&quot;);
+    <span class="hljs-comment">// 从方法参数生成 OpenAI Function Calling 格式的 schema</span>
+    <span class="hljs-keyword">public</span> Map&lt;String, Object&gt; <span class="hljs-title function_">generateFunctionSchema</span><span class="hljs-params">(Method method)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">schema</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">LinkedHashMap</span>&lt;String, Object&gt;();
+        schema.put(<span class="hljs-string">"type"</span>, <span class="hljs-string">"object"</span>);
 
-        var properties = new LinkedHashMap&lt;String, Object&gt;();
-        var required = new ArrayList&lt;String&gt;();
+        <span class="hljs-type">var</span> <span class="hljs-variable">properties</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">LinkedHashMap</span>&lt;String, Object&gt;();
+        <span class="hljs-type">var</span> <span class="hljs-variable">required</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;String&gt;();
 
-        for (var param : method.getParameters()) {
-            var paramSchema = new LinkedHashMap&lt;String, Object&gt;();
-            var paramType = mapJavaToJsonType(param.getType());
-            paramSchema.put(&quot;type&quot;, paramType);
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> param : method.getParameters()) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">paramSchema</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">LinkedHashMap</span>&lt;String, Object&gt;();
+            <span class="hljs-type">var</span> <span class="hljs-variable">paramType</span> <span class="hljs-operator">=</span> mapJavaToJsonType(param.getType());
+            paramSchema.put(<span class="hljs-string">"type"</span>, paramType);
 
-            // 提取注解描述
-            if (param.isAnnotationPresent(Description.class)) {
-                paramSchema.put(&quot;description&quot;, param.getAnnotation(Description.class).value());
+            <span class="hljs-comment">// 提取注解描述</span>
+            <span class="hljs-keyword">if</span> (param.isAnnotationPresent(Description.class)) {
+                paramSchema.put(<span class="hljs-string">"description"</span>, param.getAnnotation(Description.class).value());
             }
 
             properties.put(param.getName(), paramSchema);
 
-            if (param.isAnnotationPresent(NotNull.class) ||
+            <span class="hljs-keyword">if</span> (param.isAnnotationPresent(NotNull.class) ||
                 param.isAnnotationPresent(NotBlank.class)) {
                 required.add(param.getName());
             }
         }
 
-        schema.put(&quot;properties&quot;, properties);
-        if (!required.isEmpty()) {
-            schema.put(&quot;required&quot;, required);
+        schema.put(<span class="hljs-string">"properties"</span>, properties);
+        <span class="hljs-keyword">if</span> (!required.isEmpty()) {
+            schema.put(<span class="hljs-string">"required"</span>, required);
         }
-        return schema;
+        <span class="hljs-keyword">return</span> schema;
     }
 
-    private String mapJavaToJsonType(Class&lt;?&gt; type) {
-        if (type == String.class) return &quot;string&quot;;
-        if (type == int.class || type == long.class || type == Integer.class || type == Long.class)
-            return &quot;integer&quot;;
-        if (type == double.class || type == float.class || type == Double.class || type == Float.class)
-            return &quot;number&quot;;
-        if (type == boolean.class || type == Boolean.class) return &quot;boolean&quot;;
-        if (type.isArray() || Collection.class.isAssignableFrom(type)) return &quot;array&quot;;
-        return &quot;object&quot;;
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">mapJavaToJsonType</span><span class="hljs-params">(Class&lt;?&gt; type)</span> {
+        <span class="hljs-keyword">if</span> (type == String.class) <span class="hljs-keyword">return</span> <span class="hljs-string">"string"</span>;
+        <span class="hljs-keyword">if</span> (type == <span class="hljs-type">int</span>.class || type == <span class="hljs-type">long</span>.class || type == Integer.class || type == Long.class)
+            <span class="hljs-keyword">return</span> <span class="hljs-string">"integer"</span>;
+        <span class="hljs-keyword">if</span> (type == <span class="hljs-type">double</span>.class || type == <span class="hljs-type">float</span>.class || type == Double.class || type == Float.class)
+            <span class="hljs-keyword">return</span> <span class="hljs-string">"number"</span>;
+        <span class="hljs-keyword">if</span> (type == <span class="hljs-type">boolean</span>.class || type == Boolean.class) <span class="hljs-keyword">return</span> <span class="hljs-string">"boolean"</span>;
+        <span class="hljs-keyword">if</span> (type.isArray() || Collection.class.isAssignableFrom(type)) <span class="hljs-keyword">return</span> <span class="hljs-string">"array"</span>;
+        <span class="hljs-keyword">return</span> <span class="hljs-string">"object"</span>;
     }
 }
 
-// 使用：为 Tool 方法生成 JSON Schema
-@Retention(RetentionPolicy.RUNTIME)
-@Target(ElementType.PARAMETER)
-@interface Description {
-    String value();
+<span class="hljs-comment">// 使用：为 Tool 方法生成 JSON Schema</span>
+<span class="hljs-meta">@Retention(RetentionPolicy.RUNTIME)</span>
+<span class="hljs-meta">@Target(ElementType.PARAMETER)</span>
+<span class="hljs-meta">@interface</span> Description {
+    String <span class="hljs-title function_">value</span><span class="hljs-params">()</span>;
 }
 
-class WebSearchTool {
-    public String search(
-        @Description(&quot;搜索关键词&quot;) String query,
-        @Description(&quot;最大返回结果数&quot;) int limit) {
-        // ...
+<span class="hljs-keyword">class</span> <span class="hljs-title class_">WebSearchTool</span> {
+    <span class="hljs-keyword">public</span> String <span class="hljs-title function_">search</span><span class="hljs-params">(
+        <span class="hljs-meta">@Description("搜索关键词")</span> String query,
+        <span class="hljs-meta">@Description("最大返回结果数")</span> <span class="hljs-type">int</span> limit)</span> {
+        <span class="hljs-comment">// ...</span>
     }
 }
-</code></pre></div>
-<h3>1.6 Structured Output 序列化</h3>
+</code></pre></div><h3>1.6 Structured Output 序列化</h3>
 <p>AI 的 Structured Output（结构化输出）要求将模型输出严格反序列化为 Java 对象：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Spring AI 中的 Structured Output
-public record WeatherInfo(
-    @JsonProperty(&quot;city&quot;) String city,
-    @JsonProperty(&quot;temperature&quot;) double temperature,
-    @JsonProperty(&quot;condition&quot;) String condition,
-    @JsonProperty(&quot;humidity&quot;) int humidity
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// Spring AI 中的 Structured Output</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">WeatherInfo</span><span class="hljs-params">(
+    @JsonProperty("city")</span> String city,
+    <span class="hljs-meta">@JsonProperty("temperature")</span> <span class="hljs-type">double</span> temperature,
+    <span class="hljs-meta">@JsonProperty("condition")</span> String condition,
+    <span class="hljs-meta">@JsonProperty("humidity")</span> <span class="hljs-type">int</span> humidity
 ) {}
 
-// Jackson 反序列化模型输出
-var mapper = new ObjectMapper()
-    .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false);
-var weather = mapper.readValue(modelOutput, WeatherInfo.class);
-</code></pre></div>
-<hr>
+<span class="hljs-comment">// Jackson 反序列化模型输出</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">mapper</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ObjectMapper</span>()
+    .configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, <span class="hljs-literal">false</span>);
+<span class="hljs-type">var</span> <span class="hljs-variable">weather</span> <span class="hljs-operator">=</span> mapper.readValue(modelOutput, WeatherInfo.class);
+</code></pre></div><hr>
 <h2>二、MapStruct</h2>
 <h3>2.1 基础映射</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Entity
-@Entity
-public class User {
-    private Long id;
-    private String name;
-    private String email;
-    private String password;
-    private LocalDateTime createdAt;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// Entity</span>
+<span class="hljs-meta">@Entity</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">User</span> {
+    <span class="hljs-keyword">private</span> Long id;
+    <span class="hljs-keyword">private</span> String name;
+    <span class="hljs-keyword">private</span> String email;
+    <span class="hljs-keyword">private</span> String password;
+    <span class="hljs-keyword">private</span> LocalDateTime createdAt;
 }
 
-// DTO
-public record UserDto(
+<span class="hljs-comment">// DTO</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">UserDto</span><span class="hljs-params">(
     Long id,
     String name,
     String email,
-    @JsonFormat(pattern = &quot;yyyy-MM-dd HH:mm:ss&quot;)
+    @JsonFormat(pattern = "yyyy-MM-dd HH:mm:ss")</span>
     LocalDateTime createdAt
 ) {}
 
-// MapStruct Mapper
-@Mapper(componentModel = &quot;spring&quot;) // 注册为 Spring Bean
-public interface UserMapper {
+<span class="hljs-comment">// MapStruct Mapper</span>
+<span class="hljs-meta">@Mapper(componentModel = "spring")</span> <span class="hljs-comment">// 注册为 Spring Bean</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">UserMapper</span> {
 
-    UserMapper INSTANCE = Mappers.getMapper(UserMapper.class);
+    <span class="hljs-type">UserMapper</span> <span class="hljs-variable">INSTANCE</span> <span class="hljs-operator">=</span> Mappers.getMapper(UserMapper.class);
 
-    // 字段名相同自动映射
-    UserDto toDto(User user);
+    <span class="hljs-comment">// 字段名相同自动映射</span>
+    UserDto <span class="hljs-title function_">toDto</span><span class="hljs-params">(User user)</span>;
 
-    // 字段名不同需要显式映射
-    @Mapping(source = &quot;name&quot;, target = &quot;fullName&quot;)
-    @Mapping(source = &quot;email&quot;, target = &quot;contactEmail&quot;)
-    @Mapping(target = &quot;password&quot;, ignore = true) // 忽略敏感字段
-    UserDetailDto toDetailDto(User user);
+    <span class="hljs-comment">// 字段名不同需要显式映射</span>
+    <span class="hljs-meta">@Mapping(source = "name", target = "fullName")</span>
+    <span class="hljs-meta">@Mapping(source = "email", target = "contactEmail")</span>
+    <span class="hljs-meta">@Mapping(target = "password", ignore = true)</span> <span class="hljs-comment">// 忽略敏感字段</span>
+    UserDetailDto <span class="hljs-title function_">toDetailDto</span><span class="hljs-params">(User user)</span>;
 
-    // 日期格式化
-    @Mapping(source = &quot;createdAt&quot;, target = &quot;createTime&quot;,
-             dateFormat = &quot;yyyy-MM-dd HH:mm:ss&quot;)
-    UserDto toDtoWithFormat(User user);
+    <span class="hljs-comment">// 日期格式化</span>
+    <span class="hljs-meta">@Mapping(source = "createdAt", target = "createTime",
+             dateFormat = "yyyy-MM-dd HH:mm:ss")</span>
+    UserDto <span class="hljs-title function_">toDtoWithFormat</span><span class="hljs-params">(User user)</span>;
 }
-</code></pre></div>
-<h3>2.2 嵌套映射与表达式</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public record OrderEntity(Long id, UserEntity user, List&lt;OrderItemEntity&gt; items,
-                          BigDecimal totalAmount, OrderStatus status) {}
+</code></pre></div><h3>2.2 嵌套映射与表达式</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">OrderEntity</span><span class="hljs-params">(Long id, UserEntity user, List&lt;OrderItemEntity&gt; items,
+                          BigDecimal totalAmount, OrderStatus status)</span> {}
 
-public record OrderDto(Long orderId, String userName, int itemCount,
-                       String totalAmount, String statusCode) {}
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">OrderDto</span><span class="hljs-params">(Long orderId, String userName, <span class="hljs-type">int</span> itemCount,
+                       String totalAmount, String statusCode)</span> {}
 
-@Mapper(componentModel = &quot;spring&quot;)
-public interface OrderMapper {
+<span class="hljs-meta">@Mapper(componentModel = "spring")</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">OrderMapper</span> {
 
-    @Mapping(source = &quot;id&quot;, target = &quot;orderId&quot;)
-    @Mapping(source = &quot;user.name&quot;, target = &quot;userName&quot;) // 嵌套属性访问
-    @Mapping(source = &quot;items&quot;, target = &quot;itemCount&quot;,
-             qualifiedByName = &quot;countItems&quot;)
-    @Mapping(target = &quot;totalAmount&quot;,
-             expression = &quot;java(order.totalAmount().toPlainString())&quot;) // Java 表达式
-    @Mapping(source = &quot;status&quot;, target = &quot;statusCode&quot;,
-             qualifiedByName = &quot;statusToString&quot;)
-    OrderDto toDto(OrderEntity order);
+    <span class="hljs-meta">@Mapping(source = "id", target = "orderId")</span>
+    <span class="hljs-meta">@Mapping(source = "user.name", target = "userName")</span> <span class="hljs-comment">// 嵌套属性访问</span>
+    <span class="hljs-meta">@Mapping(source = "items", target = "itemCount",
+             qualifiedByName = "countItems")</span>
+    <span class="hljs-meta">@Mapping(target = "totalAmount",
+             expression = "java(order.totalAmount().toPlainString())")</span> <span class="hljs-comment">// Java 表达式</span>
+    <span class="hljs-meta">@Mapping(source = "status", target = "statusCode",
+             qualifiedByName = "statusToString")</span>
+    OrderDto <span class="hljs-title function_">toDto</span><span class="hljs-params">(OrderEntity order)</span>;
 
-    @Named(&quot;countItems&quot;)
-    default int countItems(List&lt;OrderItemEntity&gt; items) {
-        return items == null ? 0 : items.size();
+    <span class="hljs-meta">@Named("countItems")</span>
+    <span class="hljs-keyword">default</span> <span class="hljs-type">int</span> <span class="hljs-title function_">countItems</span><span class="hljs-params">(List&lt;OrderItemEntity&gt; items)</span> {
+        <span class="hljs-keyword">return</span> items == <span class="hljs-literal">null</span> ? <span class="hljs-number">0</span> : items.size();
     }
 
-    @Named(&quot;statusToString&quot;)
-    default String statusToString(OrderStatus status) {
-        return status.name();
+    <span class="hljs-meta">@Named("statusToString")</span>
+    <span class="hljs-keyword">default</span> String <span class="hljs-title function_">statusToString</span><span class="hljs-params">(OrderStatus status)</span> {
+        <span class="hljs-keyword">return</span> status.name();
     }
 }
-</code></pre></div>
-<h3>2.3 @AfterMapping / @BeforeMapping</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Mapper(componentModel = &quot;spring&quot;)
-public abstract class UserMapper {
+</code></pre></div><h3>2.3 @AfterMapping / @BeforeMapping</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Mapper(componentModel = "spring")</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">abstract</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">UserMapper</span> {
 
-    @Mapping(source = &quot;firstName&quot;, target = &quot;firstName&quot;)
-    @Mapping(source = &quot;lastName&quot;, target = &quot;lastName&quot;)
-    public abstract UserDto toDto(UserEntity entity);
+    <span class="hljs-meta">@Mapping(source = "firstName", target = "firstName")</span>
+    <span class="hljs-meta">@Mapping(source = "lastName", target = "lastName")</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">abstract</span> UserDto <span class="hljs-title function_">toDto</span><span class="hljs-params">(UserEntity entity)</span>;
 
-    @AfterMapping // 映射完成后执行
-    protected void enrichDto(UserEntity entity, @MappingTarget UserDto.UserDtoBuilder dto) {
-        // 组合全名
-        dto.fullName(entity.getFirstName() + &quot; &quot; + entity.getLastName());
-        // 从外部服务获取额外信息
+    <span class="hljs-meta">@AfterMapping</span> <span class="hljs-comment">// 映射完成后执行</span>
+    <span class="hljs-keyword">protected</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">enrichDto</span><span class="hljs-params">(UserEntity entity, <span class="hljs-meta">@MappingTarget</span> UserDto.UserDtoBuilder dto)</span> {
+        <span class="hljs-comment">// 组合全名</span>
+        dto.fullName(entity.getFirstName() + <span class="hljs-string">" "</span> + entity.getLastName());
+        <span class="hljs-comment">// 从外部服务获取额外信息</span>
         dto.departmentName(departmentService.getDepartmentName(entity.getDepartmentId()));
     }
 
-    @BeforeMapping // 映射前执行
-    protected void validateSource(UserEntity entity) {
-        if (entity.getEmail() == null) {
-            throw new IllegalArgumentException(&quot;Email is required&quot;);
+    <span class="hljs-meta">@BeforeMapping</span> <span class="hljs-comment">// 映射前执行</span>
+    <span class="hljs-keyword">protected</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">validateSource</span><span class="hljs-params">(UserEntity entity)</span> {
+        <span class="hljs-keyword">if</span> (entity.getEmail() == <span class="hljs-literal">null</span>) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">IllegalArgumentException</span>(<span class="hljs-string">"Email is required"</span>);
         }
     }
 
-    @Autowired
-    private DepartmentService departmentService;
+    <span class="hljs-meta">@Autowired</span>
+    <span class="hljs-keyword">private</span> DepartmentService departmentService;
 }
-</code></pre></div>
-<h3>2.4 MapStruct vs BeanUtils vs 手动转换</h3>
+</code></pre></div><h3>2.4 MapStruct vs BeanUtils vs 手动转换</h3>
 <table>
 <thead>
 <tr>
@@ -384,151 +375,145 @@ public abstract class UserMapper {
 <hr>
 <h2>三、Hibernate Validator（Bean Validation）</h2>
 <h3>3.1 内置约束注解</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class CreateUserRequest {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">CreateUserRequest</span> {
 
-    @NotNull(message = &quot;用户名不能为空&quot;)
-    @Size(min = 2, max = 50, message = &quot;用户名长度必须在 2-50 之间&quot;)
-    private String username;
+    <span class="hljs-meta">@NotNull(message = "用户名不能为空")</span>
+    <span class="hljs-meta">@Size(min = 2, max = 50, message = "用户名长度必须在 2-50 之间")</span>
+    <span class="hljs-keyword">private</span> String username;
 
-    @NotBlank(message = &quot;邮箱不能为空&quot;)
-    @Email(message = &quot;邮箱格式不正确&quot;)
-    private String email;
+    <span class="hljs-meta">@NotBlank(message = "邮箱不能为空")</span>
+    <span class="hljs-meta">@Email(message = "邮箱格式不正确")</span>
+    <span class="hljs-keyword">private</span> String email;
 
-    @NotNull
-    @Min(value = 18, message = &quot;年龄必须 &gt;= 18&quot;)
-    @Max(value = 120, message = &quot;年龄必须 &lt;= 120&quot;)
-    private Integer age;
+    <span class="hljs-meta">@NotNull</span>
+    <span class="hljs-meta">@Min(value = 18, message = "年龄必须 &gt;= 18")</span>
+    <span class="hljs-meta">@Max(value = 120, message = "年龄必须 &lt;= 120")</span>
+    <span class="hljs-keyword">private</span> Integer age;
 
-    @NotNull
-    @Pattern(regexp = &quot;^1[3-9]\\d{9}$&quot;, message = &quot;手机号格式不正确&quot;)
-    private String phone;
+    <span class="hljs-meta">@NotNull</span>
+    <span class="hljs-meta">@Pattern(regexp = "^1[3-9]\\d{9}$", message = "手机号格式不正确")</span>
+    <span class="hljs-keyword">private</span> String phone;
 
-    @NotEmpty(message = &quot;角色列表不能为空&quot;)
-    private List&lt;@Valid Role&gt; roles; // 级联校验（嵌套对象也校验）
+    <span class="hljs-meta">@NotEmpty(message = "角色列表不能为空")</span>
+    <span class="hljs-keyword">private</span> List&lt;<span class="hljs-meta">@Valid</span> Role&gt; roles; <span class="hljs-comment">// 级联校验（嵌套对象也校验）</span>
 
-    @Positive(message = &quot;金额必须为正数&quot;)
-    @Digits(integer = 10, fraction = 2, message = &quot;金额整数位最多10位，小数位最多2位&quot;)
-    private BigDecimal amount;
+    <span class="hljs-meta">@Positive(message = "金额必须为正数")</span>
+    <span class="hljs-meta">@Digits(integer = 10, fraction = 2, message = "金额整数位最多10位，小数位最多2位")</span>
+    <span class="hljs-keyword">private</span> BigDecimal amount;
 
-    @Future(message = &quot;日期必须在未来&quot;)
-    private LocalDate dueDate;
+    <span class="hljs-meta">@Future(message = "日期必须在未来")</span>
+    <span class="hljs-keyword">private</span> LocalDate dueDate;
 }
-</code></pre></div>
-<h3>3.2 自定义 Validator</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 自定义约束注解
-@Target({ElementType.FIELD, ElementType.PARAMETER})
-@Retention(RetentionPolicy.RUNTIME)
-@Constraint(validatedBy = EnumValueValidator.class)
-public @interface EnumValue {
-    String message() default &quot;值不在允许的枚举范围内&quot;;
-    Class&lt;?&gt;[] groups() default {};
-    Class&lt;? extends Payload&gt;[] payload() default {};
-    Class&lt;? extends Enum&lt;?&gt;&gt; enumClass();
-    String[] allowedValues() default {};
+</code></pre></div><h3>3.2 自定义 Validator</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 自定义约束注解</span>
+<span class="hljs-meta">@Target({ElementType.FIELD, ElementType.PARAMETER})</span>
+<span class="hljs-meta">@Retention(RetentionPolicy.RUNTIME)</span>
+<span class="hljs-meta">@Constraint(validatedBy = EnumValueValidator.class)</span>
+<span class="hljs-keyword">public</span> <span class="hljs-meta">@interface</span> EnumValue {
+    String <span class="hljs-title function_">message</span><span class="hljs-params">()</span> <span class="hljs-keyword">default</span> <span class="hljs-string">"值不在允许的枚举范围内"</span>;
+    Class&lt;?&gt;[] groups() <span class="hljs-keyword">default</span> {};
+    Class&lt;? <span class="hljs-keyword">extends</span> <span class="hljs-title class_">Payload</span>&gt;[] payload() <span class="hljs-keyword">default</span> {};
+    Class&lt;? <span class="hljs-keyword">extends</span> <span class="hljs-title class_">Enum</span>&lt;?&gt;&gt; enumClass();
+    String[] allowedValues() <span class="hljs-keyword">default</span> {};
 }
 
-// 约束校验器
-public class EnumValueValidator implements ConstraintValidator&lt;EnumValue, String&gt; {
+<span class="hljs-comment">// 约束校验器</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">EnumValueValidator</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">ConstraintValidator</span>&lt;EnumValue, String&gt; {
 
-    private Set&lt;String&gt; allowedValues;
+    <span class="hljs-keyword">private</span> Set&lt;String&gt; allowedValues;
 
-    @Override
-    public void initialize(EnumValue annotation) {
-        if (annotation.allowedValues().length &gt; 0) {
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">initialize</span><span class="hljs-params">(EnumValue annotation)</span> {
+        <span class="hljs-keyword">if</span> (annotation.allowedValues().length &gt; <span class="hljs-number">0</span>) {
             allowedValues = Set.of(annotation.allowedValues());
-        } else {
+        } <span class="hljs-keyword">else</span> {
             allowedValues = Arrays.stream(annotation.enumClass().getEnumConstants())
                 .map(Enum::name)
                 .collect(Collectors.toSet());
         }
     }
 
-    @Override
-    public boolean isValid(String value, ConstraintValidatorContext context) {
-        return value == null || allowedValues.contains(value);
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">isValid</span><span class="hljs-params">(String value, ConstraintValidatorContext context)</span> {
+        <span class="hljs-keyword">return</span> value == <span class="hljs-literal">null</span> || allowedValues.contains(value);
     }
 }
 
-// 使用
-public class UpdateRequest {
-    @EnumValue(enumClass = UserStatus.class, message = &quot;无效的用户状态&quot;)
-    private String status;
+<span class="hljs-comment">// 使用</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">UpdateRequest</span> {
+    <span class="hljs-meta">@EnumValue(enumClass = UserStatus.class, message = "无效的用户状态")</span>
+    <span class="hljs-keyword">private</span> String status;
 }
-</code></pre></div>
-<h3>3.3 分组校验（Groups）</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 分组接口
-public interface Create {}
-public interface Update {}
+</code></pre></div><h3>3.3 分组校验（Groups）</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 分组接口</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">Create</span> {}
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">Update</span> {}
 
-public class UserDto {
-    @NotNull(groups = Update.class) // 仅在更新时校验
-    private Long id;
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">UserDto</span> {
+    <span class="hljs-meta">@NotNull(groups = Update.class)</span> <span class="hljs-comment">// 仅在更新时校验</span>
+    <span class="hljs-keyword">private</span> Long id;
 
-    @NotBlank(groups = {Create.class, Update.class})
-    private String name;
+    <span class="hljs-meta">@NotBlank(groups = {Create.class, Update.class})</span>
+    <span class="hljs-keyword">private</span> String name;
 }
 
-// Controller 中使用
-@PostMapping
-public Result create(@Validated(Create.class) @RequestBody UserDto dto) { /* ... */ }
+<span class="hljs-comment">// Controller 中使用</span>
+<span class="hljs-meta">@PostMapping</span>
+<span class="hljs-keyword">public</span> Result <span class="hljs-title function_">create</span><span class="hljs-params">(<span class="hljs-meta">@Validated(Create.class)</span> <span class="hljs-meta">@RequestBody</span> UserDto dto)</span> { <span class="hljs-comment">/* ... */</span> }
 
-@PutMapping(&quot;/{id}&quot;)
-public Result update(@Validated(Update.class) @RequestBody UserDto dto) { /* ... */ }
-</code></pre></div>
-<h3>3.4 方法级校验</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
-@Validated // 开启方法级校验
-public class UserService {
+<span class="hljs-meta">@PutMapping("/{id}")</span>
+<span class="hljs-keyword">public</span> Result <span class="hljs-title function_">update</span><span class="hljs-params">(<span class="hljs-meta">@Validated(Update.class)</span> <span class="hljs-meta">@RequestBody</span> UserDto dto)</span> { <span class="hljs-comment">/* ... */</span> }
+</code></pre></div><h3>3.4 方法级校验</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Service</span>
+<span class="hljs-meta">@Validated</span> <span class="hljs-comment">// 开启方法级校验</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">UserService</span> {
 
-    public User createUser(
-        @NotNull @Valid UserDto dto,
-        @NotBlank String operatorId) { // 方法参数校验
-        // ...
-        return user;
+    <span class="hljs-keyword">public</span> User <span class="hljs-title function_">createUser</span><span class="hljs-params">(
+        <span class="hljs-meta">@NotNull</span> <span class="hljs-meta">@Valid</span> UserDto dto,
+        <span class="hljs-meta">@NotBlank</span> String operatorId)</span> { <span class="hljs-comment">// 方法参数校验</span>
+        <span class="hljs-comment">// ...</span>
+        <span class="hljs-keyword">return</span> user;
     }
 
-    public @NotNull User findById(@Positive Long id) { // 返回值校验
-        return userRepository.findById(id).orElse(null);
-        // 如果返回 null，会抛出 ConstraintViolationException
+    <span class="hljs-keyword">public</span> <span class="hljs-meta">@NotNull</span> User <span class="hljs-title function_">findById</span><span class="hljs-params">(<span class="hljs-meta">@Positive</span> Long id)</span> { <span class="hljs-comment">// 返回值校验</span>
+        <span class="hljs-keyword">return</span> userRepository.findById(id).orElse(<span class="hljs-literal">null</span>);
+        <span class="hljs-comment">// 如果返回 null，会抛出 ConstraintViolationException</span>
     }
 }
-</code></pre></div>
-<h3>3.5 DTO 校验模式</h3>
+</code></pre></div><h3>3.5 DTO 校验模式</h3>
 <p><strong>Controller 层校验（推荐）：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@PostMapping(&quot;/users&quot;)
-public ResponseEntity&lt;?&gt; createUser(@Valid @RequestBody CreateUserRequest request) {
-    // @Valid 触发校验，失败时抛出 MethodArgumentNotValidException
-    // 通过全局异常处理器统一返回 400 错误
-    return ResponseEntity.ok(userService.createUser(request));
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@PostMapping("/users")</span>
+<span class="hljs-keyword">public</span> ResponseEntity&lt;?&gt; createUser(<span class="hljs-meta">@Valid</span> <span class="hljs-meta">@RequestBody</span> CreateUserRequest request) {
+    <span class="hljs-comment">// @Valid 触发校验，失败时抛出 MethodArgumentNotValidException</span>
+    <span class="hljs-comment">// 通过全局异常处理器统一返回 400 错误</span>
+    <span class="hljs-keyword">return</span> ResponseEntity.ok(userService.createUser(request));
 }
 
-@ControllerAdvice
-public class GlobalExceptionHandler {
+<span class="hljs-meta">@ControllerAdvice</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">GlobalExceptionHandler</span> {
 
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ResponseEntity&lt;ErrorResponse&gt; handleValidation(MethodArgumentNotValidException ex) {
-        var errors = ex.getBindingResult().getFieldErrors().stream()
-            .map(e -&gt; e.getField() + &quot;: &quot; + e.getDefaultMessage())
+    <span class="hljs-meta">@ExceptionHandler(MethodArgumentNotValidException.class)</span>
+    <span class="hljs-keyword">public</span> ResponseEntity&lt;ErrorResponse&gt; <span class="hljs-title function_">handleValidation</span><span class="hljs-params">(MethodArgumentNotValidException ex)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">errors</span> <span class="hljs-operator">=</span> ex.getBindingResult().getFieldErrors().stream()
+            .map(e -&gt; e.getField() + <span class="hljs-string">": "</span> + e.getDefaultMessage())
             .toList();
-        return ResponseEntity.badRequest().body(new ErrorResponse(&quot;VALIDATION_FAILED&quot;, errors));
+        <span class="hljs-keyword">return</span> ResponseEntity.badRequest().body(<span class="hljs-keyword">new</span> <span class="hljs-title class_">ErrorResponse</span>(<span class="hljs-string">"VALIDATION_FAILED"</span>, errors));
     }
 }
-</code></pre></div>
-<p><strong>Service 层校验（补充，用于非 Web 场景）：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
-@Validated
-public class UserService {
-    public void process(@Valid UserDto dto) {
-        // 被异步消息、定时任务调用时，Service 层也需要校验
+</code></pre></div><p><strong>Service 层校验（补充，用于非 Web 场景）：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Service</span>
+<span class="hljs-meta">@Validated</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">UserService</span> {
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">process</span><span class="hljs-params">(<span class="hljs-meta">@Valid</span> UserDto dto)</span> {
+        <span class="hljs-comment">// 被异步消息、定时任务调用时，Service 层也需要校验</span>
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>常见问题</h2>
 <p><strong>Q: Jackson 的 ObjectMapper 是全局单例，如何针对特定接口自定义配置？</strong>
 A: 不要修改全局 ObjectMapper。使用 <code>@JsonView</code> 控制不同接口的字段可见性，或创建专用的 DTO 类。</p>
 <p><strong>Q: MapStruct 如何映射继承关系？</strong>
-A: 使用 <code>@MapperConfig</code> 共享配置，父类映射方法用 <code>@InheritConfiguration</code> 或显式调用 <code>@Mapping(target = &quot;...&quot;, ignore = true)</code>。</p>
+A: 使用 <code>@MapperConfig</code> 共享配置，父类映射方法用 <code>@InheritConfiguration</code> 或显式调用 <code>@Mapping(target = "...", ignore = true)</code>。</p>
 <p><strong>Q: 校验失败时如何返回结构化错误？</strong>
 A: 使用全局异常处理器捕获 <code>MethodArgumentNotValidException</code> 和 <code>ConstraintViolationException</code>，提取字段级错误构造统一响应。</p>
 <p><strong>Q: @Valid 和 @Validated 的区别？</strong>
@@ -538,10 +523,10 @@ A: MapStruct 编译期生成纯 Java 代码，零反射开销。JMH 基准测试
 <hr>
 <h2>相关条目</h2>
 <ul>
-<li><a href="#/03-Java应用平台/工程规范/03-Maven多模块工程实践" class="cross-ref" data-ref="03-Maven多模块工程实践">03-Maven多模块工程实践</a>：MapStruct 的 Maven 编译配置</li>
-<li><a href="#/03-Java应用平台/Web与安全/03-SpringMVC与SSE流式输出" class="cross-ref" data-ref="03-SpringMVC与SSE流式输出">03-SpringMVC与SSE流式输出</a>：Controller 层校验与 JSON 响应</li>
+<li><a href="#/03-Java应用平台/工程规范/03-Maven多模块工程实践" class="cross-ref">03-Maven多模块工程实践</a>：MapStruct 的 Maven 编译配置</li>
+<li><a href="#/03-Java应用平台/Web与安全/03-SpringMVC与SSE流式输出" class="cross-ref">03-SpringMVC与SSE流式输出</a>：Controller 层校验与 JSON 响应</li>
 <li><a href="#/?d=12" class="cross-ref domain-ref">12-Agent工程</a>：AI Tool 的 JSON Schema 生成</li>
 <li><a href="#/?d=08" class="cross-ref domain-ref">08-模型接入与推理</a>：Structured Output 与 JSON Schema</li>
 </ul>
-</div>
+</body></html></div>
 </article>

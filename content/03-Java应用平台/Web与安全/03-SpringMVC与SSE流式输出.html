@@ -1,134 +1,132 @@
 
-<article class="kb-entry" data-path="/03-Java应用平台/Web与安全/03-SpringMVC与SSE流式输出">
+<article class="kb-entry" data-path="/03-Java应用平台">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=03">03-Java应用平台</a></div>
     <h1>Spring MVC 请求处理与 SSE 流式输出深度解析</h1>
-    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#spring-mvc</span><span class="badge badge-tag">#dispatcher-servlet</span><span class="badge badge-tag">#sse</span><span class="badge badge-tag">#server-sent-events</span><span class="badge badge-tag">#sse-emitter</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://docs.spring.io/spring-framework/reference/web/webmvc.html" target="_blank" rel="noopener" class="source-link" title="Spring Framework 官方参考手册 — Web MVC 章节">Spring Framework 官方参考手册 — Web MVC 章节</a><a href="https://docs.spring.io/spring-framework/reference/web/webmvc/mvc-servlet.html" target="_blank" rel="noopener" class="source-link" title="Spring Framework 官方参考手册 — DispatcherServlet 章节">Spring Framework 官方参考手册 — DispatcherServlet 章节</a><a href="https://github.com/spring-projects/spring-framework/tree/main/spring-webmvc/src/main/java/org/springframework/web/servlet" target="_blank" rel="noopener" class="source-link" title="Spring Framework 源码 — DispatcherServlet 及其核心组件实现">Spring Framework 源码 — DispatcherServlet 及其核心组件实现</a><a href="https://spring.io/blog" target="_blank" rel="noopener" class="source-link" title="Spring 官方博客 — MVC 与 SSE 相关技术文章">Spring 官方博客 — MVC 与 SSE 相关技术文章</a></small></div>
   </div>
-  <div class="entry-body"><h1>Spring MVC 请求处理与 SSE 流式输出深度解析</h1>
+  <div class="entry-body"><html><head></head><body><h1>Spring MVC 请求处理与 SSE 流式输出深度解析</h1>
 <h2>概述</h2>
 <p>Spring MVC 是 Spring Framework 中构建 Web 应用的核心模块，基于 Servlet 容器实现。本文深入剖析 DispatcherServlet 的请求处理全链路，涵盖控制器参数绑定与类型转换、统一响应体包装、全局异常处理，并重点讲解 Server-Sent Events（SSE）在 AI 流式输出场景中的完整实现方案。WebFlux 作为响应式替代方案在最后做简要对比。</p>
-<p>本文面向具备 Spring 开发经验的工程师，目标是从&quot;会用&quot;升级到&quot;理解内部机制&quot;，能够对请求处理链路进行调优和排障，并掌握利用 SSE + Virtual Threads 实现 LLM 流式响应的完整方案。</p>
+<p>本文面向具备 Spring 开发经验的工程师，目标是从"会用"升级到"理解内部机制"，能够对请求处理链路进行调优和排障，并掌握利用 SSE + Virtual Threads 实现 LLM 流式响应的完整方案。</p>
 <hr>
 <h2>核心内容</h2>
 <h3>一、DispatcherServlet 请求处理全链路（源码级分析）</h3>
-<p>DispatcherServlet 是整个 Spring MVC 的&quot;前端控制器&quot;（Front Controller）。所有 HTTP 请求都先到达它，再由它分发给具体的 Handler。理解它的内部处理流程是掌握 Spring MVC 的关键。</p>
+<p>DispatcherServlet 是整个 Spring MVC 的"前端控制器"（Front Controller）。所有 HTTP 请求都先到达它，再由它分发给具体的 Handler。理解它的内部处理流程是掌握 Spring MVC 的关键。</p>
 <h4>1.1 整体架构与核心组件</h4>
 <p>DispatcherServlet 通过一系列**策略接口（Strategy Interfaces）**将请求处理拆解为可插拔的步骤：</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>HTTP Request
     │
     ▼
-DispatcherServlet.doDispatch()
+DispatcherServlet<span class="hljs-selector-class">.doDispatch</span>()
     │
-    ├─[1] HandlerMapping      → 确定哪个 Handler 处理请求
-    ├─[2] HandlerAdapter      → 用适配器模式调用 Handler
-    ├─[3] HandlerInterceptor  → 前置拦截（preHandle）
-    ├─[4] Handler             → 实际执行（Controller 方法）
-    ├─[5] HandlerInterceptor  → 后置拦截（postHandle）
-    ├─[6] ViewResolver        → 解析视图（仅 MVC 视图场景）
-    ├─[7] ExceptionResolver   → 异常时触发（绕过步骤5-6）
-    └─[8] HttpMessageConverter→ 读写请求/响应体（REST 场景）
-</code></pre></div>
-<p>每一个策略接口都有多个默认实现，Spring Boot 自动配置会注册最常用的一组。我们可以通过注入自定义 Bean 来扩展或替换。</p>
+    ├─<span class="hljs-selector-attr">[1]</span> HandlerMapping      → 确定哪个 Handler 处理请求
+    ├─<span class="hljs-selector-attr">[2]</span> HandlerAdapter      → 用适配器模式调用 Handler
+    ├─<span class="hljs-selector-attr">[3]</span> HandlerInterceptor  → 前置拦截（preHandle）
+    ├─<span class="hljs-selector-attr">[4]</span> Handler             → 实际执行（Controller 方法）
+    ├─<span class="hljs-selector-attr">[5]</span> HandlerInterceptor  → 后置拦截（postHandle）
+    ├─<span class="hljs-selector-attr">[6]</span> ViewResolver        → 解析视图（仅 MVC 视图场景）
+    ├─<span class="hljs-selector-attr">[7]</span> ExceptionResolver   → 异常时触发（绕过步骤<span class="hljs-number">5</span>-<span class="hljs-number">6</span>）
+    └─<span class="hljs-selector-attr">[8]</span> HttpMessageConverter→ 读写请求/响应体（<span class="hljs-attribute">REST</span> 场景）
+</code></pre></div><p>每一个策略接口都有多个默认实现，Spring Boot 自动配置会注册最常用的一组。我们可以通过注入自定义 Bean 来扩展或替换。</p>
 <h4>1.2 doDispatch() 源码级流程</h4>
 <p>以下是 DispatcherServlet 的核心方法 <code>doDispatch()</code> 的简化版源码分析（基于 Spring Framework 6.x 源码）：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// DispatcherServlet.java — 核心调度方法的简化分析
-protected void doDispatch(HttpServletRequest request, HttpServletResponse response) throws Exception {
-    HttpServletRequest processedRequest = request;
-    HandlerExecutionChain mappedHandler = null;
-    boolean multipartRequestParsed = false;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// DispatcherServlet.java — 核心调度方法的简化分析</span>
+<span class="hljs-keyword">protected</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">doDispatch</span><span class="hljs-params">(HttpServletRequest request, HttpServletResponse response)</span> <span class="hljs-keyword">throws</span> Exception {
+    <span class="hljs-type">HttpServletRequest</span> <span class="hljs-variable">processedRequest</span> <span class="hljs-operator">=</span> request;
+    <span class="hljs-type">HandlerExecutionChain</span> <span class="hljs-variable">mappedHandler</span> <span class="hljs-operator">=</span> <span class="hljs-literal">null</span>;
+    <span class="hljs-type">boolean</span> <span class="hljs-variable">multipartRequestParsed</span> <span class="hljs-operator">=</span> <span class="hljs-literal">false</span>;
 
-    // 异步处理支持
-    WebAsyncManager asyncManager = WebAsyncUtils.getAsyncManager(request);
+    <span class="hljs-comment">// 异步处理支持</span>
+    <span class="hljs-type">WebAsyncManager</span> <span class="hljs-variable">asyncManager</span> <span class="hljs-operator">=</span> WebAsyncUtils.getAsyncManager(request);
 
-    try {
-        ModelAndView mv = null;
-        Exception dispatchException = null;
+    <span class="hljs-keyword">try</span> {
+        <span class="hljs-type">ModelAndView</span> <span class="hljs-variable">mv</span> <span class="hljs-operator">=</span> <span class="hljs-literal">null</span>;
+        <span class="hljs-type">Exception</span> <span class="hljs-variable">dispatchException</span> <span class="hljs-operator">=</span> <span class="hljs-literal">null</span>;
 
-        try {
-            // 步骤1：检查是否为 multipart 请求，如果是则用 MultipartResolver 解析
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-comment">// 步骤1：检查是否为 multipart 请求，如果是则用 MultipartResolver 解析</span>
             processedRequest = checkMultipart(request);
             multipartRequestParsed = (processedRequest != request);
 
-            // 步骤2：通过 HandlerMapping 链确定 Handler
-            // 遍历所有注册的 HandlerMapping，第一个返回非 null 的胜出
+            <span class="hljs-comment">// 步骤2：通过 HandlerMapping 链确定 Handler</span>
+            <span class="hljs-comment">// 遍历所有注册的 HandlerMapping，第一个返回非 null 的胜出</span>
             mappedHandler = getHandler(processedRequest);
-            if (mappedHandler == null) {
-                noHandlerFound(processedRequest, response);  // 触发 404
-                return;
+            <span class="hljs-keyword">if</span> (mappedHandler == <span class="hljs-literal">null</span>) {
+                noHandlerFound(processedRequest, response);  <span class="hljs-comment">// 触发 404</span>
+                <span class="hljs-keyword">return</span>;
             }
 
-            // 步骤3：通过 HandlerAdapter 链找到能处理该 Handler 的适配器
-            // Controller 返回各种类型（ModelAndView、@ResponseBody、String 等），
-            // 每个 Adapter 只支持特定返回类型
-            HandlerAdapter ha = getHandlerAdapter(mappedHandler.getHandler());
+            <span class="hljs-comment">// 步骤3：通过 HandlerAdapter 链找到能处理该 Handler 的适配器</span>
+            <span class="hljs-comment">// Controller 返回各种类型（ModelAndView、@ResponseBody、String 等），</span>
+            <span class="hljs-comment">// 每个 Adapter 只支持特定返回类型</span>
+            <span class="hljs-type">HandlerAdapter</span> <span class="hljs-variable">ha</span> <span class="hljs-operator">=</span> getHandlerAdapter(mappedHandler.getHandler());
 
-            // 步骤4：处理 Last-Modified 缓存头（GET/HEAD 请求）
-            String method = request.getMethod();
-            boolean isGet = HttpMethod.GET.matches(method);
-            if (isGet || HttpMethod.HEAD.matches(method)) {
-                long lastModified = ha.getLastModified(request, mappedHandler.getHandler());
-                if (new ServletWebRequest(request, response).checkNotModified(lastModified) &amp;&amp; isGet) {
-                    return;  // 304 Not Modified
+            <span class="hljs-comment">// 步骤4：处理 Last-Modified 缓存头（GET/HEAD 请求）</span>
+            <span class="hljs-type">String</span> <span class="hljs-variable">method</span> <span class="hljs-operator">=</span> request.getMethod();
+            <span class="hljs-type">boolean</span> <span class="hljs-variable">isGet</span> <span class="hljs-operator">=</span> HttpMethod.GET.matches(method);
+            <span class="hljs-keyword">if</span> (isGet || HttpMethod.HEAD.matches(method)) {
+                <span class="hljs-type">long</span> <span class="hljs-variable">lastModified</span> <span class="hljs-operator">=</span> ha.getLastModified(request, mappedHandler.getHandler());
+                <span class="hljs-keyword">if</span> (<span class="hljs-keyword">new</span> <span class="hljs-title class_">ServletWebRequest</span>(request, response).checkNotModified(lastModified) &amp;&amp; isGet) {
+                    <span class="hljs-keyword">return</span>;  <span class="hljs-comment">// 304 Not Modified</span>
                 }
             }
 
-            // 步骤5：执行拦截器的 preHandle
-            // 任何一个拦截器返回 false 则终止请求
-            if (!mappedHandler.applyPreHandle(processedRequest, response)) {
-                return;
+            <span class="hljs-comment">// 步骤5：执行拦截器的 preHandle</span>
+            <span class="hljs-comment">// 任何一个拦截器返回 false 则终止请求</span>
+            <span class="hljs-keyword">if</span> (!mappedHandler.applyPreHandle(processedRequest, response)) {
+                <span class="hljs-keyword">return</span>;
             }
 
-            // 步骤6：真正执行 Handler（Controller 方法）
+            <span class="hljs-comment">// 步骤6：真正执行 Handler（Controller 方法）</span>
             mv = ha.handle(processedRequest, response, mappedHandler.getHandler());
 
-            // 步骤7：如果需要异步处理，直接返回（由异步线程完成后续步骤）
-            if (asyncManager.isConcurrentHandlingStarted()) {
-                return;
+            <span class="hljs-comment">// 步骤7：如果需要异步处理，直接返回（由异步线程完成后续步骤）</span>
+            <span class="hljs-keyword">if</span> (asyncManager.isConcurrentHandlingStarted()) {
+                <span class="hljs-keyword">return</span>;
             }
 
-            // 步骤8：如果没有 View（如 @ResponseBody 场景），应用默认视图名
+            <span class="hljs-comment">// 步骤8：如果没有 View（如 @ResponseBody 场景），应用默认视图名</span>
             applyDefaultViewName(processedRequest, mv);
 
-            // 步骤9：执行拦截器的 postHandle（执行在视图渲染之前）
+            <span class="hljs-comment">// 步骤9：执行拦截器的 postHandle（执行在视图渲染之前）</span>
             mappedHandler.applyPostHandle(processedRequest, response, mv);
         }
-        catch (Exception ex) {
+        <span class="hljs-keyword">catch</span> (Exception ex) {
             dispatchException = ex;
         }
-        catch (Throwable err) {
-            dispatchException = new NestedServletException(&quot;Handler dispatch failed&quot;, err);
+        <span class="hljs-keyword">catch</span> (Throwable err) {
+            dispatchException = <span class="hljs-keyword">new</span> <span class="hljs-title class_">NestedServletException</span>(<span class="hljs-string">"Handler dispatch failed"</span>, err);
         }
 
-        // 步骤10：处理分发结果（渲染视图或处理异常）
+        <span class="hljs-comment">// 步骤10：处理分发结果（渲染视图或处理异常）</span>
         processDispatchResult(processedRequest, response, mappedHandler, mv, dispatchException);
     }
-    catch (Exception ex) {
-        // 步骤11：触发拦截器的 afterCompletion（即使出错也会调用）
+    <span class="hljs-keyword">catch</span> (Exception ex) {
+        <span class="hljs-comment">// 步骤11：触发拦截器的 afterCompletion（即使出错也会调用）</span>
         triggerAfterCompletion(processedRequest, response, mappedHandler, ex);
     }
-    catch (Throwable err) {
+    <span class="hljs-keyword">catch</span> (Throwable err) {
         triggerAfterCompletion(processedRequest, response, mappedHandler,
-                new NestedServletException(&quot;Handler processing failed&quot;, err));
+                <span class="hljs-keyword">new</span> <span class="hljs-title class_">NestedServletException</span>(<span class="hljs-string">"Handler processing failed"</span>, err));
     }
-    finally {
-        // 步骤12：异步请求的 cleanup
-        if (asyncManager.isConcurrentHandlingStarted()) {
-            if (mappedHandler != null) {
+    <span class="hljs-keyword">finally</span> {
+        <span class="hljs-comment">// 步骤12：异步请求的 cleanup</span>
+        <span class="hljs-keyword">if</span> (asyncManager.isConcurrentHandlingStarted()) {
+            <span class="hljs-keyword">if</span> (mappedHandler != <span class="hljs-literal">null</span>) {
                 mappedHandler.applyAfterConcurrentHandlingStarted(processedRequest, response);
             }
         }
-        else {
-            // 清理 multipart 资源
-            if (multipartRequestParsed) {
+        <span class="hljs-keyword">else</span> {
+            <span class="hljs-comment">// 清理 multipart 资源</span>
+            <span class="hljs-keyword">if</span> (multipartRequestParsed) {
                 cleanupMultipart(processedRequest);
             }
         }
     }
 }
-</code></pre></div>
-<p><strong>关键设计要点：</strong></p>
+</code></pre></div><p><strong>关键设计要点：</strong></p>
 <ol>
 <li><p><strong>HandlerMapping 策略链：</strong> <code>getHandler()</code> 遍历所有 HandlerMapping（如 RequestMappingHandlerMapping、SimpleUrlHandlerMapping），返回第一个非 null 的 HandlerExecutionChain。Chain 中包装了 Handler 对象和所有匹配的 Interceptor。</p>
 </li>
@@ -141,38 +139,37 @@ protected void doDispatch(HttpServletRequest request, HttpServletResponse respon
 </ol>
 <h4>1.3 核心策略接口的自定义</h4>
 <p>所有策略接口都可以通过注入自定义 Bean 来替换默认实现。最常见的场景：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 自定义 HandlerMapping 示例：API 版本路由
-@Configuration
-public class WebMvcConfig implements WebMvcConfigurer {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 自定义 HandlerMapping 示例：API 版本路由</span>
+<span class="hljs-meta">@Configuration</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">WebMvcConfig</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">WebMvcConfigurer</span> {
 
-    @Override
-    public void addInterceptors(InterceptorRegistry registry) {
-        // 自定义拦截器：请求日志 + 鉴权
-        registry.addInterceptor(new LoggingInterceptor())
-                .order(1)
-                .addPathPatterns(&quot;/api/**&quot;)
-                .excludePathPatterns(&quot;/api/health&quot;);
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">addInterceptors</span><span class="hljs-params">(InterceptorRegistry registry)</span> {
+        <span class="hljs-comment">// 自定义拦截器：请求日志 + 鉴权</span>
+        registry.addInterceptor(<span class="hljs-keyword">new</span> <span class="hljs-title class_">LoggingInterceptor</span>())
+                .order(<span class="hljs-number">1</span>)
+                .addPathPatterns(<span class="hljs-string">"/api/**"</span>)
+                .excludePathPatterns(<span class="hljs-string">"/api/health"</span>);
 
-        registry.addInterceptor(new AuthInterceptor())
-                .order(2)
-                .addPathPatterns(&quot;/api/**&quot;)
-                .excludePathPatterns(&quot;/api/public/**&quot;);
+        registry.addInterceptor(<span class="hljs-keyword">new</span> <span class="hljs-title class_">AuthInterceptor</span>())
+                .order(<span class="hljs-number">2</span>)
+                .addPathPatterns(<span class="hljs-string">"/api/**"</span>)
+                .excludePathPatterns(<span class="hljs-string">"/api/public/**"</span>);
     }
 
-    @Override
-    public void configureHandlerExceptionResolvers(List&lt;HandlerExceptionResolver&gt; resolvers) {
-        // 自定义异常解析器（优先级高于 @ControllerAdvice）
-        resolvers.add(new CustomHandlerExceptionResolver());
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">configureHandlerExceptionResolvers</span><span class="hljs-params">(List&lt;HandlerExceptionResolver&gt; resolvers)</span> {
+        <span class="hljs-comment">// 自定义异常解析器（优先级高于 @ControllerAdvice）</span>
+        resolvers.add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">CustomHandlerExceptionResolver</span>());
     }
 
-    @Override
-    public void addFormatters(FormatterRegistry registry) {
-        // 注册自定义格式化器
-        registry.addFormatter(new CustomCurrencyFormatter());
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">addFormatters</span><span class="hljs-params">(FormatterRegistry registry)</span> {
+        <span class="hljs-comment">// 注册自定义格式化器</span>
+        registry.addFormatter(<span class="hljs-keyword">new</span> <span class="hljs-title class_">CustomCurrencyFormatter</span>());
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h3>二、控制器：参数绑定、类型转换与校验</h3>
 <h4>2.1 @RestController vs @Controller</h4>
 <p>Spring MVC 提供两种控制器注解：</p>
@@ -196,76 +193,71 @@ public class WebMvcConfig implements WebMvcConfigurer {
 </tr>
 </tbody></table>
 <p><code>@RestController</code> 是一个组合注解，等价于 <code>@Controller + @ResponseBody</code>。源码如下：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Target(ElementType.TYPE)
-@Retention(RetentionPolicy.RUNTIME)
-@Documented
-@Controller
-@ResponseBody
-public @interface RestController {
-    @AliasFor(annotation = Controller.class)
-    String value() default &quot;&quot;;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Target(ElementType.TYPE)</span>
+<span class="hljs-meta">@Retention(RetentionPolicy.RUNTIME)</span>
+<span class="hljs-meta">@Documented</span>
+<span class="hljs-meta">@Controller</span>
+<span class="hljs-meta">@ResponseBody</span>
+<span class="hljs-keyword">public</span> <span class="hljs-meta">@interface</span> RestController {
+    <span class="hljs-meta">@AliasFor(annotation = Controller.class)</span>
+    String <span class="hljs-title function_">value</span><span class="hljs-params">()</span> <span class="hljs-keyword">default</span> <span class="hljs-string">""</span>;
 }
-</code></pre></div>
-<p>选择指南：只要返回 JSON/XML 数据，就一定用 <code>@RestController</code>。仅在服务端渲染（Thymeleaf 等模板引擎）场景用 <code>@Controller</code>。</p>
+</code></pre></div><p>选择指南：只要返回 JSON/XML 数据，就一定用 <code>@RestController</code>。仅在服务端渲染（Thymeleaf 等模板引擎）场景用 <code>@Controller</code>。</p>
 <h4>2.2 参数绑定详解</h4>
 <p>Spring MVC 通过 <code>HandlerMethodArgumentResolver</code> 接口处理参数解析。每种参数注解都有对应的 Resolver：</p>
 <p><strong>@PathVariable — 路径变量</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 单个变量
-@GetMapping(&quot;/users/{userId}&quot;)
-public User getUser(@PathVariable(&quot;userId&quot;) Long userId) { /* ... */ }
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 单个变量</span>
+<span class="hljs-meta">@GetMapping("/users/{userId}")</span>
+<span class="hljs-keyword">public</span> User <span class="hljs-title function_">getUser</span><span class="hljs-params">(<span class="hljs-meta">@PathVariable("userId")</span> Long userId)</span> { <span class="hljs-comment">/* ... */</span> }
 
-// Map 绑定（不推荐生产使用，精度不够）
-@GetMapping(&quot;/users/{userId}/orders/{orderId}&quot;)
-public Order getOrder(@PathVariable Map&lt;String, String&gt; pathVars) { /* ... */ }
-</code></pre></div>
-<p>底层通过 <code>PathVariableMethodArgumentResolver</code> 解析，它从 <code>HttpServletRequest</code> 的属性（key 为 <code>HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE</code>）中提取值。</p>
+<span class="hljs-comment">// Map 绑定（不推荐生产使用，精度不够）</span>
+<span class="hljs-meta">@GetMapping("/users/{userId}/orders/{orderId}")</span>
+<span class="hljs-keyword">public</span> Order <span class="hljs-title function_">getOrder</span><span class="hljs-params">(<span class="hljs-meta">@PathVariable</span> Map&lt;String, String&gt; pathVars)</span> { <span class="hljs-comment">/* ... */</span> }
+</code></pre></div><p>底层通过 <code>PathVariableMethodArgumentResolver</code> 解析，它从 <code>HttpServletRequest</code> 的属性（key 为 <code>HandlerMapping.URI_TEMPLATE_VARIABLES_ATTRIBUTE</code>）中提取值。</p>
 <p><strong>@RequestParam — 查询参数 / 表单参数</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@GetMapping(&quot;/users&quot;)
-public Page&lt;User&gt; listUsers(
-        @RequestParam(&quot;page&quot;) int page,                    // 必填（默认）
-        @RequestParam(value = &quot;size&quot;, defaultValue = &quot;20&quot;) int size,  // 可选，带默认值
-        @RequestParam(required = false) String keyword,     // 可选
-        @RequestParam(required = false) List&lt;Long&gt; ids      // 数组绑定：?ids=1&amp;ids=2&amp;ids=3
-) { /* ... */ }
-</code></pre></div>
-<p><strong>@RequestBody — JSON 请求体</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@PostMapping(&quot;/users&quot;)
-public User createUser(@RequestBody @Valid UserCreateRequest request) {
-    // HttpMessageConverter 链（默认 Jackson）将 JSON 反序列化为 Java 对象
-    return userService.create(request);
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@GetMapping("/users")</span>
+<span class="hljs-keyword">public</span> Page&lt;User&gt; <span class="hljs-title function_">listUsers</span><span class="hljs-params">(
+        <span class="hljs-meta">@RequestParam("page")</span> <span class="hljs-type">int</span> page,                    // 必填（默认）
+        <span class="hljs-meta">@RequestParam(value = "size", defaultValue = "20")</span> <span class="hljs-type">int</span> size,  // 可选，带默认值
+        <span class="hljs-meta">@RequestParam(required = false)</span> String keyword,     // 可选
+        <span class="hljs-meta">@RequestParam(required = false)</span> List&lt;Long&gt; ids      // 数组绑定：?ids=<span class="hljs-number">1</span>&amp;ids=<span class="hljs-number">2</span>&amp;ids=<span class="hljs-number">3</span>
+)</span> { <span class="hljs-comment">/* ... */</span> }
+</code></pre></div><p><strong>@RequestBody — JSON 请求体</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@PostMapping("/users")</span>
+<span class="hljs-keyword">public</span> User <span class="hljs-title function_">createUser</span><span class="hljs-params">(<span class="hljs-meta">@RequestBody</span> <span class="hljs-meta">@Valid</span> UserCreateRequest request)</span> {
+    <span class="hljs-comment">// HttpMessageConverter 链（默认 Jackson）将 JSON 反序列化为 Java 对象</span>
+    <span class="hljs-keyword">return</span> userService.create(request);
 }
-</code></pre></div>
-<p>底层通过 <code>RequestResponseBodyMethodProcessor</code> 解析。它遍历所有 <code>HttpMessageConverter</code>，找到第一个 <code>canRead()</code> 返回 true 的 Converter 进行反序列化。</p>
+</code></pre></div><p>底层通过 <code>RequestResponseBodyMethodProcessor</code> 解析。它遍历所有 <code>HttpMessageConverter</code>，找到第一个 <code>canRead()</code> 返回 true 的 Converter 进行反序列化。</p>
 <p><strong>自定义参数解析器</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 场景：从 JWT Token 中提取当前用户信息
-@Component
-public class CurrentUserArgumentResolver implements HandlerMethodArgumentResolver {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 场景：从 JWT Token 中提取当前用户信息</span>
+<span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">CurrentUserArgumentResolver</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">HandlerMethodArgumentResolver</span> {
 
-    @Override
-    public boolean supportsParameter(MethodParameter parameter) {
-        return parameter.hasParameterAnnotation(CurrentUser.class)
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">supportsParameter</span><span class="hljs-params">(MethodParameter parameter)</span> {
+        <span class="hljs-keyword">return</span> parameter.hasParameterAnnotation(CurrentUser.class)
                 &amp;&amp; parameter.getParameterType().equals(UserContext.class);
     }
 
-    @Override
-    public Object resolveArgument(MethodParameter parameter,
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> Object <span class="hljs-title function_">resolveArgument</span><span class="hljs-params">(MethodParameter parameter,
                                   ModelAndViewContainer mavContainer,
                                   NativeWebRequest webRequest,
-                                  WebDataBinderFactory binderFactory) {
-        var request = (HttpServletRequest) webRequest.getNativeRequest();
-        var token = request.getHeader(&quot;Authorization&quot;);
-        // 解析 JWT 并返回 UserContext
-        return jwtService.parseToken(token);
+                                  WebDataBinderFactory binderFactory)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">request</span> <span class="hljs-operator">=</span> (HttpServletRequest) webRequest.getNativeRequest();
+        <span class="hljs-type">var</span> <span class="hljs-variable">token</span> <span class="hljs-operator">=</span> request.getHeader(<span class="hljs-string">"Authorization"</span>);
+        <span class="hljs-comment">// 解析 JWT 并返回 UserContext</span>
+        <span class="hljs-keyword">return</span> jwtService.parseToken(token);
     }
 }
 
-// 使用
-@GetMapping(&quot;/profile&quot;)
-public UserProfile profile(@CurrentUser UserContext user) {
-    return profileService.getByUserId(user.getUserId());
+<span class="hljs-comment">// 使用</span>
+<span class="hljs-meta">@GetMapping("/profile")</span>
+<span class="hljs-keyword">public</span> UserProfile <span class="hljs-title function_">profile</span><span class="hljs-params">(<span class="hljs-meta">@CurrentUser</span> UserContext user)</span> {
+    <span class="hljs-keyword">return</span> profileService.getByUserId(user.getUserId());
 }
-</code></pre></div>
-<h4>2.3 类型转换体系：Formatter 与 Converter</h4>
+</code></pre></div><h4>2.3 类型转换体系：Formatter 与 Converter</h4>
 <p>Spring 提供两层类型转换抽象：</p>
 <table>
 <thead>
@@ -297,218 +289,212 @@ public UserProfile profile(@CurrentUser UserContext user) {
 </tr>
 </tbody></table>
 <p><strong>Converter 示例：JSON 字符串转 POJO</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Component
-public class StringToJsonNodeConverter implements Converter&lt;String, JsonNode&gt; {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">StringToJsonNodeConverter</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">Converter</span>&lt;String, JsonNode&gt; {
 
-    private final ObjectMapper objectMapper;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> ObjectMapper objectMapper;
 
-    public StringToJsonNodeConverter(ObjectMapper objectMapper) {
-        this.objectMapper = objectMapper;
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">StringToJsonNodeConverter</span><span class="hljs-params">(ObjectMapper objectMapper)</span> {
+        <span class="hljs-built_in">this</span>.objectMapper = objectMapper;
     }
 
-    @Override
-    public JsonNode convert(String source) {
-        try {
-            return objectMapper.readTree(source);
-        } catch (JsonProcessingException e) {
-            throw new IllegalArgumentException(&quot;Invalid JSON: &quot; + source, e);
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> JsonNode <span class="hljs-title function_">convert</span><span class="hljs-params">(String source)</span> {
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-keyword">return</span> objectMapper.readTree(source);
+        } <span class="hljs-keyword">catch</span> (JsonProcessingException e) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">IllegalArgumentException</span>(<span class="hljs-string">"Invalid JSON: "</span> + source, e);
         }
     }
 }
-</code></pre></div>
-<p><strong>Formatter 示例：自定义枚举绑定</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 支持不区分大小写的枚举绑定
-public class CaseInsensitiveEnumFormatter&lt;T extends Enum&lt;T&gt;&gt; implements Formatter&lt;T&gt; {
+</code></pre></div><p><strong>Formatter 示例：自定义枚举绑定</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 支持不区分大小写的枚举绑定</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">CaseInsensitiveEnumFormatter</span>&lt;T <span class="hljs-keyword">extends</span> <span class="hljs-title class_">Enum</span>&lt;T&gt;&gt; <span class="hljs-keyword">implements</span> <span class="hljs-title class_">Formatter</span>&lt;T&gt; {
 
-    private final Class&lt;T&gt; enumType;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Class&lt;T&gt; enumType;
 
-    public CaseInsensitiveEnumFormatter(Class&lt;T&gt; enumType) {
-        this.enumType = enumType;
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">CaseInsensitiveEnumFormatter</span><span class="hljs-params">(Class&lt;T&gt; enumType)</span> {
+        <span class="hljs-built_in">this</span>.enumType = enumType;
     }
 
-    @Override
-    public T parse(String text, Locale locale) throws ParseException {
-        for (var constant : enumType.getEnumConstants()) {
-            if (constant.name().equalsIgnoreCase(text)) {
-                return constant;
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> T <span class="hljs-title function_">parse</span><span class="hljs-params">(String text, Locale locale)</span> <span class="hljs-keyword">throws</span> ParseException {
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> constant : enumType.getEnumConstants()) {
+            <span class="hljs-keyword">if</span> (constant.name().equalsIgnoreCase(text)) {
+                <span class="hljs-keyword">return</span> constant;
             }
         }
-        throw new IllegalArgumentException(&quot;No enum constant &quot; + enumType.getCanonicalName() + &quot;.&quot; + text);
+        <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">IllegalArgumentException</span>(<span class="hljs-string">"No enum constant "</span> + enumType.getCanonicalName() + <span class="hljs-string">"."</span> + text);
     }
 
-    @Override
-    public String print(T object, Locale locale) {
-        return object.name().toLowerCase();
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> String <span class="hljs-title function_">print</span><span class="hljs-params">(T object, Locale locale)</span> {
+        <span class="hljs-keyword">return</span> object.name().toLowerCase();
     }
 }
 
-// 注册（实现 FormatterRegistrar）
-@Component
-public class EnumFormatterRegistrar implements FormatterRegistrar {
-    @Override
-    public void registerFormatters(FormatterRegistry registry) {
-        registry.addFormatterForFieldAnnotation(new CaseInsensitiveFormatterFactory());
+<span class="hljs-comment">// 注册（实现 FormatterRegistrar）</span>
+<span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">EnumFormatterRegistrar</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">FormatterRegistrar</span> {
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">registerFormatters</span><span class="hljs-params">(FormatterRegistry registry)</span> {
+        registry.addFormatterForFieldAnnotation(<span class="hljs-keyword">new</span> <span class="hljs-title class_">CaseInsensitiveFormatterFactory</span>());
     }
 }
-</code></pre></div>
-<h4>2.4 校验：@Valid 与 @Validated</h4>
+</code></pre></div><h4>2.4 校验：@Valid 与 @Validated</h4>
 <p>Spring MVC 在参数绑定时自动触发校验：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// @Valid：JSR-380 标准（Jakarta Bean Validation）
-// @Validated：Spring 扩展，支持分组校验
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// @Valid：JSR-380 标准（Jakarta Bean Validation）</span>
+<span class="hljs-comment">// @Validated：Spring 扩展，支持分组校验</span>
 
-// 定义校验分组
-public interface Create {}
-public interface Update {}
+<span class="hljs-comment">// 定义校验分组</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">Create</span> {}
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">Update</span> {}
 
-public record UserCreateRequest(
-        @NotBlank(message = &quot;用户名不能为空&quot;, groups = {Create.class, Update.class})
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">UserCreateRequest</span><span class="hljs-params">(
+        @NotBlank(message = "用户名不能为空", groups = {Create.class, Update.class})</span>
         String username,
 
-        @Email(message = &quot;邮箱格式不正确&quot;)
-        @NotBlank(groups = Create.class)  // 仅创建时必填
+        <span class="hljs-meta">@Email(message = "邮箱格式不正确")</span>
+        <span class="hljs-meta">@NotBlank(groups = Create.class)</span>  <span class="hljs-comment">// 仅创建时必填</span>
         String email,
 
-        @Min(value = 18, message = &quot;年龄不能小于18岁&quot;)
-        @Max(value = 150, message = &quot;年龄不能大于150岁&quot;)
+        <span class="hljs-meta">@Min(value = 18, message = "年龄不能小于18岁")</span>
+        <span class="hljs-meta">@Max(value = 150, message = "年龄不能大于150岁")</span>
         Integer age
 ) {}
 
-@PostMapping(&quot;/users&quot;)
-public User createUser(@RequestBody @Validated(Create.class) UserCreateRequest request) {
-    // 校验失败会抛出 MethodArgumentNotValidException（由全局异常处理器统一处理）
-    return userService.create(request);
+<span class="hljs-meta">@PostMapping("/users")</span>
+<span class="hljs-keyword">public</span> User <span class="hljs-title function_">createUser</span><span class="hljs-params">(<span class="hljs-meta">@RequestBody</span> <span class="hljs-meta">@Validated(Create.class)</span> UserCreateRequest request)</span> {
+    <span class="hljs-comment">// 校验失败会抛出 MethodArgumentNotValidException（由全局异常处理器统一处理）</span>
+    <span class="hljs-keyword">return</span> userService.create(request);
 }
 
-@PutMapping(&quot;/users/{id}&quot;)
-public User updateUser(@RequestBody @Validated(Update.class) UserCreateRequest request) {
-    return userService.update(request);
+<span class="hljs-meta">@PutMapping("/users/{id}")</span>
+<span class="hljs-keyword">public</span> User <span class="hljs-title function_">updateUser</span><span class="hljs-params">(<span class="hljs-meta">@RequestBody</span> <span class="hljs-meta">@Validated(Update.class)</span> UserCreateRequest request)</span> {
+    <span class="hljs-keyword">return</span> userService.update(request);
 }
-</code></pre></div>
-<p><strong>MethodValidation（方法级校验）：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@RestController
-@Validated  // 类上必须标注
-public class UserController {
+</code></pre></div><p><strong>MethodValidation（方法级校验）：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@RestController</span>
+<span class="hljs-meta">@Validated</span>  <span class="hljs-comment">// 类上必须标注</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">UserController</span> {
 
-    @GetMapping(&quot;/users/{id}&quot;)
-    public User getUser(@PathVariable @Min(1) @Max(1000000) Long id) {
-        // 参数校验失败会抛出 ConstraintViolationException
-        return userService.findById(id);
+    <span class="hljs-meta">@GetMapping("/users/{id}")</span>
+    <span class="hljs-keyword">public</span> User <span class="hljs-title function_">getUser</span><span class="hljs-params">(<span class="hljs-meta">@PathVariable</span> <span class="hljs-meta">@Min(1)</span> <span class="hljs-meta">@Max(1000000)</span> Long id)</span> {
+        <span class="hljs-comment">// 参数校验失败会抛出 ConstraintViolationException</span>
+        <span class="hljs-keyword">return</span> userService.findById(id);
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h3>三、统一响应体包装与全局异常处理</h3>
 <p>在 REST API 中，前端期望统一的响应格式。Spring 提供两大利器：<code>ResponseBodyAdvice</code> 和 <code>@ControllerAdvice</code>。</p>
 <h4>3.1 统一响应体：ResponseBodyAdvice</h4>
 <p><code>ResponseBodyAdvice</code> 在所有 <code>HttpMessageConverter.write()</code> 之前被调用，可以修改响应体内容。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 统一响应体结构
-public record ApiResponse&lt;T&gt;(
-        int code,
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 统一响应体结构</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">ApiResponse</span>&lt;T&gt;(
+        <span class="hljs-type">int</span> code,
         String message,
         T data,
-        long timestamp,
+        <span class="hljs-type">long</span> timestamp,
         String traceId
 ) {
-    public static &lt;T&gt; ApiResponse&lt;T&gt; success(T data) {
-        return new ApiResponse&lt;&gt;(0, &quot;success&quot;, data, System.currentTimeMillis(), MDC.get(&quot;traceId&quot;));
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> &lt;T&gt; ApiResponse&lt;T&gt; <span class="hljs-title function_">success</span><span class="hljs-params">(T data)</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ApiResponse</span>&lt;&gt;(<span class="hljs-number">0</span>, <span class="hljs-string">"success"</span>, data, System.currentTimeMillis(), MDC.get(<span class="hljs-string">"traceId"</span>));
     }
 
-    public static &lt;T&gt; ApiResponse&lt;T&gt; error(int code, String message, T data) {
-        return new ApiResponse&lt;&gt;(code, message, data, System.currentTimeMillis(), MDC.get(&quot;traceId&quot;));
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> &lt;T&gt; ApiResponse&lt;T&gt; <span class="hljs-title function_">error</span><span class="hljs-params">(<span class="hljs-type">int</span> code, String message, T data)</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ApiResponse</span>&lt;&gt;(code, message, data, System.currentTimeMillis(), MDC.get(<span class="hljs-string">"traceId"</span>));
     }
 }
 
-// ResponseBodyAdvice 实现
-@ControllerAdvice
-public class ApiResponseAdvice implements ResponseBodyAdvice&lt;Object&gt; {
+<span class="hljs-comment">// ResponseBodyAdvice 实现</span>
+<span class="hljs-meta">@ControllerAdvice</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ApiResponseAdvice</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">ResponseBodyAdvice</span>&lt;Object&gt; {
 
-    @Override
-    public boolean supports(MethodParameter returnType, Class&lt;? extends HttpMessageConverter&lt;?&gt;&gt; converterType) {
-        // 跳过已经是 ApiResponse 类型或某些特殊类型
-        var returnClass = returnType.getParameterType();
-        return !returnClass.equals(ApiResponse.class)
-                &amp;&amp; !returnClass.equals(byte[].class)
-                &amp;&amp; !returnClass.equals(Resource.class);  // 文件下载跳过包装
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">supports</span><span class="hljs-params">(MethodParameter returnType, Class&lt;? extends HttpMessageConverter&lt;?&gt;&gt; converterType)</span> {
+        <span class="hljs-comment">// 跳过已经是 ApiResponse 类型或某些特殊类型</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">returnClass</span> <span class="hljs-operator">=</span> returnType.getParameterType();
+        <span class="hljs-keyword">return</span> !returnClass.equals(ApiResponse.class)
+                &amp;&amp; !returnClass.equals(<span class="hljs-type">byte</span>[].class)
+                &amp;&amp; !returnClass.equals(Resource.class);  <span class="hljs-comment">// 文件下载跳过包装</span>
     }
 
-    @Override
-    public Object beforeBodyWrite(Object body,
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> Object <span class="hljs-title function_">beforeBodyWrite</span><span class="hljs-params">(Object body,
                                   MethodParameter returnType,
                                   MediaType selectedContentType,
                                   Class&lt;? extends HttpMessageConverter&lt;?&gt;&gt; selectedConverterType,
                                   ServerHttpRequest request,
-                                  ServerHttpResponse response) {
-        // 如果 Controller 返回了 String，需要特殊处理
-        // 因为 StringHttpMessageConverter 只接受 String 类型
-        if (body instanceof String) {
-            try {
-                return new ObjectMapper().writeValueAsString(ApiResponse.success(body));
-            } catch (JsonProcessingException e) {
-                throw new RuntimeException(e);
+                                  ServerHttpResponse response)</span> {
+        <span class="hljs-comment">// 如果 Controller 返回了 String，需要特殊处理</span>
+        <span class="hljs-comment">// 因为 StringHttpMessageConverter 只接受 String 类型</span>
+        <span class="hljs-keyword">if</span> (body <span class="hljs-keyword">instanceof</span> String) {
+            <span class="hljs-keyword">try</span> {
+                <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ObjectMapper</span>().writeValueAsString(ApiResponse.success(body));
+            } <span class="hljs-keyword">catch</span> (JsonProcessingException e) {
+                <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RuntimeException</span>(e);
             }
         }
-        return ApiResponse.success(body);
+        <span class="hljs-keyword">return</span> ApiResponse.success(body);
     }
 }
-</code></pre></div>
-<p><strong>关键注意事项：</strong></p>
+</code></pre></div><p><strong>关键注意事项：</strong></p>
 <ul>
 <li><code>supports()</code> 必须正确处理 <code>String</code> 返回类型，否则会抛出 <code>ClassCastException</code></li>
 <li>文件下载（<code>ResponseEntity&lt;Resource&gt;</code> 或 <code>byte[]</code>）应在 <code>supports()</code> 中排除</li>
 <li>SSE 流式输出应排除，因为 SSE 需要多次写入响应流</li>
 </ul>
 <h4>3.2 全局异常处理：@ControllerAdvice + @ExceptionHandler</h4>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@ControllerAdvice
-public class GlobalExceptionHandler {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@ControllerAdvice</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">GlobalExceptionHandler</span> {
 
-    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">Logger</span> <span class="hljs-variable">log</span> <span class="hljs-operator">=</span> LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
-    // 参数校验异常（@Valid）
-    @ExceptionHandler(MethodArgumentNotValidException.class)
-    public ApiResponse&lt;List&lt;FieldErrorVO&gt;&gt; handleValidation(MethodArgumentNotValidException ex) {
-        var errors = ex.getBindingResult().getFieldErrors().stream()
-                .map(fe -&gt; new FieldErrorVO(fe.getField(), fe.getDefaultMessage()))
+    <span class="hljs-comment">// 参数校验异常（@Valid）</span>
+    <span class="hljs-meta">@ExceptionHandler(MethodArgumentNotValidException.class)</span>
+    <span class="hljs-keyword">public</span> ApiResponse&lt;List&lt;FieldErrorVO&gt;&gt; <span class="hljs-title function_">handleValidation</span><span class="hljs-params">(MethodArgumentNotValidException ex)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">errors</span> <span class="hljs-operator">=</span> ex.getBindingResult().getFieldErrors().stream()
+                .map(fe -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">FieldErrorVO</span>(fe.getField(), fe.getDefaultMessage()))
                 .toList();
-        return ApiResponse.error(400, &quot;参数校验失败&quot;, errors);
+        <span class="hljs-keyword">return</span> ApiResponse.error(<span class="hljs-number">400</span>, <span class="hljs-string">"参数校验失败"</span>, errors);
     }
 
-    // 方法参数校验异常（@Validated 在类上）
-    @ExceptionHandler(ConstraintViolationException.class)
-    public ApiResponse&lt;String&gt; handleConstraintViolation(ConstraintViolationException ex) {
-        var messages = ex.getConstraintViolations().stream()
-                .map(v -&gt; v.getPropertyPath() + &quot;: &quot; + v.getMessage())
+    <span class="hljs-comment">// 方法参数校验异常（@Validated 在类上）</span>
+    <span class="hljs-meta">@ExceptionHandler(ConstraintViolationException.class)</span>
+    <span class="hljs-keyword">public</span> ApiResponse&lt;String&gt; <span class="hljs-title function_">handleConstraintViolation</span><span class="hljs-params">(ConstraintViolationException ex)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">messages</span> <span class="hljs-operator">=</span> ex.getConstraintViolations().stream()
+                .map(v -&gt; v.getPropertyPath() + <span class="hljs-string">": "</span> + v.getMessage())
                 .toList();
-        return ApiResponse.error(400, &quot;参数校验失败&quot;, String.join(&quot;; &quot;, messages));
+        <span class="hljs-keyword">return</span> ApiResponse.error(<span class="hljs-number">400</span>, <span class="hljs-string">"参数校验失败"</span>, String.join(<span class="hljs-string">"; "</span>, messages));
     }
 
-    // 业务异常
-    @ExceptionHandler(BusinessException.class)
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public ApiResponse&lt;String&gt; handleBusiness(BusinessException ex) {
-        log.warn(&quot;业务异常: {}&quot;, ex.getMessage());
-        return ApiResponse.error(ex.getCode(), ex.getMessage(), null);
+    <span class="hljs-comment">// 业务异常</span>
+    <span class="hljs-meta">@ExceptionHandler(BusinessException.class)</span>
+    <span class="hljs-meta">@ResponseStatus(HttpStatus.BAD_REQUEST)</span>
+    <span class="hljs-keyword">public</span> ApiResponse&lt;String&gt; <span class="hljs-title function_">handleBusiness</span><span class="hljs-params">(BusinessException ex)</span> {
+        log.warn(<span class="hljs-string">"业务异常: {}"</span>, ex.getMessage());
+        <span class="hljs-keyword">return</span> ApiResponse.error(ex.getCode(), ex.getMessage(), <span class="hljs-literal">null</span>);
     }
 
-    // HTTP 消息不可读（JSON 格式错误）
-    @ExceptionHandler(HttpMessageNotReadableException.class)
-    @ResponseStatus(HttpStatus.BAD_REQUEST)
-    public ApiResponse&lt;String&gt; handleNotReadable(HttpMessageNotReadableException ex) {
-        return ApiResponse.error(400, &quot;请求体格式错误: &quot; + ex.getMessage(), null);
+    <span class="hljs-comment">// HTTP 消息不可读（JSON 格式错误）</span>
+    <span class="hljs-meta">@ExceptionHandler(HttpMessageNotReadableException.class)</span>
+    <span class="hljs-meta">@ResponseStatus(HttpStatus.BAD_REQUEST)</span>
+    <span class="hljs-keyword">public</span> ApiResponse&lt;String&gt; <span class="hljs-title function_">handleNotReadable</span><span class="hljs-params">(HttpMessageNotReadableException ex)</span> {
+        <span class="hljs-keyword">return</span> ApiResponse.error(<span class="hljs-number">400</span>, <span class="hljs-string">"请求体格式错误: "</span> + ex.getMessage(), <span class="hljs-literal">null</span>);
     }
 
-    // 兜底异常：捕获所有未处理的异常
-    @ExceptionHandler(Exception.class)
-    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
-    public ApiResponse&lt;String&gt; handleAll(Exception ex) {
-        log.error(&quot;未处理的异常&quot;, ex);
-        return ApiResponse.error(500, &quot;服务器内部错误&quot;, null);
+    <span class="hljs-comment">// 兜底异常：捕获所有未处理的异常</span>
+    <span class="hljs-meta">@ExceptionHandler(Exception.class)</span>
+    <span class="hljs-meta">@ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)</span>
+    <span class="hljs-keyword">public</span> ApiResponse&lt;String&gt; <span class="hljs-title function_">handleAll</span><span class="hljs-params">(Exception ex)</span> {
+        log.error(<span class="hljs-string">"未处理的异常"</span>, ex);
+        <span class="hljs-keyword">return</span> ApiResponse.error(<span class="hljs-number">500</span>, <span class="hljs-string">"服务器内部错误"</span>, <span class="hljs-literal">null</span>);
     }
 }
 
-// 辅助 VO
-public record FieldErrorVO(String field, String message) {}
-</code></pre></div>
-<p><strong>异常处理优先级机制：</strong></p>
+<span class="hljs-comment">// 辅助 VO</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">FieldErrorVO</span><span class="hljs-params">(String field, String message)</span> {}
+</code></pre></div><p><strong>异常处理优先级机制：</strong></p>
 <ol>
 <li>优先匹配 Controller 内部定义的 <code>@ExceptionHandler</code>（就近原则）</li>
 <li>然后是同一包下的 <code>@ControllerAdvice</code></li>
@@ -520,210 +506,206 @@ public record FieldErrorVO(String field, String message) {}
 <p>SSE 是一种基于 HTTP 长连接的服务器推送技术。相比 WebSocket，它更轻量：单向（服务器-&gt;客户端）、纯文本（UTF-8 的 <code>text/event-stream</code>）、自动重连、穿透代理友好。</p>
 <h4>4.1 SseEmitter 核心 API</h4>
 <p>Spring MVC 提供 <code>SseEmitter</code> 作为 SSE 的 Java 抽象：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@RestController
-@RequestMapping(&quot;/api/sse&quot;)
-public class SseDemoController {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@RestController</span>
+<span class="hljs-meta">@RequestMapping("/api/sse")</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">SseDemoController</span> {
 
-    // 基本使用：单条消息推送
-    @GetMapping(&quot;/simple&quot;)
-    public SseEmitter simpleSSE() {
-        var emitter = new SseEmitter(60_000L);  // 超时 60 秒
+    <span class="hljs-comment">// 基本使用：单条消息推送</span>
+    <span class="hljs-meta">@GetMapping("/simple")</span>
+    <span class="hljs-keyword">public</span> SseEmitter <span class="hljs-title function_">simpleSSE</span><span class="hljs-params">()</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">emitter</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">SseEmitter</span>(<span class="hljs-number">60_000L</span>);  <span class="hljs-comment">// 超时 60 秒</span>
 
-        // 使用 Virtual Thread 执行异步任务
+        <span class="hljs-comment">// 使用 Virtual Thread 执行异步任务</span>
         Thread.ofVirtual().start(() -&gt; {
-            try {
-                for (int i = 0; i &lt; 10; i++) {
+            <span class="hljs-keyword">try</span> {
+                <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; <span class="hljs-number">10</span>; i++) {
                     emitter.send(SseEmitter.event()
                             .id(String.valueOf(i))
-                            .name(&quot;progress&quot;)
-                            .data(&quot;Step &quot; + i + &quot; completed&quot;));
-                    Thread.sleep(1000);
+                            .name(<span class="hljs-string">"progress"</span>)
+                            .data(<span class="hljs-string">"Step "</span> + i + <span class="hljs-string">" completed"</span>));
+                    Thread.sleep(<span class="hljs-number">1000</span>);
                 }
                 emitter.send(SseEmitter.event()
-                        .name(&quot;complete&quot;)
-                        .data(&quot;DONE&quot;));
+                        .name(<span class="hljs-string">"complete"</span>)
+                        .data(<span class="hljs-string">"DONE"</span>));
                 emitter.complete();
-            } catch (Exception e) {
+            } <span class="hljs-keyword">catch</span> (Exception e) {
                 emitter.completeWithError(e);
             }
         });
 
-        return emitter;
+        <span class="hljs-keyword">return</span> emitter;
     }
 
-    // 事件对象的类型安全发送
-    @GetMapping(&quot;/typed&quot;)
-    public SseEmitter typedSSE() {
-        var emitter = new SseEmitter(30_000L);
+    <span class="hljs-comment">// 事件对象的类型安全发送</span>
+    <span class="hljs-meta">@GetMapping("/typed")</span>
+    <span class="hljs-keyword">public</span> SseEmitter <span class="hljs-title function_">typedSSE</span><span class="hljs-params">()</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">emitter</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">SseEmitter</span>(<span class="hljs-number">30_000L</span>);
 
         Thread.ofVirtual().start(() -&gt; {
-            try {
-                for (int i = 0; i &lt;= 100; i += 20) {
+            <span class="hljs-keyword">try</span> {
+                <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt;= <span class="hljs-number">100</span>; i += <span class="hljs-number">20</span>) {
                     emitter.send(SseEmitter.event()
                             .id(UUID.randomUUID().toString())
-                            .name(&quot;task-progress&quot;)
-                            .data(new ProgressEvent(&quot;task-001&quot;, i), MediaType.APPLICATION_JSON));
-                    Thread.sleep(500);
+                            .name(<span class="hljs-string">"task-progress"</span>)
+                            .data(<span class="hljs-keyword">new</span> <span class="hljs-title class_">ProgressEvent</span>(<span class="hljs-string">"task-001"</span>, i), MediaType.APPLICATION_JSON));
+                    Thread.sleep(<span class="hljs-number">500</span>);
                 }
                 emitter.complete();
-            } catch (Exception e) {
+            } <span class="hljs-keyword">catch</span> (Exception e) {
                 emitter.completeWithError(e);
             }
         });
 
-        return emitter;
+        <span class="hljs-keyword">return</span> emitter;
     }
 }
 
-public record ProgressEvent(String taskId, int percentage) {}
-</code></pre></div>
-<p><strong>SseEmitter 状态流转：</strong></p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>CREATED  →  (客户端连接)  →  PROCESSING  →  completed / completedWithError / timeout
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">ProgressEvent</span><span class="hljs-params">(String taskId, <span class="hljs-type">int</span> percentage)</span> {}
+</code></pre></div><p><strong>SseEmitter 状态流转：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>CREATED  →  (客户端连接)  →  PROCESSING  →  completed <span class="hljs-symbol">/</span> completedWithError <span class="hljs-symbol">/</span> timeout
                                                          ↓
                                                    回调触发（可清理资源）
-</code></pre></div>
-<h4>4.2 超时处理与资源清理</h4>
+</code></pre></div><h4>4.2 超时处理与资源清理</h4>
 <p>SseEmitter 的超时机制是必须理解的关键点：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@GetMapping(&quot;/with-timeout&quot;)
-public SseEmitter sseWithTimeout() {
-    // 超时参数：30 秒，单位毫秒
-    var emitter = new SseEmitter(30_000L);
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@GetMapping("/with-timeout")</span>
+<span class="hljs-keyword">public</span> SseEmitter <span class="hljs-title function_">sseWithTimeout</span><span class="hljs-params">()</span> {
+    <span class="hljs-comment">// 超时参数：30 秒，单位毫秒</span>
+    <span class="hljs-type">var</span> <span class="hljs-variable">emitter</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">SseEmitter</span>(<span class="hljs-number">30_000L</span>);
 
-    // 注册超时回调
+    <span class="hljs-comment">// 注册超时回调</span>
     emitter.onTimeout(() -&gt; {
-        log.warn(&quot;SSE 连接超时，emitter: {}&quot;, emitter);
-        // 清理相关资源：关闭数据库连接、释放锁等
+        log.warn(<span class="hljs-string">"SSE 连接超时，emitter: {}"</span>, emitter);
+        <span class="hljs-comment">// 清理相关资源：关闭数据库连接、释放锁等</span>
     });
 
-    // 注册完成回调
+    <span class="hljs-comment">// 注册完成回调</span>
     emitter.onCompletion(() -&gt; {
-        log.info(&quot;SSE 数据传输完成&quot;);
+        log.info(<span class="hljs-string">"SSE 数据传输完成"</span>);
     });
 
-    // 注册错误回调
+    <span class="hljs-comment">// 注册错误回调</span>
     emitter.onError(throwable -&gt; {
-        log.error(&quot;SSE 传输异常&quot;, throwable);
+        log.error(<span class="hljs-string">"SSE 传输异常"</span>, throwable);
     });
 
     Thread.ofVirtual().start(() -&gt; {
-        try {
-            // 长时间操作：逐批查询数据并发送
-            for (int batch = 0; batch &lt; 100; batch++) {
-                if (emitter.isExpired()) {
-                    log.info(&quot;Emitter 已过期，停止发送&quot;);
-                    return;
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-comment">// 长时间操作：逐批查询数据并发送</span>
+            <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">batch</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; batch &lt; <span class="hljs-number">100</span>; batch++) {
+                <span class="hljs-keyword">if</span> (emitter.isExpired()) {
+                    log.info(<span class="hljs-string">"Emitter 已过期，停止发送"</span>);
+                    <span class="hljs-keyword">return</span>;
                 }
-                var batchData = simulateLongQuery(batch);
+                <span class="hljs-type">var</span> <span class="hljs-variable">batchData</span> <span class="hljs-operator">=</span> simulateLongQuery(batch);
                 emitter.send(SseEmitter.event()
                         .data(batchData, MediaType.APPLICATION_JSON));
-                Thread.sleep(500);
+                Thread.sleep(<span class="hljs-number">500</span>);
             }
             emitter.complete();
-        } catch (IOException e) {
-            // 客户端断开连接导致 IOException
-            log.info(&quot;客户端已断开连接，停止 SSE 推送&quot;);
-        } catch (Exception e) {
-            try {
+        } <span class="hljs-keyword">catch</span> (IOException e) {
+            <span class="hljs-comment">// 客户端断开连接导致 IOException</span>
+            log.info(<span class="hljs-string">"客户端已断开连接，停止 SSE 推送"</span>);
+        } <span class="hljs-keyword">catch</span> (Exception e) {
+            <span class="hljs-keyword">try</span> {
                 emitter.completeWithError(e);
-            } catch (IOException ex) {
-                log.error(&quot;发送错误事件失败&quot;, ex);
+            } <span class="hljs-keyword">catch</span> (IOException ex) {
+                log.error(<span class="hljs-string">"发送错误事件失败"</span>, ex);
             }
         }
     });
 
-    return emitter;
+    <span class="hljs-keyword">return</span> emitter;
 }
-</code></pre></div>
-<p><strong>重要：</strong> 超时后 SseEmitter 会自动调用 <code>complete()</code>，并且 AsyncContext 会被释放。如果异步线程继续尝试 <code>send()</code>，会抛出 <code>AsyncRequestTimeoutException</code>。必须在发送前检查过期状态或捕获异常。</p>
+</code></pre></div><p><strong>重要：</strong> 超时后 SseEmitter 会自动调用 <code>complete()</code>，并且 AsyncContext 会被释放。如果异步线程继续尝试 <code>send()</code>，会抛出 <code>AsyncRequestTimeoutException</code>。必须在发送前检查过期状态或捕获异常。</p>
 <h4>4.3 客户端的 SSE 接收与自动重连</h4>
 <p>标准 SSE 客户端使用浏览器内置的 <code>EventSource</code> API（注意：<code>EventSource</code> 不支持自定义请求头，需要认证的场景用 <code>fetch</code> + 手动解析流）。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">html</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-html">&lt;!DOCTYPE html&gt;
-&lt;html&gt;
-&lt;head&gt;&lt;title&gt;SSE Client Demo&lt;/title&gt;&lt;/head&gt;
-&lt;body&gt;
-&lt;div id=&quot;output&quot;&gt;&lt;/div&gt;
-&lt;script&gt;
-// === 方式一：EventSource（不支持自定义请求头，浏览器自动重连） ===
-const eventSource = new EventSource(&#39;/api/sse/simple&#39;);
+<div class="code-block"><div class="code-header"><span class="code-lang">html</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-html"><span class="hljs-meta">&lt;!DOCTYPE <span class="hljs-keyword">html</span>&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">html</span>&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">head</span>&gt;</span><span class="hljs-tag">&lt;<span class="hljs-name">title</span>&gt;</span>SSE Client Demo<span class="hljs-tag">&lt;/<span class="hljs-name">title</span>&gt;</span><span class="hljs-tag">&lt;/<span class="hljs-name">head</span>&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">body</span>&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">div</span> <span class="hljs-attr">id</span>=<span class="hljs-string">"output"</span>&gt;</span><span class="hljs-tag">&lt;/<span class="hljs-name">div</span>&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">script</span>&gt;</span><span class="language-javascript">
+<span class="hljs-comment">// === 方式一：EventSource（不支持自定义请求头，浏览器自动重连） ===</span>
+<span class="hljs-keyword">const</span> eventSource = <span class="hljs-keyword">new</span> <span class="hljs-title class_">EventSource</span>(<span class="hljs-string">'/api/sse/simple'</span>);
 
-// 监听默认消息事件（没有 event: 字段的数据）
-eventSource.onmessage = (event) =&gt; {
-    console.log(&#39;Default event:&#39;, event.data);
+<span class="hljs-comment">// 监听默认消息事件（没有 event: 字段的数据）</span>
+eventSource.<span class="hljs-property">onmessage</span> = <span class="hljs-function">(<span class="hljs-params">event</span>) =&gt;</span> {
+    <span class="hljs-variable language_">console</span>.<span class="hljs-title function_">log</span>(<span class="hljs-string">'Default event:'</span>, event.<span class="hljs-property">data</span>);
 };
 
-// 监听自定义事件
-eventSource.addEventListener(&#39;progress&#39;, (event) =&gt; {
-    document.getElementById(&#39;output&#39;).innerHTML +=
-        `&lt;p&gt;Progress: ${event.data} (id: ${event.lastEventId})&lt;/p&gt;`;
+<span class="hljs-comment">// 监听自定义事件</span>
+eventSource.<span class="hljs-title function_">addEventListener</span>(<span class="hljs-string">'progress'</span>, <span class="hljs-function">(<span class="hljs-params">event</span>) =&gt;</span> {
+    <span class="hljs-variable language_">document</span>.<span class="hljs-title function_">getElementById</span>(<span class="hljs-string">'output'</span>).<span class="hljs-property">innerHTML</span> +=
+        <span class="hljs-string">`&lt;p&gt;Progress: <span class="hljs-subst">${event.data}</span> (id: <span class="hljs-subst">${event.lastEventId}</span>)&lt;/p&gt;`</span>;
 });
 
-eventSource.addEventListener(&#39;complete&#39;, (event) =&gt; {
-    document.getElementById(&#39;output&#39;).innerHTML += `&lt;p&gt;Complete!&lt;/p&gt;`;
-    eventSource.close();  // 主动关闭连接
+eventSource.<span class="hljs-title function_">addEventListener</span>(<span class="hljs-string">'complete'</span>, <span class="hljs-function">(<span class="hljs-params">event</span>) =&gt;</span> {
+    <span class="hljs-variable language_">document</span>.<span class="hljs-title function_">getElementById</span>(<span class="hljs-string">'output'</span>).<span class="hljs-property">innerHTML</span> += <span class="hljs-string">`&lt;p&gt;Complete!&lt;/p&gt;`</span>;
+    eventSource.<span class="hljs-title function_">close</span>();  <span class="hljs-comment">// 主动关闭连接</span>
 });
 
-// EventSource 会在以下情况自动重连：
-// 1. 连接断开（网络问题）
-// 2. 服务端主动关闭连接
-// 3. 每次重连间隔递增（由浏览器实现）
-// 重连时浏览器自动发送 Last-Event-ID 请求头
-eventSource.onerror = (event) =&gt; {
-    if (eventSource.readyState === EventSource.CLOSED) {
-        console.log(&#39;连接已关闭，不再重连&#39;);
-    } else {
-        console.log(&#39;连接错误，尝试重连...&#39;);
+<span class="hljs-comment">// EventSource 会在以下情况自动重连：</span>
+<span class="hljs-comment">// 1. 连接断开（网络问题）</span>
+<span class="hljs-comment">// 2. 服务端主动关闭连接</span>
+<span class="hljs-comment">// 3. 每次重连间隔递增（由浏览器实现）</span>
+<span class="hljs-comment">// 重连时浏览器自动发送 Last-Event-ID 请求头</span>
+eventSource.<span class="hljs-property">onerror</span> = <span class="hljs-function">(<span class="hljs-params">event</span>) =&gt;</span> {
+    <span class="hljs-keyword">if</span> (eventSource.<span class="hljs-property">readyState</span> === <span class="hljs-title class_">EventSource</span>.<span class="hljs-property">CLOSED</span>) {
+        <span class="hljs-variable language_">console</span>.<span class="hljs-title function_">log</span>(<span class="hljs-string">'连接已关闭，不再重连'</span>);
+    } <span class="hljs-keyword">else</span> {
+        <span class="hljs-variable language_">console</span>.<span class="hljs-title function_">log</span>(<span class="hljs-string">'连接错误，尝试重连...'</span>);
     }
 };
 
-// === 方式二：fetch + ReadableStream（支持自定义请求头、POST） ===
-async function fetchSSE() {
-    try {
-        const response = await fetch(&#39;/api/ai/chat/stream&#39;, {
-            method: &#39;POST&#39;,
-            headers: {
-                &#39;Content-Type&#39;: &#39;application/json&#39;,
-                &#39;Authorization&#39;: &#39;Bearer &#39; + getToken()
+<span class="hljs-comment">// === 方式二：fetch + ReadableStream（支持自定义请求头、POST） ===</span>
+<span class="hljs-keyword">async</span> <span class="hljs-keyword">function</span> <span class="hljs-title function_">fetchSSE</span>(<span class="hljs-params"></span>) {
+    <span class="hljs-keyword">try</span> {
+        <span class="hljs-keyword">const</span> response = <span class="hljs-keyword">await</span> <span class="hljs-title function_">fetch</span>(<span class="hljs-string">'/api/ai/chat/stream'</span>, {
+            <span class="hljs-attr">method</span>: <span class="hljs-string">'POST'</span>,
+            <span class="hljs-attr">headers</span>: {
+                <span class="hljs-string">'Content-Type'</span>: <span class="hljs-string">'application/json'</span>,
+                <span class="hljs-string">'Authorization'</span>: <span class="hljs-string">'Bearer '</span> + <span class="hljs-title function_">getToken</span>()
             },
-            body: JSON.stringify({ message: &#39;Hello&#39; })
+            <span class="hljs-attr">body</span>: <span class="hljs-title class_">JSON</span>.<span class="hljs-title function_">stringify</span>({ <span class="hljs-attr">message</span>: <span class="hljs-string">'Hello'</span> })
         });
 
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = &#39;&#39;;
+        <span class="hljs-keyword">const</span> reader = response.<span class="hljs-property">body</span>.<span class="hljs-title function_">getReader</span>();
+        <span class="hljs-keyword">const</span> decoder = <span class="hljs-keyword">new</span> <span class="hljs-title class_">TextDecoder</span>();
+        <span class="hljs-keyword">let</span> buffer = <span class="hljs-string">''</span>;
 
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
+        <span class="hljs-keyword">while</span> (<span class="hljs-literal">true</span>) {
+            <span class="hljs-keyword">const</span> { done, value } = <span class="hljs-keyword">await</span> reader.<span class="hljs-title function_">read</span>();
+            <span class="hljs-keyword">if</span> (done) <span class="hljs-keyword">break</span>;
 
-            buffer += decoder.decode(value, { stream: true });
+            buffer += decoder.<span class="hljs-title function_">decode</span>(value, { <span class="hljs-attr">stream</span>: <span class="hljs-literal">true</span> });
 
-            // SSE 格式解析：事件以 \n\n 分隔
-            const lines = buffer.split(&#39;\n&#39;);
-            buffer = lines.pop() || &#39;&#39;;  // 保留不完整的最后一行
+            <span class="hljs-comment">// SSE 格式解析：事件以 \n\n 分隔</span>
+            <span class="hljs-keyword">const</span> lines = buffer.<span class="hljs-title function_">split</span>(<span class="hljs-string">'\n'</span>);
+            buffer = lines.<span class="hljs-title function_">pop</span>() || <span class="hljs-string">''</span>;  <span class="hljs-comment">// 保留不完整的最后一行</span>
 
-            for (const line of lines) {
-                if (line.startsWith(&#39;data: &#39;)) {
-                    const json = line.substring(6);
-                    if (json === &#39;[DONE]&#39;) {
-                        console.log(&#39;Stream complete&#39;);
-                        return;
+            <span class="hljs-keyword">for</span> (<span class="hljs-keyword">const</span> line <span class="hljs-keyword">of</span> lines) {
+                <span class="hljs-keyword">if</span> (line.<span class="hljs-title function_">startsWith</span>(<span class="hljs-string">'data: '</span>)) {
+                    <span class="hljs-keyword">const</span> json = line.<span class="hljs-title function_">substring</span>(<span class="hljs-number">6</span>);
+                    <span class="hljs-keyword">if</span> (json === <span class="hljs-string">'[DONE]'</span>) {
+                        <span class="hljs-variable language_">console</span>.<span class="hljs-title function_">log</span>(<span class="hljs-string">'Stream complete'</span>);
+                        <span class="hljs-keyword">return</span>;
                     }
-                    const data = JSON.parse(json);
-                    console.log(&#39;Received:&#39;, data);
+                    <span class="hljs-keyword">const</span> data = <span class="hljs-title class_">JSON</span>.<span class="hljs-title function_">parse</span>(json);
+                    <span class="hljs-variable language_">console</span>.<span class="hljs-title function_">log</span>(<span class="hljs-string">'Received:'</span>, data);
                 }
             }
         }
-    } catch (error) {
-        console.error(&#39;SSE fetch error:&#39;, error);
-        // 手动重连逻辑
-        setTimeout(() =&gt; fetchSSE(), 3000);
+    } <span class="hljs-keyword">catch</span> (error) {
+        <span class="hljs-variable language_">console</span>.<span class="hljs-title function_">error</span>(<span class="hljs-string">'SSE fetch error:'</span>, error);
+        <span class="hljs-comment">// 手动重连逻辑</span>
+        <span class="hljs-built_in">setTimeout</span>(<span class="hljs-function">() =&gt;</span> <span class="hljs-title function_">fetchSSE</span>(), <span class="hljs-number">3000</span>);
     }
 }
-&lt;/script&gt;
-&lt;/body&gt;
-&lt;/html&gt;
-</code></pre></div>
-<h4>4.4 WebSocket 与 SSE 对比</h4>
+</span><span class="hljs-tag">&lt;/<span class="hljs-name">script</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">body</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">html</span>&gt;</span>
+</code></pre></div><h4>4.4 WebSocket 与 SSE 对比</h4>
 <table>
 <thead>
 <tr>
@@ -789,331 +771,329 @@ async function fetchSSE() {
 <p>这是 SSE 在 AI 应用中最关键的实战场景。LLM 的 Chat Completion API 通常支持两种模式：一次性返回（<code>stream: false</code>）和流式返回（<code>stream: true</code>）。流式返回使用 SSE 逐 Token 推送生成的文本，大幅降低首 Token 延迟（TTFT），提升用户体验。</p>
 <h4>5.1 完整实现：Chat Completion 流式输出</h4>
 <p>以下是一个生产级的 Chat Stream Controller 实现，包含超时控制、错误处理、客户端断开感知、资源清理：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@RestController
-@RequestMapping(&quot;/api/ai/chat&quot;)
-public class ChatStreamController {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@RestController</span>
+<span class="hljs-meta">@RequestMapping("/api/ai/chat")</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ChatStreamController</span> {
 
-    private static final Logger log = LoggerFactory.getLogger(ChatStreamController.class);
-    private final ChatModelService chatModelService;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">Logger</span> <span class="hljs-variable">log</span> <span class="hljs-operator">=</span> LoggerFactory.getLogger(ChatStreamController.class);
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> ChatModelService chatModelService;
 
-    // JDK 25: 使用构造器注入（无需 @Autowired）
-    public ChatStreamController(ChatModelService chatModelService) {
-        this.chatModelService = chatModelService;
+    <span class="hljs-comment">// JDK 25: 使用构造器注入（无需 @Autowired）</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">ChatStreamController</span><span class="hljs-params">(ChatModelService chatModelService)</span> {
+        <span class="hljs-built_in">this</span>.chatModelService = chatModelService;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 流式聊天接口。
      * 客户端发起 POST 请求后，服务器通过 SSE 逐 Token 推送模型响应。
      *
-     * @param request  用户消息
-     * @param response HttpServletResponse，用于设置 SSE 响应头
-     * @return SseEmitter
-     */
-    @PostMapping(value = &quot;/stream&quot;, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter chatStream(@RequestBody ChatRequest request,
-                                  HttpServletResponse response) {
-        // 设置正确的 SSE 响应头（部分浏览器对 charset 有严格要求）
-        response.setHeader(&quot;Cache-Control&quot;, &quot;no-cache&quot;);
-        response.setHeader(&quot;Connection&quot;, &quot;keep-alive&quot;);
-        response.setHeader(&quot;X-Accel-Buffering&quot;, &quot;no&quot;);  // 禁用 nginx 缓冲
-        response.setCharacterEncoding(&quot;UTF-8&quot;);
+     * <span class="hljs-doctag">@param</span> request  用户消息
+     * <span class="hljs-doctag">@param</span> response HttpServletResponse，用于设置 SSE 响应头
+     * <span class="hljs-doctag">@return</span> SseEmitter
+     */</span>
+    <span class="hljs-meta">@PostMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)</span>
+    <span class="hljs-keyword">public</span> SseEmitter <span class="hljs-title function_">chatStream</span><span class="hljs-params">(<span class="hljs-meta">@RequestBody</span> ChatRequest request,
+                                  HttpServletResponse response)</span> {
+        <span class="hljs-comment">// 设置正确的 SSE 响应头（部分浏览器对 charset 有严格要求）</span>
+        response.setHeader(<span class="hljs-string">"Cache-Control"</span>, <span class="hljs-string">"no-cache"</span>);
+        response.setHeader(<span class="hljs-string">"Connection"</span>, <span class="hljs-string">"keep-alive"</span>);
+        response.setHeader(<span class="hljs-string">"X-Accel-Buffering"</span>, <span class="hljs-string">"no"</span>);  <span class="hljs-comment">// 禁用 nginx 缓冲</span>
+        response.setCharacterEncoding(<span class="hljs-string">"UTF-8"</span>);
 
-        // 超时时间设置为 5 分钟（根据模型最大生成 Token 数估算）
-        // 假设 50 token/s，最大 4000 tokens = 80 秒，留足余量
-        var emitter = new SseEmitter(300_000L);
+        <span class="hljs-comment">// 超时时间设置为 5 分钟（根据模型最大生成 Token 数估算）</span>
+        <span class="hljs-comment">// 假设 50 token/s，最大 4000 tokens = 80 秒，留足余量</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">emitter</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">SseEmitter</span>(<span class="hljs-number">300_000L</span>);
 
-        // 超时时的清理逻辑
-        var cleanup = registerCleanup(emitter, request);
+        <span class="hljs-comment">// 超时时的清理逻辑</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">cleanup</span> <span class="hljs-operator">=</span> registerCleanup(emitter, request);
 
-        // 使用 Virtual Thread 处理，不占用 Tomcat Worker 线程池
+        <span class="hljs-comment">// 使用 Virtual Thread 处理，不占用 Tomcat Worker 线程池</span>
         Thread.ofVirtual()
-                .name(&quot;chat-stream-&quot; + request.conversationId())
+                .name(<span class="hljs-string">"chat-stream-"</span> + request.conversationId())
                 .start(() -&gt; handleChatStream(emitter, request, cleanup));
 
-        return emitter;
+        <span class="hljs-keyword">return</span> emitter;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 注册资源清理回调。返回一个 Runnable，在流结束时关闭资源。
-     */
-    private Runnable registerCleanup(SseEmitter emitter, ChatRequest request) {
-        Runnable cleanup = () -&gt; {
-            log.info(&quot;清理 chat stream 资源, conversationId: {}&quot;, request.conversationId());
-            // 通知模型服务取消生成、释放 Token 等
+     */</span>
+    <span class="hljs-keyword">private</span> Runnable <span class="hljs-title function_">registerCleanup</span><span class="hljs-params">(SseEmitter emitter, ChatRequest request)</span> {
+        <span class="hljs-type">Runnable</span> <span class="hljs-variable">cleanup</span> <span class="hljs-operator">=</span> () -&gt; {
+            log.info(<span class="hljs-string">"清理 chat stream 资源, conversationId: {}"</span>, request.conversationId());
+            <span class="hljs-comment">// 通知模型服务取消生成、释放 Token 等</span>
             chatModelService.cancelGeneration(request.conversationId());
         };
 
         emitter.onTimeout(() -&gt; {
-            log.warn(&quot;SSE timeout, conversationId: {}&quot;, request.conversationId());
+            log.warn(<span class="hljs-string">"SSE timeout, conversationId: {}"</span>, request.conversationId());
             cleanup.run();
         });
         emitter.onError(e -&gt; {
-            log.error(&quot;SSE error, conversationId: {}&quot;, request.conversationId(), e);
+            log.error(<span class="hljs-string">"SSE error, conversationId: {}"</span>, request.conversationId(), e);
             cleanup.run();
         });
         emitter.onCompletion(() -&gt; {
-            log.info(&quot;SSE complete, conversationId: {}&quot;, request.conversationId());
+            log.info(<span class="hljs-string">"SSE complete, conversationId: {}"</span>, request.conversationId());
             cleanup.run();
         });
 
-        return cleanup;
+        <span class="hljs-keyword">return</span> cleanup;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 核心流式处理逻辑。模拟调用 LLM API 的流式接口，逐 Token 发送。
-     */
-    private void handleChatStream(SseEmitter emitter, ChatRequest request, Runnable cleanup) {
-        try {
-            // 第 1 步：保存用户消息（可以在这里做敏感词审核）
+     */</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">handleChatStream</span><span class="hljs-params">(SseEmitter emitter, ChatRequest request, Runnable cleanup)</span> {
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-comment">// 第 1 步：保存用户消息（可以在这里做敏感词审核）</span>
             saveUserMessage(request);
 
-            // 第 2 步：发送会话元数据事件
-            var conversationId = request.conversationId() != null
+            <span class="hljs-comment">// 第 2 步：发送会话元数据事件</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">conversationId</span> <span class="hljs-operator">=</span> request.conversationId() != <span class="hljs-literal">null</span>
                     ? request.conversationId()
                     : UUID.randomUUID().toString();
             emitter.send(SseEmitter.event()
-                    .id(&quot;1&quot;)
-                    .name(&quot;metadata&quot;)
-                    .data(new StreamMetadata(conversationId, &quot;started&quot;), MediaType.APPLICATION_JSON));
+                    .id(<span class="hljs-string">"1"</span>)
+                    .name(<span class="hljs-string">"metadata"</span>)
+                    .data(<span class="hljs-keyword">new</span> <span class="hljs-title class_">StreamMetadata</span>(conversationId, <span class="hljs-string">"started"</span>), MediaType.APPLICATION_JSON));
 
-            // 第 3 步：调用模型流式 API，逐 Token 发送
-            int tokenCount = 0;
-            StringBuilder fullResponse = new StringBuilder();
-            long eventId = 2;  // SseEmitter.event().id() 要求 String 但此处用序号
+            <span class="hljs-comment">// 第 3 步：调用模型流式 API，逐 Token 发送</span>
+            <span class="hljs-type">int</span> <span class="hljs-variable">tokenCount</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+            <span class="hljs-type">StringBuilder</span> <span class="hljs-variable">fullResponse</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>();
+            <span class="hljs-type">long</span> <span class="hljs-variable">eventId</span> <span class="hljs-operator">=</span> <span class="hljs-number">2</span>;  <span class="hljs-comment">// SseEmitter.event().id() 要求 String 但此处用序号</span>
 
-            try (var stream = chatModelService.chatStream(request)) {
-                while (stream.hasNext()) {
-                    // 检查客户端是否断开
-                    if (emitter.isExpired()) {
-                        log.info(&quot;Emitter expired, stop streaming&quot;);
-                        break;
+            <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">stream</span> <span class="hljs-operator">=</span> chatModelService.chatStream(request)) {
+                <span class="hljs-keyword">while</span> (stream.hasNext()) {
+                    <span class="hljs-comment">// 检查客户端是否断开</span>
+                    <span class="hljs-keyword">if</span> (emitter.isExpired()) {
+                        log.info(<span class="hljs-string">"Emitter expired, stop streaming"</span>);
+                        <span class="hljs-keyword">break</span>;
                     }
 
-                    var token = stream.next();
+                    <span class="hljs-type">var</span> <span class="hljs-variable">token</span> <span class="hljs-operator">=</span> stream.next();
                     tokenCount++;
 
-                    // 发送 token delta 事件
+                    <span class="hljs-comment">// 发送 token delta 事件</span>
                     emitter.send(SseEmitter.event()
                             .id(String.valueOf(eventId++))
-                            .name(&quot;token&quot;)
-                            .data(new TokenDelta(token.content(), tokenCount), MediaType.APPLICATION_JSON));
+                            .name(<span class="hljs-string">"token"</span>)
+                            .data(<span class="hljs-keyword">new</span> <span class="hljs-title class_">TokenDelta</span>(token.content(), tokenCount), MediaType.APPLICATION_JSON));
 
                     fullResponse.append(token.content());
 
-                    // 可选：发送心跳保持连接（每 30 个 token 或 15 秒）
-                    if (tokenCount % 30 == 0) {
+                    <span class="hljs-comment">// 可选：发送心跳保持连接（每 30 个 token 或 15 秒）</span>
+                    <span class="hljs-keyword">if</span> (tokenCount % <span class="hljs-number">30</span> == <span class="hljs-number">0</span>) {
                         emitter.send(SseEmitter.event()
-                                .comment(&quot;heartbeat&quot;));  // 注释事件，浏览器 JavaScript 不会触发回调
+                                .comment(<span class="hljs-string">"heartbeat"</span>));  <span class="hljs-comment">// 注释事件，浏览器 JavaScript 不会触发回调</span>
                     }
                 }
             }
 
-            // 第 4 步：发送完成事件
-            var usage = new TokenUsage(tokenCount, stream.estimatedPromptTokens());
+            <span class="hljs-comment">// 第 4 步：发送完成事件</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">usage</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">TokenUsage</span>(tokenCount, stream.estimatedPromptTokens());
             emitter.send(SseEmitter.event()
                     .id(String.valueOf(eventId))
-                    .name(&quot;done&quot;)
+                    .name(<span class="hljs-string">"done"</span>)
                     .data(usage, MediaType.APPLICATION_JSON));
 
-            // 第 5 步：保存完整消息到数据库
+            <span class="hljs-comment">// 第 5 步：保存完整消息到数据库</span>
             saveAssistantMessage(request, fullResponse.toString(), tokenCount);
 
-            // 第 6 步：完成 SSE
+            <span class="hljs-comment">// 第 6 步：完成 SSE</span>
             emitter.complete();
-            log.info(&quot;Chat stream finished, conversationId: {}, tokens: {}&quot;, conversationId, tokenCount);
+            log.info(<span class="hljs-string">"Chat stream finished, conversationId: {}, tokens: {}"</span>, conversationId, tokenCount);
 
-        } catch (IOException e) {
-            // 客户端断开连接是最常见的情况
-            log.info(&quot;Client disconnected, conversationId: {}&quot;, request.conversationId());
-            try {
+        } <span class="hljs-keyword">catch</span> (IOException e) {
+            <span class="hljs-comment">// 客户端断开连接是最常见的情况</span>
+            log.info(<span class="hljs-string">"Client disconnected, conversationId: {}"</span>, request.conversationId());
+            <span class="hljs-keyword">try</span> {
                 emitter.complete();
-            } catch (IOException ignored) {}
-        } catch (Exception e) {
-            log.error(&quot;Chat stream error, conversationId: {}&quot;, request.conversationId(), e);
-            try {
+            } <span class="hljs-keyword">catch</span> (IOException ignored) {}
+        } <span class="hljs-keyword">catch</span> (Exception e) {
+            log.error(<span class="hljs-string">"Chat stream error, conversationId: {}"</span>, request.conversationId(), e);
+            <span class="hljs-keyword">try</span> {
                 emitter.send(SseEmitter.event()
-                        .name(&quot;error&quot;)
-                        .data(new StreamError(e.getClass().getSimpleName(), e.getMessage())));
+                        .name(<span class="hljs-string">"error"</span>)
+                        .data(<span class="hljs-keyword">new</span> <span class="hljs-title class_">StreamError</span>(e.getClass().getSimpleName(), e.getMessage())));
                 emitter.completeWithError(e);
-            } catch (IOException ex) {
-                log.error(&quot;Failed to send error event&quot;, ex);
+            } <span class="hljs-keyword">catch</span> (IOException ex) {
+                log.error(<span class="hljs-string">"Failed to send error event"</span>, ex);
             }
-        } finally {
+        } <span class="hljs-keyword">finally</span> {
             cleanup.run();
         }
     }
 
-    // 辅助方法（简化实现）
-    private void saveUserMessage(ChatRequest request) {
-        // 实现：持久化用户消息到数据库
+    <span class="hljs-comment">// 辅助方法（简化实现）</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">saveUserMessage</span><span class="hljs-params">(ChatRequest request)</span> {
+        <span class="hljs-comment">// 实现：持久化用户消息到数据库</span>
     }
 
-    private void saveAssistantMessage(ChatRequest request, String fullResponse, int tokenCount) {
-        // 实现：持久化助手回复到数据库
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">saveAssistantMessage</span><span class="hljs-params">(ChatRequest request, String fullResponse, <span class="hljs-type">int</span> tokenCount)</span> {
+        <span class="hljs-comment">// 实现：持久化助手回复到数据库</span>
     }
 }
 
-// === 数据对象 ===
+<span class="hljs-comment">// === 数据对象 ===</span>
 
-public record ChatRequest(
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">ChatRequest</span><span class="hljs-params">(
         String conversationId,
         String message,
         Map&lt;String, Object&gt; context
-) {}
+)</span> {}
 
-public record TokenDelta(
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">TokenDelta</span><span class="hljs-params">(
         String content,
-        int index
-) {}
+        <span class="hljs-type">int</span> index
+)</span> {}
 
-public record StreamMetadata(
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">StreamMetadata</span><span class="hljs-params">(
         String conversationId,
         String status
-) {}
+)</span> {}
 
-public record TokenUsage(
-        int completionTokens,
-        int promptTokens
-) {}
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">TokenUsage</span><span class="hljs-params">(
+        <span class="hljs-type">int</span> completionTokens,
+        <span class="hljs-type">int</span> promptTokens
+)</span> {}
 
-public record StreamError(
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">StreamError</span><span class="hljs-params">(
         String type,
         String message
-) {
-    public static StreamError fromException(Exception e) {
-        return new StreamError(e.getClass().getSimpleName(), e.getMessage());
+)</span> {
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> StreamError <span class="hljs-title function_">fromException</span><span class="hljs-params">(Exception e)</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StreamError</span>(e.getClass().getSimpleName(), e.getMessage());
     }
 }
-</code></pre></div>
-<h4>5.2 ChatModelService：模拟 LLM API 流式调用</h4>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
-public class ChatModelService {
+</code></pre></div><h4>5.2 ChatModelService：模拟 LLM API 流式调用</h4>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ChatModelService</span> {
 
-    private static final Logger log = LoggerFactory.getLogger(ChatModelService.class);
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">Logger</span> <span class="hljs-variable">log</span> <span class="hljs-operator">=</span> LoggerFactory.getLogger(ChatModelService.class);
 
-    /**
+    <span class="hljs-comment">/**
      * 模拟调用 LLM 的流式 API。
      * 生产环境中这里会通过 OpenAI SDK、Anthropic SDK 或 Spring AI 进行实际的 API 调用。
      *
-     * @param request 聊天请求
-     * @return 可遍历的 Token 流，实现了 AutoCloseable 以便资源清理
-     */
-    public TokenStream chatStream(ChatRequest request) {
-        // 生产实现：通过 Spring AI ChatClient 调用
-        // var flux = chatClient.prompt()
-        //         .user(request.message())
-        //         .stream()
-        //         .content();
-        // return new FluxTokenStream(flux);
+     * <span class="hljs-doctag">@param</span> request 聊天请求
+     * <span class="hljs-doctag">@return</span> 可遍历的 Token 流，实现了 AutoCloseable 以便资源清理
+     */</span>
+    <span class="hljs-keyword">public</span> TokenStream <span class="hljs-title function_">chatStream</span><span class="hljs-params">(ChatRequest request)</span> {
+        <span class="hljs-comment">// 生产实现：通过 Spring AI ChatClient 调用</span>
+        <span class="hljs-comment">// var flux = chatClient.prompt()</span>
+        <span class="hljs-comment">//         .user(request.message())</span>
+        <span class="hljs-comment">//         .stream()</span>
+        <span class="hljs-comment">//         .content();</span>
+        <span class="hljs-comment">// return new FluxTokenStream(flux);</span>
 
-        // 演示实现：模拟延迟和 Token 生成
-        return new SimulatedTokenStream(request.message());
+        <span class="hljs-comment">// 演示实现：模拟延迟和 Token 生成</span>
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">SimulatedTokenStream</span>(request.message());
     }
 
-    public void cancelGeneration(String conversationId) {
-        // 实现：通过模型 API 的 cancel 机制停止生成
-        log.info(&quot;Cancel generation for conversation: {}&quot;, conversationId);
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">cancelGeneration</span><span class="hljs-params">(String conversationId)</span> {
+        <span class="hljs-comment">// 实现：通过模型 API 的 cancel 机制停止生成</span>
+        log.info(<span class="hljs-string">"Cancel generation for conversation: {}"</span>, conversationId);
     }
 
-    /**
+    <span class="hljs-comment">/**
      * Token 流接口
-     */
-    public interface TokenStream extends AutoCloseable, Iterator&lt;TokenDelta&gt; {
-        boolean hasNext();
-        TokenDelta next();
-        int estimatedPromptTokens();
-        @Override void close();
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">TokenStream</span> <span class="hljs-keyword">extends</span> <span class="hljs-title class_">AutoCloseable</span>, Iterator&lt;TokenDelta&gt; {
+        <span class="hljs-type">boolean</span> <span class="hljs-title function_">hasNext</span><span class="hljs-params">()</span>;
+        TokenDelta <span class="hljs-title function_">next</span><span class="hljs-params">()</span>;
+        <span class="hljs-type">int</span> <span class="hljs-title function_">estimatedPromptTokens</span><span class="hljs-params">()</span>;
+        <span class="hljs-meta">@Override</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">close</span><span class="hljs-params">()</span>;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 模拟 Token 流实现（演示用）
-     */
-    private static class SimulatedTokenStream implements TokenStream {
-        private final List&lt;TokenDelta&gt; tokens;
-        private int index = 0;
+     */</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">SimulatedTokenStream</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">TokenStream</span> {
+        <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> List&lt;TokenDelta&gt; tokens;
+        <span class="hljs-keyword">private</span> <span class="hljs-type">int</span> <span class="hljs-variable">index</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
 
         SimulatedTokenStream(String prompt) {
-            // 模拟模型逐 Token 生成
-            this.tokens = simulateTokens(prompt);
+            <span class="hljs-comment">// 模拟模型逐 Token 生成</span>
+            <span class="hljs-built_in">this</span>.tokens = simulateTokens(prompt);
         }
 
-        private List&lt;TokenDelta&gt; simulateTokens(String prompt) {
-            var words = (&quot;根据您的问题「&quot; + prompt + &quot;」，我来为您详细解答。&quot;
-                    + &quot;这是一个很复杂的问题，涉及多个方面。&quot;
-                    + &quot;首先，我们需要理解核心概念。&quot;
-                    + &quot;其次，在实践中需要注意以下几点。&quot;
-                    + &quot;最后，总结一下关键要点。&quot;
-                    + &quot;建议结合实际案例来加深理解。&quot;).split(&quot;(?&lt;=\\S)(?=\\s)&quot;);
-            var result = new ArrayList&lt;TokenDelta&gt;();
-            for (int i = 0; i &lt; words.length; i++) {
-                result.add(new TokenDelta(words[i], i));
+        <span class="hljs-keyword">private</span> List&lt;TokenDelta&gt; <span class="hljs-title function_">simulateTokens</span><span class="hljs-params">(String prompt)</span> {
+            <span class="hljs-type">var</span> <span class="hljs-variable">words</span> <span class="hljs-operator">=</span> (<span class="hljs-string">"根据您的问题「"</span> + prompt + <span class="hljs-string">"」，我来为您详细解答。"</span>
+                    + <span class="hljs-string">"这是一个很复杂的问题，涉及多个方面。"</span>
+                    + <span class="hljs-string">"首先，我们需要理解核心概念。"</span>
+                    + <span class="hljs-string">"其次，在实践中需要注意以下几点。"</span>
+                    + <span class="hljs-string">"最后，总结一下关键要点。"</span>
+                    + <span class="hljs-string">"建议结合实际案例来加深理解。"</span>).split(<span class="hljs-string">"(?&lt;=\\S)(?=\\s)"</span>);
+            <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;TokenDelta&gt;();
+            <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; words.length; i++) {
+                result.add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">TokenDelta</span>(words[i], i));
             }
-            return result;
+            <span class="hljs-keyword">return</span> result;
         }
 
-        @Override
-        public boolean hasNext() {
-            // 模拟延迟 50-100ms 每个 token
-            try {
-                Thread.sleep(ThreadLocalRandom.current().nextLong(50, 100));
-            } catch (InterruptedException e) {
+        <span class="hljs-meta">@Override</span>
+        <span class="hljs-keyword">public</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">hasNext</span><span class="hljs-params">()</span> {
+            <span class="hljs-comment">// 模拟延迟 50-100ms 每个 token</span>
+            <span class="hljs-keyword">try</span> {
+                Thread.sleep(ThreadLocalRandom.current().nextLong(<span class="hljs-number">50</span>, <span class="hljs-number">100</span>));
+            } <span class="hljs-keyword">catch</span> (InterruptedException e) {
                 Thread.currentThread().interrupt();
-                return false;
+                <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
             }
-            return index &lt; tokens.size();
+            <span class="hljs-keyword">return</span> index &lt; tokens.size();
         }
 
-        @Override
-        public TokenDelta next() {
-            if (!hasNext()) {
-                throw new NoSuchElementException();
+        <span class="hljs-meta">@Override</span>
+        <span class="hljs-keyword">public</span> TokenDelta <span class="hljs-title function_">next</span><span class="hljs-params">()</span> {
+            <span class="hljs-keyword">if</span> (!hasNext()) {
+                <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">NoSuchElementException</span>();
             }
-            return tokens.get(index++);
+            <span class="hljs-keyword">return</span> tokens.get(index++);
         }
 
-        @Override
-        public int estimatedPromptTokens() {
-            return tokens.size() / 4;  // 粗略估算
+        <span class="hljs-meta">@Override</span>
+        <span class="hljs-keyword">public</span> <span class="hljs-type">int</span> <span class="hljs-title function_">estimatedPromptTokens</span><span class="hljs-params">()</span> {
+            <span class="hljs-keyword">return</span> tokens.size() / <span class="hljs-number">4</span>;  <span class="hljs-comment">// 粗略估算</span>
         }
 
-        @Override
-        public void close() {
+        <span class="hljs-meta">@Override</span>
+        <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">close</span><span class="hljs-params">()</span> {
             tokens.clear();
         }
     }
 
-    /**
+    <span class="hljs-comment">/**
      * Spring AI Reactor Flux 适配器（生产使用）
-     */
-    private static class FluxTokenStream implements TokenStream {
-        private final Iterator&lt;String&gt; delegate;
-        private int index = 0;
-        private boolean closed = false;
+     */</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">FluxTokenStream</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">TokenStream</span> {
+        <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Iterator&lt;String&gt; delegate;
+        <span class="hljs-keyword">private</span> <span class="hljs-type">int</span> <span class="hljs-variable">index</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">private</span> <span class="hljs-type">boolean</span> <span class="hljs-variable">closed</span> <span class="hljs-operator">=</span> <span class="hljs-literal">false</span>;
 
         FluxTokenStream(Flux&lt;String&gt; flux) {
-            // 阻塞式获取 Virtual Thread 场景下可使用 toIterable()
-            this.delegate = flux.toIterable().iterator();
+            <span class="hljs-comment">// 阻塞式获取 Virtual Thread 场景下可使用 toIterable()</span>
+            <span class="hljs-built_in">this</span>.delegate = flux.toIterable().iterator();
         }
 
-        @Override
-        public boolean hasNext() {
-            return !closed &amp;&amp; delegate.hasNext();
+        <span class="hljs-meta">@Override</span>
+        <span class="hljs-keyword">public</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">hasNext</span><span class="hljs-params">()</span> {
+            <span class="hljs-keyword">return</span> !closed &amp;&amp; delegate.hasNext();
         }
 
-        @Override
-        public TokenDelta next() {
-            return new TokenDelta(delegate.next(), index++);
+        <span class="hljs-meta">@Override</span>
+        <span class="hljs-keyword">public</span> TokenDelta <span class="hljs-title function_">next</span><span class="hljs-params">()</span> {
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">TokenDelta</span>(delegate.next(), index++);
         }
 
-        @Override
-        public int estimatedPromptTokens() { return 0; }
+        <span class="hljs-meta">@Override</span>
+        <span class="hljs-keyword">public</span> <span class="hljs-type">int</span> <span class="hljs-title function_">estimatedPromptTokens</span><span class="hljs-params">()</span> { <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>; }
 
-        @Override
-        public void close() { closed = true; }
+        <span class="hljs-meta">@Override</span>
+        <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">close</span><span class="hljs-params">()</span> { closed = <span class="hljs-literal">true</span>; }
     }
 }
-</code></pre></div>
-<h4>5.3 为什么使用 Virtual Threads 而非 WebFlux 处理 SSE</h4>
+</code></pre></div><h4>5.3 为什么使用 Virtual Threads 而非 WebFlux 处理 SSE</h4>
 <p>SSE 场景下，每个客户端连接需要维持一个长连接。传统 Servlet 容器（Tomcat）的 Worker 线程池有限（默认 200），如果有大量 SSE 连接，Worker 线程会很快耗尽。</p>
 <p>Virtual Threads 从根本上解决了这个问题：</p>
 <ul>
@@ -1121,124 +1101,119 @@ public class ChatModelService {
 <li>Virtual Thread 在 <code>Thread.sleep()</code> 或阻塞 I/O 时释放底层的平台线程（Carrier Thread）</li>
 <li>可以支撑数万个并发 SSE 连接而不会耗尽平台线程资源</li>
 </ul>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Configuration
-public class TomcatVirtualThreadConfig {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Configuration</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">TomcatVirtualThreadConfig</span> {
 
-    @Bean
-    public TomcatProtocolHandlerCustomizer&lt;?&gt; protocolHandlerVirtualThreadExecutor() {
-        return protocolHandler -&gt; {
-            // 将 Tomcat 的请求处理线程池替换为 Virtual Thread Per Task Executor
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-keyword">public</span> TomcatProtocolHandlerCustomizer&lt;?&gt; protocolHandlerVirtualThreadExecutor() {
+        <span class="hljs-keyword">return</span> protocolHandler -&gt; {
+            <span class="hljs-comment">// 将 Tomcat 的请求处理线程池替换为 Virtual Thread Per Task Executor</span>
             protocolHandler.setExecutor(Executors.newVirtualThreadPerTaskExecutor());
         };
     }
 }
-</code></pre></div>
-<p>此配置后，每个 HTTP 请求（包括 SSE 长连接）都在独立的 Virtual Thread 上运行。当 SSESender 线程因 <code>Thread.sleep()</code> 阻塞时，底层平台线程被释放处理其他请求。</p>
+</code></pre></div><p>此配置后，每个 HTTP 请求（包括 SSE 长连接）都在独立的 Virtual Thread 上运行。当 SSESender 线程因 <code>Thread.sleep()</code> 阻塞时，底层平台线程被释放处理其他请求。</p>
 <h4>5.4 生产级注意事项汇总</h4>
 <ol>
 <li><p><strong>Nginx 缓冲问题：</strong> 如果前端使用 Nginx 反向代理，默认会缓冲代理响应。必须添加配置：<code>proxy_buffering off;</code> 和 <code>proxy_cache off;</code>。或者在响应头中设置 <code>X-Accel-Buffering: no</code>。</p>
 </li>
-<li><p><strong>HTTP/2 的多路复用：</strong> 建议升级到 HTTP/2，可以突破 HTTP/1.1 的&quot;同域 6 个并发连接&quot;限制，且 Header 压缩减少开销。</p>
+<li><p><strong>HTTP/2 的多路复用：</strong> 建议升级到 HTTP/2，可以突破 HTTP/1.1 的"同域 6 个并发连接"限制，且 Header 压缩减少开销。</p>
 </li>
 <li><p><strong>事件 ID 的语义：</strong> <code>SseEmitter.event().id()</code> 对应 SSE 规范的 <code>id:</code> 字段。浏览器 EventSource 将 <code>lastEventId</code> 作为重连时的 <code>Last-Event-ID</code> 请求头发送。可以利用此机制实现断点续传。</p>
 </li>
 <li><p><strong>SseEmitter 超时与 Tomcat 异步超时：</strong> <code>SseEmitter(timeout)</code> 的超时需要小于 Tomcat 的 <code>asyncTimeout</code>（默认 30 秒，可配置 <code>spring.mvc.async.request-timeout</code>）。如果 Tomcat 异步超时先触发，SSE 连接的 AsyncContext 被销毁，后续 <code>send()</code> 会失败。</p>
 </li>
 </ol>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># application.yml
-spring:
-  mvc:
-    async:
-      request-timeout: 300000  # 5分钟，与 SseEmitter 超时保持一致
-</code></pre></div>
-<ol start="5">
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-comment"># application.yml</span>
+<span class="hljs-attr">spring:</span>
+  <span class="hljs-attr">mvc:</span>
+    <span class="hljs-attr">async:</span>
+      <span class="hljs-attr">request-timeout:</span> <span class="hljs-number">300000</span>  <span class="hljs-comment"># 5分钟，与 SseEmitter 超时保持一致</span>
+</code></pre></div><ol start="5">
 <li><p><strong>连接泄漏防护：</strong> 始终在 <code>onTimeout</code>、<code>onError</code>、<code>onCompletion</code> 回调中释放资源。使用 try-with-resources 或 finally 确保模型 API 的流被关闭。</p>
 </li>
 <li><p><strong>监控指标：</strong></p>
 </li>
 </ol>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Component
-public class SseMetrics {
-    private final MeterRegistry registry;
-    private final Counter activeConnections;
-    private final Counter totalEvents;
-    private final Counter errors;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">SseMetrics</span> {
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> MeterRegistry registry;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Counter activeConnections;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Counter totalEvents;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Counter errors;
 
-    public SseMetrics(MeterRegistry registry) {
-        this.registry = registry;
-        this.activeConnections = Counter.builder(&quot;sse.connections.active&quot;).register(registry);
-        this.totalEvents = Counter.builder(&quot;sse.events.total&quot;).register(registry);
-        this.errors = Counter.builder(&quot;sse.errors.total&quot;).register(registry);
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">SseMetrics</span><span class="hljs-params">(MeterRegistry registry)</span> {
+        <span class="hljs-built_in">this</span>.registry = registry;
+        <span class="hljs-built_in">this</span>.activeConnections = Counter.builder(<span class="hljs-string">"sse.connections.active"</span>).register(registry);
+        <span class="hljs-built_in">this</span>.totalEvents = Counter.builder(<span class="hljs-string">"sse.events.total"</span>).register(registry);
+        <span class="hljs-built_in">this</span>.errors = Counter.builder(<span class="hljs-string">"sse.errors.total"</span>).register(registry);
     }
 
-    public void onConnectionOpen() { activeConnections.increment(); }
-    public void onConnectionClose() { activeConnections.increment(-1); }
-    public void onEvent() { totalEvents.increment(); }
-    public void onError() { errors.increment(); }
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">onConnectionOpen</span><span class="hljs-params">()</span> { activeConnections.increment(); }
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">onConnectionClose</span><span class="hljs-params">()</span> { activeConnections.increment(-<span class="hljs-number">1</span>); }
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">onEvent</span><span class="hljs-params">()</span> { totalEvents.increment(); }
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">onError</span><span class="hljs-params">()</span> { errors.increment(); }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h3>六、WebFlux 简要对比</h3>
 <p>WebFlux 是 Spring 5 引入的响应式 Web 框架，基于 Reactor（Mono/Flux）和 Netty。在 Virtual Threads 普及之前，它是处理高并发 SSE/WebSocket 的推荐方案。</p>
 <h4>6.1 Mono 与 Flux 基础</h4>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@RestController
-public class ReactiveSSEController {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@RestController</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ReactiveSSEController</span> {
 
-    // Mono: 0 或 1 个元素
-    @GetMapping(&quot;/reactive/user/{id}&quot;)
-    public Mono&lt;User&gt; getUser(@PathVariable Long id) {
-        return Mono.fromCallable(() -&gt; userService.findById(id))
+    <span class="hljs-comment">// Mono: 0 或 1 个元素</span>
+    <span class="hljs-meta">@GetMapping("/reactive/user/{id}")</span>
+    <span class="hljs-keyword">public</span> Mono&lt;User&gt; <span class="hljs-title function_">getUser</span><span class="hljs-params">(<span class="hljs-meta">@PathVariable</span> Long id)</span> {
+        <span class="hljs-keyword">return</span> Mono.fromCallable(() -&gt; userService.findById(id))
                 .subscribeOn(Schedulers.boundedElastic());
     }
 
-    // Flux: 0 到 N 个元素，自动以 SSE 格式序列化
-    @GetMapping(value = &quot;/reactive/stream&quot;, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public Flux&lt;String&gt; streamData() {
-        return Flux.interval(Duration.ofSeconds(1))
-                .map(i -&gt; &quot;Event &quot; + i)
-                .take(10);
+    <span class="hljs-comment">// Flux: 0 到 N 个元素，自动以 SSE 格式序列化</span>
+    <span class="hljs-meta">@GetMapping(value = "/reactive/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)</span>
+    <span class="hljs-keyword">public</span> Flux&lt;String&gt; <span class="hljs-title function_">streamData</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">return</span> Flux.interval(Duration.ofSeconds(<span class="hljs-number">1</span>))
+                .map(i -&gt; <span class="hljs-string">"Event "</span> + i)
+                .take(<span class="hljs-number">10</span>);
     }
 }
-</code></pre></div>
-<h4>6.2 WebFlux Router Functions</h4>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Configuration
-public class RouterConfig {
+</code></pre></div><h4>6.2 WebFlux Router Functions</h4>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Configuration</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">RouterConfig</span> {
 
-    @Bean
-    public RouterFunction&lt;ServerResponse&gt; routes(UserHandler handler) {
-        return RouterFunctions
-                .route(GET(&quot;/api/v2/users/{id}&quot;).and(accept(APPLICATION_JSON)), handler::getUser)
-                .andRoute(POST(&quot;/api/v2/users&quot;).and(accept(APPLICATION_JSON)), handler::createUser)
-                .andRoute(GET(&quot;/api/v2/users/{id}/stream&quot;).and(accept(TEXT_EVENT_STREAM)), handler::streamUser);
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-keyword">public</span> RouterFunction&lt;ServerResponse&gt; <span class="hljs-title function_">routes</span><span class="hljs-params">(UserHandler handler)</span> {
+        <span class="hljs-keyword">return</span> RouterFunctions
+                .route(GET(<span class="hljs-string">"/api/v2/users/{id}"</span>).and(accept(APPLICATION_JSON)), handler::getUser)
+                .andRoute(POST(<span class="hljs-string">"/api/v2/users"</span>).and(accept(APPLICATION_JSON)), handler::createUser)
+                .andRoute(GET(<span class="hljs-string">"/api/v2/users/{id}/stream"</span>).and(accept(TEXT_EVENT_STREAM)), handler::streamUser);
     }
 }
 
-@Component
-public class UserHandler {
-    private final UserService userService;
+<span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">UserHandler</span> {
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> UserService userService;
 
-    public UserHandler(UserService userService) {
-        this.userService = userService;
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">UserHandler</span><span class="hljs-params">(UserService userService)</span> {
+        <span class="hljs-built_in">this</span>.userService = userService;
     }
 
-    public Mono&lt;ServerResponse&gt; getUser(ServerRequest request) {
-        var id = Long.parseLong(request.pathVariable(&quot;id&quot;));
-        return userService.findById(id)
+    <span class="hljs-keyword">public</span> Mono&lt;ServerResponse&gt; <span class="hljs-title function_">getUser</span><span class="hljs-params">(ServerRequest request)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">id</span> <span class="hljs-operator">=</span> Long.parseLong(request.pathVariable(<span class="hljs-string">"id"</span>));
+        <span class="hljs-keyword">return</span> userService.findById(id)
                 .flatMap(user -&gt; ServerResponse.ok().bodyValue(user))
                 .switchIfEmpty(ServerResponse.notFound().build());
     }
 
-    public Mono&lt;ServerResponse&gt; streamUser(ServerRequest request) {
-        var flux = Flux.interval(Duration.ofMillis(500))
-                .map(i -&gt; &quot;data-&quot; + i)
-                .take(100);
-        return ServerResponse.ok()
+    <span class="hljs-keyword">public</span> Mono&lt;ServerResponse&gt; <span class="hljs-title function_">streamUser</span><span class="hljs-params">(ServerRequest request)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">flux</span> <span class="hljs-operator">=</span> Flux.interval(Duration.ofMillis(<span class="hljs-number">500</span>))
+                .map(i -&gt; <span class="hljs-string">"data-"</span> + i)
+                .take(<span class="hljs-number">100</span>);
+        <span class="hljs-keyword">return</span> ServerResponse.ok()
                 .contentType(MediaType.TEXT_EVENT_STREAM)
                 .body(flux, String.class);
     }
 }
-</code></pre></div>
-<h4>6.3 WebFlux vs Virtual Threads：选择指南</h4>
+</code></pre></div><h4>6.3 WebFlux vs Virtual Threads：选择指南</h4>
 <table>
 <thead>
 <tr>
@@ -1297,45 +1272,44 @@ public class UserHandler {
 <hr>
 <h3>七、DispatcherServlet 源码补充：关键策略接口的初始化</h3>
 <p>DispatcherServlet 的核心策略接口在 <code>initStrategies()</code> 方法中初始化：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// DispatcherServlet.java — initStrategies() 方法的关键逻辑
-protected void initStrategies(ApplicationContext context) {
-    // 1. MultipartResolver：文件上传处理器
-    //    Spring Boot 自动配置 StandardServletMultipartResolver
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// DispatcherServlet.java — initStrategies() 方法的关键逻辑</span>
+<span class="hljs-keyword">protected</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">initStrategies</span><span class="hljs-params">(ApplicationContext context)</span> {
+    <span class="hljs-comment">// 1. MultipartResolver：文件上传处理器</span>
+    <span class="hljs-comment">//    Spring Boot 自动配置 StandardServletMultipartResolver</span>
     initMultipartResolver(context);
 
-    // 2. LocaleResolver：国际化语言解析
-    //    默认 AcceptHeaderLocaleResolver（从 Accept-Language 请求头获取）
+    <span class="hljs-comment">// 2. LocaleResolver：国际化语言解析</span>
+    <span class="hljs-comment">//    默认 AcceptHeaderLocaleResolver（从 Accept-Language 请求头获取）</span>
     initLocaleResolver(context);
 
-    // 3. ThemeResolver：主题解析（很少用到）
+    <span class="hljs-comment">// 3. ThemeResolver：主题解析（很少用到）</span>
     initThemeResolver(context);
 
-    // 4. HandlerMappings：处理器映射器链
-    //    核心：RequestMappingHandlerMapping
-    //    额外：BeanNameUrlHandlerMapping、SimpleUrlHandlerMapping、WelcomePageHandlerMapping
+    <span class="hljs-comment">// 4. HandlerMappings：处理器映射器链</span>
+    <span class="hljs-comment">//    核心：RequestMappingHandlerMapping</span>
+    <span class="hljs-comment">//    额外：BeanNameUrlHandlerMapping、SimpleUrlHandlerMapping、WelcomePageHandlerMapping</span>
     initHandlerMappings(context);
 
-    // 5. HandlerAdapters：处理器适配器链
-    //    核心：RequestMappingHandlerAdapter
-    //    额外：HttpRequestHandlerAdapter、SimpleControllerHandlerAdapter
+    <span class="hljs-comment">// 5. HandlerAdapters：处理器适配器链</span>
+    <span class="hljs-comment">//    核心：RequestMappingHandlerAdapter</span>
+    <span class="hljs-comment">//    额外：HttpRequestHandlerAdapter、SimpleControllerHandlerAdapter</span>
     initHandlerAdapters(context);
 
-    // 6. HandlerExceptionResolvers：异常解析器链
-    //    核心：ExceptionHandlerExceptionResolver（处理 @ExceptionHandler）
-    //    额外：ResponseStatusExceptionResolver、DefaultHandlerExceptionResolver
+    <span class="hljs-comment">// 6. HandlerExceptionResolvers：异常解析器链</span>
+    <span class="hljs-comment">//    核心：ExceptionHandlerExceptionResolver（处理 @ExceptionHandler）</span>
+    <span class="hljs-comment">//    额外：ResponseStatusExceptionResolver、DefaultHandlerExceptionResolver</span>
     initHandlerExceptionResolvers(context);
 
-    // 7. RequestToViewNameTranslator：请求到视图名的默认翻译
+    <span class="hljs-comment">// 7. RequestToViewNameTranslator：请求到视图名的默认翻译</span>
     initRequestToViewNameTranslator(context);
 
-    // 8. ViewResolvers：视图解析器链（REST 场景下不使用）
+    <span class="hljs-comment">// 8. ViewResolvers：视图解析器链（REST 场景下不使用）</span>
     initViewResolvers(context);
 
-    // 9. FlashMapManager：Flash 属性（重定向后保持数据）
+    <span class="hljs-comment">// 9. FlashMapManager：Flash 属性（重定向后保持数据）</span>
     initFlashMapManager(context);
 }
-</code></pre></div>
-<p>每个 <code>init*</code> 方法遵循相同的策略模式：</p>
+</code></pre></div><p>每个 <code>init*</code> 方法遵循相同的策略模式：</p>
 <ol>
 <li>先从容器中按类型查找 Bean</li>
 <li>如果未找到，使用默认策略（<code>getDefaultStrategies()</code> 从 <code>DispatcherServlet.properties</code> 加载）</li>
@@ -1383,32 +1357,31 @@ protected void initStrategies(ApplicationContext context) {
 <p><code>EventSource</code> 是 W3C 规范定义的浏览器 API，设计上只支持 GET 请求，目的是简单、安全地订阅服务器事件。复杂场景（POST、自定义请求头）应使用 <code>fetch</code> API + <code>ReadableStream</code> 手动解析 SSE 流。</p>
 <p><strong>Q5：如何实现 SSE 的断点续传？</strong></p>
 <p>利用 SSE 的 <code>id:</code> 字段机制。服务端为每条消息设置递增的 ID，客户端断开重连时浏览器自动发送 <code>Last-Event-ID</code> 请求头。服务端读取此头，从对应 ID 之后的事件开始重新推送。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@GetMapping(&quot;/resumable-sse&quot;)
-public SseEmitter resumableSSE(@RequestHeader(value = &quot;Last-Event-ID&quot;, defaultValue = &quot;0&quot;) long lastEventId) {
-    var emitter = new SseEmitter(60_000L);
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@GetMapping("/resumable-sse")</span>
+<span class="hljs-keyword">public</span> SseEmitter <span class="hljs-title function_">resumableSSE</span><span class="hljs-params">(<span class="hljs-meta">@RequestHeader(value = "Last-Event-ID", defaultValue = "0")</span> <span class="hljs-type">long</span> lastEventId)</span> {
+    <span class="hljs-type">var</span> <span class="hljs-variable">emitter</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">SseEmitter</span>(<span class="hljs-number">60_000L</span>);
     Thread.ofVirtual().start(() -&gt; {
-        try {
-            // 从 lastEventId 之后的事件开始发送
-            var events = eventStore.getEventsAfter(lastEventId);
-            for (var event : events) {
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-comment">// 从 lastEventId 之后的事件开始发送</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">events</span> <span class="hljs-operator">=</span> eventStore.getEventsAfter(lastEventId);
+            <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> event : events) {
                 emitter.send(event.toSseEvent());
             }
             emitter.complete();
-        } catch (Exception e) {
+        } <span class="hljs-keyword">catch</span> (Exception e) {
             emitter.completeWithError(e);
         }
     });
-    return emitter;
+    <span class="hljs-keyword">return</span> emitter;
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>相关条目</h2>
 <ul>
-<li><a href="#/03-Java应用平台/Spring核心/03-SpringBoot4深度解析" class="cross-ref" data-ref="03-SpringBoot4深度解析">03-SpringBoot4深度解析</a> — Spring Boot 自动配置如何装配 DispatcherServlet</li>
-<li><a href="#/02-Java平台/语言特性/02-现代Java25深度解析" class="cross-ref" data-ref="02-现代Java25深度解析">02-现代Java25深度解析</a> — Virtual Threads 深度解析</li>
-<li><a href="#/02-Java平台/语言特性/02-现代Java25深度解析" class="cross-ref" data-ref="02-现代Java25深度解析">02-现代Java25深度解析</a> — WebFlux 与 Virtual Threads 的选型对比</li>
-<li><a href="#/08-模型接入与推理/模型API/08-OpenAI兼容协议详解" class="cross-ref" data-ref="08-OpenAI兼容协议详解">08-OpenAI兼容协议详解</a> — OpenAI 兼容协议与流式响应事件模型</li>
-<li><a href="#/09-Java AI框架/09-SpringAI2深度解析" class="cross-ref" data-ref="09-SpringAI2深度解析">09-SpringAI2深度解析</a> — Spring AI ChatClient 流式调用</li>
+<li><a href="#/03-Java应用平台/Spring核心/03-SpringBoot4深度解析" class="cross-ref">03-SpringBoot4深度解析</a> — Spring Boot 自动配置如何装配 DispatcherServlet</li>
+<li><a href="#/02-Java平台/语言特性/02-现代Java25深度解析" class="cross-ref">02-现代Java25深度解析</a> — Virtual Threads 深度解析</li>
+<li><a href="#/02-Java平台/语言特性/02-现代Java25深度解析" class="cross-ref">02-现代Java25深度解析</a> — WebFlux 与 Virtual Threads 的选型对比</li>
+<li><a href="#/08-模型接入与推理/模型API/08-OpenAI兼容协议详解" class="cross-ref">08-OpenAI兼容协议详解</a> — OpenAI 兼容协议与流式响应事件模型</li>
+<li><a href="#/09-Java AI框架/09-SpringAI2深度解析" class="cross-ref">09-SpringAI2深度解析</a> — Spring AI ChatClient 流式调用</li>
 </ul>
-</div>
+</body></html></div>
 </article>

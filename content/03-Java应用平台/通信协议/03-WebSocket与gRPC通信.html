@@ -1,12 +1,12 @@
 
-<article class="kb-entry" data-path="/03-Java应用平台/通信协议/03-WebSocket与gRPC通信">
+<article class="kb-entry" data-path="/03-Java应用平台">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=03">03-Java应用平台</a></div>
     <h1>WebSocket与gRPC通信</h1>
-    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#websocket</span><span class="badge badge-tag">#grpc</span><span class="badge badge-tag">#protobuf</span><span class="badge badge-tag">#stomp</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#websocket</span><span class="badge badge-tag">#grpc</span><span class="badge badge-tag">#protobuf</span><span class="badge badge-tag">#stomp</span><span class="badge badge-tag">#sockjs</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://docs.spring.io/spring-framework/reference/web/websocket.html" target="_blank" rel="noopener" class="source-link" title="Spring WebSocket Reference — WebSocketHandler, STOMP, SockJS">Spring WebSocket Reference — WebSocketHandler, STOMP, SockJS</a><a href="https://grpc.io/docs/languages/java/" target="_blank" rel="noopener" class="source-link" title="gRPC Java Official Documentation — proto definition, stubs, streaming modes">gRPC Java Official Documentation — proto definition, stubs, streaming modes</a><a href="https://datatracker.ietf.org/doc/html/rfc6455" target="_blank" rel="noopener" class="source-link" title="WebSocket Protocol (RFC 6455)">WebSocket Protocol (RFC 6455)</a><a href="https://github.com/grpc/grpc-java" target="_blank" rel="noopener" class="source-link" title="gRPC Java source code and examples">gRPC Java source code and examples</a></small></div>
   </div>
-  <div class="entry-body"><h1>WebSocket 与 gRPC 通信</h1>
+  <div class="entry-body"><html><head></head><body><h1>WebSocket 与 gRPC 通信</h1>
 <h2>概述</h2>
 <p>HTTP 请求-响应模型已无法满足现代应用对实时双向通信的需求。AI Agent 需要持续的流式响应、实时状态推送、多模态数据传输，传统的轮询和长轮询方案在延迟和资源消耗上都捉襟见肘。</p>
 <p>本文覆盖两大实时通信技术——<strong>WebSocket</strong>（基于 HTTP 升级的全双工协议，适合浏览器和轻量级场景）和 <strong>gRPC</strong>（基于 HTTP/2 和 Protocol Buffers 的高性能 RPC 框架，适合微服务间通信），以及它们在 AI 场景中的典型应用，并给出明确的选型决策树。</p>
@@ -15,125 +15,121 @@
 <h3>1.1 协议升级：HTTP to WebSocket</h3>
 <p>WebSocket 连接建立过程：</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Client                                    Server
-  |                                          |
-  |--- HTTP GET /chat                        |
-  |    Upgrade: websocket                    |
-  |    Connection: Upgrade                   |
-  |    Sec-WebSocket-Key: dGhlIHNhbXBsZQ==   |
-  |    Sec-WebSocket-Version: 13 -----------&gt;|
-  |                                          |
-  |&lt;-- HTTP/1.1 101 Switching Protocols -----|
-  |    Upgrade: websocket                    |
-  |    Connection: Upgrade                   |
-  |    Sec-WebSocket-Accept: s3pPLMBiTx...   |
-  |                                          |
-  |&lt;========== WebSocket 全双工通道 ========&gt;|
-</code></pre></div>
-<p>连接一旦建立，双方可以随时发送消息，无需重建连接或携带 HTTP 头。</p>
+  |<span class="hljs-string">                                          </span>|
+  |<span class="hljs-string">--- HTTP GET /chat                        </span>|
+  |<span class="hljs-string">    Upgrade: websocket                    </span>|
+  |<span class="hljs-string">    Connection: Upgrade                   </span>|
+  |<span class="hljs-string">    Sec-WebSocket-Key: dGhlIHNhbXBsZQ==   </span>|
+  |<span class="hljs-string">    Sec-WebSocket-Version: 13 -----------&gt;</span>|
+  |<span class="hljs-string">                                          </span>|
+  |<span class="hljs-string">&lt;-- HTTP/1.1 101 Switching Protocols -----</span>|
+  |<span class="hljs-string">    Upgrade: websocket                    </span>|
+  |<span class="hljs-string">    Connection: Upgrade                   </span>|
+  |<span class="hljs-string">    Sec-WebSocket-Accept: s3pPLMBiTx...   </span>|
+  |<span class="hljs-string">                                          </span>|
+  |<span class="hljs-string">&lt;========== WebSocket 全双工通道 ========&gt;</span>|
+</code></pre></div><p>连接一旦建立，双方可以随时发送消息，无需重建连接或携带 HTTP 头。</p>
 <h3>1.2 Spring WebSocket：基础版</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Component
-public class ChatWebSocketHandler extends TextWebSocketHandler {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ChatWebSocketHandler</span> <span class="hljs-keyword">extends</span> <span class="hljs-title class_">TextWebSocketHandler</span> {
 
-    private final ConcurrentHashMap&lt;String, WebSocketSession&gt; sessions = new ConcurrentHashMap&lt;&gt;();
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> ConcurrentHashMap&lt;String, WebSocketSession&gt; sessions = <span class="hljs-keyword">new</span> <span class="hljs-title class_">ConcurrentHashMap</span>&lt;&gt;();
 
-    @Override
-    public void afterConnectionEstablished(WebSocketSession session) {
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">afterConnectionEstablished</span><span class="hljs-params">(WebSocketSession session)</span> {
         sessions.put(session.getId(), session);
-        System.out.println(&quot;Client connected: &quot; + session.getId());
+        System.out.println(<span class="hljs-string">"Client connected: "</span> + session.getId());
     }
 
-    @Override
-    protected void handleTextMessage(WebSocketSession session, TextMessage message)
-            throws Exception {
-        var payload = message.getPayload();
-        System.out.printf(&quot;Received from %s: %s%n&quot;, session.getId(), payload);
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">protected</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">handleTextMessage</span><span class="hljs-params">(WebSocketSession session, TextMessage message)</span>
+            <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-type">var</span> <span class="hljs-variable">payload</span> <span class="hljs-operator">=</span> message.getPayload();
+        System.out.printf(<span class="hljs-string">"Received from %s: %s%n"</span>, session.getId(), payload);
 
-        // 回复消息给发送方
-        session.sendMessage(new TextMessage(&quot;Echo: &quot; + payload));
+        <span class="hljs-comment">// 回复消息给发送方</span>
+        session.sendMessage(<span class="hljs-keyword">new</span> <span class="hljs-title class_">TextMessage</span>(<span class="hljs-string">"Echo: "</span> + payload));
 
-        // 广播消息给所有连接
-        for (var s : sessions.values()) {
-            if (s.isOpen() &amp;&amp; !s.getId().equals(session.getId())) {
-                s.sendMessage(new TextMessage(&quot;Broadcast: &quot; + payload));
+        <span class="hljs-comment">// 广播消息给所有连接</span>
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> s : sessions.values()) {
+            <span class="hljs-keyword">if</span> (s.isOpen() &amp;&amp; !s.getId().equals(session.getId())) {
+                s.sendMessage(<span class="hljs-keyword">new</span> <span class="hljs-title class_">TextMessage</span>(<span class="hljs-string">"Broadcast: "</span> + payload));
             }
         }
     }
 
-    @Override
-    public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">afterConnectionClosed</span><span class="hljs-params">(WebSocketSession session, CloseStatus status)</span> {
         sessions.remove(session.getId());
-        System.out.println(&quot;Client disconnected: &quot; + session.getId());
+        System.out.println(<span class="hljs-string">"Client disconnected: "</span> + session.getId());
     }
 }
 
-@Configuration
-@EnableWebSocket
-public class WebSocketConfig implements WebSocketConfigurer {
-    @Override
-    public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
-        registry.addHandler(new ChatWebSocketHandler(), &quot;/ws/chat&quot;)
-                .setAllowedOrigins(&quot;*&quot;);
+<span class="hljs-meta">@Configuration</span>
+<span class="hljs-meta">@EnableWebSocket</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">WebSocketConfig</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">WebSocketConfigurer</span> {
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">registerWebSocketHandlers</span><span class="hljs-params">(WebSocketHandlerRegistry registry)</span> {
+        registry.addHandler(<span class="hljs-keyword">new</span> <span class="hljs-title class_">ChatWebSocketHandler</span>(), <span class="hljs-string">"/ws/chat"</span>)
+                .setAllowedOrigins(<span class="hljs-string">"*"</span>);
     }
 }
-</code></pre></div>
-<h3>1.3 Spring STOMP：消息代理模式</h3>
+</code></pre></div><h3>1.3 Spring STOMP：消息代理模式</h3>
 <p>STOMP（Simple Text Oriented Messaging Protocol）是 WebSocket 之上的子协议，提供发布-订阅和点对点消息模型：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 配置 STOMP 消息代理
-@Configuration
-@EnableWebSocketMessageBroker
-public class StompConfig implements WebSocketMessageBrokerConfigurer {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 配置 STOMP 消息代理</span>
+<span class="hljs-meta">@Configuration</span>
+<span class="hljs-meta">@EnableWebSocketMessageBroker</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">StompConfig</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">WebSocketMessageBrokerConfigurer</span> {
 
-    @Override
-    public void configureMessageBroker(MessageBrokerRegistry registry) {
-        // 客户端订阅 /topic 开头的目标（广播）
-        registry.enableSimpleBroker(&quot;/topic&quot;, &quot;/queue&quot;);
-        // 客户端发送消息到 /app 开头的目标
-        registry.setApplicationDestinationPrefixes(&quot;/app&quot;);
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">configureMessageBroker</span><span class="hljs-params">(MessageBrokerRegistry registry)</span> {
+        <span class="hljs-comment">// 客户端订阅 /topic 开头的目标（广播）</span>
+        registry.enableSimpleBroker(<span class="hljs-string">"/topic"</span>, <span class="hljs-string">"/queue"</span>);
+        <span class="hljs-comment">// 客户端发送消息到 /app 开头的目标</span>
+        registry.setApplicationDestinationPrefixes(<span class="hljs-string">"/app"</span>);
     }
 
-    @Override
-    public void registerStompEndpoints(StompEndpointRegistry registry) {
-        registry.addEndpoint(&quot;/stomp-chat&quot;)
-                .setAllowedOrigins(&quot;*&quot;)
-                .withSockJS(); // SockJS 降级支持
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">registerStompEndpoints</span><span class="hljs-params">(StompEndpointRegistry registry)</span> {
+        registry.addEndpoint(<span class="hljs-string">"/stomp-chat"</span>)
+                .setAllowedOrigins(<span class="hljs-string">"*"</span>)
+                .withSockJS(); <span class="hljs-comment">// SockJS 降级支持</span>
     }
 }
 
-// 控制器：处理 STOMP 消息
-@Controller
-public class StompChatController {
+<span class="hljs-comment">// 控制器：处理 STOMP 消息</span>
+<span class="hljs-meta">@Controller</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">StompChatController</span> {
 
-    // 处理客户端发送到 /app/chat 的消息
-    @MessageMapping(&quot;/chat&quot;)
-    @SendTo(&quot;/topic/messages&quot;) // 广播到所有订阅 /topic/messages 的客户端
-    public ChatMessage handleChat(ChatMessage message, Principal principal) {
+    <span class="hljs-comment">// 处理客户端发送到 /app/chat 的消息</span>
+    <span class="hljs-meta">@MessageMapping("/chat")</span>
+    <span class="hljs-meta">@SendTo("/topic/messages")</span> <span class="hljs-comment">// 广播到所有订阅 /topic/messages 的客户端</span>
+    <span class="hljs-keyword">public</span> ChatMessage <span class="hljs-title function_">handleChat</span><span class="hljs-params">(ChatMessage message, Principal principal)</span> {
         message.setSender(principal.getName());
         message.setTimestamp(LocalDateTime.now());
-        return message;
+        <span class="hljs-keyword">return</span> message;
     }
 
-    // 点对点消息
-    @MessageMapping(&quot;/private&quot;)
-    public void handlePrivate(ChatMessage message, SimpMessageHeaderAccessor accessor) {
-        var destination = &quot;/queue/private-&quot; + message.getRecipient();
+    <span class="hljs-comment">// 点对点消息</span>
+    <span class="hljs-meta">@MessageMapping("/private")</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">handlePrivate</span><span class="hljs-params">(ChatMessage message, SimpMessageHeaderAccessor accessor)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">destination</span> <span class="hljs-operator">=</span> <span class="hljs-string">"/queue/private-"</span> + message.getRecipient();
         messagingTemplate.convertAndSendToUser(
-            message.getRecipient(), &quot;/queue/private&quot;, message);
+            message.getRecipient(), <span class="hljs-string">"/queue/private"</span>, message);
     }
 }
-</code></pre></div>
-<h3>1.4 心跳机制</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 服务端心跳配置
-@Configuration
-@EnableWebSocketMessageBroker
-public class StompConfig implements WebSocketMessageBrokerConfigurer {
-    @Override
-    public void configureMessageBroker(MessageBrokerRegistry registry) {
-        registry.enableSimpleBroker(&quot;/topic&quot;)
-                .setHeartbeatValue(new long[]{10000, 10000}); // 客户端→服务端，服务端→客户端（ms）
+</code></pre></div><h3>1.4 心跳机制</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 服务端心跳配置</span>
+<span class="hljs-meta">@Configuration</span>
+<span class="hljs-meta">@EnableWebSocketMessageBroker</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">StompConfig</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">WebSocketMessageBrokerConfigurer</span> {
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">configureMessageBroker</span><span class="hljs-params">(MessageBrokerRegistry registry)</span> {
+        registry.enableSimpleBroker(<span class="hljs-string">"/topic"</span>)
+                .setHeartbeatValue(<span class="hljs-keyword">new</span> <span class="hljs-title class_">long</span>[]{<span class="hljs-number">10000</span>, <span class="hljs-number">10000</span>}); <span class="hljs-comment">// 客户端→服务端，服务端→客户端（ms）</span>
     }
 }
-</code></pre></div>
-<p><strong>心跳作用：</strong></p>
+</code></pre></div><p><strong>心跳作用：</strong></p>
 <ul>
 <li>保持连接活跃（防止代理/负载均衡关闭空闲连接）</li>
 <li>检测死连接（及时清理失效的 WebSocket Session）</li>
@@ -142,106 +138,102 @@ public class StompConfig implements WebSocketMessageBrokerConfigurer {
 <h3>1.5 SockJS 降级</h3>
 <p>当浏览器或网络代理不支持 WebSocket 时，SockJS 自动降级为以下方案：</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>优先级（从高到低）：
-1. WebSocket（原生）
-2. XHR Streaming（HTTP 流）
-3. XHR Polling（HTTP 长轮询）
-4. JSONP Polling
-</code></pre></div>
-<p>客户端使用 SockJS 库即可自动适配。</p>
+<span class="hljs-bullet">1.</span> WebSocket（原生）
+<span class="hljs-bullet">2.</span> XHR Streaming（HTTP 流）
+<span class="hljs-bullet">3.</span> XHR Polling（HTTP 长轮询）
+<span class="hljs-bullet">4.</span> JSONP Polling
+</code></pre></div><p>客户端使用 SockJS 库即可自动适配。</p>
 <hr>
 <h2>二、WebSocket 在 AI 场景中的应用</h2>
 <h3>2.1 流式对话（替代 SSE 的长连接方案）</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Controller
-public class AiChatController {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Controller</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">AiChatController</span> {
 
-    private final ChatModelPort chatModel;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> ChatModelPort chatModel;
 
-    // WebSocket 版流式对话
-    @MessageMapping(&quot;/ai/chat&quot;)
-    public void handleAiChat(ChatRequest request, SimpMessageHeaderAccessor accessor) {
-        var sessionId = accessor.getSessionId();
-        var userDestination = &quot;/queue/ai-response-&quot; + sessionId;
+    <span class="hljs-comment">// WebSocket 版流式对话</span>
+    <span class="hljs-meta">@MessageMapping("/ai/chat")</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">handleAiChat</span><span class="hljs-params">(ChatRequest request, SimpMessageHeaderAccessor accessor)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">sessionId</span> <span class="hljs-operator">=</span> accessor.getSessionId();
+        <span class="hljs-type">var</span> <span class="hljs-variable">userDestination</span> <span class="hljs-operator">=</span> <span class="hljs-string">"/queue/ai-response-"</span> + sessionId;
 
-        // 通过 Virtual Thread 处理长期运行的流式调用
+        <span class="hljs-comment">// 通过 Virtual Thread 处理长期运行的流式调用</span>
         Thread.ofVirtual().start(() -&gt; {
-            try (var stream = chatModel.stream(request.message())) {
+            <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">stream</span> <span class="hljs-operator">=</span> chatModel.stream(request.message())) {
                 stream.forEach(chunk -&gt; {
                     messagingTemplate.convertAndSendToUser(
-                        sessionId, &quot;/queue/ai-response&quot;, chunk);
+                        sessionId, <span class="hljs-string">"/queue/ai-response"</span>, chunk);
                 });
-                // 发送结束标记
+                <span class="hljs-comment">// 发送结束标记</span>
                 messagingTemplate.convertAndSendToUser(
-                    sessionId, &quot;/queue/ai-response&quot;,
+                    sessionId, <span class="hljs-string">"/queue/ai-response"</span>,
                     ChatChunk.endOfStream());
             }
         });
     }
 }
-</code></pre></div>
-<h3>2.2 实时 Agent 状态推送</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
-public class AgentStatusService {
+</code></pre></div><h3>2.2 实时 Agent 状态推送</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">AgentStatusService</span> {
 
-    private final SimpMessagingTemplate messagingTemplate;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> SimpMessagingTemplate messagingTemplate;
 
-    // Agent 执行过程中实时推送状态更新
-    public void notifyAgentState(String agentId, AgentState state) {
-        // state 可以是：thinking, calling_tool, tool_completed, generating_response
+    <span class="hljs-comment">// Agent 执行过程中实时推送状态更新</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">notifyAgentState</span><span class="hljs-params">(String agentId, AgentState state)</span> {
+        <span class="hljs-comment">// state 可以是：thinking, calling_tool, tool_completed, generating_response</span>
         messagingTemplate.convertAndSend(
-            &quot;/topic/agent/&quot; + agentId + &quot;/state&quot;,
-            new AgentStateUpdate(agentId, state, LocalDateTime.now())
+            <span class="hljs-string">"/topic/agent/"</span> + agentId + <span class="hljs-string">"/state"</span>,
+            <span class="hljs-keyword">new</span> <span class="hljs-title class_">AgentStateUpdate</span>(agentId, state, LocalDateTime.now())
         );
     }
 
-    public void notifyToolExecution(String agentId, String toolName, Map&lt;String, Object&gt; params) {
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">notifyToolExecution</span><span class="hljs-params">(String agentId, String toolName, Map&lt;String, Object&gt; params)</span> {
         messagingTemplate.convertAndSend(
-            &quot;/topic/agent/&quot; + agentId + &quot;/tool&quot;,
-            new ToolExecutionEvent(agentId, toolName, params)
+            <span class="hljs-string">"/topic/agent/"</span> + agentId + <span class="hljs-string">"/tool"</span>,
+            <span class="hljs-keyword">new</span> <span class="hljs-title class_">ToolExecutionEvent</span>(agentId, toolName, params)
         );
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>三、gRPC</h2>
 <h3>3.1 Protocol Buffers 定义</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">protobuf</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-protobuf">// chat.proto
-syntax = &quot;proto3&quot;;
+<div class="code-block"><div class="code-header"><span class="code-lang">protobuf</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-protobuf"><span class="hljs-comment">// chat.proto</span>
+syntax = <span class="hljs-string">"proto3"</span>;
 
-package com.example.chat;
+<span class="hljs-keyword">package</span> com.example.chat;
 
-option java_multiple_files = true;
-option java_package = &quot;com.example.chat.grpc&quot;;
+<span class="hljs-keyword">option</span> java_multiple_files = <span class="hljs-literal">true</span>;
+<span class="hljs-keyword">option</span> java_package = <span class="hljs-string">"com.example.chat.grpc"</span>;
 
-// 消息定义
-message ChatRequest {
-    string user_id = 1;
-    string message = 2;
-    string model = 3;
+<span class="hljs-comment">// 消息定义</span>
+<span class="hljs-keyword">message </span><span class="hljs-title class_">ChatRequest</span> {
+    <span class="hljs-type">string</span> user_id = <span class="hljs-number">1</span>;
+    <span class="hljs-type">string</span> message = <span class="hljs-number">2</span>;
+    <span class="hljs-type">string</span> model = <span class="hljs-number">3</span>;
 }
 
-message ChatResponse {
-    string content = 1;
-    bool is_final = 2;
-    string finish_reason = 3;
-    int32 token_count = 4;
+<span class="hljs-keyword">message </span><span class="hljs-title class_">ChatResponse</span> {
+    <span class="hljs-type">string</span> content = <span class="hljs-number">1</span>;
+    <span class="hljs-type">bool</span> is_final = <span class="hljs-number">2</span>;
+    <span class="hljs-type">string</span> finish_reason = <span class="hljs-number">3</span>;
+    <span class="hljs-type">int32</span> token_count = <span class="hljs-number">4</span>;
 }
 
-// 服务定义
-service ChatService {
-    // 一元调用：发送消息，获取完整响应
-    rpc Chat(ChatRequest) returns (ChatResponse);
+<span class="hljs-comment">// 服务定义</span>
+<span class="hljs-keyword">service </span><span class="hljs-title class_">ChatService</span> {
+    <span class="hljs-comment">// 一元调用：发送消息，获取完整响应</span>
+    <span class="hljs-function"><span class="hljs-keyword">rpc</span> Chat(ChatRequest) <span class="hljs-keyword">returns</span> (ChatResponse)</span>;
 
-    // 服务端流：发送消息，获取流式响应
-    rpc StreamChat(ChatRequest) returns (stream ChatResponse);
+    <span class="hljs-comment">// 服务端流：发送消息，获取流式响应</span>
+    <span class="hljs-function"><span class="hljs-keyword">rpc</span> StreamChat(ChatRequest) <span class="hljs-keyword">returns</span> (stream ChatResponse)</span>;
 
-    // 客户端流：上传多个文件，获取处理结果
-    rpc UploadFiles(stream FileChunk) returns (UploadResult);
+    <span class="hljs-comment">// 客户端流：上传多个文件，获取处理结果</span>
+    <span class="hljs-function"><span class="hljs-keyword">rpc</span> UploadFiles(stream FileChunk) <span class="hljs-keyword">returns</span> (UploadResult)</span>;
 
-    // 双向流：实时对话
-    rpc BidiChat(stream ChatRequest) returns (stream ChatResponse);
+    <span class="hljs-comment">// 双向流：实时对话</span>
+    <span class="hljs-function"><span class="hljs-keyword">rpc</span> BidiChat(stream ChatRequest) <span class="hljs-keyword">returns</span> (stream ChatResponse)</span>;
 }
-</code></pre></div>
-<h3>3.2 四种通信模式</h3>
+</code></pre></div><h3>3.2 四种通信模式</h3>
 <table>
 <thead>
 <tr>
@@ -277,18 +269,18 @@ service ChatService {
 </tr>
 </tbody></table>
 <h3>3.3 Spring gRPC 集成</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 服务端实现
-@GrpcService
-public class ChatServiceImpl extends ChatServiceGrpc.ChatServiceImplBase {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 服务端实现</span>
+<span class="hljs-meta">@GrpcService</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ChatServiceImpl</span> <span class="hljs-keyword">extends</span> <span class="hljs-title class_">ChatServiceGrpc</span>.ChatServiceImplBase {
 
-    @Override
-    public void streamChat(ChatRequest request,
-                           StreamObserver&lt;ChatResponse&gt; responseObserver) {
-        try {
-            // 调用 AI 模型流式接口
-            var stream = chatModel.stream(request.getMessage());
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">streamChat</span><span class="hljs-params">(ChatRequest request,
+                           StreamObserver&lt;ChatResponse&gt; responseObserver)</span> {
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-comment">// 调用 AI 模型流式接口</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">stream</span> <span class="hljs-operator">=</span> chatModel.stream(request.getMessage());
             stream.forEach(chunk -&gt; {
-                var response = ChatResponse.newBuilder()
+                <span class="hljs-type">var</span> <span class="hljs-variable">response</span> <span class="hljs-operator">=</span> ChatResponse.newBuilder()
                     .setContent(chunk.content())
                     .setIsFinal(chunk.isFinal())
                     .setFinishReason(chunk.finishReason())
@@ -296,90 +288,87 @@ public class ChatServiceImpl extends ChatServiceGrpc.ChatServiceImplBase {
                 responseObserver.onNext(response);
             });
             responseObserver.onCompleted();
-        } catch (Exception e) {
+        } <span class="hljs-keyword">catch</span> (Exception e) {
             responseObserver.onError(Status.INTERNAL
-                .withDescription(&quot;AI service error: &quot; + e.getMessage())
+                .withDescription(<span class="hljs-string">"AI service error: "</span> + e.getMessage())
                 .asRuntimeException());
         }
     }
 }
 
-// 客户端调用
-@GrpcClient(&quot;chat-service&quot;)
-private ChatServiceGrpc.ChatServiceStub asyncStub;
+<span class="hljs-comment">// 客户端调用</span>
+<span class="hljs-meta">@GrpcClient("chat-service")</span>
+<span class="hljs-keyword">private</span> ChatServiceGrpc.ChatServiceStub asyncStub;
 
-public void streamChat(String message) {
-    var request = ChatRequest.newBuilder()
-        .setUserId(&quot;user-123&quot;)
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">streamChat</span><span class="hljs-params">(String message)</span> {
+    <span class="hljs-type">var</span> <span class="hljs-variable">request</span> <span class="hljs-operator">=</span> ChatRequest.newBuilder()
+        .setUserId(<span class="hljs-string">"user-123"</span>)
         .setMessage(message)
         .build();
 
-    asyncStub.streamChat(request, new StreamObserver&lt;&gt;() {
-        @Override
-        public void onNext(ChatResponse response) {
+    asyncStub.streamChat(request, <span class="hljs-keyword">new</span> <span class="hljs-title class_">StreamObserver</span>&lt;&gt;() {
+        <span class="hljs-meta">@Override</span>
+        <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">onNext</span><span class="hljs-params">(ChatResponse response)</span> {
             System.out.print(response.getContent());
-            if (response.getIsFinal()) {
-                System.out.println(&quot;\n[Finished: &quot; + response.getFinishReason() + &quot;]&quot;);
+            <span class="hljs-keyword">if</span> (response.getIsFinal()) {
+                System.out.println(<span class="hljs-string">"\n[Finished: "</span> + response.getFinishReason() + <span class="hljs-string">"]"</span>);
             }
         }
 
-        @Override
-        public void onError(Throwable t) {
-            System.err.println(&quot;RPC failed: &quot; + t.getMessage());
+        <span class="hljs-meta">@Override</span>
+        <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">onError</span><span class="hljs-params">(Throwable t)</span> {
+            System.err.println(<span class="hljs-string">"RPC failed: "</span> + t.getMessage());
         }
 
-        @Override
-        public void onCompleted() {
-            System.out.println(&quot;\nStream completed&quot;);
+        <span class="hljs-meta">@Override</span>
+        <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">onCompleted</span><span class="hljs-params">()</span> {
+            System.out.println(<span class="hljs-string">"\nStream completed"</span>);
         }
     });
 }
-</code></pre></div>
-<h3>3.4 gRPC 拦截器</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 认证拦截器
-public class AuthInterceptor implements ServerInterceptor {
-    @Override
-    public &lt;ReqT, RespT&gt; ServerCall.Listener&lt;ReqT&gt; interceptCall(
+</code></pre></div><h3>3.4 gRPC 拦截器</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 认证拦截器</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">AuthInterceptor</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">ServerInterceptor</span> {
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> &lt;ReqT, RespT&gt; ServerCall.Listener&lt;ReqT&gt; <span class="hljs-title function_">interceptCall</span><span class="hljs-params">(
             ServerCall&lt;ReqT, RespT&gt; call, Metadata headers,
-            ServerCallHandler&lt;ReqT, RespT&gt; next) {
-        var token = headers.get(Metadata.Key.of(&quot;Authorization&quot;,
+            ServerCallHandler&lt;ReqT, RespT&gt; next)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">token</span> <span class="hljs-operator">=</span> headers.get(Metadata.Key.of(<span class="hljs-string">"Authorization"</span>,
             Metadata.ASCII_STRING_MARSHALLER));
-        if (token == null || !validateToken(token)) {
+        <span class="hljs-keyword">if</span> (token == <span class="hljs-literal">null</span> || !validateToken(token)) {
             call.close(Status.UNAUTHENTICATED
-                .withDescription(&quot;Invalid or missing token&quot;), new Metadata());
-            return new ServerCall.Listener&lt;&gt;() {};
+                .withDescription(<span class="hljs-string">"Invalid or missing token"</span>), <span class="hljs-keyword">new</span> <span class="hljs-title class_">Metadata</span>());
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ServerCall</span>.Listener&lt;&gt;() {};
         }
-        return next.startCall(call, headers);
+        <span class="hljs-keyword">return</span> next.startCall(call, headers);
     }
 }
 
-// 日志/监控拦截器
-public class MetricsInterceptor implements ServerInterceptor {
-    @Override
-    public &lt;ReqT, RespT&gt; ServerCall.Listener&lt;ReqT&gt; interceptCall(
+<span class="hljs-comment">// 日志/监控拦截器</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">MetricsInterceptor</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">ServerInterceptor</span> {
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> &lt;ReqT, RespT&gt; ServerCall.Listener&lt;ReqT&gt; <span class="hljs-title function_">interceptCall</span><span class="hljs-params">(
             ServerCall&lt;ReqT, RespT&gt; call, Metadata headers,
-            ServerCallHandler&lt;ReqT, RespT&gt; next) {
-        var startTime = System.nanoTime();
-        var listener = next.startCall(call, headers);
-        return new ForwardingServerCallListener.SimpleForwardingServerCallListener&lt;&gt;(listener) {
-            @Override
-            public void onComplete() {
-                var elapsed = (System.nanoTime() - startTime) / 1_000_000;
-                System.out.printf(&quot;[gRPC] %s completed in %dms%n&quot;,
+            ServerCallHandler&lt;ReqT, RespT&gt; next)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">startTime</span> <span class="hljs-operator">=</span> System.nanoTime();
+        <span class="hljs-type">var</span> <span class="hljs-variable">listener</span> <span class="hljs-operator">=</span> next.startCall(call, headers);
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ForwardingServerCallListener</span>.SimpleForwardingServerCallListener&lt;&gt;(listener) {
+            <span class="hljs-meta">@Override</span>
+            <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">onComplete</span><span class="hljs-params">()</span> {
+                <span class="hljs-type">var</span> <span class="hljs-variable">elapsed</span> <span class="hljs-operator">=</span> (System.nanoTime() - startTime) / <span class="hljs-number">1_000_000</span>;
+                System.out.printf(<span class="hljs-string">"[gRPC] %s completed in %dms%n"</span>,
                     call.getMethodDescriptor().getFullMethodName(), elapsed);
-                super.onComplete();
+                <span class="hljs-built_in">super</span>.onComplete();
             }
         };
     }
 }
-</code></pre></div>
-<h3>3.5 gRPC Gateway：HTTP 代理</h3>
+</code></pre></div><h3>3.5 gRPC Gateway：HTTP 代理</h3>
 <p>gRPC 不适合浏览器直接调用（浏览器不支持 HTTP/2 Trailers），使用 gRPC Gateway 提供 RESTful JSON API 作为代理：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># grpc-gateway 配置（将 gRPC 方法映射为 HTTP 端点）
-# POST /v1/chat → ChatService.Chat
-# GET /v1/chat/stream → ChatService.StreamChat (SSE)
-</code></pre></div>
-<hr>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-comment"># grpc-gateway 配置（将 gRPC 方法映射为 HTTP 端点）</span>
+<span class="hljs-comment"># POST /v1/chat → ChatService.Chat</span>
+<span class="hljs-comment"># GET /v1/chat/stream → ChatService.StreamChat (SSE)</span>
+</code></pre></div><hr>
 <h2>四、WebSocket vs SSE vs gRPC vs 轮询 选型决策树</h2>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>通信需求分析：
 
@@ -387,26 +376,25 @@ public class MetricsInterceptor implements ServerInterceptor {
 ├── 否 → 传统 HTTP REST 即可
 └── 是 → 通信方向？
     ├── 仅服务端→客户端（单向流）
-    │   ├── 浏览器端？ → SSE（简单、自动重连、HTTP/2 友好）
+    │   ├── 浏览器端？ → SSE（简单、自动重连、HTTP<span class="hljs-symbol">/2</span> 友好）
     │   └── 微服务间？ → gRPC Server Streaming
     ├── 双向通信
     │   ├── 浏览器端？
     │   │   ├── 需要二进制数据？ → WebSocket
-    │   │   ├── 需要 pub/sub 消息模式？ → WebSocket + STOMP
-    │   │   └── 仅文本 JSON → SSE + POST 组合（简单场景）
+    │   │   ├── 需要 pub<span class="hljs-symbol">/sub</span> 消息模式？ → WebSocket <span class="hljs-operator">+</span> STOMP
+    │   │   └── 仅文本 JSON → SSE <span class="hljs-operator">+</span> POST 组合（简单场景）
     │   └── 微服务间？
     │       ├── 需要强类型契约？ → gRPC Bidirectional Streaming
-    │       ├── 需要高性能低延迟？ → gRPC（基于 HTTP/2）
-    │       └── 需要代理/负载均衡友好？ → gRPC 或 WebSocket
+    │       ├── 需要高性能低延迟？ → gRPC（基于 HTTP<span class="hljs-operator">/</span><span class="hljs-number">2</span>）
+    │       └── 需要代理<span class="hljs-operator">/</span>负载均衡友好？ → gRPC 或 WebSocket
     └── 仅客户端→服务端（上传流）→ gRPC Client Streaming
 
 特殊场景：
 ├── 需要浏览器兼容性（无法升级 WebSocket）？ → SockJS（自动降级）
 ├── 需要多语言互操作？ → gRPC（.proto 生成多语言代码）
-├── 需要穿透防火墙/代理？ → SSE（纯 HTTP），gRPC（需 HTTP/2 支持）
+├── 需要穿透防火墙<span class="hljs-operator">/</span>代理？ → SSE（纯 HTTP），gRPC（需 HTTP<span class="hljs-symbol">/2</span> 支持）
 └── AI 流式对话？ → SSE（简单）或 WebSocket（需要双向）
-</code></pre></div>
-<p><strong>AI 场景推荐：</strong></p>
+</code></pre></div><p><strong>AI 场景推荐：</strong></p>
 <ul>
 <li>模型流式响应 → SSE（最简方案）</li>
 <li>Agent 实时状态推送 → WebSocket + STOMP</li>
@@ -418,12 +406,11 @@ public class MetricsInterceptor implements ServerInterceptor {
 <h2>常见问题</h2>
 <p><strong>Q: Spring WebSocket 如何处理横向扩展？</strong>
 A: 使用外部消息代理（RabbitMQ/Redis）替代 SimpleBroker。Spring Session 管理用户会话。所有实例订阅同一个消息代理，消息广播到所有实例。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 使用 RabbitMQ 作为 STOMP 外部代理
-registry.enableStompBrokerRelay(&quot;/topic&quot;, &quot;/queue&quot;)
-    .setRelayHost(&quot;localhost&quot;)
-    .setRelayPort(61613);
-</code></pre></div>
-<p><strong>Q: gRPC 的负载均衡如何实现？</strong>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 使用 RabbitMQ 作为 STOMP 外部代理</span>
+registry.enableStompBrokerRelay(<span class="hljs-string">"/topic"</span>, <span class="hljs-string">"/queue"</span>)
+    .setRelayHost(<span class="hljs-string">"localhost"</span>)
+    .setRelayPort(<span class="hljs-number">61613</span>);
+</code></pre></div><p><strong>Q: gRPC 的负载均衡如何实现？</strong>
 A: gRPC 基于 HTTP/2 长连接，传统 L4 负载均衡器无法按请求分发。解决方案：1) 客户端负载均衡（推荐，如 gRPC Name Resolver + LoadBalancer）；2) L7 代理（Envoy/Linkerd）；3) Kubernetes Headless Service。</p>
 <p><strong>Q: WebSocket 的连接数上限是多少？</strong>
 A: 受操作系统文件描述符限制。单机通常支持数万到数十万连接（Linux 默认 1024 / 进程，需调大 <code>ulimit -n</code>）。Java NIO（Netty/Tomcat）使用 select/epoll 可支持百万级连接。</p>
@@ -432,10 +419,10 @@ A: 优先 SSE：更简单的实现、自动重连、浏览器原生 EventSource 
 <hr>
 <h2>相关条目</h2>
 <ul>
-<li><a href="#/03-Java应用平台/Web与安全/03-SpringMVC与SSE流式输出" class="cross-ref" data-ref="03-SpringMVC与SSE流式输出">03-SpringMVC与SSE流式输出</a>：SSE 流式输出的实现</li>
-<li><a href="#/13-AI协议/13-MCP协议与JavaSDK" class="cross-ref" data-ref="13-MCP协议与JavaSDK">13-MCP协议与JavaSDK</a>：MCP 的 Streamable HTTP Transport</li>
+<li><a href="#/03-Java应用平台/Web与安全/03-SpringMVC与SSE流式输出" class="cross-ref">03-SpringMVC与SSE流式输出</a>：SSE 流式输出的实现</li>
+<li><a href="#/13-AI协议/13-MCP协议与JavaSDK" class="cross-ref">13-MCP协议与JavaSDK</a>：MCP 的 Streamable HTTP Transport</li>
 <li><a href="#/?d=08" class="cross-ref domain-ref">08-模型接入与推理</a>：OpenAI 兼容协议的流式事件模型</li>
-<li><a href="#/01-计算机基础/计算机网络/01-计算机网络" class="cross-ref" data-ref="01-计算机网络">01-计算机网络</a>：HTTP/2、TLS 基础</li>
+<li><a href="#/01-计算机基础/计算机网络/01-计算机网络" class="cross-ref">01-计算机网络</a>：HTTP/2、TLS 基础</li>
 </ul>
-</div>
+</body></html></div>
 </article>

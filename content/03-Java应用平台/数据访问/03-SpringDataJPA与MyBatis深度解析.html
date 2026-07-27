@@ -1,93 +1,91 @@
 
-<article class="kb-entry" data-path="/03-Java应用平台/数据访问/03-SpringDataJPA与MyBatis深度解析">
+<article class="kb-entry" data-path="/03-Java应用平台">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=03">03-Java应用平台</a></div>
     <h1>Spring Data JPA与MyBatis深度解析</h1>
-    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#jpa</span><span class="badge badge-tag">#hibernate</span><span class="badge badge-tag">#mybatis</span><span class="badge badge-tag">#mybatis-plus</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#jpa</span><span class="badge badge-tag">#hibernate</span><span class="badge badge-tag">#mybatis</span><span class="badge badge-tag">#mybatis-plus</span><span class="badge badge-tag">#spring-data-jpa</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://docs.spring.io/spring-data/jpa/reference/" target="_blank" rel="noopener" class="source-link" title="Spring Data JPA Reference Documentation">Spring Data JPA Reference Documentation</a><a href="https://mybatis.org/mybatis-3/" target="_blank" rel="noopener" class="source-link" title="MyBatis 3 Official Documentation">MyBatis 3 Official Documentation</a><a href="https://github.com/spring-projects/spring-data-jpa" target="_blank" rel="noopener" class="source-link" title="Spring Data JPA source code">Spring Data JPA source code</a><a href="https://www.manning.com/books/java-persistence-with-spring-data-and-hibernate" target="_blank" rel="noopener" class="source-link" title="Java Persistence with Spring Data and Hibernate">Java Persistence with Spring Data and Hibernate</a></small></div>
   </div>
-  <div class="entry-body"><h1>Spring Data JPA 与 MyBatis 深度解析</h1>
+  <div class="entry-body"><html><head></head><body><h1>Spring Data JPA 与 MyBatis 深度解析</h1>
 <h2>概述</h2>
 <p>数据持久化是 Java 后端的核心战场。Spring Data JPA（基于 Hibernate）和 MyBatis（及其增强工具 MyBatis-Plus）代表了 Java 持久层的两大流派：<strong>ORM 自动映射</strong>与<strong>SQL 显式控制</strong>。</p>
 <p>本文从 JPA 实体映射、关系管理、N+1 问题、Spring Data Repository 模式，到 MyBatis XML Mapper、动态 SQL、MyBatis-Plus 条件构造器，全面对比两种方案的适用场景，并提供可运行的代码示例（JDK 25 + Spring Boot 4.x）。</p>
 <hr>
 <h2>一、JPA 核心</h2>
 <h3>1.1 Entity 映射</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Entity
-@Table(name = &quot;users&quot;, indexes = {
-    @Index(name = &quot;idx_email&quot;, columnList = &quot;email&quot;, unique = true)
-})
-public class User {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Entity</span>
+<span class="hljs-meta">@Table(name = "users", indexes = {
+    @Index(name = "idx_email", columnList = "email", unique = true)
+})</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">User</span> {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY) // 自增主键
-    private Long id;
+    <span class="hljs-meta">@Id</span>
+    <span class="hljs-meta">@GeneratedValue(strategy = GenerationType.IDENTITY)</span> <span class="hljs-comment">// 自增主键</span>
+    <span class="hljs-keyword">private</span> Long id;
 
-    @Column(nullable = false, length = 100)
-    private String name;
+    <span class="hljs-meta">@Column(nullable = false, length = 100)</span>
+    <span class="hljs-keyword">private</span> String name;
 
-    @Column(nullable = false, unique = true, length = 200)
-    private String email;
+    <span class="hljs-meta">@Column(nullable = false, unique = true, length = 200)</span>
+    <span class="hljs-keyword">private</span> String email;
 
-    @Enumerated(EnumType.STRING) // 枚举存储为字符串，而非序数
-    @Column(nullable = false)
-    private UserStatus status;
+    <span class="hljs-meta">@Enumerated(EnumType.STRING)</span> <span class="hljs-comment">// 枚举存储为字符串，而非序数</span>
+    <span class="hljs-meta">@Column(nullable = false)</span>
+    <span class="hljs-keyword">private</span> UserStatus status;
 
-    @Column(name = &quot;created_at&quot;, updatable = false)
-    private LocalDateTime createdAt;
+    <span class="hljs-meta">@Column(name = "created_at", updatable = false)</span>
+    <span class="hljs-keyword">private</span> LocalDateTime createdAt;
 
-    @Column(name = &quot;updated_at&quot;)
-    private LocalDateTime updatedAt;
+    <span class="hljs-meta">@Column(name = "updated_at")</span>
+    <span class="hljs-keyword">private</span> LocalDateTime updatedAt;
 
-    // 生命周期回调
-    @PrePersist
-    void prePersist() {
-        this.createdAt = LocalDateTime.now();
-        this.updatedAt = this.createdAt;
+    <span class="hljs-comment">// 生命周期回调</span>
+    <span class="hljs-meta">@PrePersist</span>
+    <span class="hljs-keyword">void</span> <span class="hljs-title function_">prePersist</span><span class="hljs-params">()</span> {
+        <span class="hljs-built_in">this</span>.createdAt = LocalDateTime.now();
+        <span class="hljs-built_in">this</span>.updatedAt = <span class="hljs-built_in">this</span>.createdAt;
     }
 
-    @PreUpdate
-    void preUpdate() {
-        this.updatedAt = LocalDateTime.now();
+    <span class="hljs-meta">@PreUpdate</span>
+    <span class="hljs-keyword">void</span> <span class="hljs-title function_">preUpdate</span><span class="hljs-params">()</span> {
+        <span class="hljs-built_in">this</span>.updatedAt = LocalDateTime.now();
     }
 }
-</code></pre></div>
-<h3>1.2 关系映射</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 一对多：一个用户有多个订单
-@Entity
-public class User {
-    @OneToMany(mappedBy = &quot;user&quot;, cascade = CascadeType.ALL, orphanRemoval = true,
-               fetch = FetchType.LAZY) // 默认 LAZY
-    private List&lt;Order&gt; orders = new ArrayList&lt;&gt;();
+</code></pre></div><h3>1.2 关系映射</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 一对多：一个用户有多个订单</span>
+<span class="hljs-meta">@Entity</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">User</span> {
+    <span class="hljs-meta">@OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true,
+               fetch = FetchType.LAZY)</span> <span class="hljs-comment">// 默认 LAZY</span>
+    <span class="hljs-keyword">private</span> List&lt;Order&gt; orders = <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;&gt;();
 
-    // 辅助方法：维护双向关系
-    public void addOrder(Order order) {
+    <span class="hljs-comment">// 辅助方法：维护双向关系</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">addOrder</span><span class="hljs-params">(Order order)</span> {
         orders.add(order);
-        order.setUser(this);
+        order.setUser(<span class="hljs-built_in">this</span>);
     }
 }
 
-// 多对一：多个订单属于一个用户
-@Entity
-public class Order {
-    @ManyToOne(fetch = FetchType.LAZY) // 多对一默认 EAGER！必须改为 LAZY
-    @JoinColumn(name = &quot;user_id&quot;, nullable = false)
-    private User user;
+<span class="hljs-comment">// 多对一：多个订单属于一个用户</span>
+<span class="hljs-meta">@Entity</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">Order</span> {
+    <span class="hljs-meta">@ManyToOne(fetch = FetchType.LAZY)</span> <span class="hljs-comment">// 多对一默认 EAGER！必须改为 LAZY</span>
+    <span class="hljs-meta">@JoinColumn(name = "user_id", nullable = false)</span>
+    <span class="hljs-keyword">private</span> User user;
 }
 
-// 多对多：用户和角色
-@Entity
-public class User {
-    @ManyToMany
-    @JoinTable(
-        name = &quot;user_roles&quot;,
-        joinColumns = @JoinColumn(name = &quot;user_id&quot;),
-        inverseJoinColumns = @JoinColumn(name = &quot;role_id&quot;)
-    )
-    private Set&lt;Role&gt; roles = new HashSet&lt;&gt;();
+<span class="hljs-comment">// 多对多：用户和角色</span>
+<span class="hljs-meta">@Entity</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">User</span> {
+    <span class="hljs-meta">@ManyToMany</span>
+    <span class="hljs-meta">@JoinTable(
+        name = "user_roles",
+        joinColumns = @JoinColumn(name = "user_id"),
+        inverseJoinColumns = @JoinColumn(name = "role_id")
+    )</span>
+    <span class="hljs-keyword">private</span> Set&lt;Role&gt; roles = <span class="hljs-keyword">new</span> <span class="hljs-title class_">HashSet</span>&lt;&gt;();
 }
-</code></pre></div>
-<p><strong>关键注意事项：</strong></p>
+</code></pre></div><p><strong>关键注意事项：</strong></p>
 <ul>
 <li><code>@OneToMany</code> 和 <code>@ManyToMany</code> 默认 LAZY</li>
 <li><code>@ManyToOne</code> 和 <code>@OneToOne</code> <strong>默认 EAGER！</strong> 这是最常见的性能陷阱，务必显式设置 <code>fetch = FetchType.LAZY</code></li>
@@ -123,244 +121,233 @@ public class User {
 <li>在 Controller 层使用 <code>OpenSessionInViewFilter</code>（不推荐生产环境）</li>
 </ol>
 <h3>1.4 级联操作</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Persist：保存用户时自动保存关联订单
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// Persist：保存用户时自动保存关联订单</span>
 cascade = CascadeType.PERSIST
 
-// Remove：删除用户时自动删除关联订单（配合 orphanRemoval）
-cascade = CascadeType.REMOVE
-orphanRemoval = true // 从集合中移除订单时，自动删除数据库记录
+<span class="hljs-comment">// Remove：删除用户时自动删除关联订单（配合 orphanRemoval）</span>
+cascade = CascadeType.<span class="hljs-type">REMOVE</span>
+<span class="hljs-variable">orphanRemoval</span> <span class="hljs-operator">=</span> <span class="hljs-literal">true</span> <span class="hljs-comment">// 从集合中移除订单时，自动删除数据库记录</span>
 
-// 不做级联删除的安全做法：使用软删除
-@SQLDelete(sql = &quot;UPDATE orders SET deleted = true WHERE id = ?&quot;)
-@Where(clause = &quot;deleted = false&quot;) // Hibernate 6+ 改用 @SoftDelete
-</code></pre></div>
-<hr>
+<span class="hljs-comment">// 不做级联删除的安全做法：使用软删除</span>
+<span class="hljs-meta">@SQLDelete(sql = "UPDATE orders SET deleted = true WHERE id = ?")</span>
+<span class="hljs-meta">@Where(clause = "deleted = false")</span> <span class="hljs-comment">// Hibernate 6+ 改用 @SoftDelete</span>
+</code></pre></div><hr>
 <h2>二、N+1 问题：原因与解决方案</h2>
 <h3>2.1 问题演示</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 查询所有用户（1 条 SQL）
-List&lt;User&gt; users = userRepository.findAll(); // SELECT * FROM users
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 查询所有用户（1 条 SQL）</span>
+List&lt;User&gt; users = userRepository.findAll(); <span class="hljs-comment">// SELECT * FROM users</span>
 
-// 遍历用户获取订单（N 条 SQL！）
-for (var user : users) {
-    System.out.println(user.getOrders().size()); // 每个 user 触发一次 SELECT
+<span class="hljs-comment">// 遍历用户获取订单（N 条 SQL！）</span>
+<span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> user : users) {
+    System.out.println(user.getOrders().size()); <span class="hljs-comment">// 每个 user 触发一次 SELECT</span>
 }
-// 总共：1 + N 条 SQL
-</code></pre></div>
-<h3>2.2 解决方案一：@EntityGraph</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 方案1：在 Repository 方法上直接声明
-public interface UserRepository extends JpaRepository&lt;User, Long&gt; {
+<span class="hljs-comment">// 总共：1 + N 条 SQL</span>
+</code></pre></div><h3>2.2 解决方案一：@EntityGraph</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 方案1：在 Repository 方法上直接声明</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">UserRepository</span> <span class="hljs-keyword">extends</span> <span class="hljs-title class_">JpaRepository</span>&lt;User, Long&gt; {
 
-    @EntityGraph(attributePaths = {&quot;orders&quot;, &quot;roles&quot;})
-    List&lt;User&gt; findAll(); // 生成的 SQL 使用 LEFT JOIN FETCH
+    <span class="hljs-meta">@EntityGraph(attributePaths = {"orders", "roles"})</span>
+    List&lt;User&gt; <span class="hljs-title function_">findAll</span><span class="hljs-params">()</span>; <span class="hljs-comment">// 生成的 SQL 使用 LEFT JOIN FETCH</span>
 
-    @EntityGraph(attributePaths = {&quot;orders&quot;})
-    Optional&lt;User&gt; findById(Long id);
-}
-
-// 方案2：在 Entity 上定义命名 EntityGraph
-@NamedEntityGraph(
-    name = &quot;User.withOrders&quot;,
-    attributeNodes = @NamedAttributeNode(&quot;orders&quot;)
-)
-@Entity
-public class User { /* ... */ }
-
-// 使用时引用
-@EntityGraph(&quot;User.withOrders&quot;)
-List&lt;User&gt; findAll();
-</code></pre></div>
-<h3>2.3 解决方案二：JOIN FETCH</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// JPQL JOIN FETCH
-@Query(&quot;SELECT DISTINCT u FROM User u LEFT JOIN FETCH u.orders WHERE u.status = :status&quot;)
-List&lt;User&gt; findUsersWithOrders(@Param(&quot;status&quot;) UserStatus status);
-</code></pre></div>
-<h3>2.4 解决方案三：Batch Size</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Entity
-public class User {
-    @BatchSize(size = 50) // 一次加载 50 个关联对象
-    @OneToMany(mappedBy = &quot;user&quot;)
-    private List&lt;Order&gt; orders;
+    <span class="hljs-meta">@EntityGraph(attributePaths = {"orders"})</span>
+    Optional&lt;User&gt; <span class="hljs-title function_">findById</span><span class="hljs-params">(Long id)</span>;
 }
 
-// 全局配置（application.yml）
-// spring.jpa.properties.hibernate.default_batch_fetch_size: 50
-</code></pre></div>
-<hr>
+<span class="hljs-comment">// 方案2：在 Entity 上定义命名 EntityGraph</span>
+<span class="hljs-meta">@NamedEntityGraph(
+    name = "User.withOrders",
+    attributeNodes = @NamedAttributeNode("orders")
+)</span>
+<span class="hljs-meta">@Entity</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">User</span> { <span class="hljs-comment">/* ... */</span> }
+
+<span class="hljs-comment">// 使用时引用</span>
+<span class="hljs-meta">@EntityGraph("User.withOrders")</span>
+List&lt;User&gt; <span class="hljs-title function_">findAll</span><span class="hljs-params">()</span>;
+</code></pre></div><h3>2.3 解决方案二：JOIN FETCH</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// JPQL JOIN FETCH</span>
+<span class="hljs-meta">@Query("SELECT DISTINCT u FROM User u LEFT JOIN FETCH u.orders WHERE u.status = :status")</span>
+List&lt;User&gt; <span class="hljs-title function_">findUsersWithOrders</span><span class="hljs-params">(<span class="hljs-meta">@Param("status")</span> UserStatus status)</span>;
+</code></pre></div><h3>2.4 解决方案三：Batch Size</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Entity</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">User</span> {
+    <span class="hljs-meta">@BatchSize(size = 50)</span> <span class="hljs-comment">// 一次加载 50 个关联对象</span>
+    <span class="hljs-meta">@OneToMany(mappedBy = "user")</span>
+    <span class="hljs-keyword">private</span> List&lt;Order&gt; orders;
+}
+
+<span class="hljs-comment">// 全局配置（application.yml）</span>
+<span class="hljs-comment">// spring.jpa.properties.hibernate.default_batch_fetch_size: 50</span>
+</code></pre></div><hr>
 <h2>三、JPQL 与 Criteria</h2>
 <h3>3.1 JPQL 语法</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 基本查询
-@Query(&quot;SELECT u FROM User u WHERE u.email = :email&quot;)
-Optional&lt;User&gt; findByEmail(@Param(&quot;email&quot;) String email);
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 基本查询</span>
+<span class="hljs-meta">@Query("SELECT u FROM User u WHERE u.email = :email")</span>
+Optional&lt;User&gt; <span class="hljs-title function_">findByEmail</span><span class="hljs-params">(<span class="hljs-meta">@Param("email")</span> String email)</span>;
 
-// 投影查询（返回 DTO）
-public record UserSummary(Long id, String name, String email) {}
+<span class="hljs-comment">// 投影查询（返回 DTO）</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">UserSummary</span><span class="hljs-params">(Long id, String name, String email)</span> {}
 
-@Query(&quot;SELECT new com.example.dto.UserSummary(u.id, u.name, u.email) &quot; +
-       &quot;FROM User u WHERE u.status = :status&quot;)
-List&lt;UserSummary&gt; findSummariesByStatus(@Param(&quot;status&quot;) UserStatus status);
+<span class="hljs-meta">@Query("SELECT new com.example.dto.UserSummary(u.id, u.name, u.email) " +
+       "FROM User u WHERE u.status = :status")</span>
+List&lt;UserSummary&gt; <span class="hljs-title function_">findSummariesByStatus</span><span class="hljs-params">(<span class="hljs-meta">@Param("status")</span> UserStatus status)</span>;
 
-// 更新查询
-@Modifying
-@Query(&quot;UPDATE User u SET u.status = :status WHERE u.lastLoginAt &lt; :threshold&quot;)
-int deactivateInactiveUsers(@Param(&quot;status&quot;) UserStatus status,
-                            @Param(&quot;threshold&quot;) LocalDateTime threshold);
-</code></pre></div>
-<h3>3.2 CriteriaBuilder 动态查询</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Repository
-public class UserSearchRepository {
+<span class="hljs-comment">// 更新查询</span>
+<span class="hljs-meta">@Modifying</span>
+<span class="hljs-meta">@Query("UPDATE User u SET u.status = :status WHERE u.lastLoginAt &lt; :threshold")</span>
+<span class="hljs-type">int</span> <span class="hljs-title function_">deactivateInactiveUsers</span><span class="hljs-params">(<span class="hljs-meta">@Param("status")</span> UserStatus status,
+                            <span class="hljs-meta">@Param("threshold")</span> LocalDateTime threshold)</span>;
+</code></pre></div><h3>3.2 CriteriaBuilder 动态查询</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Repository</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">UserSearchRepository</span> {
 
-    @PersistenceContext
-    private EntityManager em;
+    <span class="hljs-meta">@PersistenceContext</span>
+    <span class="hljs-keyword">private</span> EntityManager em;
 
-    public List&lt;User&gt; searchUsers(String name, UserStatus status, LocalDate fromDate) {
-        var cb = em.getCriteriaBuilder();
-        var query = cb.createQuery(User.class);
-        var root = query.from(User.class);
+    <span class="hljs-keyword">public</span> List&lt;User&gt; <span class="hljs-title function_">searchUsers</span><span class="hljs-params">(String name, UserStatus status, LocalDate fromDate)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">cb</span> <span class="hljs-operator">=</span> em.getCriteriaBuilder();
+        <span class="hljs-type">var</span> <span class="hljs-variable">query</span> <span class="hljs-operator">=</span> cb.createQuery(User.class);
+        <span class="hljs-type">var</span> <span class="hljs-variable">root</span> <span class="hljs-operator">=</span> query.from(User.class);
 
-        var predicates = new ArrayList&lt;Predicate&gt;();
+        <span class="hljs-type">var</span> <span class="hljs-variable">predicates</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;Predicate&gt;();
 
-        if (name != null &amp;&amp; !name.isBlank()) {
-            predicates.add(cb.like(root.get(&quot;name&quot;), &quot;%&quot; + name + &quot;%&quot;));
+        <span class="hljs-keyword">if</span> (name != <span class="hljs-literal">null</span> &amp;&amp; !name.isBlank()) {
+            predicates.add(cb.like(root.get(<span class="hljs-string">"name"</span>), <span class="hljs-string">"%"</span> + name + <span class="hljs-string">"%"</span>));
         }
-        if (status != null) {
-            predicates.add(cb.equal(root.get(&quot;status&quot;), status));
+        <span class="hljs-keyword">if</span> (status != <span class="hljs-literal">null</span>) {
+            predicates.add(cb.equal(root.get(<span class="hljs-string">"status"</span>), status));
         }
-        if (fromDate != null) {
+        <span class="hljs-keyword">if</span> (fromDate != <span class="hljs-literal">null</span>) {
             predicates.add(cb.greaterThanOrEqualTo(
-                root.get(&quot;createdAt&quot;), fromDate.atStartOfDay()));
+                root.get(<span class="hljs-string">"createdAt"</span>), fromDate.atStartOfDay()));
         }
 
-        query.where(predicates.toArray(new Predicate[0]));
-        return em.createQuery(query).getResultList();
+        query.where(predicates.toArray(<span class="hljs-keyword">new</span> <span class="hljs-title class_">Predicate</span>[<span class="hljs-number">0</span>]));
+        <span class="hljs-keyword">return</span> em.createQuery(query).getResultList();
     }
 }
-</code></pre></div>
-<h3>3.3 Specification 模式（Spring Data JPA）</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 更优雅的动态查询方式
-import org.springframework.data.jpa.domain.Specification;
+</code></pre></div><h3>3.3 Specification 模式（Spring Data JPA）</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 更优雅的动态查询方式</span>
+<span class="hljs-keyword">import</span> org.springframework.data.jpa.domain.Specification;
 
-public class UserSpecifications {
-    public static Specification&lt;User&gt; nameContains(String name) {
-        return (root, query, cb) -&gt;
-            name == null ? null : cb.like(root.get(&quot;name&quot;), &quot;%&quot; + name + &quot;%&quot;);
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">UserSpecifications</span> {
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> Specification&lt;User&gt; <span class="hljs-title function_">nameContains</span><span class="hljs-params">(String name)</span> {
+        <span class="hljs-keyword">return</span> (root, query, cb) -&gt;
+            name == <span class="hljs-literal">null</span> ? <span class="hljs-literal">null</span> : cb.like(root.get(<span class="hljs-string">"name"</span>), <span class="hljs-string">"%"</span> + name + <span class="hljs-string">"%"</span>);
     }
 
-    public static Specification&lt;User&gt; hasStatus(UserStatus status) {
-        return (root, query, cb) -&gt;
-            status == null ? null : cb.equal(root.get(&quot;status&quot;), status);
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> Specification&lt;User&gt; <span class="hljs-title function_">hasStatus</span><span class="hljs-params">(UserStatus status)</span> {
+        <span class="hljs-keyword">return</span> (root, query, cb) -&gt;
+            status == <span class="hljs-literal">null</span> ? <span class="hljs-literal">null</span> : cb.equal(root.get(<span class="hljs-string">"status"</span>), status);
     }
 }
 
-// 使用
-public interface UserRepository extends JpaRepository&lt;User, Long&gt;,
+<span class="hljs-comment">// 使用</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">UserRepository</span> <span class="hljs-keyword">extends</span> <span class="hljs-title class_">JpaRepository</span>&lt;User, Long&gt;,
                                           JpaSpecificationExecutor&lt;User&gt; {}
 
-// 组合多种条件
-var spec = Specification
-    .where(UserSpecifications.nameContains(&quot;zhang&quot;))
+<span class="hljs-comment">// 组合多种条件</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">spec</span> <span class="hljs-operator">=</span> Specification
+    .where(UserSpecifications.nameContains(<span class="hljs-string">"zhang"</span>))
     .and(UserSpecifications.hasStatus(UserStatus.ACTIVE));
 List&lt;User&gt; users = userRepository.findAll(spec);
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>四、Spring Data JPA 核心功能</h2>
 <h3>4.1 Auditing 审计</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Configuration
-@EnableJpaAuditing
-public class JpaConfig {}
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Configuration</span>
+<span class="hljs-meta">@EnableJpaAuditing</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">JpaConfig</span> {}
 
-@Entity
-@EntityListeners(AuditingEntityListener.class)
-public class User {
-    @CreatedDate
-    private LocalDateTime createdAt;
+<span class="hljs-meta">@Entity</span>
+<span class="hljs-meta">@EntityListeners(AuditingEntityListener.class)</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">User</span> {
+    <span class="hljs-meta">@CreatedDate</span>
+    <span class="hljs-keyword">private</span> LocalDateTime createdAt;
 
-    @LastModifiedDate
-    private LocalDateTime updatedAt;
+    <span class="hljs-meta">@LastModifiedDate</span>
+    <span class="hljs-keyword">private</span> LocalDateTime updatedAt;
 
-    @CreatedBy
-    private String createdBy;
+    <span class="hljs-meta">@CreatedBy</span>
+    <span class="hljs-keyword">private</span> String createdBy;
 
-    @LastModifiedBy
-    private String lastModifiedBy;
+    <span class="hljs-meta">@LastModifiedBy</span>
+    <span class="hljs-keyword">private</span> String lastModifiedBy;
 }
 
-// 配合 AuditorAware
-@Component
-public class AuditorAwareImpl implements AuditorAware&lt;String&gt; {
-    @Override
-    public Optional&lt;String&gt; getCurrentAuditor() {
-        // 从 SecurityContext 或请求上下文中获取当前用户
-        return Optional.of(SecurityContextHolder.getContext()
+<span class="hljs-comment">// 配合 AuditorAware</span>
+<span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">AuditorAwareImpl</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">AuditorAware</span>&lt;String&gt; {
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> Optional&lt;String&gt; <span class="hljs-title function_">getCurrentAuditor</span><span class="hljs-params">()</span> {
+        <span class="hljs-comment">// 从 SecurityContext 或请求上下文中获取当前用户</span>
+        <span class="hljs-keyword">return</span> Optional.of(SecurityContextHolder.getContext()
             .getAuthentication().getName());
     }
 }
-</code></pre></div>
-<h3>4.2 分页与排序</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 分页查询
-Page&lt;User&gt; page = userRepository.findAll(PageRequest.of(0, 20,
-    Sort.by(Sort.Direction.DESC, &quot;createdAt&quot;)));
+</code></pre></div><h3>4.2 分页与排序</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 分页查询</span>
+Page&lt;User&gt; page = userRepository.findAll(PageRequest.of(<span class="hljs-number">0</span>, <span class="hljs-number">20</span>,
+    Sort.by(Sort.Direction.DESC, <span class="hljs-string">"createdAt"</span>)));
 
-System.out.println(&quot;Total pages: &quot; + page.getTotalPages());
-System.out.println(&quot;Total elements: &quot; + page.getTotalElements());
+System.out.println(<span class="hljs-string">"Total pages: "</span> + page.getTotalPages());
+System.out.println(<span class="hljs-string">"Total elements: "</span> + page.getTotalElements());
 
-// Slice：不查询总数，更高效（适合无限滚动）
+<span class="hljs-comment">// Slice：不查询总数，更高效（适合无限滚动）</span>
 Slice&lt;User&gt; slice = userRepository.findByStatus(
-    UserStatus.ACTIVE, PageRequest.of(0, 20));
-while (slice.hasNext()) {
+    UserStatus.ACTIVE, PageRequest.of(<span class="hljs-number">0</span>, <span class="hljs-number">20</span>));
+<span class="hljs-keyword">while</span> (slice.hasNext()) {
     slice = userRepository.findByStatus(
         UserStatus.ACTIVE, slice.nextPageable());
     slice.getContent().forEach(System.out::println);
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>五、MyBatis</h2>
 <h3>5.1 XML Mapper</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;!-- UserMapper.xml --&gt;
-&lt;mapper namespace=&quot;com.example.mapper.UserMapper&quot;&gt;
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-xml"><span class="hljs-comment">&lt;!-- UserMapper.xml --&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">mapper</span> <span class="hljs-attr">namespace</span>=<span class="hljs-string">"com.example.mapper.UserMapper"</span>&gt;</span>
 
-    &lt;!-- ResultMap：字段映射 --&gt;
-    &lt;resultMap id=&quot;userResultMap&quot; type=&quot;com.example.entity.User&quot;&gt;
-        &lt;id property=&quot;id&quot; column=&quot;id&quot;/&gt;
-        &lt;result property=&quot;name&quot; column=&quot;name&quot;/&gt;
-        &lt;result property=&quot;email&quot; column=&quot;email&quot;/&gt;
-        &lt;result property=&quot;createdAt&quot; column=&quot;created_at&quot;/&gt;
-        &lt;!-- 一对多关联 --&gt;
-        &lt;collection property=&quot;orders&quot; ofType=&quot;com.example.entity.Order&quot;
-                    select=&quot;com.example.mapper.OrderMapper.findByUserId&quot;
-                    column=&quot;id&quot;/&gt;
-    &lt;/resultMap&gt;
+    <span class="hljs-comment">&lt;!-- ResultMap：字段映射 --&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">resultMap</span> <span class="hljs-attr">id</span>=<span class="hljs-string">"userResultMap"</span> <span class="hljs-attr">type</span>=<span class="hljs-string">"com.example.entity.User"</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">id</span> <span class="hljs-attr">property</span>=<span class="hljs-string">"id"</span> <span class="hljs-attr">column</span>=<span class="hljs-string">"id"</span>/&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">result</span> <span class="hljs-attr">property</span>=<span class="hljs-string">"name"</span> <span class="hljs-attr">column</span>=<span class="hljs-string">"name"</span>/&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">result</span> <span class="hljs-attr">property</span>=<span class="hljs-string">"email"</span> <span class="hljs-attr">column</span>=<span class="hljs-string">"email"</span>/&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">result</span> <span class="hljs-attr">property</span>=<span class="hljs-string">"createdAt"</span> <span class="hljs-attr">column</span>=<span class="hljs-string">"created_at"</span>/&gt;</span>
+        <span class="hljs-comment">&lt;!-- 一对多关联 --&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">collection</span> <span class="hljs-attr">property</span>=<span class="hljs-string">"orders"</span> <span class="hljs-attr">ofType</span>=<span class="hljs-string">"com.example.entity.Order"</span>
+                    <span class="hljs-attr">select</span>=<span class="hljs-string">"com.example.mapper.OrderMapper.findByUserId"</span>
+                    <span class="hljs-attr">column</span>=<span class="hljs-string">"id"</span>/&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">resultMap</span>&gt;</span>
 
-    &lt;!-- 动态查询 --&gt;
-    &lt;select id=&quot;findByCondition&quot; resultMap=&quot;userResultMap&quot;&gt;
+    <span class="hljs-comment">&lt;!-- 动态查询 --&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">select</span> <span class="hljs-attr">id</span>=<span class="hljs-string">"findByCondition"</span> <span class="hljs-attr">resultMap</span>=<span class="hljs-string">"userResultMap"</span>&gt;</span>
         SELECT * FROM users
-        &lt;where&gt;
-            &lt;if test=&quot;name != null and name != &#39;&#39;&quot;&gt;
-                AND name LIKE CONCAT(&#39;%&#39;, #{name}, &#39;%&#39;)
-            &lt;/if&gt;
-            &lt;if test=&quot;status != null&quot;&gt;
+        <span class="hljs-tag">&lt;<span class="hljs-name">where</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">if</span> <span class="hljs-attr">test</span>=<span class="hljs-string">"name != null and name != ''"</span>&gt;</span>
+                AND name LIKE CONCAT('%', #{name}, '%')
+            <span class="hljs-tag">&lt;/<span class="hljs-name">if</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">if</span> <span class="hljs-attr">test</span>=<span class="hljs-string">"status != null"</span>&gt;</span>
                 AND status = #{status}
-            &lt;/if&gt;
-            &lt;if test=&quot;ids != null and ids.size() &gt; 0&quot;&gt;
+            <span class="hljs-tag">&lt;/<span class="hljs-name">if</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">if</span> <span class="hljs-attr">test</span>=<span class="hljs-string">"ids != null and ids.size() &gt; 0"</span>&gt;</span>
                 AND id IN
-                &lt;foreach collection=&quot;ids&quot; item=&quot;id&quot; open=&quot;(&quot; separator=&quot;,&quot; close=&quot;)&quot;&gt;
+                <span class="hljs-tag">&lt;<span class="hljs-name">foreach</span> <span class="hljs-attr">collection</span>=<span class="hljs-string">"ids"</span> <span class="hljs-attr">item</span>=<span class="hljs-string">"id"</span> <span class="hljs-attr">open</span>=<span class="hljs-string">"("</span> <span class="hljs-attr">separator</span>=<span class="hljs-string">","</span> <span class="hljs-attr">close</span>=<span class="hljs-string">")"</span>&gt;</span>
                     #{id}
-                &lt;/foreach&gt;
-            &lt;/if&gt;
-        &lt;/where&gt;
+                <span class="hljs-tag">&lt;/<span class="hljs-name">foreach</span>&gt;</span>
+            <span class="hljs-tag">&lt;/<span class="hljs-name">if</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">where</span>&gt;</span>
         ORDER BY created_at DESC
-    &lt;/select&gt;
+    <span class="hljs-tag">&lt;/<span class="hljs-name">select</span>&gt;</span>
 
-    &lt;!-- 批量插入 --&gt;
-    &lt;insert id=&quot;batchInsert&quot;&gt;
+    <span class="hljs-comment">&lt;!-- 批量插入 --&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">insert</span> <span class="hljs-attr">id</span>=<span class="hljs-string">"batchInsert"</span>&gt;</span>
         INSERT INTO users (name, email, status, created_at) VALUES
-        &lt;foreach collection=&quot;users&quot; item=&quot;user&quot; separator=&quot;,&quot;&gt;
+        <span class="hljs-tag">&lt;<span class="hljs-name">foreach</span> <span class="hljs-attr">collection</span>=<span class="hljs-string">"users"</span> <span class="hljs-attr">item</span>=<span class="hljs-string">"user"</span> <span class="hljs-attr">separator</span>=<span class="hljs-string">","</span>&gt;</span>
             (#{user.name}, #{user.email}, #{user.status}, #{user.createdAt})
-        &lt;/foreach&gt;
-    &lt;/insert&gt;
+        <span class="hljs-tag">&lt;/<span class="hljs-name">foreach</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">insert</span>&gt;</span>
 
-&lt;/mapper&gt;
-</code></pre></div>
-<h3>5.2 动态 SQL 标签</h3>
+<span class="hljs-tag">&lt;/<span class="hljs-name">mapper</span>&gt;</span>
+</code></pre></div><h3>5.2 动态 SQL 标签</h3>
 <table>
 <thead>
 <tr>
@@ -406,70 +393,67 @@ while (slice.hasNext()) {
 </tr>
 </tbody></table>
 <h3>5.3 注解方式</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Mapper
-public interface UserMapper {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Mapper</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">UserMapper</span> {
 
-    @Select(&quot;SELECT * FROM users WHERE id = #{id}&quot;)
-    User findById(Long id);
+    <span class="hljs-meta">@Select("SELECT * FROM users WHERE id = #{id}")</span>
+    User <span class="hljs-title function_">findById</span><span class="hljs-params">(Long id)</span>;
 
-    @Select(&quot;SELECT * FROM users WHERE email = #{email}&quot;)
-    @Results({
-        @Result(property = &quot;createdAt&quot;, column = &quot;created_at&quot;),
-        @Result(property = &quot;orders&quot;, column = &quot;id&quot;,
-                many = @Many(select = &quot;com.example.mapper.OrderMapper.findByUserId&quot;))
-    })
-    User findByEmail(String email);
+    <span class="hljs-meta">@Select("SELECT * FROM users WHERE email = #{email}")</span>
+    <span class="hljs-meta">@Results({
+        @Result(property = "createdAt", column = "created_at"),
+        @Result(property = "orders", column = "id",
+                many = @Many(select = "com.example.mapper.OrderMapper.findByUserId"))
+    })</span>
+    User <span class="hljs-title function_">findByEmail</span><span class="hljs-params">(String email)</span>;
 
-    @Insert(&quot;INSERT INTO users(name, email, status, created_at) &quot; +
-            &quot;VALUES(#{name}, #{email}, #{status}, #{createdAt})&quot;)
-    @Options(useGeneratedKeys = true, keyProperty = &quot;id&quot;)
-    int insert(User user);
+    <span class="hljs-meta">@Insert("INSERT INTO users(name, email, status, created_at) " +
+            "VALUES(#{name}, #{email}, #{status}, #{createdAt})")</span>
+    <span class="hljs-meta">@Options(useGeneratedKeys = true, keyProperty = "id")</span>
+    <span class="hljs-type">int</span> <span class="hljs-title function_">insert</span><span class="hljs-params">(User user)</span>;
 }
-</code></pre></div>
-<h3>5.4 Plugin 拦截器</h3>
+</code></pre></div><h3>5.4 Plugin 拦截器</h3>
 <p>MyBatis Plugin 可以实现分页、审计、SQL 监控等功能：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 自定义 SQL 监控拦截器
-@Intercepts({
-    @Signature(type = StatementHandler.class, method = &quot;prepare&quot;,
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 自定义 SQL 监控拦截器</span>
+<span class="hljs-meta">@Intercepts({
+    @Signature(type = StatementHandler.class, method = "prepare",
                args = {Connection.class, Integer.class})
-})
-public class SqlMonitorInterceptor implements Interceptor {
+})</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">SqlMonitorInterceptor</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">Interceptor</span> {
 
-    @Override
-    public Object intercept(Invocation invocation) throws Throwable {
-        var statementHandler = (StatementHandler) invocation.getTarget();
-        var sql = statementHandler.getBoundSql().getSql();
-        var start = System.nanoTime();
-        try {
-            return invocation.proceed();
-        } finally {
-            var elapsed = (System.nanoTime() - start) / 1_000_000;
-            System.out.printf(&quot;[SQL] %s (took %dms)%n&quot;,
-                sql.replaceAll(&quot;\\s+&quot;, &quot; &quot;).trim(), elapsed);
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> Object <span class="hljs-title function_">intercept</span><span class="hljs-params">(Invocation invocation)</span> <span class="hljs-keyword">throws</span> Throwable {
+        <span class="hljs-type">var</span> <span class="hljs-variable">statementHandler</span> <span class="hljs-operator">=</span> (StatementHandler) invocation.getTarget();
+        <span class="hljs-type">var</span> <span class="hljs-variable">sql</span> <span class="hljs-operator">=</span> statementHandler.getBoundSql().getSql();
+        <span class="hljs-type">var</span> <span class="hljs-variable">start</span> <span class="hljs-operator">=</span> System.nanoTime();
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-keyword">return</span> invocation.proceed();
+        } <span class="hljs-keyword">finally</span> {
+            <span class="hljs-type">var</span> <span class="hljs-variable">elapsed</span> <span class="hljs-operator">=</span> (System.nanoTime() - start) / <span class="hljs-number">1_000_000</span>;
+            System.out.printf(<span class="hljs-string">"[SQL] %s (took %dms)%n"</span>,
+                sql.replaceAll(<span class="hljs-string">"\\s+"</span>, <span class="hljs-string">" "</span>).trim(), elapsed);
         }
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>六、MyBatis-Plus</h2>
 <h3>6.1 BaseMapper</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Mapper
-public interface UserMapper extends BaseMapper&lt;User&gt; {
-    // 无需写任何 SQL，自动获得 CRUD 方法：
-    // insert(), deleteById(), updateById(), selectById(), selectList(), selectPage()
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Mapper</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">UserMapper</span> <span class="hljs-keyword">extends</span> <span class="hljs-title class_">BaseMapper</span>&lt;User&gt; {
+    <span class="hljs-comment">// 无需写任何 SQL，自动获得 CRUD 方法：</span>
+    <span class="hljs-comment">// insert(), deleteById(), updateById(), selectById(), selectList(), selectPage()</span>
 }
-</code></pre></div>
-<h3>6.2 条件构造器</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
-public class UserService {
+</code></pre></div><h3>6.2 条件构造器</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">UserService</span> {
 
-    @Autowired
-    private UserMapper userMapper;
+    <span class="hljs-meta">@Autowired</span>
+    <span class="hljs-keyword">private</span> UserMapper userMapper;
 
-    // LambdaQueryWrapper：类型安全，避免字段名硬编码
-    public List&lt;User&gt; searchUsers(String keyword) {
-        return userMapper.selectList(
-            new LambdaQueryWrapper&lt;User&gt;()
+    <span class="hljs-comment">// LambdaQueryWrapper：类型安全，避免字段名硬编码</span>
+    <span class="hljs-keyword">public</span> List&lt;User&gt; <span class="hljs-title function_">searchUsers</span><span class="hljs-params">(String keyword)</span> {
+        <span class="hljs-keyword">return</span> userMapper.selectList(
+            <span class="hljs-keyword">new</span> <span class="hljs-title class_">LambdaQueryWrapper</span>&lt;User&gt;()
                 .like(StringUtils.hasText(keyword), User::getName, keyword)
                 .or()
                 .like(StringUtils.hasText(keyword), User::getEmail, keyword)
@@ -478,42 +462,40 @@ public class UserService {
         );
     }
 
-    // 分页查询
-    public Page&lt;User&gt; pageUsers(int pageNum, int pageSize) {
-        return userMapper.selectPage(
-            new Page&lt;&gt;(pageNum, pageSize),
-            new LambdaQueryWrapper&lt;User&gt;()
+    <span class="hljs-comment">// 分页查询</span>
+    <span class="hljs-keyword">public</span> Page&lt;User&gt; <span class="hljs-title function_">pageUsers</span><span class="hljs-params">(<span class="hljs-type">int</span> pageNum, <span class="hljs-type">int</span> pageSize)</span> {
+        <span class="hljs-keyword">return</span> userMapper.selectPage(
+            <span class="hljs-keyword">new</span> <span class="hljs-title class_">Page</span>&lt;&gt;(pageNum, pageSize),
+            <span class="hljs-keyword">new</span> <span class="hljs-title class_">LambdaQueryWrapper</span>&lt;User&gt;()
                 .eq(User::getStatus, UserStatus.ACTIVE)
         );
     }
 }
-</code></pre></div>
-<h3>6.3 自动填充</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Component
-public class MetaObjectHandler implements com.baomidou.mybatisplus.core.handlers.MetaObjectHandler {
+</code></pre></div><h3>6.3 自动填充</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">MetaObjectHandler</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">com</span>.baomidou.mybatisplus.core.handlers.MetaObjectHandler {
 
-    @Override
-    public void insertFill(MetaObject metaObject) {
-        this.strictInsertFill(metaObject, &quot;createdAt&quot;, LocalDateTime.class, LocalDateTime.now());
-        this.strictInsertFill(metaObject, &quot;updatedAt&quot;, LocalDateTime.class, LocalDateTime.now());
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">insertFill</span><span class="hljs-params">(MetaObject metaObject)</span> {
+        <span class="hljs-built_in">this</span>.strictInsertFill(metaObject, <span class="hljs-string">"createdAt"</span>, LocalDateTime.class, LocalDateTime.now());
+        <span class="hljs-built_in">this</span>.strictInsertFill(metaObject, <span class="hljs-string">"updatedAt"</span>, LocalDateTime.class, LocalDateTime.now());
     }
 
-    @Override
-    public void updateFill(MetaObject metaObject) {
-        this.strictUpdateFill(metaObject, &quot;updatedAt&quot;, LocalDateTime.class, LocalDateTime.now());
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">updateFill</span><span class="hljs-params">(MetaObject metaObject)</span> {
+        <span class="hljs-built_in">this</span>.strictUpdateFill(metaObject, <span class="hljs-string">"updatedAt"</span>, LocalDateTime.class, LocalDateTime.now());
     }
 }
 
-@Entity
-public class User {
-    @TableField(fill = FieldFill.INSERT)
-    private LocalDateTime createdAt;
+<span class="hljs-meta">@Entity</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">User</span> {
+    <span class="hljs-meta">@TableField(fill = FieldFill.INSERT)</span>
+    <span class="hljs-keyword">private</span> LocalDateTime createdAt;
 
-    @TableField(fill = FieldFill.INSERT_UPDATE)
-    private LocalDateTime updatedAt;
+    <span class="hljs-meta">@TableField(fill = FieldFill.INSERT_UPDATE)</span>
+    <span class="hljs-keyword">private</span> LocalDateTime updatedAt;
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>七、JPA vs MyBatis 选型</h2>
 <table>
 <thead>
@@ -578,10 +560,10 @@ A: Spring Boot 通过 <code>@Primary</code> 标注主数据源，自定义 <code
 <hr>
 <h2>相关条目</h2>
 <ul>
-<li><a href="#/03-Java应用平台/Spring核心/03-Spring核心IoC-AOP-事务" class="cross-ref" data-ref="03-Spring核心IoC-AOP-事务">03-Spring核心IoC-AOP-事务</a>：事务管理</li>
-<li><a href="#/03-Java应用平台/Spring核心/03-SpringBoot4深度解析" class="cross-ref" data-ref="03-SpringBoot4深度解析">03-SpringBoot4深度解析</a>：自动配置</li>
-<li><a href="#/?d=04" class="cross-ref domain-ref">04-数据库与缓存/PostgreSQL</a>：数据库选型</li>
-<li><a href="#/01-计算机基础/数据库原理/01-数据库原理" class="cross-ref" data-ref="01-数据库原理">01-数据库原理</a>：索引与查询优化</li>
+<li><a href="#/03-Java应用平台/Spring核心/03-Spring核心IoC-AOP-事务" class="cross-ref">03-Spring核心IoC-AOP-事务</a>：事务管理</li>
+<li><a href="#/03-Java应用平台/Spring核心/03-SpringBoot4深度解析" class="cross-ref">03-SpringBoot4深度解析</a>：自动配置</li>
+<li><span class="broken-ref" title="未找到: 04-数据库与缓存/PostgreSQL">04-数据库与缓存/PostgreSQL</span>：数据库选型</li>
+<li><a href="#/01-计算机基础/数据库原理/01-数据库原理" class="cross-ref">01-数据库原理</a>：索引与查询优化</li>
 </ul>
-</div>
+</body></html></div>
 </article>

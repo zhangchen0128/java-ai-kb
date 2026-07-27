@@ -1,459 +1,445 @@
 
-<article class="kb-entry" data-path="/04-数据与中间件/对象存储/04-对象存储与中间件扩展">
+<article class="kb-entry" data-path="/04-数据与中间件">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=04">04-数据与中间件</a></div>
     <h1>对象存储、RabbitMQ 与中间件扩展</h1>
-    <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#minio</span><span class="badge badge-tag">#s3</span><span class="badge badge-tag">#object-storage</span><span class="badge badge-tag">#rabbitmq</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#minio</span><span class="badge badge-tag">#s3</span><span class="badge badge-tag">#object-storage</span><span class="badge badge-tag">#rabbitmq</span><span class="badge badge-tag">#presigned-url</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://min.io/docs/minio/linux/index.html" target="_blank" rel="noopener" class="source-link" title="MinIO 官方文档">MinIO 官方文档</a><a href="https://docs.aws.amazon.com/AmazonS3/latest/API/Type_API_Reference.html" target="_blank" rel="noopener" class="source-link" title="AWS S3 API 参考">AWS S3 API 参考</a><a href="https://www.rabbitmq.com/docs" target="_blank" rel="noopener" class="source-link" title="RabbitMQ 官方文档">RabbitMQ 官方文档</a><a href="https://www.oreilly.com/library/view/rabbitmq-in-depth/" target="_blank" rel="noopener" class="source-link" title="《RabbitMQ in Depth》— Gavin M. Roy">《RabbitMQ in Depth》— Gavin M. Roy</a></small></div>
   </div>
-  <div class="entry-body"><h1>对象存储、RabbitMQ 与中间件扩展</h1>
+  <div class="entry-body"><html><head></head><body><h1>对象存储、RabbitMQ 与中间件扩展</h1>
 <h2>概述</h2>
 <p>对象存储是 AI 数据工程的基础设施，承载着从原始文档上传到向量索引的完整文件链路。RabbitMQ 作为传统消息中间件，在轻量级消息路由、死信队列、延迟消息等场景仍不可替代。</p>
 <p>本文涵盖 MinIO 部署和集成、S3 兼容 API、AI 文档存储链路、RabbitMQ 核心概念与选型对比、对象存储安全最佳实践。</p>
 <hr>
 <h2>一、MinIO</h2>
 <h3>1.1 部署</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># docker-compose.yml
-services:
-  minio:
-    image: quay.io/minio/minio:latest
-    command: server /data --console-address &quot;:9001&quot;
-    ports:
-      - &quot;9000:9000&quot;  # API
-      - &quot;9001:9001&quot;  # Console
-    environment:
-      MINIO_ROOT_USER: admin
-      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD}
-      MINIO_BROWSER_REDIRECT_URL: http://localhost:9001
-    volumes:
-      - minio_data:/data
-    healthcheck:
-      test: [&quot;CMD&quot;, &quot;mc&quot;, &quot;ready&quot;, &quot;local&quot;]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-comment"># docker-compose.yml</span>
+<span class="hljs-attr">services:</span>
+  <span class="hljs-attr">minio:</span>
+    <span class="hljs-attr">image:</span> <span class="hljs-string">quay.io/minio/minio:latest</span>
+    <span class="hljs-attr">command:</span> <span class="hljs-string">server</span> <span class="hljs-string">/data</span> <span class="hljs-string">--console-address</span> <span class="hljs-string">":9001"</span>
+    <span class="hljs-attr">ports:</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-string">"9000:9000"</span>  <span class="hljs-comment"># API</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-string">"9001:9001"</span>  <span class="hljs-comment"># Console</span>
+    <span class="hljs-attr">environment:</span>
+      <span class="hljs-attr">MINIO_ROOT_USER:</span> <span class="hljs-string">admin</span>
+      <span class="hljs-attr">MINIO_ROOT_PASSWORD:</span> <span class="hljs-string">${MINIO_PASSWORD}</span>
+      <span class="hljs-attr">MINIO_BROWSER_REDIRECT_URL:</span> <span class="hljs-string">http://localhost:9001</span>
+    <span class="hljs-attr">volumes:</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-string">minio_data:/data</span>
+    <span class="hljs-attr">healthcheck:</span>
+      <span class="hljs-attr">test:</span> [<span class="hljs-string">"CMD"</span>, <span class="hljs-string">"mc"</span>, <span class="hljs-string">"ready"</span>, <span class="hljs-string">"local"</span>]
+      <span class="hljs-attr">interval:</span> <span class="hljs-string">5s</span>
+      <span class="hljs-attr">timeout:</span> <span class="hljs-string">5s</span>
+      <span class="hljs-attr">retries:</span> <span class="hljs-number">5</span>
 
-  # 分布式部署（4 节点，纠删码 EC:2）
-  minio-distributed:
-    image: quay.io/minio/minio
-    command: server http://minio-{1...4}/data --console-address &quot;:9001&quot;
-    environment:
-      MINIO_ROOT_USER: admin
-      MINIO_ROOT_PASSWORD: ${MINIO_PASSWORD}
+  <span class="hljs-comment"># 分布式部署（4 节点，纠删码 EC:2）</span>
+  <span class="hljs-attr">minio-distributed:</span>
+    <span class="hljs-attr">image:</span> <span class="hljs-string">quay.io/minio/minio</span>
+    <span class="hljs-attr">command:</span> <span class="hljs-string">server</span> <span class="hljs-string">http://minio-{1...4}/data</span> <span class="hljs-string">--console-address</span> <span class="hljs-string">":9001"</span>
+    <span class="hljs-attr">environment:</span>
+      <span class="hljs-attr">MINIO_ROOT_USER:</span> <span class="hljs-string">admin</span>
+      <span class="hljs-attr">MINIO_ROOT_PASSWORD:</span> <span class="hljs-string">${MINIO_PASSWORD}</span>
 
-volumes:
-  minio_data:
-</code></pre></div>
-<h3>1.2 Bucket 策略</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-json">{
-  &quot;Version&quot;: &quot;2012-10-17&quot;,
-  &quot;Statement&quot;: [
-    {
-      &quot;Effect&quot;: &quot;Allow&quot;,
-      &quot;Principal&quot;: { &quot;AWS&quot;: [&quot;*&quot;] },
-      &quot;Action&quot;: [&quot;s3:GetObject&quot;],
-      &quot;Resource&quot;: [&quot;arn:aws:s3:::public-docs/*&quot;],
-      &quot;Condition&quot;: {
-        &quot;IpAddress&quot;: { &quot;aws:SourceIp&quot;: [&quot;10.0.0.0/8&quot;, &quot;172.16.0.0/12&quot;] }
-      }
-    },
-    {
-      &quot;Effect&quot;: &quot;Allow&quot;,
-      &quot;Principal&quot;: { &quot;AWS&quot;: [&quot;arn:aws:iam::app-user&quot;] },
-      &quot;Action&quot;: [&quot;s3:GetObject&quot;, &quot;s3:PutObject&quot;, &quot;s3:DeleteObject&quot;],
-      &quot;Resource&quot;: [&quot;arn:aws:s3:::app-documents/*&quot;]
-    }
-  ]
-}
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># mc 命令行工具
-mc alias set local http://localhost:9000 admin ${MINIO_PASSWORD}
-mc mb local/ai-documents
-mc policy set download local/public-assets
-mc anonymous set public local/public-assets
-</code></pre></div>
-<h3>1.3 预签名 URL</h3>
+<span class="hljs-attr">volumes:</span>
+  <span class="hljs-attr">minio_data:</span>
+</code></pre></div><h3>1.2 Bucket 策略</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-json"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">"Version"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"2012-10-17"</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">"Statement"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
+    <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">"Effect"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"Allow"</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">"Principal"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"AWS"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">"*"</span><span class="hljs-punctuation">]</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">"Action"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">"s3:GetObject"</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">"Resource"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">"arn:aws:s3:::public-docs/*"</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">"Condition"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">"IpAddress"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"aws:SourceIp"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">"10.0.0.0/8"</span><span class="hljs-punctuation">,</span> <span class="hljs-string">"172.16.0.0/12"</span><span class="hljs-punctuation">]</span> <span class="hljs-punctuation">}</span>
+      <span class="hljs-punctuation">}</span>
+    <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">"Effect"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"Allow"</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">"Principal"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"AWS"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">"arn:aws:iam::app-user"</span><span class="hljs-punctuation">]</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">"Action"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">"s3:GetObject"</span><span class="hljs-punctuation">,</span> <span class="hljs-string">"s3:PutObject"</span><span class="hljs-punctuation">,</span> <span class="hljs-string">"s3:DeleteObject"</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">"Resource"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">"arn:aws:s3:::app-documents/*"</span><span class="hljs-punctuation">]</span>
+    <span class="hljs-punctuation">}</span>
+  <span class="hljs-punctuation">]</span>
+<span class="hljs-punctuation">}</span>
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-comment"># mc 命令行工具</span>
+mc <span class="hljs-built_in">alias</span> <span class="hljs-built_in">set</span> <span class="hljs-built_in">local</span> http://localhost:9000 admin <span class="hljs-variable">${MINIO_PASSWORD}</span>
+mc mb <span class="hljs-built_in">local</span>/ai-documents
+mc policy <span class="hljs-built_in">set</span> download <span class="hljs-built_in">local</span>/public-assets
+mc anonymous <span class="hljs-built_in">set</span> public <span class="hljs-built_in">local</span>/public-assets
+</code></pre></div><h3>1.3 预签名 URL</h3>
 <p>预签名 URL 是对象存储的安全访问模式，允许临时授权而无需暴露访问密钥。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
-public class MinioPresignedUrlService {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">MinioPresignedUrlService</span> {
 
-    private final MinioClient minioClient;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> MinioClient minioClient;
 
-    // 生成上传预签名 URL（PUT）
-    public String generateUploadUrl(String objectName, Duration expiry) {
-        try {
-            var args = GetPresignedObjectUrlArgs.builder()
+    <span class="hljs-comment">// 生成上传预签名 URL（PUT）</span>
+    <span class="hljs-keyword">public</span> String <span class="hljs-title function_">generateUploadUrl</span><span class="hljs-params">(String objectName, Duration expiry)</span> {
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-type">var</span> <span class="hljs-variable">args</span> <span class="hljs-operator">=</span> GetPresignedObjectUrlArgs.builder()
                     .method(Method.PUT)
-                    .bucket(&quot;ai-documents&quot;)
+                    .bucket(<span class="hljs-string">"ai-documents"</span>)
                     .object(objectName)
-                    .expiry((int) expiry.getSeconds())
+                    .expiry((<span class="hljs-type">int</span>) expiry.getSeconds())
                     .build();
-            return minioClient.getPresignedObjectUrl(args);
-        } catch (Exception e) {
-            throw new StorageException(&quot;Failed to generate upload URL&quot;, e);
+            <span class="hljs-keyword">return</span> minioClient.getPresignedObjectUrl(args);
+        } <span class="hljs-keyword">catch</span> (Exception e) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StorageException</span>(<span class="hljs-string">"Failed to generate upload URL"</span>, e);
         }
     }
 
-    // 生成下载预签名 URL（GET）
-    public String generateDownloadUrl(String objectName, Duration expiry) {
-        try {
-            var args = GetPresignedObjectUrlArgs.builder()
+    <span class="hljs-comment">// 生成下载预签名 URL（GET）</span>
+    <span class="hljs-keyword">public</span> String <span class="hljs-title function_">generateDownloadUrl</span><span class="hljs-params">(String objectName, Duration expiry)</span> {
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-type">var</span> <span class="hljs-variable">args</span> <span class="hljs-operator">=</span> GetPresignedObjectUrlArgs.builder()
                     .method(Method.GET)
-                    .bucket(&quot;ai-documents&quot;)
+                    .bucket(<span class="hljs-string">"ai-documents"</span>)
                     .object(objectName)
-                    .expiry((int) expiry.getSeconds())
+                    .expiry((<span class="hljs-type">int</span>) expiry.getSeconds())
                     .build();
-            return minioClient.getPresignedObjectUrl(args);
-        } catch (Exception e) {
-            throw new StorageException(&quot;Failed to generate download URL&quot;, e);
+            <span class="hljs-keyword">return</span> minioClient.getPresignedObjectUrl(args);
+        } <span class="hljs-keyword">catch</span> (Exception e) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StorageException</span>(<span class="hljs-string">"Failed to generate download URL"</span>, e);
         }
     }
 
-    // 结合自定义响应头的预签名 URL
-    public String generateDownloadUrlWithHeaders(String objectName,
-                                                  String contentDisposition) {
-        try {
-            var reqParams = new HashMap&lt;String, String&gt;();
-            reqParams.put(&quot;response-content-disposition&quot;,
-                    &quot;attachment; filename=\&quot;&quot; + contentDisposition + &quot;\&quot;&quot;);
+    <span class="hljs-comment">// 结合自定义响应头的预签名 URL</span>
+    <span class="hljs-keyword">public</span> String <span class="hljs-title function_">generateDownloadUrlWithHeaders</span><span class="hljs-params">(String objectName,
+                                                  String contentDisposition)</span> {
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-type">var</span> <span class="hljs-variable">reqParams</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">HashMap</span>&lt;String, String&gt;();
+            reqParams.put(<span class="hljs-string">"response-content-disposition"</span>,
+                    <span class="hljs-string">"attachment; filename=\""</span> + contentDisposition + <span class="hljs-string">"\""</span>);
 
-            var args = GetPresignedObjectUrlArgs.builder()
+            <span class="hljs-type">var</span> <span class="hljs-variable">args</span> <span class="hljs-operator">=</span> GetPresignedObjectUrlArgs.builder()
                     .method(Method.GET)
-                    .bucket(&quot;ai-documents&quot;)
+                    .bucket(<span class="hljs-string">"ai-documents"</span>)
                     .object(objectName)
-                    .expiry(3600)
+                    .expiry(<span class="hljs-number">3600</span>)
                     .extraQueryParams(reqParams)
                     .build();
-            return minioClient.getPresignedObjectUrl(args);
-        } catch (Exception e) {
-            throw new StorageException(&quot;Failed to generate download URL&quot;, e);
+            <span class="hljs-keyword">return</span> minioClient.getPresignedObjectUrl(args);
+        } <span class="hljs-keyword">catch</span> (Exception e) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StorageException</span>(<span class="hljs-string">"Failed to generate download URL"</span>, e);
         }
     }
 }
-</code></pre></div>
-<h3>1.4 事件通知</h3>
+</code></pre></div><h3>1.4 事件通知</h3>
 <p>MinIO 支持将对象变更事件推送到 Webhook、Kafka、Redis、NATS 等。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># Kafka 事件通知配置
-mc admin config set local notify_kafka:doc-events \
-  brokers=&quot;kafka:9092&quot; \
-  topic=&quot;minio-events&quot;
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-comment"># Kafka 事件通知配置</span>
+mc admin config <span class="hljs-built_in">set</span> <span class="hljs-built_in">local</span> notify_kafka:doc-events \
+  brokers=<span class="hljs-string">"kafka:9092"</span> \
+  topic=<span class="hljs-string">"minio-events"</span>
 
-mc event add local/ai-documents arn:minio:sqs::doc-events:kafka \
+mc event add <span class="hljs-built_in">local</span>/ai-documents arn:minio:sqs::doc-events:kafka \
   --event put,delete
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-json">// MinIO 事件格式（发送到 Kafka）
-{
-  &quot;EventName&quot;: &quot;s3:ObjectCreated:Put&quot;,
-  &quot;Key&quot;: &quot;ai-documents/user-123/report.pdf&quot;,
-  &quot;Records&quot;: [{
-    &quot;s3&quot;: {
-      &quot;bucket&quot;: { &quot;name&quot;: &quot;ai-documents&quot; },
-      &quot;object&quot;: {
-        &quot;key&quot;: &quot;user-123/report.pdf&quot;,
-        &quot;size&quot;: 1048576,
-        &quot;eTag&quot;: &quot;d41d8cd98f00b204e9800998ecf8427e&quot;,
-        &quot;contentType&quot;: &quot;application/pdf&quot;
-      }
-    }
-  }]
-}
-</code></pre></div>
-<p><strong>AI 场景事件驱动流水线：</strong></p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>MinIO Put事件 → Kafka → 文档处理服务
-├── Apache Tika 解析 PDF
-├── Markdown 标准化
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-json"><span class="hljs-comment">// MinIO 事件格式（发送到 Kafka）</span>
+<span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">"EventName"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"s3:ObjectCreated:Put"</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">"Key"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"ai-documents/user-123/report.pdf"</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">"Records"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">"s3"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">"bucket"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"name"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"ai-documents"</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">"object"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">"key"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"user-123/report.pdf"</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">"size"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1048576</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">"eTag"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"d41d8cd98f00b204e9800998ecf8427e"</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">"contentType"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"application/pdf"</span>
+      <span class="hljs-punctuation">}</span>
+    <span class="hljs-punctuation">}</span>
+  <span class="hljs-punctuation">}</span><span class="hljs-punctuation">]</span>
+<span class="hljs-punctuation">}</span>
+</code></pre></div><p><strong>AI 场景事件驱动流水线：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-variable">MinIO</span> <span class="hljs-built_in">Put</span>事件 → <span class="hljs-variable">Kafka</span> → 文档处理服务
+├── <span class="hljs-variable">Apache</span> <span class="hljs-variable">Tika</span> 解析 <span class="hljs-built_in">PDF</span>
+├── <span class="hljs-variable">Markdown</span> 标准化
 ├── 语义切片
-├── Embedding 生成
-└── pgvector/ES 索引写入
-</code></pre></div>
-<h3>1.5 版本控制与对象锁定</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># 启用版本控制
-mc version enable local/ai-documents
+├── <span class="hljs-variable">Embedding</span> 生成
+└── <span class="hljs-variable">pgvector</span><span class="hljs-operator">/</span><span class="hljs-variable">ES</span> 索引写入
+</code></pre></div><h3>1.5 版本控制与对象锁定</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-comment"># 启用版本控制</span>
+mc version <span class="hljs-built_in">enable</span> <span class="hljs-built_in">local</span>/ai-documents
 
-# 查看对象版本
-mc ls --versions local/ai-documents/user-123/report.pdf
+<span class="hljs-comment"># 查看对象版本</span>
+mc <span class="hljs-built_in">ls</span> --versions <span class="hljs-built_in">local</span>/ai-documents/user-123/report.pdf
 
-# 回退到指定版本
-mc cp --version-id &quot;xxx&quot; local/ai-documents/user-123/report.pdf .
+<span class="hljs-comment"># 回退到指定版本</span>
+mc <span class="hljs-built_in">cp</span> --version-id <span class="hljs-string">"xxx"</span> <span class="hljs-built_in">local</span>/ai-documents/user-123/report.pdf .
 
-# 对象锁定（WORM，合规场景）
-mc retention set --default COMPLIANCE 30d local/compliance-docs
-</code></pre></div>
-<hr>
+<span class="hljs-comment"># 对象锁定（WORM，合规场景）</span>
+mc retention <span class="hljs-built_in">set</span> --default COMPLIANCE 30d <span class="hljs-built_in">local</span>/compliance-docs
+</code></pre></div><hr>
 <h2>二、S3 兼容 API</h2>
 <h3>2.1 核心操作</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
-public class S3DocumentService {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">S3DocumentService</span> {
 
-    private final MinioClient minio;
-    private static final String BUCKET = &quot;ai-documents&quot;;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> MinioClient minio;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">String</span> <span class="hljs-variable">BUCKET</span> <span class="hljs-operator">=</span> <span class="hljs-string">"ai-documents"</span>;
 
-    // PutObject
-    public void uploadDocument(String key, InputStream data, long size,
-                                String contentType, Map&lt;String, String&gt; metadata) {
-        try {
+    <span class="hljs-comment">// PutObject</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">uploadDocument</span><span class="hljs-params">(String key, InputStream data, <span class="hljs-type">long</span> size,
+                                String contentType, Map&lt;String, String&gt; metadata)</span> {
+        <span class="hljs-keyword">try</span> {
             minio.putObject(PutObjectArgs.builder()
                     .bucket(BUCKET)
                     .object(key)
-                    .stream(data, size, -1)
+                    .stream(data, size, -<span class="hljs-number">1</span>)
                     .contentType(contentType)
-                    .userMetadata(metadata)  // 自定义元数据
+                    .userMetadata(metadata)  <span class="hljs-comment">// 自定义元数据</span>
                     .build());
-        } catch (Exception e) {
-            throw new StorageException(&quot;Upload failed: &quot; + key, e);
+        } <span class="hljs-keyword">catch</span> (Exception e) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StorageException</span>(<span class="hljs-string">"Upload failed: "</span> + key, e);
         }
     }
 
-    // GetObject
-    public InputStream downloadDocument(String key) {
-        try {
-            return minio.getObject(GetObjectArgs.builder()
+    <span class="hljs-comment">// GetObject</span>
+    <span class="hljs-keyword">public</span> InputStream <span class="hljs-title function_">downloadDocument</span><span class="hljs-params">(String key)</span> {
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-keyword">return</span> minio.getObject(GetObjectArgs.builder()
                     .bucket(BUCKET)
                     .object(key)
                     .build());
-        } catch (Exception e) {
-            throw new StorageException(&quot;Download failed: &quot; + key, e);
+        } <span class="hljs-keyword">catch</span> (Exception e) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StorageException</span>(<span class="hljs-string">"Download failed: "</span> + key, e);
         }
     }
 
-    // DeleteObject
-    public void deleteDocument(String key) {
-        try {
+    <span class="hljs-comment">// DeleteObject</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">deleteDocument</span><span class="hljs-params">(String key)</span> {
+        <span class="hljs-keyword">try</span> {
             minio.removeObject(RemoveObjectArgs.builder()
                     .bucket(BUCKET)
                     .object(key)
                     .build());
-        } catch (Exception e) {
-            throw new StorageException(&quot;Delete failed: &quot; + key, e);
+        } <span class="hljs-keyword">catch</span> (Exception e) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StorageException</span>(<span class="hljs-string">"Delete failed: "</span> + key, e);
         }
     }
 
-    // HeadObject（获取元数据）
-    public Map&lt;String, String&gt; getMetadata(String key) {
-        try {
-            var stat = minio.statObject(StatObjectArgs.builder()
+    <span class="hljs-comment">// HeadObject（获取元数据）</span>
+    <span class="hljs-keyword">public</span> Map&lt;String, String&gt; <span class="hljs-title function_">getMetadata</span><span class="hljs-params">(String key)</span> {
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-type">var</span> <span class="hljs-variable">stat</span> <span class="hljs-operator">=</span> minio.statObject(StatObjectArgs.builder()
                     .bucket(BUCKET)
                     .object(key)
                     .build());
-            return stat.userMetadata();
-        } catch (Exception e) {
-            throw new StorageException(&quot;Stat failed: &quot; + key, e);
+            <span class="hljs-keyword">return</span> stat.userMetadata();
+        } <span class="hljs-keyword">catch</span> (Exception e) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StorageException</span>(<span class="hljs-string">"Stat failed: "</span> + key, e);
         }
     }
 
-    // ListObjects（带前缀过滤）
-    public List&lt;String&gt; listDocuments(String prefix) {
-        var keys = new ArrayList&lt;String&gt;();
-        var results = minio.listObjects(ListObjectsArgs.builder()
+    <span class="hljs-comment">// ListObjects（带前缀过滤）</span>
+    <span class="hljs-keyword">public</span> List&lt;String&gt; <span class="hljs-title function_">listDocuments</span><span class="hljs-params">(String prefix)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">keys</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;String&gt;();
+        <span class="hljs-type">var</span> <span class="hljs-variable">results</span> <span class="hljs-operator">=</span> minio.listObjects(ListObjectsArgs.builder()
                 .bucket(BUCKET)
                 .prefix(prefix)
-                .recursive(true)
+                .recursive(<span class="hljs-literal">true</span>)
                 .build());
         results.forEach(item -&gt; {
-            try {
+            <span class="hljs-keyword">try</span> {
                 keys.add(item.get().objectName());
-            } catch (Exception e) {
-                throw new StorageException(&quot;List failed&quot;, e);
+            } <span class="hljs-keyword">catch</span> (Exception e) {
+                <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StorageException</span>(<span class="hljs-string">"List failed"</span>, e);
             }
         });
-        return keys;
+        <span class="hljs-keyword">return</span> keys;
     }
 }
-</code></pre></div>
-<h3>2.2 分段上传（Multipart Upload）</h3>
+</code></pre></div><h3>2.2 分段上传（Multipart Upload）</h3>
 <p>大文件（&gt;5MB）推荐使用分段上传，支持断点续传和并行上传。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public void uploadLargeFile(String key, Path filePath) {
-    try {
-        // 1. 初始化分段上传
-        var uploadId = minio.createMultipartUpload(BUCKET, null, key, null, null);
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">uploadLargeFile</span><span class="hljs-params">(String key, Path filePath)</span> {
+    <span class="hljs-keyword">try</span> {
+        <span class="hljs-comment">// 1. 初始化分段上传</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">uploadId</span> <span class="hljs-operator">=</span> minio.createMultipartUpload(BUCKET, <span class="hljs-literal">null</span>, key, <span class="hljs-literal">null</span>, <span class="hljs-literal">null</span>);
 
-        // 2. 上传各部分（每部分 &gt;= 5MB，最多 10000 部分）
-        var parts = new ArrayList&lt;ComposeSource&gt;();
-        var partSize = 10 * 1024 * 1024; // 10MB
-        var fileSize = Files.size(filePath);
-        var partCount = (int) Math.ceil((double) fileSize / partSize);
+        <span class="hljs-comment">// 2. 上传各部分（每部分 &gt;= 5MB，最多 10000 部分）</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">parts</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;ComposeSource&gt;();
+        <span class="hljs-type">var</span> <span class="hljs-variable">partSize</span> <span class="hljs-operator">=</span> <span class="hljs-number">10</span> * <span class="hljs-number">1024</span> * <span class="hljs-number">1024</span>; <span class="hljs-comment">// 10MB</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">fileSize</span> <span class="hljs-operator">=</span> Files.size(filePath);
+        <span class="hljs-type">var</span> <span class="hljs-variable">partCount</span> <span class="hljs-operator">=</span> (<span class="hljs-type">int</span>) Math.ceil((<span class="hljs-type">double</span>) fileSize / partSize);
 
-        try (var fileStream = Files.newInputStream(filePath)) {
-            for (int i = 0; i &lt; partCount; i++) {
-                long currentPartSize = Math.min(partSize, fileSize - (long) i * partSize);
-                var part = minio.uploadPart(
-                        BUCKET, null, key,
+        <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">fileStream</span> <span class="hljs-operator">=</span> Files.newInputStream(filePath)) {
+            <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; partCount; i++) {
+                <span class="hljs-type">long</span> <span class="hljs-variable">currentPartSize</span> <span class="hljs-operator">=</span> Math.min(partSize, fileSize - (<span class="hljs-type">long</span>) i * partSize);
+                <span class="hljs-type">var</span> <span class="hljs-variable">part</span> <span class="hljs-operator">=</span> minio.uploadPart(
+                        BUCKET, <span class="hljs-literal">null</span>, key,
                         uploadId,
                         fileStream, currentPartSize,
-                        i + 1, null, null);
+                        i + <span class="hljs-number">1</span>, <span class="hljs-literal">null</span>, <span class="hljs-literal">null</span>);
                 parts.add(part);
             }
         }
 
-        // 3. 完成分段上传
-        minio.completeMultipartUpload(BUCKET, null, key, uploadId, parts.toArray(new Part[0]));
+        <span class="hljs-comment">// 3. 完成分段上传</span>
+        minio.completeMultipartUpload(BUCKET, <span class="hljs-literal">null</span>, key, uploadId, parts.toArray(<span class="hljs-keyword">new</span> <span class="hljs-title class_">Part</span>[<span class="hljs-number">0</span>]));
 
-    } catch (Exception e) {
-        // 中止分段上传清理残留部分
-        try {
-            minio.abortMultipartUpload(BUCKET, null, key, uploadId);
-        } catch (Exception ex) {
-            log.error(&quot;Abort multipart upload failed&quot;, ex);
+    } <span class="hljs-keyword">catch</span> (Exception e) {
+        <span class="hljs-comment">// 中止分段上传清理残留部分</span>
+        <span class="hljs-keyword">try</span> {
+            minio.abortMultipartUpload(BUCKET, <span class="hljs-literal">null</span>, key, uploadId);
+        } <span class="hljs-keyword">catch</span> (Exception ex) {
+            log.error(<span class="hljs-string">"Abort multipart upload failed"</span>, ex);
         }
-        throw new StorageException(&quot;Large file upload failed: &quot; + key, e);
+        <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StorageException</span>(<span class="hljs-string">"Large file upload failed: "</span> + key, e);
     }
 }
-</code></pre></div>
-<h3>2.3 生命周期策略</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;!-- 生命周期配置（XML） --&gt;
-&lt;LifecycleConfiguration&gt;
-  &lt;Rule&gt;
-    &lt;ID&gt;expire-temp-files&lt;/ID&gt;
-    &lt;Status&gt;Enabled&lt;/Status&gt;
-    &lt;Filter&gt;
-      &lt;Prefix&gt;temp/&lt;/Prefix&gt;
-    &lt;/Filter&gt;
-    &lt;Expiration&gt;
-      &lt;Days&gt;7&lt;/Days&gt;
-    &lt;/Expiration&gt;
-  &lt;/Rule&gt;
-  &lt;Rule&gt;
-    &lt;ID&gt;transition-to-cold&lt;/ID&gt;
-    &lt;Status&gt;Enabled&lt;/Status&gt;
-    &lt;Filter&gt;
-      &lt;Prefix&gt;archive/&lt;/Prefix&gt;
-    &lt;/Filter&gt;
-    &lt;Transition&gt;
-      &lt;Days&gt;30&lt;/Days&gt;
-      &lt;StorageClass&gt;GLACIER&lt;/StorageClass&gt;
-    &lt;/Transition&gt;
-  &lt;/Rule&gt;
-&lt;/LifecycleConfiguration&gt;
-</code></pre></div>
-<hr>
+</code></pre></div><h3>2.3 生命周期策略</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-xml"><span class="hljs-comment">&lt;!-- 生命周期配置（XML） --&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">LifecycleConfiguration</span>&gt;</span>
+  <span class="hljs-tag">&lt;<span class="hljs-name">Rule</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">ID</span>&gt;</span>expire-temp-files<span class="hljs-tag">&lt;/<span class="hljs-name">ID</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">Status</span>&gt;</span>Enabled<span class="hljs-tag">&lt;/<span class="hljs-name">Status</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">Filter</span>&gt;</span>
+      <span class="hljs-tag">&lt;<span class="hljs-name">Prefix</span>&gt;</span>temp/<span class="hljs-tag">&lt;/<span class="hljs-name">Prefix</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">Filter</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">Expiration</span>&gt;</span>
+      <span class="hljs-tag">&lt;<span class="hljs-name">Days</span>&gt;</span>7<span class="hljs-tag">&lt;/<span class="hljs-name">Days</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">Expiration</span>&gt;</span>
+  <span class="hljs-tag">&lt;/<span class="hljs-name">Rule</span>&gt;</span>
+  <span class="hljs-tag">&lt;<span class="hljs-name">Rule</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">ID</span>&gt;</span>transition-to-cold<span class="hljs-tag">&lt;/<span class="hljs-name">ID</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">Status</span>&gt;</span>Enabled<span class="hljs-tag">&lt;/<span class="hljs-name">Status</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">Filter</span>&gt;</span>
+      <span class="hljs-tag">&lt;<span class="hljs-name">Prefix</span>&gt;</span>archive/<span class="hljs-tag">&lt;/<span class="hljs-name">Prefix</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">Filter</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">Transition</span>&gt;</span>
+      <span class="hljs-tag">&lt;<span class="hljs-name">Days</span>&gt;</span>30<span class="hljs-tag">&lt;/<span class="hljs-name">Days</span>&gt;</span>
+      <span class="hljs-tag">&lt;<span class="hljs-name">StorageClass</span>&gt;</span>GLACIER<span class="hljs-tag">&lt;/<span class="hljs-name">StorageClass</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">Transition</span>&gt;</span>
+  <span class="hljs-tag">&lt;/<span class="hljs-name">Rule</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">LifecycleConfiguration</span>&gt;</span>
+</code></pre></div><hr>
 <h2>三、AI 场景：文档存储链路</h2>
 <h3>3.1 完整文件链路</h3>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>原始文件上传 → 预处理 → 切片 → 向量索引
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="language-xml">原始文件上传 → 预处理 → 切片 → 向量索引
 
 详细路径：
 1. 用户上传 PDF/Word/HTML
-   存储路径: raw/{tenant_id}/{doc_id}/original.{ext}
+   存储路径: raw/</span><span class="hljs-template-variable">{tenant_id}</span><span class="language-xml">/</span><span class="hljs-template-variable">{doc_id}</span><span class="language-xml">/original.</span><span class="hljs-template-variable">{ext}</span><span class="language-xml">
    
 2. Apache Tika 解析 → Markdown
-   存储路径: processed/{tenant_id}/{doc_id}/content.md
+   存储路径: processed/</span><span class="hljs-template-variable">{tenant_id}</span><span class="language-xml">/</span><span class="hljs-template-variable">{doc_id}</span><span class="language-xml">/content.md
    
 3. 语义切片
-   存储路径: chunks/{tenant_id}/{doc_id}/chunk_{seq}.txt
-   元数据: {chunk_index, start_offset, end_offset, token_count}
+   存储路径: chunks/</span><span class="hljs-template-variable">{tenant_id}</span><span class="language-xml">/</span><span class="hljs-template-variable">{doc_id}</span><span class="language-xml">/chunk_</span><span class="hljs-template-variable">{seq}</span><span class="language-xml">.txt
+   元数据: </span><span class="hljs-template-variable">{chunk_index, start_offset, end_offset, token_count}</span><span class="language-xml">
    
 4. Embedding 向量化
    存储: pgvector / Elasticsearch dense_vector
-   关联: chunk_path → embedding → vector_id
-</code></pre></div>
-<h3>3.2 Java 实现示例</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
-public class DocumentPipelineService {
+   关联: chunk_path → embedding → vector_id</span>
+</code></pre></div><h3>3.2 Java 实现示例</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">DocumentPipelineService</span> {
 
-    private static final String RAW_PREFIX = &quot;raw/&quot;;
-    private static final String PROCESSED_PREFIX = &quot;processed/&quot;;
-    private static final String CHUNK_PREFIX = &quot;chunks/&quot;;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">String</span> <span class="hljs-variable">RAW_PREFIX</span> <span class="hljs-operator">=</span> <span class="hljs-string">"raw/"</span>;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">String</span> <span class="hljs-variable">PROCESSED_PREFIX</span> <span class="hljs-operator">=</span> <span class="hljs-string">"processed/"</span>;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">String</span> <span class="hljs-variable">CHUNK_PREFIX</span> <span class="hljs-operator">=</span> <span class="hljs-string">"chunks/"</span>;
 
-    private final MinioClient minio;
-    private final DocumentParser parser;      // Apache Tika
-    private final ChunkingStrategy chunker;   // 语义切片
-    private final EmbeddingService embedder;  // Embedding 生成
-    private final VectorStore vectorStore;    // pgvector
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> MinioClient minio;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> DocumentParser parser;      <span class="hljs-comment">// Apache Tika</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> ChunkingStrategy chunker;   <span class="hljs-comment">// 语义切片</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> EmbeddingService embedder;  <span class="hljs-comment">// Embedding 生成</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> VectorStore vectorStore;    <span class="hljs-comment">// pgvector</span>
 
-    public record DocPipelineResult(String docId, int chunkCount, long totalTokens) {}
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">DocPipelineResult</span><span class="hljs-params">(String docId, <span class="hljs-type">int</span> chunkCount, <span class="hljs-type">long</span> totalTokens)</span> {}
 
-    public DocPipelineResult processDocument(String tenantId, String docId,
+    <span class="hljs-keyword">public</span> DocPipelineResult <span class="hljs-title function_">processDocument</span><span class="hljs-params">(String tenantId, String docId,
                                               InputStream content,
-                                              String originalFilename) {
-        // 1. 存储原始文件
-        var rawKey = RAW_PREFIX + tenantId + &quot;/&quot; + docId + &quot;/&quot; + originalFilename;
+                                              String originalFilename)</span> {
+        <span class="hljs-comment">// 1. 存储原始文件</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">rawKey</span> <span class="hljs-operator">=</span> RAW_PREFIX + tenantId + <span class="hljs-string">"/"</span> + docId + <span class="hljs-string">"/"</span> + originalFilename;
         storeObject(rawKey, content);
 
-        // 2. 解析为标准 Markdown
-        var markdown = parser.parseToMarkdown(content, originalFilename);
-        var processedKey = PROCESSED_PREFIX + tenantId + &quot;/&quot; + docId + &quot;/content.md&quot;;
-        storeObject(processedKey, new ByteArrayInputStream(markdown.getBytes(UTF_8)));
+        <span class="hljs-comment">// 2. 解析为标准 Markdown</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">markdown</span> <span class="hljs-operator">=</span> parser.parseToMarkdown(content, originalFilename);
+        <span class="hljs-type">var</span> <span class="hljs-variable">processedKey</span> <span class="hljs-operator">=</span> PROCESSED_PREFIX + tenantId + <span class="hljs-string">"/"</span> + docId + <span class="hljs-string">"/content.md"</span>;
+        storeObject(processedKey, <span class="hljs-keyword">new</span> <span class="hljs-title class_">ByteArrayInputStream</span>(markdown.getBytes(UTF_8)));
 
-        // 3. 语义切片
-        var chunks = chunker.chunk(markdown, Map.of(
-                &quot;tenantId&quot;, tenantId,
-                &quot;docId&quot;, docId,
-                &quot;source&quot;, originalFilename
+        <span class="hljs-comment">// 3. 语义切片</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">chunks</span> <span class="hljs-operator">=</span> chunker.chunk(markdown, Map.of(
+                <span class="hljs-string">"tenantId"</span>, tenantId,
+                <span class="hljs-string">"docId"</span>, docId,
+                <span class="hljs-string">"source"</span>, originalFilename
         ));
 
-        // 4. 存储切片文件 + 写入向量索引
-        int totalTokens = 0;
-        for (int i = 0; i &lt; chunks.size(); i++) {
-            var chunk = chunks.get(i);
+        <span class="hljs-comment">// 4. 存储切片文件 + 写入向量索引</span>
+        <span class="hljs-type">int</span> <span class="hljs-variable">totalTokens</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; chunks.size(); i++) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">chunk</span> <span class="hljs-operator">=</span> chunks.get(i);
             totalTokens += chunk.tokenCount();
 
-            // 存储切片
-            var chunkKey = CHUNK_PREFIX + tenantId + &quot;/&quot; + docId + &quot;/chunk_&quot; + i + &quot;.txt&quot;;
+            <span class="hljs-comment">// 存储切片</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">chunkKey</span> <span class="hljs-operator">=</span> CHUNK_PREFIX + tenantId + <span class="hljs-string">"/"</span> + docId + <span class="hljs-string">"/chunk_"</span> + i + <span class="hljs-string">".txt"</span>;
             storeObject(chunkKey,
-                    new ByteArrayInputStream(chunk.text().getBytes(UTF_8)));
+                    <span class="hljs-keyword">new</span> <span class="hljs-title class_">ByteArrayInputStream</span>(chunk.text().getBytes(UTF_8)));
 
-            // 向量化 + 索引
-            var embedding = embedder.embed(chunk.text());
+            <span class="hljs-comment">// 向量化 + 索引</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">embedding</span> <span class="hljs-operator">=</span> embedder.embed(chunk.text());
             vectorStore.add(List.of(
                     Document.builder()
-                            .id(docId + &quot;_chunk_&quot; + i)
+                            .id(docId + <span class="hljs-string">"_chunk_"</span> + i)
                             .text(chunk.text())
                             .embedding(embedding)
                             .metadata(Map.of(
-                                    &quot;tenantId&quot;, tenantId,
-                                    &quot;docId&quot;, docId,
-                                    &quot;chunkIndex&quot;, String.valueOf(i),
-                                    &quot;sourceFile&quot;, originalFilename,
-                                    &quot;storageKey&quot;, chunkKey
+                                    <span class="hljs-string">"tenantId"</span>, tenantId,
+                                    <span class="hljs-string">"docId"</span>, docId,
+                                    <span class="hljs-string">"chunkIndex"</span>, String.valueOf(i),
+                                    <span class="hljs-string">"sourceFile"</span>, originalFilename,
+                                    <span class="hljs-string">"storageKey"</span>, chunkKey
                             ))
                             .build()
             ));
         }
 
-        return new DocPipelineResult(docId, chunks.size(), totalTokens);
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">DocPipelineResult</span>(docId, chunks.size(), totalTokens);
     }
 
-    private void storeObject(String key, InputStream data) {
-        try {
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">storeObject</span><span class="hljs-params">(String key, InputStream data)</span> {
+        <span class="hljs-keyword">try</span> {
             minio.putObject(PutObjectArgs.builder()
-                    .bucket(&quot;ai-documents&quot;)
+                    .bucket(<span class="hljs-string">"ai-documents"</span>)
                     .object(key)
-                    .stream(data, data.available(), -1)
+                    .stream(data, data.available(), -<span class="hljs-number">1</span>)
                     .build());
-        } catch (Exception e) {
-            throw new StorageException(&quot;Store failed: &quot; + key, e);
+        } <span class="hljs-keyword">catch</span> (Exception e) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StorageException</span>(<span class="hljs-string">"Store failed: "</span> + key, e);
         }
     }
 }
-</code></pre></div>
-<h3>3.3 模型文件管理</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 模型版本管理
-// 存储路径: models/{model_name}/{version}/{file}
-// 示例: models/bge-m3/v1/config.json, pytorch_model.bin, tokenizer.json
+</code></pre></div><h3>3.3 模型文件管理</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 模型版本管理</span>
+<span class="hljs-comment">// 存储路径: models/{model_name}/{version}/{file}</span>
+<span class="hljs-comment">// 示例: models/bge-m3/v1/config.json, pytorch_model.bin, tokenizer.json</span>
 
-@Service
-public class ModelStorageService {
+<span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ModelStorageService</span> {
 
-    public void uploadModelVersion(String modelName, String version,
-                                    Path modelDir) throws IOException {
-        try (var files = Files.walk(modelDir)) {
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">uploadModelVersion</span><span class="hljs-params">(String modelName, String version,
+                                    Path modelDir)</span> <span class="hljs-keyword">throws</span> IOException {
+        <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">files</span> <span class="hljs-operator">=</span> Files.walk(modelDir)) {
             files.filter(Files::isRegularFile).forEach(file -&gt; {
-                var relative = modelDir.relativize(file).toString();
-                var key = STR.&quot;models/\{modelName}/\{version}/\{relative}&quot;;
-                try (var in = Files.newInputStream(file)) {
+                <span class="hljs-type">var</span> <span class="hljs-variable">relative</span> <span class="hljs-operator">=</span> modelDir.relativize(file).toString();
+                <span class="hljs-type">var</span> <span class="hljs-variable">key</span> <span class="hljs-operator">=</span> STR.<span class="hljs-string">"models/\{modelName}/\{version}/\{relative}"</span>;
+                <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">in</span> <span class="hljs-operator">=</span> Files.newInputStream(file)) {
                     minio.putObject(PutObjectArgs.builder()
-                            .bucket(&quot;model-repository&quot;)
+                            .bucket(<span class="hljs-string">"model-repository"</span>)
                             .object(key)
-                            .stream(in, Files.size(file), -1)
+                            .stream(in, Files.size(file), -<span class="hljs-number">1</span>)
                             .build());
-                } catch (Exception e) {
-                    throw new StorageException(&quot;Model upload failed: &quot; + key, e);
+                } <span class="hljs-keyword">catch</span> (Exception e) {
+                    <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StorageException</span>(<span class="hljs-string">"Model upload failed: "</span> + key, e);
                 }
             });
         }
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>四、RabbitMQ（简要）</h2>
 <h3>4.1 Exchange 类型</h3>
 <table>
@@ -485,133 +471,128 @@ public class ModelStorageService {
 <td>属性匹配路由</td>
 </tr>
 </tbody></table>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Configuration
-public class RabbitMQConfig {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Configuration</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">RabbitMQConfig</span> {
 
-    @Bean
-    public TopicExchange orderExchange() {
-        return new TopicExchange(&quot;order.exchange&quot;);
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-keyword">public</span> TopicExchange <span class="hljs-title function_">orderExchange</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">TopicExchange</span>(<span class="hljs-string">"order.exchange"</span>);
     }
 
-    @Bean
-    public Queue orderCreatedQueue() {
-        return QueueBuilder.durable(&quot;order.created.queue&quot;)
-                .deadLetterExchange(&quot;order.dlx.exchange&quot;)
-                .deadLetterRoutingKey(&quot;order.dlq&quot;)
-                .ttl(30000)
-                .maxLength(10000)
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-keyword">public</span> Queue <span class="hljs-title function_">orderCreatedQueue</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">return</span> QueueBuilder.durable(<span class="hljs-string">"order.created.queue"</span>)
+                .deadLetterExchange(<span class="hljs-string">"order.dlx.exchange"</span>)
+                .deadLetterRoutingKey(<span class="hljs-string">"order.dlq"</span>)
+                .ttl(<span class="hljs-number">30000</span>)
+                .maxLength(<span class="hljs-number">10000</span>)
                 .build();
     }
 
-    @Bean
-    public Binding orderCreatedBinding() {
-        return BindingBuilder.bind(orderCreatedQueue())
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-keyword">public</span> Binding <span class="hljs-title function_">orderCreatedBinding</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">return</span> BindingBuilder.bind(orderCreatedQueue())
                 .to(orderExchange())
-                .with(&quot;order.created&quot;);
+                .with(<span class="hljs-string">"order.created"</span>);
     }
 }
-</code></pre></div>
-<h3>4.2 死信队列（DLQ）</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Configuration
-public class DeadLetterConfig {
+</code></pre></div><h3>4.2 死信队列（DLQ）</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Configuration</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">DeadLetterConfig</span> {
 
-    @Bean
-    public DirectExchange dlxExchange() {
-        return new DirectExchange(&quot;order.dlx.exchange&quot;);
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-keyword">public</span> DirectExchange <span class="hljs-title function_">dlxExchange</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">DirectExchange</span>(<span class="hljs-string">"order.dlx.exchange"</span>);
     }
 
-    @Bean
-    public Queue deadLetterQueue() {
-        return QueueBuilder.durable(&quot;order.dlq&quot;).build();
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-keyword">public</span> Queue <span class="hljs-title function_">deadLetterQueue</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">return</span> QueueBuilder.durable(<span class="hljs-string">"order.dlq"</span>).build();
     }
 
-    @Bean
-    public Binding dlqBinding() {
-        return BindingBuilder.bind(deadLetterQueue())
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-keyword">public</span> Binding <span class="hljs-title function_">dlqBinding</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">return</span> BindingBuilder.bind(deadLetterQueue())
                 .to(dlxExchange())
-                .with(&quot;order.dlq&quot;);
+                .with(<span class="hljs-string">"order.dlq"</span>);
     }
 }
 
-// DLQ 消费者：记录失败消息并发送告警
-@RabbitListener(queues = &quot;order.dlq&quot;)
-public void handleDeadLetter(Message failedMessage) {
-    var headers = failedMessage.getMessageProperties().getHeaders();
-    var deathReason = headers.get(&quot;x-death&quot;);
+<span class="hljs-comment">// DLQ 消费者：记录失败消息并发送告警</span>
+<span class="hljs-meta">@RabbitListener(queues = "order.dlq")</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">handleDeadLetter</span><span class="hljs-params">(Message failedMessage)</span> {
+    <span class="hljs-type">var</span> <span class="hljs-variable">headers</span> <span class="hljs-operator">=</span> failedMessage.getMessageProperties().getHeaders();
+    <span class="hljs-type">var</span> <span class="hljs-variable">deathReason</span> <span class="hljs-operator">=</span> headers.get(<span class="hljs-string">"x-death"</span>);
 
-    log.error(&quot;&quot;&quot;
+    log.error(<span class="hljs-string">"""
             Dead letter received:
             Original Queue: {}
             Reason: {}
             Body: {}
-            &quot;&quot;&quot;,
-            headers.get(&quot;x-first-death-queue&quot;),
-            headers.get(&quot;x-first-death-reason&quot;),
-            new String(failedMessage.getBody()));
+            """</span>,
+            headers.get(<span class="hljs-string">"x-first-death-queue"</span>),
+            headers.get(<span class="hljs-string">"x-first-death-reason"</span>),
+            <span class="hljs-keyword">new</span> <span class="hljs-title class_">String</span>(failedMessage.getBody()));
 
-    // 存储到数据库供后续排查
-    failedMessageRepository.save(new FailedMessage(
+    <span class="hljs-comment">// 存储到数据库供后续排查</span>
+    failedMessageRepository.save(<span class="hljs-keyword">new</span> <span class="hljs-title class_">FailedMessage</span>(
             failedMessage.getMessageProperties().getMessageId(),
             deathReason.toString(),
-            new String(failedMessage.getBody()),
+            <span class="hljs-keyword">new</span> <span class="hljs-title class_">String</span>(failedMessage.getBody()),
             Instant.now()
     ));
 }
-</code></pre></div>
-<h3>4.3 延迟队列</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// RabbitMQ 延迟消息插件（rabbitmq_delayed_message_exchange）
-@Bean
-public CustomExchange delayedExchange() {
-    var args = new HashMap&lt;String, Object&gt;();
-    args.put(&quot;x-delayed-type&quot;, &quot;direct&quot;);
-    return new CustomExchange(&quot;order.delayed.exchange&quot;, &quot;x-delayed-message&quot;,
-            true, false, args);
+</code></pre></div><h3>4.3 延迟队列</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// RabbitMQ 延迟消息插件（rabbitmq_delayed_message_exchange）</span>
+<span class="hljs-meta">@Bean</span>
+<span class="hljs-keyword">public</span> CustomExchange <span class="hljs-title function_">delayedExchange</span><span class="hljs-params">()</span> {
+    <span class="hljs-type">var</span> <span class="hljs-variable">args</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">HashMap</span>&lt;String, Object&gt;();
+    args.put(<span class="hljs-string">"x-delayed-type"</span>, <span class="hljs-string">"direct"</span>);
+    <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">CustomExchange</span>(<span class="hljs-string">"order.delayed.exchange"</span>, <span class="hljs-string">"x-delayed-message"</span>,
+            <span class="hljs-literal">true</span>, <span class="hljs-literal">false</span>, args);
 }
 
-// 发送延迟消息
-public void sendDelayed(String orderId, long delayMs) {
-    var message = MessageBuilder.withBody(orderId.getBytes())
-            .setHeader(&quot;x-delay&quot;, delayMs)
+<span class="hljs-comment">// 发送延迟消息</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">sendDelayed</span><span class="hljs-params">(String orderId, <span class="hljs-type">long</span> delayMs)</span> {
+    <span class="hljs-type">var</span> <span class="hljs-variable">message</span> <span class="hljs-operator">=</span> MessageBuilder.withBody(orderId.getBytes())
+            .setHeader(<span class="hljs-string">"x-delay"</span>, delayMs)
             .build();
-    rabbitTemplate.send(&quot;order.delayed.exchange&quot;, &quot;order.timeout&quot;, message);
+    rabbitTemplate.send(<span class="hljs-string">"order.delayed.exchange"</span>, <span class="hljs-string">"order.timeout"</span>, message);
 }
-</code></pre></div>
-<h3>4.4 消息确认</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">spring:
-  rabbitmq:
-    publisher-confirm-type: correlated   # 发布确认
-    publisher-returns: true              # 路由失败返回
-    listener:
-      simple:
-        acknowledge-mode: manual         # 手动确认
-        retry:
-          enabled: true
-          max-attempts: 3
-          initial-interval: 1000ms
-          multiplier: 2.0
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Publisher Confirms（确保消息到达 Broker）
+</code></pre></div><h3>4.4 消息确认</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-attr">spring:</span>
+  <span class="hljs-attr">rabbitmq:</span>
+    <span class="hljs-attr">publisher-confirm-type:</span> <span class="hljs-string">correlated</span>   <span class="hljs-comment"># 发布确认</span>
+    <span class="hljs-attr">publisher-returns:</span> <span class="hljs-literal">true</span>              <span class="hljs-comment"># 路由失败返回</span>
+    <span class="hljs-attr">listener:</span>
+      <span class="hljs-attr">simple:</span>
+        <span class="hljs-attr">acknowledge-mode:</span> <span class="hljs-string">manual</span>         <span class="hljs-comment"># 手动确认</span>
+        <span class="hljs-attr">retry:</span>
+          <span class="hljs-attr">enabled:</span> <span class="hljs-literal">true</span>
+          <span class="hljs-attr">max-attempts:</span> <span class="hljs-number">3</span>
+          <span class="hljs-attr">initial-interval:</span> <span class="hljs-string">1000ms</span>
+          <span class="hljs-attr">multiplier:</span> <span class="hljs-number">2.0</span>
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// Publisher Confirms（确保消息到达 Broker）</span>
 rabbitTemplate.setConfirmCallback((correlationData, ack, cause) -&gt; {
-    if (!ack) {
-        log.error(&quot;Message not confirmed: id={}, cause={}&quot;,
+    <span class="hljs-keyword">if</span> (!ack) {
+        log.error(<span class="hljs-string">"Message not confirmed: id={}, cause={}"</span>,
                 correlationData.getId(), cause);
-        // 写入 outbox 表重试
+        <span class="hljs-comment">// 写入 outbox 表重试</span>
     }
 });
 
-// Consumer Manual Ack
-@RabbitListener(queues = &quot;order.created.queue&quot;)
-public void onOrderCreated(OrderEvent event, Channel channel,
-                            @Header(AmqpHeaders.DELIVERY_TAG) long tag) {
-    try {
+<span class="hljs-comment">// Consumer Manual Ack</span>
+<span class="hljs-meta">@RabbitListener(queues = "order.created.queue")</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">onOrderCreated</span><span class="hljs-params">(OrderEvent event, Channel channel,
+                            <span class="hljs-meta">@Header(AmqpHeaders.DELIVERY_TAG)</span> <span class="hljs-type">long</span> tag)</span> {
+    <span class="hljs-keyword">try</span> {
         orderService.process(event);
-        channel.basicAck(tag, false);  // 确认
-    } catch (Exception e) {
-        channel.basicNack(tag, false, true);  // 拒绝并重新入队
+        channel.basicAck(tag, <span class="hljs-literal">false</span>);  <span class="hljs-comment">// 确认</span>
+    } <span class="hljs-keyword">catch</span> (Exception e) {
+        channel.basicNack(tag, <span class="hljs-literal">false</span>, <span class="hljs-literal">true</span>);  <span class="hljs-comment">// 拒绝并重新入队</span>
     }
 }
-</code></pre></div>
-<h3>4.5 Kafka vs RabbitMQ 选型</h3>
+</code></pre></div><h3>4.5 Kafka vs RabbitMQ 选型</h3>
 <table>
 <thead>
 <tr>
@@ -669,31 +650,30 @@ public void onOrderCreated(OrderEvent event, Channel channel,
 <hr>
 <h2>五、对象存储安全</h2>
 <h3>5.1 访问密钥管理</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">spring:
-  cloud:
-    vault:
-      kv:
-        enabled: true
-      authentication: APPROLE
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-attr">spring:</span>
+  <span class="hljs-attr">cloud:</span>
+    <span class="hljs-attr">vault:</span>
+      <span class="hljs-attr">kv:</span>
+        <span class="hljs-attr">enabled:</span> <span class="hljs-literal">true</span>
+      <span class="hljs-attr">authentication:</span> <span class="hljs-string">APPROLE</span>
 
-# 通过 Vault 获取 MinIO 凭证
-minio:
-  access-key: ${vault:secret/minio#access_key}
-  secret-key: ${vault:secret/minio#secret_key}
-</code></pre></div>
-<h3>5.2 服务端加密</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// MinIO SSE-S3（服务端托管密钥）
+<span class="hljs-comment"># 通过 Vault 获取 MinIO 凭证</span>
+<span class="hljs-attr">minio:</span>
+  <span class="hljs-attr">access-key:</span> <span class="hljs-string">${vault:secret/minio#access_key}</span>
+  <span class="hljs-attr">secret-key:</span> <span class="hljs-string">${vault:secret/minio#secret_key}</span>
+</code></pre></div><h3>5.2 服务端加密</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// MinIO SSE-S3（服务端托管密钥）</span>
 minioClient.putObject(PutObjectArgs.builder()
         .bucket(BUCKET)
         .object(key)
-        .stream(data, size, -1)
+        .stream(data, size, -<span class="hljs-number">1</span>)
         .sse(Sse.newBuilder()
-                .type(ServerSideEncryption.AES256)  // SSE-S3
+                .type(ServerSideEncryption.AES256)  <span class="hljs-comment">// SSE-S3</span>
                 .build())
         .build());
 
-// SSE-C（客户端提供密钥）
-var sseCustomerKey = new ServerSideEncryptionCustomerKey(
+<span class="hljs-comment">// SSE-C（客户端提供密钥）</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">sseCustomerKey</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ServerSideEncryptionCustomerKey</span>(
         Base64.getDecoder().decode(customerKeyBase64));
 
 minioClient.getObject(GetObjectArgs.builder()
@@ -701,44 +681,41 @@ minioClient.getObject(GetObjectArgs.builder()
         .object(key)
         .ssec(sseCustomerKey)
         .build());
-</code></pre></div>
-<h3>5.3 公开访问防护</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># 禁止公共访问（Bucket 级别）
-mc anonymous set none local/ai-documents
+</code></pre></div><h3>5.3 公开访问防护</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-comment"># 禁止公共访问（Bucket 级别）</span>
+mc anonymous <span class="hljs-built_in">set</span> none <span class="hljs-built_in">local</span>/ai-documents
 
-# 检查公开访问的 Bucket
-mc ls --json local | jq &#39;select(.access == &quot;public&quot;)&#39;
+<span class="hljs-comment"># 检查公开访问的 Bucket</span>
+mc <span class="hljs-built_in">ls</span> --json <span class="hljs-built_in">local</span> | jq <span class="hljs-string">'select(.access == "public")'</span>
 
-# 阻止公开策略的设置（MInIO 策略）
-mc admin policy set local block-public-policy
-</code></pre></div>
-<h3>5.4 访问策略最小化</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-json">{
-  &quot;Version&quot;: &quot;2012-10-17&quot;,
-  &quot;Statement&quot;: [
-    {
-      &quot;Effect&quot;: &quot;Allow&quot;,
-      &quot;Action&quot;: [&quot;s3:GetObject&quot;],
-      &quot;Resource&quot;: [&quot;arn:aws:s3:::ai-documents/users/${aws:username}/*&quot;]
-    },
-    {
-      &quot;Effect&quot;: &quot;Allow&quot;,
-      &quot;Action&quot;: [&quot;s3:PutObject&quot;],
-      &quot;Resource&quot;: [&quot;arn:aws:s3:::ai-documents/upload/${aws:username}/*&quot;],
-      &quot;Condition&quot;: {
-        &quot;NumericLessThan&quot;: { &quot;s3:content-length&quot;: 104857600 }
-      }
-    },
-    {
-      &quot;Effect&quot;: &quot;Deny&quot;,
-      &quot;Action&quot;: [&quot;s3:*&quot;],
-      &quot;Resource&quot;: [&quot;arn:aws:s3:::ai-documents/admin/*&quot;],
-      &quot;Condition&quot;: { &quot;StringNotEquals&quot;: { &quot;aws:username&quot;: &quot;admin&quot; } }
-    }
-  ]
-}
-</code></pre></div>
-<hr>
+<span class="hljs-comment"># 阻止公开策略的设置（MInIO 策略）</span>
+mc admin policy <span class="hljs-built_in">set</span> <span class="hljs-built_in">local</span> block-public-policy
+</code></pre></div><h3>5.4 访问策略最小化</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-json"><span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">"Version"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"2012-10-17"</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">"Statement"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
+    <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">"Effect"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"Allow"</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">"Action"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">"s3:GetObject"</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">"Resource"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">"arn:aws:s3:::ai-documents/users/${aws:username}/*"</span><span class="hljs-punctuation">]</span>
+    <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">"Effect"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"Allow"</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">"Action"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">"s3:PutObject"</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">"Resource"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">"arn:aws:s3:::ai-documents/upload/${aws:username}/*"</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">"Condition"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">"NumericLessThan"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"s3:content-length"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">104857600</span> <span class="hljs-punctuation">}</span>
+      <span class="hljs-punctuation">}</span>
+    <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">"Effect"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"Deny"</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">"Action"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">"s3:*"</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">"Resource"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">"arn:aws:s3:::ai-documents/admin/*"</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">"Condition"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"StringNotEquals"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"aws:username"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"admin"</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span>
+    <span class="hljs-punctuation">}</span>
+  <span class="hljs-punctuation">]</span>
+<span class="hljs-punctuation">}</span>
+</code></pre></div><hr>
 <h2>常见问题</h2>
 <p><strong>Q: 预签名 URL 安全吗？</strong>
 A: 预签名 URL 包含签名认证，在有效期内可被任何人使用。应设置短有效期（几分钟到几小时），并通过 HTTPS 传输。</p>
@@ -751,10 +728,10 @@ A: 模型文件动辄数GB，打包进镜像会导致镜像臃肿、部署慢、
 <hr>
 <h2>相关条目</h2>
 <ul>
-<li><a href="#/04-数据与中间件/数据库与缓存/04-PostgreSQL与pgvector深度解析" class="cross-ref" data-ref="04-PostgreSQL与pgvector深度解析">04-PostgreSQL与pgvector深度解析</a> — 向量索引存储</li>
-<li><a href="#/04-数据与中间件/消息与搜索/04-Elasticsearch深度解析" class="cross-ref" data-ref="04-Elasticsearch深度解析">04-Elasticsearch深度解析</a> — 全文检索索引</li>
-<li><a href="#/04-数据与中间件/消息与搜索/04-Kafka深度解析" class="cross-ref" data-ref="04-Kafka深度解析">04-Kafka深度解析</a> — Kafka 与 RabbitMQ 选型对比</li>
-<li><a href="#/?d=10" class="cross-ref domain-ref">10-AI数据工程/README</a> — AI 数据工程完整流水线</li>
+<li><a href="#/04-数据与中间件/数据库与缓存/04-PostgreSQL与pgvector深度解析" class="cross-ref">04-PostgreSQL与pgvector深度解析</a> — 向量索引存储</li>
+<li><a href="#/04-数据与中间件/消息与搜索/04-Elasticsearch深度解析" class="cross-ref">04-Elasticsearch深度解析</a> — 全文检索索引</li>
+<li><a href="#/04-数据与中间件/消息与搜索/04-Kafka深度解析" class="cross-ref">04-Kafka深度解析</a> — Kafka 与 RabbitMQ 选型对比</li>
+<li><span class="broken-ref" title="未找到: 10-AI数据工程/README">10-AI数据工程/README</span> — AI 数据工程完整流水线</li>
 </ul>
-</div>
+</body></html></div>
 </article>

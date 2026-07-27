@@ -1,24 +1,23 @@
 
-<article class="kb-entry" data-path="/10-AI数据工程/文档处理/10-切片策略深度剖析">
+<article class="kb-entry" data-path="/10-AI数据工程">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=10">10-AI数据工程</a></div>
     <h1>切片策略深度剖析：从固定窗口到语义感知</h1>
-    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#chunking</span><span class="badge badge-tag">#text-splitting</span><span class="badge badge-tag">#semantic-chunking</span><span class="badge badge-tag">#late-chunking</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#chunking</span><span class="badge badge-tag">#text-splitting</span><span class="badge badge-tag">#semantic-chunking</span><span class="badge badge-tag">#late-chunking</span><span class="badge badge-tag">#contextual-retrieval</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://python.langchain.com/docs/how_to/#text-splitters" target="_blank" rel="noopener" class="source-link" title="LangChain 官方文档 — RecursiveCharacterTextSplitter 设计原理">LangChain 官方文档 — RecursiveCharacterTextSplitter 设计原理</a><a href="https://arxiv.org/abs/2310.06824" target="_blank" rel="noopener" class="source-link" title="ColBERT v2 论文 — Late Interaction 检索">ColBERT v2 论文 — Late Interaction 检索</a><a href="https://arxiv.org/abs/2401.07463" target="_blank" rel="noopener" class="source-link" title="Contextual Retrieval — Anthropic RAG最佳实践">Contextual Retrieval — Anthropic RAG最佳实践</a><a href="https://www.pinecone.io/learn/chunking-strategies/" target="_blank" rel="noopener" class="source-link" title="Pinecone — Chunking Strategies 综述">Pinecone — Chunking Strategies 综述</a><a href="https://docs.spring.io/spring-ai/reference/api/etl-pipeline.html" target="_blank" rel="noopener" class="source-link" title="Spring AI ETL Pipeline — 官方文档管道">Spring AI ETL Pipeline — 官方文档管道</a></small></div>
   </div>
-  <div class="entry-body"><h1>切片策略深度剖析：从固定窗口到语义感知</h1>
+  <div class="entry-body"><html><head></head><body><h1>切片策略深度剖析：从固定窗口到语义感知</h1>
 <h2>概述</h2>
 <p>切片（Chunking）是RAG系统中的关键决策点。切片质量直接决定了检索精度、Token成本和最终答案质量。一个好的切片策略需要回答三个核心问题：切多大、在哪切、切完如何组织。本文系统性地剖析8种切片策略，从最基础的固定大小切片到最前沿的Late Chunking和Contextual Retrieval，每种策略都附带可运行的Java实现。</p>
 <hr>
 <h2>一、切片的核心约束与权衡</h2>
 <h3>1.1 三要素约束</h3>
 <p>在切片设计中，有三个相互制约的因素：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>检索精度 ∝ chunk_size
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>检索精度 ∝ chunk<span class="hljs-emphasis">_size
 检索噪音 ∝ chunk_size
 Token成本 ∝ chunk_size × retrieval_top_k
-上下文完整性 ∝ chunk_size
-</code></pre></div>
-<p><strong>关键洞察</strong>：上下文完整性与检索噪音之间存在根本矛盾。大chunk包含更多上下文但引入噪音，小chunk精度高但可能丢失关键上下文。</p>
+上下文完整性 ∝ chunk_</span>size
+</code></pre></div><p><strong>关键洞察</strong>：上下文完整性与检索噪音之间存在根本矛盾。大chunk包含更多上下文但引入噪音，小chunk精度高但可能丢失关键上下文。</p>
 <h3>1.2 推荐参数范围</h3>
 <table>
 <thead>
@@ -56,112 +55,110 @@ Token成本 ∝ chunk_size × retrieval_top_k
 <h3>2.1 固定大小切片 (Fixed-Size Chunking)</h3>
 <p><strong>原理</strong>：将文档按固定窗口大小切分，窗口之间有重叠。</p>
 <p><strong>实现</strong>：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.util.ArrayList;
-import java.util.List;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> java.util.ArrayList;
+<span class="hljs-keyword">import</span> java.util.List;
 
-public class FixedSizeChunker {
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">FixedSizeChunker</span> {
 
-    public record Chunk(String text, int startIndex, int endIndex,
-                        java.util.Map&lt;String, Object&gt; metadata) {}
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">Chunk</span><span class="hljs-params">(String text, <span class="hljs-type">int</span> startIndex, <span class="hljs-type">int</span> endIndex,
+                        java.util.Map&lt;String, Object&gt; metadata)</span> {}
 
-    /**
+    <span class="hljs-comment">/**
      * 固定大小切片
-     * @param text 原始文本
-     * @param chunkSize 窗口大小（字符数）
-     * @param overlap 重叠大小（字符数）
-     */
-    public List&lt;Chunk&gt; chunk(String text, int chunkSize, int overlap) {
-        var chunks = new ArrayList&lt;Chunk&gt;();
-        int start = 0;
-        int index = 0;
+     * <span class="hljs-doctag">@param</span> text 原始文本
+     * <span class="hljs-doctag">@param</span> chunkSize 窗口大小（字符数）
+     * <span class="hljs-doctag">@param</span> overlap 重叠大小（字符数）
+     */</span>
+    <span class="hljs-keyword">public</span> List&lt;Chunk&gt; <span class="hljs-title function_">chunk</span><span class="hljs-params">(String text, <span class="hljs-type">int</span> chunkSize, <span class="hljs-type">int</span> overlap)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">chunks</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;Chunk&gt;();
+        <span class="hljs-type">int</span> <span class="hljs-variable">start</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+        <span class="hljs-type">int</span> <span class="hljs-variable">index</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
 
-        while (start &lt; text.length()) {
-            int end = Math.min(start + chunkSize, text.length());
-            var chunkText = text.substring(start, end);
+        <span class="hljs-keyword">while</span> (start &lt; text.length()) {
+            <span class="hljs-type">int</span> <span class="hljs-variable">end</span> <span class="hljs-operator">=</span> Math.min(start + chunkSize, text.length());
+            <span class="hljs-type">var</span> <span class="hljs-variable">chunkText</span> <span class="hljs-operator">=</span> text.substring(start, end);
 
-            chunks.add(new Chunk(
+            chunks.add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">Chunk</span>(
                 chunkText, start, end,
-                java.util.Map.of(&quot;chunk_index&quot;, index++, &quot;start&quot;, start, &quot;end&quot;, end)
+                java.util.Map.of(<span class="hljs-string">"chunk_index"</span>, index++, <span class="hljs-string">"start"</span>, start, <span class="hljs-string">"end"</span>, end)
             ));
 
             start += (chunkSize - overlap);
         }
 
-        return chunks;
+        <span class="hljs-keyword">return</span> chunks;
     }
 }
-</code></pre></div>
-<p><strong>优点</strong>：实现简单、计算成本低、适合快速原型验证。</p>
+</code></pre></div><p><strong>优点</strong>：实现简单、计算成本低、适合快速原型验证。</p>
 <p><strong>缺点</strong>：语义断裂是最致命的问题。一个句子或段落可能被切为两半，导致检索时匹配到不完整的语义单元。</p>
 <p><strong>适用场景</strong>：结构化文本（日志、代码diff）、快速原型、对语义完整性要求不高的场景。</p>
 <hr>
 <h3>2.2 段落切片 (Paragraph Chunking)</h3>
 <p><strong>原理</strong>：以自然段落（<code>\n\n</code>）为边界切分。段落在自然语言中是最基本的语义单元。</p>
 <p><strong>实现</strong>：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> java.util.ArrayList;
+<span class="hljs-keyword">import</span> java.util.Arrays;
+<span class="hljs-keyword">import</span> java.util.List;
 
-public class ParagraphChunker {
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ParagraphChunker</span> {
 
-    public record Chunk(String text, int paragraphIndex,
-                        java.util.Map&lt;String, Object&gt; metadata) {}
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">Chunk</span><span class="hljs-params">(String text, <span class="hljs-type">int</span> paragraphIndex,
+                        java.util.Map&lt;String, Object&gt; metadata)</span> {}
 
-    /**
+    <span class="hljs-comment">/**
      * 按段落切分，带最大长度限制（长段落二次切分）
-     */
-    public List&lt;Chunk&gt; chunk(String text, int maxChunkSize) {
-        var chunks = new ArrayList&lt;Chunk&gt;();
-        var paragraphs = text.split(&quot;\n\n&quot;);
-        int index = 0;
+     */</span>
+    <span class="hljs-keyword">public</span> List&lt;Chunk&gt; <span class="hljs-title function_">chunk</span><span class="hljs-params">(String text, <span class="hljs-type">int</span> maxChunkSize)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">chunks</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;Chunk&gt;();
+        <span class="hljs-type">var</span> <span class="hljs-variable">paragraphs</span> <span class="hljs-operator">=</span> text.split(<span class="hljs-string">"\n\n"</span>);
+        <span class="hljs-type">int</span> <span class="hljs-variable">index</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
 
-        for (int i = 0; i &lt; paragraphs.length; i++) {
-            var para = paragraphs[i].trim();
-            if (para.isEmpty()) continue;
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; paragraphs.length; i++) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">para</span> <span class="hljs-operator">=</span> paragraphs[i].trim();
+            <span class="hljs-keyword">if</span> (para.isEmpty()) <span class="hljs-keyword">continue</span>;
 
-            if (para.length() &lt;= maxChunkSize) {
-                chunks.add(new Chunk(para, i, java.util.Map.of(
-                    &quot;chunk_index&quot;, index++,
-                    &quot;paragraph_index&quot;, i
+            <span class="hljs-keyword">if</span> (para.length() &lt;= maxChunkSize) {
+                chunks.add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">Chunk</span>(para, i, java.util.Map.of(
+                    <span class="hljs-string">"chunk_index"</span>, index++,
+                    <span class="hljs-string">"paragraph_index"</span>, i
                 )));
-            } else {
-                // 长段落二次切分（在句子边界上切）
-                var subChunks = splitLongParagraph(para, maxChunkSize);
-                for (var sub : subChunks) {
-                    chunks.add(new Chunk(sub, i, java.util.Map.of(
-                        &quot;chunk_index&quot;, index++,
-                        &quot;paragraph_index&quot;, i,
-                        &quot;is_sub_chunk&quot;, true
+            } <span class="hljs-keyword">else</span> {
+                <span class="hljs-comment">// 长段落二次切分（在句子边界上切）</span>
+                <span class="hljs-type">var</span> <span class="hljs-variable">subChunks</span> <span class="hljs-operator">=</span> splitLongParagraph(para, maxChunkSize);
+                <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> sub : subChunks) {
+                    chunks.add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">Chunk</span>(sub, i, java.util.Map.of(
+                        <span class="hljs-string">"chunk_index"</span>, index++,
+                        <span class="hljs-string">"paragraph_index"</span>, i,
+                        <span class="hljs-string">"is_sub_chunk"</span>, <span class="hljs-literal">true</span>
                     )));
                 }
             }
         }
 
-        return chunks;
+        <span class="hljs-keyword">return</span> chunks;
     }
 
-    private List&lt;String&gt; splitLongParagraph(String para, int maxSize) {
-        var results = new ArrayList&lt;String&gt;();
-        // 在句子边界（。！？\n）处切分，优先保持句子完整性
-        var sentences = para.split(&quot;(?&lt;=[。！？\\n])&quot;);
-        var current = new StringBuilder();
+    <span class="hljs-keyword">private</span> List&lt;String&gt; <span class="hljs-title function_">splitLongParagraph</span><span class="hljs-params">(String para, <span class="hljs-type">int</span> maxSize)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">results</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;String&gt;();
+        <span class="hljs-comment">// 在句子边界（。！？\n）处切分，优先保持句子完整性</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">sentences</span> <span class="hljs-operator">=</span> para.split(<span class="hljs-string">"(?&lt;=[。！？\\n])"</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">current</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>();
 
-        for (var sentence : sentences) {
-            if (current.length() + sentence.length() &gt; maxSize &amp;&amp; !current.isEmpty()) {
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> sentence : sentences) {
+            <span class="hljs-keyword">if</span> (current.length() + sentence.length() &gt; maxSize &amp;&amp; !current.isEmpty()) {
                 results.add(current.toString().trim());
-                current = new StringBuilder();
+                current = <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>();
             }
             current.append(sentence);
         }
-        if (!current.isEmpty()) {
+        <span class="hljs-keyword">if</span> (!current.isEmpty()) {
             results.add(current.toString().trim());
         }
 
-        return results;
+        <span class="hljs-keyword">return</span> results;
     }
 }
-</code></pre></div>
-<p><strong>优点</strong>：保持语义完整性、自然边界、大多数文档适用。</p>
+</code></pre></div><p><strong>优点</strong>：保持语义完整性、自然边界、大多数文档适用。</p>
 <p><strong>缺点</strong>：段落长度可能差异很大（一句 vs 一页），需要配合最大长度限制。</p>
 <p><strong>适用场景</strong>：通用文档、报告、文章——最常用的策略之一。</p>
 <hr>
@@ -170,105 +167,104 @@ public class ParagraphChunker {
 <code>\n\n</code> → <code>\n</code> → <code>。</code> → <code>.</code> → <code> </code> → ``（逐字符）</p>
 <p>每次尝试用当前分割符切分，如果某个chunk超过大小限制，则用下一级分割符对该chunk继续切分。</p>
 <p><strong>实现</strong>：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.function.Function;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> java.util.ArrayList;
+<span class="hljs-keyword">import</span> java.util.Arrays;
+<span class="hljs-keyword">import</span> java.util.List;
+<span class="hljs-keyword">import</span> java.util.function.Function;
 
-public class RecursiveCharacterChunker {
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">RecursiveCharacterChunker</span> {
 
-    // 分割符优先级：从高到低
-    private static final List&lt;String&gt; SEPARATORS = List.of(
-        &quot;\n\n&quot;,   // 段落
-        &quot;\n&quot;,     // 行
-        &quot;。&quot;,     // 中文句号
-        &quot;！&quot;,     // 中文感叹号
-        &quot;？&quot;,     // 中文问号
-        &quot;. &quot;,     // 英文句号+空格
-        &quot;；&quot;,     // 中文分号
-        &quot;; &quot;,     // 英文分号
-        &quot;，&quot;,     // 中文逗号
-        &quot;, &quot;,     // 英文逗号
-        &quot; &quot;,      // 空格
-        &quot;&quot;        // 逐字符
+    <span class="hljs-comment">// 分割符优先级：从高到低</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> List&lt;String&gt; SEPARATORS = List.of(
+        <span class="hljs-string">"\n\n"</span>,   <span class="hljs-comment">// 段落</span>
+        <span class="hljs-string">"\n"</span>,     <span class="hljs-comment">// 行</span>
+        <span class="hljs-string">"。"</span>,     <span class="hljs-comment">// 中文句号</span>
+        <span class="hljs-string">"！"</span>,     <span class="hljs-comment">// 中文感叹号</span>
+        <span class="hljs-string">"？"</span>,     <span class="hljs-comment">// 中文问号</span>
+        <span class="hljs-string">". "</span>,     <span class="hljs-comment">// 英文句号+空格</span>
+        <span class="hljs-string">"；"</span>,     <span class="hljs-comment">// 中文分号</span>
+        <span class="hljs-string">"; "</span>,     <span class="hljs-comment">// 英文分号</span>
+        <span class="hljs-string">"，"</span>,     <span class="hljs-comment">// 中文逗号</span>
+        <span class="hljs-string">", "</span>,     <span class="hljs-comment">// 英文逗号</span>
+        <span class="hljs-string">" "</span>,      <span class="hljs-comment">// 空格</span>
+        <span class="hljs-string">""</span>        <span class="hljs-comment">// 逐字符</span>
     );
 
-    public record Chunk(String text, int index, String strategy) {}
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">Chunk</span><span class="hljs-params">(String text, <span class="hljs-type">int</span> index, String strategy)</span> {}
 
-    /**
+    <span class="hljs-comment">/**
      * 递归切片主入口
-     */
-    public List&lt;Chunk&gt; splitText(String text, int chunkSize, int overlap) {
-        return splitText(text, new ArrayList&lt;&gt;(), chunkSize, overlap, 0);
+     */</span>
+    <span class="hljs-keyword">public</span> List&lt;Chunk&gt; <span class="hljs-title function_">splitText</span><span class="hljs-params">(String text, <span class="hljs-type">int</span> chunkSize, <span class="hljs-type">int</span> overlap)</span> {
+        <span class="hljs-keyword">return</span> splitText(text, <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;&gt;(), chunkSize, overlap, <span class="hljs-number">0</span>);
     }
 
-    private List&lt;Chunk&gt; splitText(String text, List&lt;String&gt; separators,
-                                   int chunkSize, int overlap, int depth) {
-        var chunks = new ArrayList&lt;Chunk&gt;();
+    <span class="hljs-keyword">private</span> List&lt;Chunk&gt; <span class="hljs-title function_">splitText</span><span class="hljs-params">(String text, List&lt;String&gt; separators,
+                                   <span class="hljs-type">int</span> chunkSize, <span class="hljs-type">int</span> overlap, <span class="hljs-type">int</span> depth)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">chunks</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;Chunk&gt;();
 
-        if (text.length() &lt;= chunkSize) {
-            chunks.add(new Chunk(text, 0, &quot;fits:%d&quot;.formatted(depth)));
-            return chunks;
+        <span class="hljs-keyword">if</span> (text.length() &lt;= chunkSize) {
+            chunks.add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">Chunk</span>(text, <span class="hljs-number">0</span>, <span class="hljs-string">"fits:%d"</span>.formatted(depth)));
+            <span class="hljs-keyword">return</span> chunks;
         }
 
-        // 选择当前深度的分割符
-        var separator = depth &lt; separators.size()
+        <span class="hljs-comment">// 选择当前深度的分割符</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">separator</span> <span class="hljs-operator">=</span> depth &lt; separators.size()
             ? separators.get(depth)
-            : &quot;&quot;; // 最后一级：逐字符
+            : <span class="hljs-string">""</span>; <span class="hljs-comment">// 最后一级：逐字符</span>
 
-        var splits = separator.isEmpty()
-            ? text.chars().mapToObj(c -&gt; String.valueOf((char) c)).toList()
+        <span class="hljs-type">var</span> <span class="hljs-variable">splits</span> <span class="hljs-operator">=</span> separator.isEmpty()
+            ? text.chars().mapToObj(c -&gt; String.valueOf((<span class="hljs-type">char</span>) c)).toList()
             : Arrays.asList(text.split(Pattern.quote(separator)));
 
-        var goodSplits = new ArrayList&lt;String&gt;();
-        for (var split : splits) {
-            if (split.length() &lt; chunkSize) {
+        <span class="hljs-type">var</span> <span class="hljs-variable">goodSplits</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;String&gt;();
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> split : splits) {
+            <span class="hljs-keyword">if</span> (split.length() &lt; chunkSize) {
                 goodSplits.add(split);
-            } else {
-                // 当前分割符无法满足，递归使用更细粒度的分割符
-                var subChunks = splitText(split, separators, chunkSize, overlap, depth + 1);
-                for (var sub : subChunks) {
+            } <span class="hljs-keyword">else</span> {
+                <span class="hljs-comment">// 当前分割符无法满足，递归使用更细粒度的分割符</span>
+                <span class="hljs-type">var</span> <span class="hljs-variable">subChunks</span> <span class="hljs-operator">=</span> splitText(split, separators, chunkSize, overlap, depth + <span class="hljs-number">1</span>);
+                <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> sub : subChunks) {
                     goodSplits.add(sub.text());
                 }
             }
         }
 
-        // 合并短片段到chunk_size上限，overlap衔接
-        var currentChunk = new StringBuilder();
-        var previousTail = &quot;&quot;; // 用于overlap
-        int chunkIndex = 0;
+        <span class="hljs-comment">// 合并短片段到chunk_size上限，overlap衔接</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">currentChunk</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>();
+        <span class="hljs-type">var</span> <span class="hljs-variable">previousTail</span> <span class="hljs-operator">=</span> <span class="hljs-string">""</span>; <span class="hljs-comment">// 用于overlap</span>
+        <span class="hljs-type">int</span> <span class="hljs-variable">chunkIndex</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
 
-        for (int i = 0; i &lt; goodSplits.size(); i++) {
-            var split = goodSplits.get(i);
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; goodSplits.size(); i++) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">split</span> <span class="hljs-operator">=</span> goodSplits.get(i);
 
-            if (currentChunk.length() + split.length() &gt; chunkSize &amp;&amp; !currentChunk.isEmpty()) {
-                var chunkText = currentChunk.toString();
-                chunks.add(new Chunk(chunkText, chunkIndex++, &quot;recursive:%d&quot;.formatted(depth)));
+            <span class="hljs-keyword">if</span> (currentChunk.length() + split.length() &gt; chunkSize &amp;&amp; !currentChunk.isEmpty()) {
+                <span class="hljs-type">var</span> <span class="hljs-variable">chunkText</span> <span class="hljs-operator">=</span> currentChunk.toString();
+                chunks.add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">Chunk</span>(chunkText, chunkIndex++, <span class="hljs-string">"recursive:%d"</span>.formatted(depth)));
 
-                // 保留overlap部分
-                if (overlap &gt; 0 &amp;&amp; chunkText.length() &gt; overlap) {
+                <span class="hljs-comment">// 保留overlap部分</span>
+                <span class="hljs-keyword">if</span> (overlap &gt; <span class="hljs-number">0</span> &amp;&amp; chunkText.length() &gt; overlap) {
                     previousTail = chunkText.substring(chunkText.length() - overlap);
-                    currentChunk = new StringBuilder(previousTail);
-                } else {
-                    currentChunk = new StringBuilder();
+                    currentChunk = <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>(previousTail);
+                } <span class="hljs-keyword">else</span> {
+                    currentChunk = <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>();
                 }
             }
 
             currentChunk.append(split);
-            if (!separator.isEmpty() &amp;&amp; i &lt; goodSplits.size() - 1) {
-                currentChunk.append(separator); // 恢复分割符
+            <span class="hljs-keyword">if</span> (!separator.isEmpty() &amp;&amp; i &lt; goodSplits.size() - <span class="hljs-number">1</span>) {
+                currentChunk.append(separator); <span class="hljs-comment">// 恢复分割符</span>
             }
         }
 
-        if (!currentChunk.isEmpty()) {
-            chunks.add(new Chunk(currentChunk.toString(), chunkIndex, &quot;recursive:%d&quot;.formatted(depth)));
+        <span class="hljs-keyword">if</span> (!currentChunk.isEmpty()) {
+            chunks.add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">Chunk</span>(currentChunk.toString(), chunkIndex, <span class="hljs-string">"recursive:%d"</span>.formatted(depth)));
         }
 
-        return chunks;
+        <span class="hljs-keyword">return</span> chunks;
     }
 }
-</code></pre></div>
-<p><strong>优点</strong>：平衡了语义完整性和chunk大小控制，是通用性最强的策略。</p>
+</code></pre></div><p><strong>优点</strong>：平衡了语义完整性和chunk大小控制，是通用性最强的策略。</p>
 <p><strong>适用场景</strong>：通用文档处理，LangChain默认策略。</p>
 <hr>
 <h3>2.4 语义切片 (Semantic Chunking)</h3>
@@ -282,435 +278,428 @@ public class RecursiveCharacterChunker {
 <li>在边界处切分</li>
 </ol>
 <p><strong>实现</strong>：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.util.ArrayList;
-import java.util.List;
-import java.util.stream.IntStream;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> java.util.ArrayList;
+<span class="hljs-keyword">import</span> java.util.List;
+<span class="hljs-keyword">import</span> java.util.stream.IntStream;
 
-public class SemanticChunker {
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">SemanticChunker</span> {
 
-    private final EmbeddingService embeddingService;
-    private final double similarityThreshold; // 典型值: 0.6-0.8
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> EmbeddingService embeddingService;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">double</span> similarityThreshold; <span class="hljs-comment">// 典型值: 0.6-0.8</span>
 
-    public SemanticChunker(EmbeddingService embeddingService, double similarityThreshold) {
-        this.embeddingService = embeddingService;
-        this.similarityThreshold = similarityThreshold;
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">SemanticChunker</span><span class="hljs-params">(EmbeddingService embeddingService, <span class="hljs-type">double</span> similarityThreshold)</span> {
+        <span class="hljs-built_in">this</span>.embeddingService = embeddingService;
+        <span class="hljs-built_in">this</span>.similarityThreshold = similarityThreshold;
     }
 
-    public interface EmbeddingService {
-        float[] embed(String text);
-        default double cosineSimilarity(float[] a, float[] b) {
-            double dot = 0, normA = 0, normB = 0;
-            for (int i = 0; i &lt; a.length; i++) {
-                dot += (double) a[i] * b[i];
-                normA += (double) a[i] * a[i];
-                normB += (double) b[i] * b[i];
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">EmbeddingService</span> {
+        <span class="hljs-type">float</span>[] embed(String text);
+        <span class="hljs-keyword">default</span> <span class="hljs-type">double</span> <span class="hljs-title function_">cosineSimilarity</span><span class="hljs-params">(<span class="hljs-type">float</span>[] a, <span class="hljs-type">float</span>[] b)</span> {
+            <span class="hljs-type">double</span> <span class="hljs-variable">dot</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>, normA = <span class="hljs-number">0</span>, normB = <span class="hljs-number">0</span>;
+            <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; a.length; i++) {
+                dot += (<span class="hljs-type">double</span>) a[i] * b[i];
+                normA += (<span class="hljs-type">double</span>) a[i] * a[i];
+                normB += (<span class="hljs-type">double</span>) b[i] * b[i];
             }
-            return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+            <span class="hljs-keyword">return</span> dot / (Math.sqrt(normA) * Math.sqrt(normB));
         }
     }
 
-    public record Chunk(String text, int sentenceStart, int sentenceEnd,
-                        double boundaryScore) {}
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">Chunk</span><span class="hljs-params">(String text, <span class="hljs-type">int</span> sentenceStart, <span class="hljs-type">int</span> sentenceEnd,
+                        <span class="hljs-type">double</span> boundaryScore)</span> {}
 
-    /**
+    <span class="hljs-comment">/**
      * 基于语义相似度的智能切片
-     * @param text 原始文本
-     * @param windowSize 滑动窗口大小（句子数），典型值3-5
-     */
-    public List&lt;Chunk&gt; chunk(String text, int windowSize) {
-        // 1. 句子拆分（处理中英文）
-        var sentences = splitSentences(text);
-        if (sentences.size() &lt;= windowSize) {
-            return List.of(new Chunk(text, 0, sentences.size() - 1, 1.0));
+     * <span class="hljs-doctag">@param</span> text 原始文本
+     * <span class="hljs-doctag">@param</span> windowSize 滑动窗口大小（句子数），典型值3-5
+     */</span>
+    <span class="hljs-keyword">public</span> List&lt;Chunk&gt; <span class="hljs-title function_">chunk</span><span class="hljs-params">(String text, <span class="hljs-type">int</span> windowSize)</span> {
+        <span class="hljs-comment">// 1. 句子拆分（处理中英文）</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">sentences</span> <span class="hljs-operator">=</span> splitSentences(text);
+        <span class="hljs-keyword">if</span> (sentences.size() &lt;= windowSize) {
+            <span class="hljs-keyword">return</span> List.of(<span class="hljs-keyword">new</span> <span class="hljs-title class_">Chunk</span>(text, <span class="hljs-number">0</span>, sentences.size() - <span class="hljs-number">1</span>, <span class="hljs-number">1.0</span>));
         }
 
-        // 2. 逐句Embedding
-        var embeddings = sentences.stream()
+        <span class="hljs-comment">// 2. 逐句Embedding</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">embeddings</span> <span class="hljs-operator">=</span> sentences.stream()
             .map(embeddingService::embed)
             .toList();
 
-        // 3. 滑动窗口计算语义边界分数
-        // boundaryScore[i] = 窗口[i-windowSize, i]与窗口[i, i+windowSize]的相似度
-        var boundaryScores = new double[sentences.size()];
-        for (int i = windowSize; i &lt; sentences.size() - windowSize; i++) {
-            // 左边窗口的句子的平均Embedding
-            var leftWindow = averageEmbedding(
+        <span class="hljs-comment">// 3. 滑动窗口计算语义边界分数</span>
+        <span class="hljs-comment">// boundaryScore[i] = 窗口[i-windowSize, i]与窗口[i, i+windowSize]的相似度</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">boundaryScores</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">double</span>[sentences.size()];
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> windowSize; i &lt; sentences.size() - windowSize; i++) {
+            <span class="hljs-comment">// 左边窗口的句子的平均Embedding</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">leftWindow</span> <span class="hljs-operator">=</span> averageEmbedding(
                 embeddings.subList(i - windowSize, i)
             );
-            // 右边窗口的句子的平均Embedding
-            var rightWindow = averageEmbedding(
+            <span class="hljs-comment">// 右边窗口的句子的平均Embedding</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">rightWindow</span> <span class="hljs-operator">=</span> averageEmbedding(
                 embeddings.subList(i, i + windowSize)
             );
             boundaryScores[i] = embeddingService.cosineSimilarity(leftWindow, rightWindow);
         }
 
-        // 4. 找语义边界（局部最小值）
-        var boundaries = new ArrayList&lt;Integer&gt;();
-        boundaries.add(0);
-        for (int i = windowSize; i &lt; sentences.size() - windowSize; i++) {
-            if (boundaryScores[i] &lt; similarityThreshold) {
-                // 确保不切得太密（至少3个句子）
-                if (boundaries.isEmpty() || i - boundaries.getLast() &gt;= 3) {
+        <span class="hljs-comment">// 4. 找语义边界（局部最小值）</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">boundaries</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;Integer&gt;();
+        boundaries.add(<span class="hljs-number">0</span>);
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> windowSize; i &lt; sentences.size() - windowSize; i++) {
+            <span class="hljs-keyword">if</span> (boundaryScores[i] &lt; similarityThreshold) {
+                <span class="hljs-comment">// 确保不切得太密（至少3个句子）</span>
+                <span class="hljs-keyword">if</span> (boundaries.isEmpty() || i - boundaries.getLast() &gt;= <span class="hljs-number">3</span>) {
                     boundaries.add(i);
                 }
             }
         }
         boundaries.add(sentences.size());
 
-        // 5. 在边界处切分
-        var chunks = new ArrayList&lt;Chunk&gt;();
-        for (int i = 0; i &lt; boundaries.size() - 1; i++) {
-            var start = boundaries.get(i);
-            var end = boundaries.get(i + 1);
-            var chunkText = String.join(&quot;&quot;, sentences.subList(start, end));
-            var avgScore = IntStream.range(start, end)
-                .mapToDouble(j -&gt; j &lt; boundaryScores.length ? boundaryScores[j] : 1.0)
-                .average().orElse(1.0);
+        <span class="hljs-comment">// 5. 在边界处切分</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">chunks</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;Chunk&gt;();
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; boundaries.size() - <span class="hljs-number">1</span>; i++) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">start</span> <span class="hljs-operator">=</span> boundaries.get(i);
+            <span class="hljs-type">var</span> <span class="hljs-variable">end</span> <span class="hljs-operator">=</span> boundaries.get(i + <span class="hljs-number">1</span>);
+            <span class="hljs-type">var</span> <span class="hljs-variable">chunkText</span> <span class="hljs-operator">=</span> String.join(<span class="hljs-string">""</span>, sentences.subList(start, end));
+            <span class="hljs-type">var</span> <span class="hljs-variable">avgScore</span> <span class="hljs-operator">=</span> IntStream.range(start, end)
+                .mapToDouble(j -&gt; j &lt; boundaryScores.length ? boundaryScores[j] : <span class="hljs-number">1.0</span>)
+                .average().orElse(<span class="hljs-number">1.0</span>);
 
-            chunks.add(new Chunk(chunkText, start, end - 1, avgScore));
+            chunks.add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">Chunk</span>(chunkText, start, end - <span class="hljs-number">1</span>, avgScore));
         }
 
-        return chunks;
+        <span class="hljs-keyword">return</span> chunks;
     }
 
-    private float[] averageEmbedding(List&lt;float[]&gt; embs) {
-        var dim = embs.getFirst().length;
-        var avg = new float[dim];
-        for (var emb : embs) {
-            for (int i = 0; i &lt; dim; i++) {
+    <span class="hljs-keyword">private</span> <span class="hljs-type">float</span>[] averageEmbedding(List&lt;<span class="hljs-type">float</span>[]&gt; embs) {
+        <span class="hljs-type">var</span> <span class="hljs-variable">dim</span> <span class="hljs-operator">=</span> embs.getFirst().length;
+        <span class="hljs-type">var</span> <span class="hljs-variable">avg</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">float</span>[dim];
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> emb : embs) {
+            <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; dim; i++) {
                 avg[i] += emb[i] / embs.size();
             }
         }
-        return avg;
+        <span class="hljs-keyword">return</span> avg;
     }
 
-    private List&lt;String&gt; splitSentences(String text) {
-        // 中英文混合句子切割正则
-        var sentences = new ArrayList&lt;String&gt;();
-        var matcher = java.util.regex.Pattern.compile(
-            &quot;[^。！？.!?\n]+[。！？.!?\n]?&quot;
+    <span class="hljs-keyword">private</span> List&lt;String&gt; <span class="hljs-title function_">splitSentences</span><span class="hljs-params">(String text)</span> {
+        <span class="hljs-comment">// 中英文混合句子切割正则</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">sentences</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;String&gt;();
+        <span class="hljs-type">var</span> <span class="hljs-variable">matcher</span> <span class="hljs-operator">=</span> java.util.regex.Pattern.compile(
+            <span class="hljs-string">"[^。！？.!?\n]+[。！？.!?\n]?"</span>
         ).matcher(text);
 
-        while (matcher.find()) {
-            var sentence = matcher.group().trim();
-            if (!sentence.isEmpty()) {
+        <span class="hljs-keyword">while</span> (matcher.find()) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">sentence</span> <span class="hljs-operator">=</span> matcher.group().trim();
+            <span class="hljs-keyword">if</span> (!sentence.isEmpty()) {
                 sentences.add(sentence);
             }
         }
-        return sentences;
+        <span class="hljs-keyword">return</span> sentences;
     }
 }
-</code></pre></div>
-<p><strong>优点</strong>：最高质量的语义保留、自适应不同内容密度。</p>
+</code></pre></div><p><strong>优点</strong>：最高质量的语义保留、自适应不同内容密度。</p>
 <p><strong>缺点</strong>：计算成本高（每个句子都需要Embedding）、需要选择合适的Embedding模型。</p>
 <p><strong>适用场景</strong>：对检索质量要求极高的场景、学术文献、技术文档。</p>
 <hr>
 <h3>2.5 代码感知切片 (Code-Aware Chunking)</h3>
 <p><strong>原理</strong>：利用AST（抽象语法树）按函数/类/方法边界切分，而非按行或字符。这是代码RAG的核心技术。</p>
 <p><strong>实现（Java AST解析）</strong>：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import com.github.javaparser.StaticJavaParser;
-import com.github.javaparser.ast.CompilationUnit;
-import com.github.javaparser.ast.body.MethodDeclaration;
-import com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Optional;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> com.github.javaparser.StaticJavaParser;
+<span class="hljs-keyword">import</span> com.github.javaparser.ast.CompilationUnit;
+<span class="hljs-keyword">import</span> com.github.javaparser.ast.body.MethodDeclaration;
+<span class="hljs-keyword">import</span> com.github.javaparser.ast.body.ClassOrInterfaceDeclaration;
+<span class="hljs-keyword">import</span> java.util.ArrayList;
+<span class="hljs-keyword">import</span> java.util.List;
+<span class="hljs-keyword">import</span> java.util.Optional;
 
-public class CodeAwareChunker {
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">CodeAwareChunker</span> {
 
-    public record CodeChunk(
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">CodeChunk</span><span class="hljs-params">(
         String code,
-        String type,          // &quot;class&quot;, &quot;method&quot;, &quot;field&quot;, &quot;import&quot;
+        String type,          // "class", "method", "field", "<span class="hljs-keyword">import</span>"
         String name,          // 类/方法名
-        int startLine,
-        int endLine,
+        <span class="hljs-type">int</span> startLine,
+        <span class="hljs-type">int</span> endLine,
         String parentClass,   // 所属类名
         String signature,     // 方法签名
         List&lt;String&gt; annotations
-    ) {}
+    )</span> {}
 
-    /**
+    <span class="hljs-comment">/**
      * 按方法和类边界切分Java源代码
-     */
-    public List&lt;CodeChunk&gt; chunkJava(String sourceCode) {
-        var chunks = new ArrayList&lt;CodeChunk&gt;();
-        var cu = StaticJavaParser.parse(sourceCode);
+     */</span>
+    <span class="hljs-keyword">public</span> List&lt;CodeChunk&gt; <span class="hljs-title function_">chunkJava</span><span class="hljs-params">(String sourceCode)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">chunks</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;CodeChunk&gt;();
+        <span class="hljs-type">var</span> <span class="hljs-variable">cu</span> <span class="hljs-operator">=</span> StaticJavaParser.parse(sourceCode);
 
-        // 提取导入语句
+        <span class="hljs-comment">// 提取导入语句</span>
         cu.getImports().forEach(imp -&gt;
-            chunks.add(new CodeChunk(
-                imp.toString(), &quot;import&quot;, imp.getNameAsString(),
-                imp.getBegin().map(p -&gt; p.line).orElse(0),
-                imp.getEnd().map(p -&gt; p.line).orElse(0),
-                null, null, List.of()
+            chunks.add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">CodeChunk</span>(
+                imp.toString(), <span class="hljs-string">"import"</span>, imp.getNameAsString(),
+                imp.getBegin().map(p -&gt; p.line).orElse(<span class="hljs-number">0</span>),
+                imp.getEnd().map(p -&gt; p.line).orElse(<span class="hljs-number">0</span>),
+                <span class="hljs-literal">null</span>, <span class="hljs-literal">null</span>, List.of()
             ))
         );
 
-        // 遍历类型声明
+        <span class="hljs-comment">// 遍历类型声明</span>
         cu.findAll(ClassOrInterfaceDeclaration.class).forEach(cls -&gt; {
-            var className = cls.getNameAsString();
-            var annotations = cls.getAnnotations().stream()
+            <span class="hljs-type">var</span> <span class="hljs-variable">className</span> <span class="hljs-operator">=</span> cls.getNameAsString();
+            <span class="hljs-type">var</span> <span class="hljs-variable">annotations</span> <span class="hljs-operator">=</span> cls.getAnnotations().stream()
                 .map(a -&gt; a.getNameAsString()).toList();
 
-            // 类级别的chunk（包含字段）
-            var classChunk = buildClassChunk(cls);
+            <span class="hljs-comment">// 类级别的chunk（包含字段）</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">classChunk</span> <span class="hljs-operator">=</span> buildClassChunk(cls);
             chunks.add(classChunk);
 
-            // 方法级别的chunk
+            <span class="hljs-comment">// 方法级别的chunk</span>
             cls.getMethods().forEach(method -&gt; {
                 chunks.add(buildMethodChunk(method, className));
             });
         });
 
-        // 顶层方法
+        <span class="hljs-comment">// 顶层方法</span>
         cu.findAll(MethodDeclaration.class).stream()
             .filter(m -&gt; m.getParentNode()
-                .filter(p -&gt; p instanceof CompilationUnit).isPresent())
+                .filter(p -&gt; p <span class="hljs-keyword">instanceof</span> CompilationUnit).isPresent())
             .forEach(method -&gt; {
-                chunks.add(buildMethodChunk(method, null));
+                chunks.add(buildMethodChunk(method, <span class="hljs-literal">null</span>));
             });
 
-        return chunks;
+        <span class="hljs-keyword">return</span> chunks;
     }
 
-    private CodeChunk buildClassChunk(ClassOrInterfaceDeclaration cls) {
-        var fields = new StringBuilder();
+    <span class="hljs-keyword">private</span> CodeChunk <span class="hljs-title function_">buildClassChunk</span><span class="hljs-params">(ClassOrInterfaceDeclaration cls)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">fields</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>();
         cls.getFields().forEach(f -&gt;
-            fields.append(&quot;  &quot;).append(f.getVariable(0).getNameAsString())
-                  .append(&quot;: &quot;).append(f.getCommonType()).append(&quot;;\n&quot;)
+            fields.append(<span class="hljs-string">"  "</span>).append(f.getVariable(<span class="hljs-number">0</span>).getNameAsString())
+                  .append(<span class="hljs-string">": "</span>).append(f.getCommonType()).append(<span class="hljs-string">";\n"</span>)
         );
 
-        var code = &quot;&quot;&quot;
+        <span class="hljs-type">var</span> <span class="hljs-variable">code</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
             %s
             class %s {
             %s
             // ... %d methods ...
             }
-            &quot;&quot;&quot;.formatted(
+            """</span>.formatted(
                 cls.getAnnotations().stream()
-                    .map(a -&gt; &quot;@&quot; + a.getNameAsString())
-                    .collect(java.util.stream.Collectors.joining(&quot;\n&quot;)),
+                    .map(a -&gt; <span class="hljs-string">"@"</span> + a.getNameAsString())
+                    .collect(java.util.stream.Collectors.joining(<span class="hljs-string">"\n"</span>)),
                 cls.getNameAsString(),
                 fields,
                 cls.getMethods().size()
             );
 
-        return new CodeChunk(
-            code, &quot;class&quot;, cls.getNameAsString(),
-            cls.getBegin().map(p -&gt; p.line).orElse(0),
-            cls.getEnd().map(p -&gt; p.line).orElse(0),
-            null, null,
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">CodeChunk</span>(
+            code, <span class="hljs-string">"class"</span>, cls.getNameAsString(),
+            cls.getBegin().map(p -&gt; p.line).orElse(<span class="hljs-number">0</span>),
+            cls.getEnd().map(p -&gt; p.line).orElse(<span class="hljs-number">0</span>),
+            <span class="hljs-literal">null</span>, <span class="hljs-literal">null</span>,
             cls.getAnnotations().stream()
                 .map(a -&gt; a.getNameAsString()).toList()
         );
     }
 
-    private CodeChunk buildMethodChunk(MethodDeclaration method, String parentClass) {
-        return new CodeChunk(
-            method.getTokenRange().map(t -&gt; t.toString()).orElse(&quot;&quot;),
-            &quot;method&quot;,
+    <span class="hljs-keyword">private</span> CodeChunk <span class="hljs-title function_">buildMethodChunk</span><span class="hljs-params">(MethodDeclaration method, String parentClass)</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">CodeChunk</span>(
+            method.getTokenRange().map(t -&gt; t.toString()).orElse(<span class="hljs-string">""</span>),
+            <span class="hljs-string">"method"</span>,
             method.getNameAsString(),
-            method.getBegin().map(p -&gt; p.line).orElse(0),
-            method.getEnd().map(p -&gt; p.line).orElse(0),
+            method.getBegin().map(p -&gt; p.line).orElse(<span class="hljs-number">0</span>),
+            method.getEnd().map(p -&gt; p.line).orElse(<span class="hljs-number">0</span>),
             parentClass,
-            method.getDeclarationAsString(false, false, false),
+            method.getDeclarationAsString(<span class="hljs-literal">false</span>, <span class="hljs-literal">false</span>, <span class="hljs-literal">false</span>),
             method.getAnnotations().stream()
                 .map(a -&gt; a.getNameAsString()).toList()
         );
     }
 }
-</code></pre></div>
-<p>Maven依赖：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;dependency&gt;
-    &lt;groupId&gt;com.github.javaparser&lt;/groupId&gt;
-    &lt;artifactId&gt;javaparser-core&lt;/artifactId&gt;
-    &lt;version&gt;3.26.3&lt;/version&gt;
-&lt;/dependency&gt;
-</code></pre></div>
-<p><strong>优点</strong>：保持代码逻辑完整性、检索时能精确匹配函数/类。</p>
+</code></pre></div><p>Maven依赖：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-xml"><span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>com.github.javaparser<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>javaparser-core<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">version</span>&gt;</span>3.26.3<span class="hljs-tag">&lt;/<span class="hljs-name">version</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+</code></pre></div><p><strong>优点</strong>：保持代码逻辑完整性、检索时能精确匹配函数/类。</p>
 <p><strong>缺点</strong>：语言特定、需要解析器支持每种语言。</p>
 <p><strong>适用场景</strong>：代码库RAG、API文档生成、代码问答。</p>
 <hr>
 <h3>2.6 文档结构感知切片 (Structure-Aware Chunking)</h3>
 <p><strong>原理</strong>：利用文档自身的结构标记（Markdown标题、PDF目录/书签、HTML标题标签）作为切片边界，保持文档的层级结构。</p>
 <p><strong>实现（Markdown结构感知）</strong>：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.util.ArrayList;
-import java.util.List;
-import java.util.regex.Pattern;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> java.util.ArrayList;
+<span class="hljs-keyword">import</span> java.util.List;
+<span class="hljs-keyword">import</span> java.util.regex.Pattern;
 
-public class StructureAwareChunker {
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">StructureAwareChunker</span> {
 
-    public record StructuredChunk(
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">StructuredChunk</span><span class="hljs-params">(
         String content,
-        String sectionPath,      // &quot;第1章 &gt; 1.1节 &gt; 1.1.2小节&quot;
-        int headingLevel,        // 1-6
-        String headingTitle,     // &quot;切片策略详解&quot;
+        String sectionPath,      // "第1章 &gt; 1.1节 &gt; 1.1.2小节"
+        <span class="hljs-type">int</span> headingLevel,        // 1-6
+        String headingTitle,     // "切片策略详解"
         List&lt;StructuredChunk&gt; children
-    ) {}
+    )</span> {}
 
-    /**
+    <span class="hljs-comment">/**
      * 按Markdown标题层级切分
      * 每个chunk包含其标题路径的完整上下文
-     */
-    public List&lt;StructuredChunk&gt; chunkMarkdown(String markdown, int maxChunkSize) {
-        var lines = markdown.split(&quot;\n&quot;);
-        var root = new StructuredChunk(&quot;&quot;, &quot;/&quot;, 0, &quot;ROOT&quot;, new ArrayList&lt;&gt;());
-        var pathStack = new java.util.Stack&lt;StructuredChunk&gt;();
+     */</span>
+    <span class="hljs-keyword">public</span> List&lt;StructuredChunk&gt; <span class="hljs-title function_">chunkMarkdown</span><span class="hljs-params">(String markdown, <span class="hljs-type">int</span> maxChunkSize)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">lines</span> <span class="hljs-operator">=</span> markdown.split(<span class="hljs-string">"\n"</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">root</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StructuredChunk</span>(<span class="hljs-string">""</span>, <span class="hljs-string">"/"</span>, <span class="hljs-number">0</span>, <span class="hljs-string">"ROOT"</span>, <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;&gt;());
+        <span class="hljs-type">var</span> <span class="hljs-variable">pathStack</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">java</span>.util.Stack&lt;StructuredChunk&gt;();
         pathStack.push(root);
 
-        var currentContent = new StringBuilder();
+        <span class="hljs-type">var</span> <span class="hljs-variable">currentContent</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>();
 
-        for (var line : lines) {
-            var matcher = Pattern.compile(&quot;^(#{1,6})\\s+(.+)&quot;).matcher(line);
-            if (matcher.find()) {
-                // 遇到新标题：保存前一个chunk内容
-                if (!currentContent.isEmpty() &amp;&amp; pathStack.size() &gt; 1) {
-                    var parent = pathStack.peek();
-                    var chunk = new StructuredChunk(
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> line : lines) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">matcher</span> <span class="hljs-operator">=</span> Pattern.compile(<span class="hljs-string">"^(#{1,6})\\s+(.+)"</span>).matcher(line);
+            <span class="hljs-keyword">if</span> (matcher.find()) {
+                <span class="hljs-comment">// 遇到新标题：保存前一个chunk内容</span>
+                <span class="hljs-keyword">if</span> (!currentContent.isEmpty() &amp;&amp; pathStack.size() &gt; <span class="hljs-number">1</span>) {
+                    <span class="hljs-type">var</span> <span class="hljs-variable">parent</span> <span class="hljs-operator">=</span> pathStack.peek();
+                    <span class="hljs-type">var</span> <span class="hljs-variable">chunk</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StructuredChunk</span>(
                         currentContent.toString(),
                         buildPath(pathStack),
-                        pathStack.size() - 1,
+                        pathStack.size() - <span class="hljs-number">1</span>,
                         parent.headingTitle(),
-                        new ArrayList&lt;&gt;()
+                        <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;&gt;()
                     );
                     parent.children().add(chunk);
-                    currentContent = new StringBuilder();
+                    currentContent = <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>();
                 }
 
-                // 调整层级栈
-                var level = matcher.group(1).length();
-                var title = matcher.group(2);
+                <span class="hljs-comment">// 调整层级栈</span>
+                <span class="hljs-type">var</span> <span class="hljs-variable">level</span> <span class="hljs-operator">=</span> matcher.group(<span class="hljs-number">1</span>).length();
+                <span class="hljs-type">var</span> <span class="hljs-variable">title</span> <span class="hljs-operator">=</span> matcher.group(<span class="hljs-number">2</span>);
 
-                while (pathStack.size() &gt; level) {
+                <span class="hljs-keyword">while</span> (pathStack.size() &gt; level) {
                     pathStack.pop();
                 }
 
-                var newChunk = new StructuredChunk(
-                    &quot;&quot;, buildPath(pathStack) + &quot; &gt; &quot; + title,
-                    level, title, new ArrayList&lt;&gt;()
+                <span class="hljs-type">var</span> <span class="hljs-variable">newChunk</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StructuredChunk</span>(
+                    <span class="hljs-string">""</span>, buildPath(pathStack) + <span class="hljs-string">" &gt; "</span> + title,
+                    level, title, <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;&gt;()
                 );
                 pathStack.peek().children().add(newChunk);
                 pathStack.push(newChunk);
-            } else {
-                currentContent.append(line).append(&quot;\n&quot;);
+            } <span class="hljs-keyword">else</span> {
+                currentContent.append(line).append(<span class="hljs-string">"\n"</span>);
             }
 
-            // 内容超限时切分子chunk
-            if (currentContent.length() &gt;= maxChunkSize) {
-                if (!pathStack.isEmpty()) {
-                    var parent = pathStack.peek();
-                    parent.children().add(new StructuredChunk(
+            <span class="hljs-comment">// 内容超限时切分子chunk</span>
+            <span class="hljs-keyword">if</span> (currentContent.length() &gt;= maxChunkSize) {
+                <span class="hljs-keyword">if</span> (!pathStack.isEmpty()) {
+                    <span class="hljs-type">var</span> <span class="hljs-variable">parent</span> <span class="hljs-operator">=</span> pathStack.peek();
+                    parent.children().add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">StructuredChunk</span>(
                         currentContent.toString(), buildPath(pathStack),
-                        pathStack.size(), parent.headingTitle(), new ArrayList&lt;&gt;()
+                        pathStack.size(), parent.headingTitle(), <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;&gt;()
                     ));
-                    currentContent = new StringBuilder();
+                    currentContent = <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>();
                 }
             }
         }
 
-        // 残留内容
-        if (!currentContent.isEmpty() &amp;&amp; pathStack.size() &gt; 1) {
-            pathStack.peek().children().add(new StructuredChunk(
+        <span class="hljs-comment">// 残留内容</span>
+        <span class="hljs-keyword">if</span> (!currentContent.isEmpty() &amp;&amp; pathStack.size() &gt; <span class="hljs-number">1</span>) {
+            pathStack.peek().children().add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">StructuredChunk</span>(
                 currentContent.toString(), buildPath(pathStack),
-                pathStack.size(), pathStack.peek().headingTitle(), new ArrayList&lt;&gt;()
+                pathStack.size(), pathStack.peek().headingTitle(), <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;&gt;()
             ));
         }
 
-        return flattenChunks(root);
+        <span class="hljs-keyword">return</span> flattenChunks(root);
     }
 
-    private String buildPath(java.util.Stack&lt;StructuredChunk&gt; stack) {
-        return stack.stream()
-            .skip(1) // 跳过ROOT
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">buildPath</span><span class="hljs-params">(java.util.Stack&lt;StructuredChunk&gt; stack)</span> {
+        <span class="hljs-keyword">return</span> stack.stream()
+            .skip(<span class="hljs-number">1</span>) <span class="hljs-comment">// 跳过ROOT</span>
             .map(StructuredChunk::headingTitle)
-            .collect(java.util.stream.Collectors.joining(&quot; &gt; &quot;));
+            .collect(java.util.stream.Collectors.joining(<span class="hljs-string">" &gt; "</span>));
     }
 
-    private List&lt;StructuredChunk&gt; flattenChunks(StructuredChunk root) {
-        var result = new ArrayList&lt;StructuredChunk&gt;();
-        for (var child : root.children()) {
+    <span class="hljs-keyword">private</span> List&lt;StructuredChunk&gt; <span class="hljs-title function_">flattenChunks</span><span class="hljs-params">(StructuredChunk root)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;StructuredChunk&gt;();
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> child : root.children()) {
             result.add(child);
             result.addAll(flattenChunks(child));
         }
-        return result;
+        <span class="hljs-keyword">return</span> result;
     }
 }
-</code></pre></div>
-<p><strong>优点</strong>：保持文档逻辑结构、检索结果的章节上下文清晰。</p>
+</code></pre></div><p><strong>优点</strong>：保持文档逻辑结构、检索结果的章节上下文清晰。</p>
 <p><strong>适用场景</strong>：技术文档、API文档、知识库——有明确层级结构的文档。</p>
 <hr>
 <h3>2.7 Late Chunking vs Early Chunking</h3>
 <p>这是切片策略中最根本的范式区别：</p>
 <p><strong>Early Chunking</strong>（当前主流）：</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>文档 → 切片 → 每个Chunk独立Embedding → 索引 → 检索
-</code></pre></div>
-<p>问题：一个Chunk的Embedding只反映了该Chunk自身的语义，丢失了文档级的上下文信息。</p>
+</code></pre></div><p>问题：一个Chunk的Embedding只反映了该Chunk自身的语义，丢失了文档级的上下文信息。</p>
 <p><strong>Late Chunking (ColBERT风格)</strong>：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>文档 → 整篇Embedding（Token级）→ 切片（在Token Embedding上操作）→ 加权检索
-</code></pre></div>
-<p>优势：每个Token的Embedding包含了整篇文档的上下文信息，即使切片后仍保留了更细粒度的语义。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>文档 → 整篇Embedding（<span class="hljs-built_in">Token</span>级）→ 切片（在<span class="hljs-built_in">Token</span> Embedding上操作）→ 加权检索
+</code></pre></div><p>优势：每个Token的Embedding包含了整篇文档的上下文信息，即使切片后仍保留了更细粒度的语义。</p>
 <p><strong>Java实现 (Late Chunking模拟)</strong>：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.List;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> java.util.ArrayList;
+<span class="hljs-keyword">import</span> java.util.Comparator;
+<span class="hljs-keyword">import</span> java.util.List;
 
-public class LateChunker {
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">LateChunker</span> {
 
-    /**
+    <span class="hljs-comment">/**
      * 模拟Late Chunking：
      * 1. 先对整篇文档做Token级Embedding（这里简化为句子级）
      * 2. 切片时保留Token Embedding
      * 3. 检索时使用MaxSim（最大相似度）而非Chunk级余弦相似度
-     */
-    public record LateChunk(
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">LateChunk</span><span class="hljs-params">(
         String text,
-        float[][] tokenEmbeddings,  // 每个Token的Embedding向量
+        <span class="hljs-type">float</span>[][] tokenEmbeddings,  // 每个Token的Embedding向量
         List&lt;Integer&gt; tokenPositions
-    ) {}
+    )</span> {}
 
-    public interface LateEmbeddingService {
-        /**
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">LateEmbeddingService</span> {
+        <span class="hljs-comment">/**
          * 返回Token级别的Embedding矩阵 [numTokens × dim]
-         */
-        float[][] tokenEmbed(String text);
+         */</span>
+        <span class="hljs-type">float</span>[][] tokenEmbed(String text);
     }
 
-    /**
+    <span class="hljs-comment">/**
      * MaxSim检索：查询与Chunk的相似度 = max(查询向量与Chunk内每个Token向量的相似度)
      * 这是ColBERT的核心思想
-     */
-    public double maxSimScore(float[] queryEmbedding, LateChunk chunk) {
-        double maxScore = 0;
-        for (var tokenEmb : chunk.tokenEmbeddings()) {
-            var score = cosineSimilarity(queryEmbedding, tokenEmb);
-            if (score &gt; maxScore) {
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-type">double</span> <span class="hljs-title function_">maxSimScore</span><span class="hljs-params">(<span class="hljs-type">float</span>[] queryEmbedding, LateChunk chunk)</span> {
+        <span class="hljs-type">double</span> <span class="hljs-variable">maxScore</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> tokenEmb : chunk.tokenEmbeddings()) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">score</span> <span class="hljs-operator">=</span> cosineSimilarity(queryEmbedding, tokenEmb);
+            <span class="hljs-keyword">if</span> (score &gt; maxScore) {
                 maxScore = score;
             }
         }
-        return maxScore;
+        <span class="hljs-keyword">return</span> maxScore;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * SumMaxSim：查询与多个Chunk的交互式检索分数
-     */
-    public double sumMaxSimScore(float[] queryEmbedding, List&lt;LateChunk&gt; chunks) {
-        return chunks.stream()
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-type">double</span> <span class="hljs-title function_">sumMaxSimScore</span><span class="hljs-params">(<span class="hljs-type">float</span>[] queryEmbedding, List&lt;LateChunk&gt; chunks)</span> {
+        <span class="hljs-keyword">return</span> chunks.stream()
             .mapToDouble(chunk -&gt; maxSimScore(queryEmbedding, chunk))
             .sum();
     }
 
-    private double cosineSimilarity(float[] a, float[] b) {
-        double dot = 0, normA = 0, normB = 0;
-        for (int i = 0; i &lt; a.length; i++) {
-            dot += (double) a[i] * b[i];
-            normA += (double) a[i] * a[i];
-            normB += (double) b[i] * b[i];
+    <span class="hljs-keyword">private</span> <span class="hljs-type">double</span> <span class="hljs-title function_">cosineSimilarity</span><span class="hljs-params">(<span class="hljs-type">float</span>[] a, <span class="hljs-type">float</span>[] b)</span> {
+        <span class="hljs-type">double</span> <span class="hljs-variable">dot</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>, normA = <span class="hljs-number">0</span>, normB = <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; a.length; i++) {
+            dot += (<span class="hljs-type">double</span>) a[i] * b[i];
+            normA += (<span class="hljs-type">double</span>) a[i] * a[i];
+            normB += (<span class="hljs-type">double</span>) b[i] * b[i];
         }
-        return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+        <span class="hljs-keyword">return</span> dot / (Math.sqrt(normA) * Math.sqrt(normB));
     }
 }
-</code></pre></div>
-<p><strong>性能对比（基于文献数据）</strong>：</p>
+</code></pre></div><p><strong>性能对比（基于文献数据）</strong>：</p>
 <table>
 <thead>
 <tr>
@@ -742,66 +731,64 @@ public class LateChunker {
 <p>Late Chunking的索引大小开销巨大（存储Token级Embedding），适用于对检索质量要求极高的场景。</p>
 <hr>
 <h3>2.8 Contextual Retrieval</h3>
-<p><strong>原理</strong>（Anthropic提出）：为每个Chunk自动生成一段&quot;上下文描述&quot;，描述该Chunk在原始文档中的位置和角色。</p>
+<p><strong>原理</strong>（Anthropic提出）：为每个Chunk自动生成一段"上下文描述"，描述该Chunk在原始文档中的位置和角色。</p>
 <p>例如，原始Chunk：</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>计算方法是使用标准差进行标准化...
-</code></pre></div>
-<p>加上上下文描述后：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>{文档标题: 机器学习入门, 章节: 第3章 特征工程, 上一节: 缺失值处理}
+</code></pre></div><p>加上上下文描述后：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>{文档标题: 机器学习入门, 章节: 第<span class="hljs-number">3</span>章 特征工程, 上一节: 缺失值处理}
 计算方法是使用标准差进行标准化...
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class ContextualChunker {
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ContextualChunker</span> {
 
-    public interface ContextGenerator {
-        /**
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">ContextGenerator</span> {
+        <span class="hljs-comment">/**
          * 为chunk生成上下文描述
          * 可以用LLM生成，也可以用基于规则的元数据方法
-         */
-        String generateContext(String chunkText, String documentTitle,
-                               String sectionPath, String previousChunkSummary);
+         */</span>
+        String <span class="hljs-title function_">generateContext</span><span class="hljs-params">(String chunkText, String documentTitle,
+                               String sectionPath, String previousChunkSummary)</span>;
     }
 
-    public record ContextualChunk(
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">ContextualChunk</span><span class="hljs-params">(
         String chunkContent,
         String contextDescription,
         String combinedText  // contextDescription + chunkContent
-    ) {}
+    )</span> {}
 
-    /**
+    <span class="hljs-comment">/**
      * 规则式上下文生成（无需LLM，速度快）
-     */
-    public static class RuleBasedContextGenerator implements ContextGenerator {
-        @Override
-        public String generateContext(String chunkText, String documentTitle,
-                                       String sectionPath, String previousChunkSummary) {
-            var sb = new StringBuilder();
-            if (documentTitle != null &amp;&amp; !documentTitle.isEmpty()) {
-                sb.append(&quot;文档: &quot;).append(documentTitle).append(&quot;; &quot;);
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">RuleBasedContextGenerator</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">ContextGenerator</span> {
+        <span class="hljs-meta">@Override</span>
+        <span class="hljs-keyword">public</span> String <span class="hljs-title function_">generateContext</span><span class="hljs-params">(String chunkText, String documentTitle,
+                                       String sectionPath, String previousChunkSummary)</span> {
+            <span class="hljs-type">var</span> <span class="hljs-variable">sb</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>();
+            <span class="hljs-keyword">if</span> (documentTitle != <span class="hljs-literal">null</span> &amp;&amp; !documentTitle.isEmpty()) {
+                sb.append(<span class="hljs-string">"文档: "</span>).append(documentTitle).append(<span class="hljs-string">"; "</span>);
             }
-            if (sectionPath != null &amp;&amp; !sectionPath.isEmpty()) {
-                sb.append(&quot;章节: &quot;).append(sectionPath).append(&quot;; &quot;);
+            <span class="hljs-keyword">if</span> (sectionPath != <span class="hljs-literal">null</span> &amp;&amp; !sectionPath.isEmpty()) {
+                sb.append(<span class="hljs-string">"章节: "</span>).append(sectionPath).append(<span class="hljs-string">"; "</span>);
             }
-            if (previousChunkSummary != null &amp;&amp; !previousChunkSummary.isEmpty()) {
-                sb.append(&quot;上文概述: &quot;).append(previousChunkSummary).append(&quot;; &quot;);
+            <span class="hljs-keyword">if</span> (previousChunkSummary != <span class="hljs-literal">null</span> &amp;&amp; !previousChunkSummary.isEmpty()) {
+                sb.append(<span class="hljs-string">"上文概述: "</span>).append(previousChunkSummary).append(<span class="hljs-string">"; "</span>);
             }
-            return sb.toString();
+            <span class="hljs-keyword">return</span> sb.toString();
         }
     }
 
-    /**
+    <span class="hljs-comment">/**
      * LLM式上下文生成（质量高，成本较高）
-     */
-    public static class LlmContextGenerator implements ContextGenerator {
-        private final ChatClient chatClient;
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">LlmContextGenerator</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">ContextGenerator</span> {
+        <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> ChatClient chatClient;
 
-        public LlmContextGenerator(ChatClient chatClient) {
-            this.chatClient = chatClient;
+        <span class="hljs-keyword">public</span> <span class="hljs-title function_">LlmContextGenerator</span><span class="hljs-params">(ChatClient chatClient)</span> {
+            <span class="hljs-built_in">this</span>.chatClient = chatClient;
         }
 
-        @Override
-        public String generateContext(String chunkText, String documentTitle,
-                                       String sectionPath, String previousChunkSummary) {
-            var prompt = &quot;&quot;&quot;
+        <span class="hljs-meta">@Override</span>
+        <span class="hljs-keyword">public</span> String <span class="hljs-title function_">generateContext</span><span class="hljs-params">(String chunkText, String documentTitle,
+                                       String sectionPath, String previousChunkSummary)</span> {
+            <span class="hljs-type">var</span> <span class="hljs-variable">prompt</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
                 请为以下文档片段生成一段简短的上下文描述（不超过50字）。
                 描述应包含：该片段所属的文档主题、所在章节、与前文的关系。
 
@@ -813,50 +800,49 @@ public class LateChunker {
                 %s
 
                 上下文描述:
-                &quot;&quot;&quot;.formatted(documentTitle, sectionPath, previousChunkSummary, chunkText);
+                """</span>.formatted(documentTitle, sectionPath, previousChunkSummary, chunkText);
 
-            return chatClient.prompt().user(prompt).call().content();
+            <span class="hljs-keyword">return</span> chatClient.prompt().user(prompt).call().content();
         }
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 将Contextual Chunk用于索引和检索
-     */
-    public List&lt;ContextualChunk&gt; chunkWithContext(String documentText,
+     */</span>
+    <span class="hljs-keyword">public</span> List&lt;ContextualChunk&gt; <span class="hljs-title function_">chunkWithContext</span><span class="hljs-params">(String documentText,
                                                    String documentTitle,
-                                                   ContextGenerator contextGenerator) {
-        var structureChunker = new StructureAwareChunker();
-        var structuredChunks = structureChunker.chunkMarkdown(documentText, 1024);
+                                                   ContextGenerator contextGenerator)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">structureChunker</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StructureAwareChunker</span>();
+        <span class="hljs-type">var</span> <span class="hljs-variable">structuredChunks</span> <span class="hljs-operator">=</span> structureChunker.chunkMarkdown(documentText, <span class="hljs-number">1024</span>);
 
-        var contextualChunks = new ArrayList&lt;ContextualChunk&gt;();
-        String previousSummary = null;
+        <span class="hljs-type">var</span> <span class="hljs-variable">contextualChunks</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;ContextualChunk&gt;();
+        <span class="hljs-type">String</span> <span class="hljs-variable">previousSummary</span> <span class="hljs-operator">=</span> <span class="hljs-literal">null</span>;
 
-        for (var chunk : structuredChunks) {
-            var context = contextGenerator.generateContext(
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> chunk : structuredChunks) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">context</span> <span class="hljs-operator">=</span> contextGenerator.generateContext(
                 chunk.content(), documentTitle, chunk.sectionPath(), previousSummary
             );
 
-            var combined = &quot;&quot;&quot;
+            <span class="hljs-type">var</span> <span class="hljs-variable">combined</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
                 [上下文: %s]
 
                 %s
-                &quot;&quot;&quot;.formatted(context, chunk.content());
+                """</span>.formatted(context, chunk.content());
 
-            contextualChunks.add(new ContextualChunk(
+            contextualChunks.add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">ContextualChunk</span>(
                 chunk.content(), context, combined
             ));
 
-            // 用当前chunk的前50字作为下一chunk的上文概述
-            previousSummary = chunk.content().length() &gt; 50
-                ? chunk.content().substring(0, 50) + &quot;...&quot;
+            <span class="hljs-comment">// 用当前chunk的前50字作为下一chunk的上文概述</span>
+            previousSummary = chunk.content().length() &gt; <span class="hljs-number">50</span>
+                ? chunk.content().substring(<span class="hljs-number">0</span>, <span class="hljs-number">50</span>) + <span class="hljs-string">"..."</span>
                 : chunk.content();
         }
 
-        return contextualChunks;
+        <span class="hljs-keyword">return</span> contextualChunks;
     }
 }
-</code></pre></div>
-<p><strong>关键洞察</strong>：索引时使用<code>combinedText</code>（contextDescription + chunkContent）做Embedding，检索时能匹配到更多语义相关的chunk。这解决了传统切片中&quot;chunk脱离文档上下文&quot;的核心问题。</p>
+</code></pre></div><p><strong>关键洞察</strong>：索引时使用<code>combinedText</code>（contextDescription + chunkContent）做Embedding，检索时能匹配到更多语义相关的chunk。这解决了传统切片中"chunk脱离文档上下文"的核心问题。</p>
 <p>Anthropic的实验显示，Contextual Retrieval可以将检索失败率降低49%（相对于传统切片）。</p>
 <hr>
 <h2>三、元数据附加策略</h2>
@@ -866,78 +852,75 @@ public class LateChunker {
 <li><strong>溯源</strong>：从检索命中追溯到原始文档位置</li>
 <li><strong>调试</strong>：分析检索质量</li>
 </ol>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public record ChunkMetadata(
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">ChunkMetadata</span><span class="hljs-params">(
     String chunkId,           // UUID
     String documentId,        // 源文档ID
     String documentTitle,     // 文档标题
-    int chunkIndex,           // 在文档中的序号
-    int totalChunks,          // 文档总chunk数
+    <span class="hljs-type">int</span> chunkIndex,           // 在文档中的序号
+    <span class="hljs-type">int</span> totalChunks,          // 文档总chunk数
     String sectionPath,       // 章节路径
-    int pageNumber,           // 原始页码（PDF专用）
-    int[] characterRange,     // 源文档字符位置 [start, end]
+    <span class="hljs-type">int</span> pageNumber,           // 原始页码（PDF专用）
+    <span class="hljs-type">int</span>[] characterRange,     // 源文档字符位置 [start, end]
     String sourceUri,         // 文件/数据库来源
     String contentType,       // MIME类型
     String chunkingStrategy,  // 使用的切片策略
-    int chunkSize,            // 实际字符数
-    int estimatedTokens,      // 估算Token数
+    <span class="hljs-type">int</span> chunkSize,            // 实际字符数
+    <span class="hljs-type">int</span> estimatedTokens,      // 估算Token数
     java.time.Instant createdAt,
     java.util.Map&lt;String, String&gt; custom // 业务自定义字段
-) {}
-</code></pre></div>
-<hr>
+)</span> {}
+</code></pre></div><hr>
 <h2>四、多模态切片</h2>
 <p>对于图文混排文档，切片策略需要考虑图片的归属：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class MultimodalChunker {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">MultimodalChunker</span> {
 
-    public record MultimodalChunk(
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">MultimodalChunk</span><span class="hljs-params">(
         String text,
         List&lt;ImageReference&gt; images,  // 属于这个chunk的图片
-        int pageNumber
-    ) {}
+        <span class="hljs-type">int</span> pageNumber
+    )</span> {}
 
-    public record ImageReference(
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">ImageReference</span><span class="hljs-params">(
         String imageId,
         String ocrText,
         String caption,     // 图表标题
         String description, // 视觉描述（可由多模态模型生成）
-        float[] imageEmbedding
-    ) {}
+        <span class="hljs-type">float</span>[] imageEmbedding
+    )</span> {}
 
-    /**
+    <span class="hljs-comment">/**
      * 图文切片规则：
      * - 图片归属于距离最近的前一个标题段落
      * - 图表标题和OCR文本追加到chunk文本中
      * - 可选的Image Embedding用于多模态检索
-     */
-    public List&lt;MultimodalChunk&gt; chunkWithImages(
+     */</span>
+    <span class="hljs-keyword">public</span> List&lt;MultimodalChunk&gt; <span class="hljs-title function_">chunkWithImages</span><span class="hljs-params">(
             String markdownText,
             List&lt;ImageReference&gt; allImages,
-            java.util.Map&lt;Integer, List&lt;ImageReference&gt;&gt; imagesByPage) {
+            java.util.Map&lt;Integer, List&lt;ImageReference&gt;&gt; imagesByPage)</span> {
 
-        var textChunks = new ParagraphChunker().chunk(markdownText, 1024);
-        // 将图片分配到最近的chunk...
-        // 实现略，原理为按位置匹配
+        <span class="hljs-type">var</span> <span class="hljs-variable">textChunks</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ParagraphChunker</span>().chunk(markdownText, <span class="hljs-number">1024</span>);
+        <span class="hljs-comment">// 将图片分配到最近的chunk...</span>
+        <span class="hljs-comment">// 实现略，原理为按位置匹配</span>
 
-        return List.of(); // 实际实现
+        <span class="hljs-keyword">return</span> List.of(); <span class="hljs-comment">// 实际实现</span>
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>五、切片策略选择决策树</h2>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>文档类型？
 ├── 纯文本/文章
 │   ├── 有标题结构 → 递归字符切片 + Contextual Retrieval
-│   └── 无标题结构 → 段落切片 + 10%重叠
+│   └── 无标题结构 → 段落切片 + <span class="hljs-number">10</span><span class="hljs-comment">%重叠</span>
 ├── 代码
 │   ├── 检索粒度：函数级 → 代码感知切片（AST）
 │   └── 检索粒度：文件级 → 固定大小 + 文件名元数据
 ├── PDF/Office文档
 │   ├── 质量优先 → 结构感知切片 + 语义切片混合
-│   └── 成本优先 → 递归字符切片 + 10%重叠
+│   └── 成本优先 → 递归字符切片 + <span class="hljs-number">10</span><span class="hljs-comment">%重叠</span>
 ├── 图文混排 → 结构感知 + 多模态元数据
 └── 对话/日志 → 时间窗口切片（按时间间隔/轮次）
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>六、最佳实践</h2>
 <ol>
 <li><strong>默认使用递归字符切片</strong>：通用性最好，作为baseline</li>
@@ -958,10 +941,10 @@ public class LateChunker {
 </ul>
 <h2>相关条目</h2>
 <ul>
-<li><a href="#/10-AI数据工程/文档处理/10-Java文档解析全景" class="cross-ref" data-ref="10-Java文档解析全景">10-Java文档解析全景</a> — 切片前的文档解析</li>
-<li><a href="#/11-检索与RAG/检索技术/11-向量检索与混合检索" class="cross-ref" data-ref="11-向量检索与混合检索">11-向量检索与混合检索</a> — 切片索引与检索</li>
-<li><a href="#/11-检索与RAG/RAG实现/11-高级RAG模式" class="cross-ref" data-ref="11-高级RAG模式">11-高级RAG模式</a> — Parent-Child Retrieval等高级模式</li>
-<li><a href="#/10-AI数据工程/数据治理/10-元数据管理与数据治理" class="cross-ref" data-ref="10-元数据管理与数据治理">10-元数据管理与数据治理</a> — 切片元数据管理</li>
+<li><a href="#/10-AI数据工程/文档处理/10-Java文档解析全景" class="cross-ref">10-Java文档解析全景</a> — 切片前的文档解析</li>
+<li><a href="#/11-检索与RAG/检索技术/11-向量检索与混合检索" class="cross-ref">11-向量检索与混合检索</a> — 切片索引与检索</li>
+<li><a href="#/11-检索与RAG/RAG实现/11-高级RAG模式" class="cross-ref">11-高级RAG模式</a> — Parent-Child Retrieval等高级模式</li>
+<li><a href="#/10-AI数据工程/数据治理/10-元数据管理与数据治理" class="cross-ref">10-元数据管理与数据治理</a> — 切片元数据管理</li>
 </ul>
-</div>
+</body></html></div>
 </article>

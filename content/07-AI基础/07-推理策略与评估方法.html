@@ -1,126 +1,122 @@
 
-<article class="kb-entry" data-path="/07-AI基础/07-推理策略与评估方法">
+<article class="kb-entry" data-path="/07-AI基础">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=07">07-AI基础</a></div>
     <h1>Inference and Evaluation</h1>
-    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#inference</span><span class="badge badge-tag">#decoding</span><span class="badge badge-tag">#sampling</span><span class="badge badge-tag">#kv-cache</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#inference</span><span class="badge badge-tag">#decoding</span><span class="badge badge-tag">#sampling</span><span class="badge badge-tag">#kv-cache</span><span class="badge badge-tag">#speculative-decoding</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://arxiv.org/abs/1904.09751" target="_blank" rel="noopener" class="source-link" title="The Curious Case of Neural Text Degeneration (Holtzman et al., Top-p sampling)">The Curious Case of Neural Text Degeneration (Holtzman et al., Top-p sampling)</a><a href="https://arxiv.org/abs/2305.10429" target="_blank" rel="noopener" class="source-link" title="PagedAttention / vLLM (Kwon et al.)">PagedAttention / vLLM (Kwon et al.)</a><a href="https://arxiv.org/abs/1904.09751" target="_blank" rel="noopener" class="source-link" title="Top-k sampling analysis">Top-k sampling analysis</a><a href="https://arxiv.org/abs/2306.05685" target="_blank" rel="noopener" class="source-link" title="LLM-as-a-Judge (Zheng et al.)">LLM-as-a-Judge (Zheng et al.)</a><a href="https://huggingface.co/spaces/lmsys/chatbot-arena-leaderboard" target="_blank" rel="noopener" class="source-link" title="Chatbot Arena Leaderboard">Chatbot Arena Leaderboard</a></small></div>
   </div>
-  <div class="entry-body"><h1>Inference and Evaluation</h1>
+  <div class="entry-body"><html><head></head><body><h1>Inference and Evaluation</h1>
 <h2>概述</h2>
-<p>推理（Inference）和评估（Evaluation）是 LLM 应用落地的两个关键环节。推理策略决定了模型&quot;怎么说&quot;（如何从概率分布中选择输出），评估方法决定了模型&quot;说得好不好&quot;（如何度量输出质量）。本条目从算法原理、性能优化到评估体系，全面覆盖这两方面。</p>
+<p>推理（Inference）和评估（Evaluation）是 LLM 应用落地的两个关键环节。推理策略决定了模型"怎么说"（如何从概率分布中选择输出），评估方法决定了模型"说得好不好"（如何度量输出质量）。本条目从算法原理、性能优化到评估体系，全面覆盖这两方面。</p>
 <h2>推理策略</h2>
 <p>模型在每个生成步骤输出的是词汇表上的概率分布（logits → softmax → probabilities）。如何从这个分布中选择下一个 token，就是推理策略的核心问题。</p>
 <h3>Greedy Decoding</h3>
 <p>最简单的策略：每步选择概率最高的 token。</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Greedy Decoding:
-  for each step t:
-    probs = softmax(logits[t])
-    token_t = argmax(probs)
-    if token_t == EOS: break
+  <span class="hljs-keyword">for</span> each step t:
+    probs = <span class="hljs-built_in">softmax</span>(logits[t])
+    <span class="hljs-type">token_t</span> = <span class="hljs-built_in">argmax</span>(probs)
+    <span class="hljs-keyword">if</span> <span class="hljs-type">token_t</span> == EOS: <span class="hljs-keyword">break</span>
 
 优点：确定性，速度快，可复现
 缺点：
-  - 容易陷入重复循环（&quot;I am happy. I am happy. I am happy...&quot;）
+  - 容易陷入重复循环（<span class="hljs-string">"I am happy. I am happy. I am happy..."</span>）
   - 缺乏多样性，输出可能不是全局最优（贪心的局部最优 ≠ 全局最优）
-</code></pre></div>
-<p><strong>重复问题示例</strong>：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Prompt: &quot;What is Java?&quot;
-Greedy: &quot;Java is a programming language that is a programming language
-         that is a programming language...&quot;  ← 陷入循环
-</code></pre></div>
-<p><strong>为什么 Greedy 会重复</strong>：贪心选择使得之前选过的高概率 token 在后续步骤中仍然保持高概率，形成正反馈循环。</p>
+</code></pre></div><p><strong>重复问题示例</strong>：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Prompt: <span class="hljs-string">"What is Java?"</span>
+Greedy: <span class="hljs-comment">"Java is a programming language that is a programming language</span>
+         that <span class="hljs-keyword">is</span> <span class="hljs-keyword">a</span> programming <span class="hljs-keyword">language</span>...<span class="hljs-comment">"  ← 陷入循环</span>
+</code></pre></div><p><strong>为什么 Greedy 会重复</strong>：贪心选择使得之前选过的高概率 token 在后续步骤中仍然保持高概率，形成正反馈循环。</p>
 <h3>Temperature 采样</h3>
 <p>在 softmax 之前对 logits 除以温度参数 T：</p>
 <p>$$p_i = \frac{\exp(z_i / T)}{\sum_j \exp(z_j / T)}$$</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>T → 0:  等价于 Greedy（概率分布极度尖锐）
-T = 0.7: 推荐用于事实类回答（平衡准确性和自然度）
-T = 1.0: 标准采样（使用原始概率分布）
-T = 1.5: 增加创造性（概率分布变平）
-T → ∞:  等价于均匀分布（完全随机）
-</code></pre></div>
-<p><strong>Java 实现：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class TemperatureSampling {
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-attribute">T</span> → <span class="hljs-number">0</span>:  等价于 Greedy（概率分布极度尖锐）
+<span class="hljs-attribute">T</span> = <span class="hljs-number">0</span>.<span class="hljs-number">7</span>: 推荐用于事实类回答（平衡准确性和自然度）
+<span class="hljs-attribute">T</span> = <span class="hljs-number">1</span>.<span class="hljs-number">0</span>: 标准采样（使用原始概率分布）
+<span class="hljs-attribute">T</span> = <span class="hljs-number">1</span>.<span class="hljs-number">5</span>: 增加创造性（概率分布变平）
+<span class="hljs-attribute">T</span> → ∞:  等价于均匀分布（完全随机）
+</code></pre></div><p><strong>Java 实现：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">TemperatureSampling</span> {
 
-    /**
+    <span class="hljs-comment">/**
      * 应用温度参数后采样
-     * @param logits 原始 logits
-     * @param temperature 温度参数
-     * @param random 随机数生成器
-     * @return 采样得到的 token 索引
-     */
-    public static int sample(float[] logits, float temperature, java.util.Random random) {
-        float[] probs = applyTemperature(logits, temperature);
-        return sampleFromDistribution(probs, random);
+     * <span class="hljs-doctag">@param</span> logits 原始 logits
+     * <span class="hljs-doctag">@param</span> temperature 温度参数
+     * <span class="hljs-doctag">@param</span> random 随机数生成器
+     * <span class="hljs-doctag">@return</span> 采样得到的 token 索引
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-type">int</span> <span class="hljs-title function_">sample</span><span class="hljs-params">(<span class="hljs-type">float</span>[] logits, <span class="hljs-type">float</span> temperature, java.util.Random random)</span> {
+        <span class="hljs-type">float</span>[] probs = applyTemperature(logits, temperature);
+        <span class="hljs-keyword">return</span> sampleFromDistribution(probs, random);
     }
 
-    public static float[] applyTemperature(float[] logits, float temperature) {
-        if (temperature &lt;= 0) temperature = 1e-6f;  // 防止除零
-        float[] scaled = new float[logits.length];
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-type">float</span>[] applyTemperature(<span class="hljs-type">float</span>[] logits, <span class="hljs-type">float</span> temperature) {
+        <span class="hljs-keyword">if</span> (temperature &lt;= <span class="hljs-number">0</span>) temperature = <span class="hljs-number">1e-6f</span>;  <span class="hljs-comment">// 防止除零</span>
+        <span class="hljs-type">float</span>[] scaled = <span class="hljs-keyword">new</span> <span class="hljs-title class_">float</span>[logits.length];
 
-        // 数值稳定性：减去最大值
-        float maxLogit = Float.NEGATIVE_INFINITY;
-        for (float l : logits) maxLogit = Math.max(maxLogit, l);
+        <span class="hljs-comment">// 数值稳定性：减去最大值</span>
+        <span class="hljs-type">float</span> <span class="hljs-variable">maxLogit</span> <span class="hljs-operator">=</span> Float.NEGATIVE_INFINITY;
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">float</span> l : logits) maxLogit = Math.max(maxLogit, l);
 
-        double sum = 0;
-        for (int i = 0; i &lt; logits.length; i++) {
-            scaled[i] = (float) Math.exp((logits[i] - maxLogit) / temperature);
+        <span class="hljs-type">double</span> <span class="hljs-variable">sum</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; logits.length; i++) {
+            scaled[i] = (<span class="hljs-type">float</span>) Math.exp((logits[i] - maxLogit) / temperature);
             sum += scaled[i];
         }
 
-        for (int i = 0; i &lt; scaled.length; i++) {
-            scaled[i] = (float) (scaled[i] / sum);
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; scaled.length; i++) {
+            scaled[i] = (<span class="hljs-type">float</span>) (scaled[i] / sum);
         }
-        return scaled;
+        <span class="hljs-keyword">return</span> scaled;
     }
 
-    public static int sampleFromDistribution(float[] probs, java.util.Random random) {
-        double r = random.nextDouble();
-        double cumulative = 0;
-        for (int i = 0; i &lt; probs.length; i++) {
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-type">int</span> <span class="hljs-title function_">sampleFromDistribution</span><span class="hljs-params">(<span class="hljs-type">float</span>[] probs, java.util.Random random)</span> {
+        <span class="hljs-type">double</span> <span class="hljs-variable">r</span> <span class="hljs-operator">=</span> random.nextDouble();
+        <span class="hljs-type">double</span> <span class="hljs-variable">cumulative</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; probs.length; i++) {
             cumulative += probs[i];
-            if (r &lt;= cumulative) return i;
+            <span class="hljs-keyword">if</span> (r &lt;= cumulative) <span class="hljs-keyword">return</span> i;
         }
-        return probs.length - 1;  // 兜底
+        <span class="hljs-keyword">return</span> probs.length - <span class="hljs-number">1</span>;  <span class="hljs-comment">// 兜底</span>
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 演示不同温度的效果
-     */
-    public static void demonstrate() {
-        // 模拟一个词汇表上的 logits
-        float[] logits = {3.0f, 2.0f, 1.0f, 0.5f, 0.1f};
-        String[] tokens = {&quot;Java&quot;, &quot;Python&quot;, &quot;Rust&quot;, &quot;Go&quot;, &quot;C&quot;};
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">demonstrate</span><span class="hljs-params">()</span> {
+        <span class="hljs-comment">// 模拟一个词汇表上的 logits</span>
+        <span class="hljs-type">float</span>[] logits = {<span class="hljs-number">3.0f</span>, <span class="hljs-number">2.0f</span>, <span class="hljs-number">1.0f</span>, <span class="hljs-number">0.5f</span>, <span class="hljs-number">0.1f</span>};
+        String[] tokens = {<span class="hljs-string">"Java"</span>, <span class="hljs-string">"Python"</span>, <span class="hljs-string">"Rust"</span>, <span class="hljs-string">"Go"</span>, <span class="hljs-string">"C"</span>};
 
-        System.out.println(&quot;原始 logits: &quot; + Arrays.toString(logits));
+        System.out.println(<span class="hljs-string">"原始 logits: "</span> + Arrays.toString(logits));
         System.out.println();
 
-        for (float t : new float[]{0.1f, 0.7f, 1.0f, 2.0f}) {
-            float[] probs = applyTemperature(logits, t);
-            System.out.printf(&quot;T=%.1f: &quot;, t);
-            for (int i = 0; i &lt; tokens.length; i++) {
-                System.out.printf(&quot;%s:%.3f &quot;, tokens[i], probs[i]);
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">float</span> t : <span class="hljs-keyword">new</span> <span class="hljs-title class_">float</span>[]{<span class="hljs-number">0.1f</span>, <span class="hljs-number">0.7f</span>, <span class="hljs-number">1.0f</span>, <span class="hljs-number">2.0f</span>}) {
+            <span class="hljs-type">float</span>[] probs = applyTemperature(logits, t);
+            System.out.printf(<span class="hljs-string">"T=%.1f: "</span>, t);
+            <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; tokens.length; i++) {
+                System.out.printf(<span class="hljs-string">"%s:%.3f "</span>, tokens[i], probs[i]);
             }
             System.out.println();
         }
-        // 输出：
-        // T=0.1: Java:0.996 Python:0.004 Rust:0.000 Go:0.000 C:0.000  (接近Greedy)
-        // T=0.7: Java:0.614 Python:0.239 Rust:0.100 Go:0.035 C:0.012
-        // T=1.0: Java:0.506 Python:0.266 Rust:0.148 Go:0.064 C:0.016
-        // T=2.0: Java:0.351 Python:0.265 Rust:0.195 Go:0.128 C:0.061  (更平坦)
+        <span class="hljs-comment">// 输出：</span>
+        <span class="hljs-comment">// T=0.1: Java:0.996 Python:0.004 Rust:0.000 Go:0.000 C:0.000  (接近Greedy)</span>
+        <span class="hljs-comment">// T=0.7: Java:0.614 Python:0.239 Rust:0.100 Go:0.035 C:0.012</span>
+        <span class="hljs-comment">// T=1.0: Java:0.506 Python:0.266 Rust:0.148 Go:0.064 C:0.016</span>
+        <span class="hljs-comment">// T=2.0: Java:0.351 Python:0.265 Rust:0.195 Go:0.128 C:0.061  (更平坦)</span>
     }
 
-    public static void main(String[] args) {
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">main</span><span class="hljs-params">(String[] args)</span> {
         demonstrate();
     }
 }
-</code></pre></div>
-<h3>Top-k 采样</h3>
+</code></pre></div><h3>Top-k 采样</h3>
 <p>只保留概率最高的 k 个 token，将其他的概率设为 0，然后重新归一化采样。</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Top-k 采样流程：
-1. 取概率最高的 k 个 token
-2. 将这 k 个 token 的概率重新归一化
-3. 从这 k 个 token 中随机采样
+<span class="hljs-bullet">1.</span> 取概率最高的 k 个 token
+<span class="hljs-bullet">2.</span> 将这 k 个 token 的概率重新归一化
+<span class="hljs-bullet">3.</span> 从这 k 个 token 中随机采样
 
 k 值选择：
   k = 5-10:  高确定度输出（事实问答、代码生成）
@@ -128,233 +124,226 @@ k 值选择：
   k = 100+:  高创造性（创意写作、头脑风暴）
 
 问题：固定的 k 无法适应不同上下文
-  - 概率已集中在1-2个 token 时，k=50 引入了噪音
-  - 概率均匀分布时，k=10 可能切掉了合理选项
-</code></pre></div>
-<p><strong>Java 实现：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class TopKSampling {
+<span class="hljs-bullet">  -</span> 概率已集中在1-2个 token 时，k=50 引入了噪音
+<span class="hljs-bullet">  -</span> 概率均匀分布时，k=10 可能切掉了合理选项
+</code></pre></div><p><strong>Java 实现：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">TopKSampling</span> {
 
-    /**
+    <span class="hljs-comment">/**
      * Top-K 采样
-     * @param logits 原始 logits
-     * @param k 保留 top-k 个 token
-     */
-    public static int sample(float[] logits, int k, java.util.Random random) {
-        // 创建索引数组并按 logits 降序排序
-        var indices = new Integer[logits.length];
-        for (int i = 0; i &lt; logits.length; i++) indices[i] = i;
+     * <span class="hljs-doctag">@param</span> logits 原始 logits
+     * <span class="hljs-doctag">@param</span> k 保留 top-k 个 token
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-type">int</span> <span class="hljs-title function_">sample</span><span class="hljs-params">(<span class="hljs-type">float</span>[] logits, <span class="hljs-type">int</span> k, java.util.Random random)</span> {
+        <span class="hljs-comment">// 创建索引数组并按 logits 降序排序</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">indices</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Integer</span>[logits.length];
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; logits.length; i++) indices[i] = i;
         Arrays.sort(indices, (a, b) -&gt; Float.compare(logits[b], logits[a]));
 
-        // 保留 top-k
-        var filtered = new float[logits.length];
-        for (int i = 0; i &lt; k &amp;&amp; i &lt; logits.length; i++) {
+        <span class="hljs-comment">// 保留 top-k</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">filtered</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">float</span>[logits.length];
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; k &amp;&amp; i &lt; logits.length; i++) {
             filtered[indices[i]] = logits[indices[i]];
         }
 
-        // softmax 归一化 top-k
-        float[] probs = TemperatureSampling.applyTemperature(filtered, 1.0f);
-        return TemperatureSampling.sampleFromDistribution(probs, random);
+        <span class="hljs-comment">// softmax 归一化 top-k</span>
+        <span class="hljs-type">float</span>[] probs = TemperatureSampling.applyTemperature(filtered, <span class="hljs-number">1.0f</span>);
+        <span class="hljs-keyword">return</span> TemperatureSampling.sampleFromDistribution(probs, random);
     }
 }
-</code></pre></div>
-<h3>Top-p (Nucleus) 采样</h3>
+</code></pre></div><h3>Top-p (Nucleus) 采样</h3>
 <p>不固定 token 数量，而是从概率最高的开始累加，直到累积概率超过阈值 p：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Top-p 采样流程：
-1. 将 token 按概率从大到小排序
-2. 从大到小累加，直到累积概率 ≥ p
-3. 只保留这些 token，重新归一化采样
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Top-<span class="hljs-selector-tag">p</span> 采样流程：
+<span class="hljs-number">1</span>. 将 token 按概率从大到小排序
+<span class="hljs-number">2</span>. 从大到小累加，直到累积概率 ≥ <span class="hljs-selector-tag">p</span>
+<span class="hljs-number">3</span>. 只保留这些 token，重新归一化采样
 
-p 值选择：
-  p = 0.1:  非常保守（通常只保留 1-3 个 token）
-  p = 0.5:  中等
-  p = 0.9:  常用默认值（保留概率主体的 token）
-  p = 0.95: 高创造性
-  p = 1.0:  等价于纯 temperature 采样
+<span class="hljs-selector-tag">p</span> 值选择：
+  <span class="hljs-selector-tag">p</span> = <span class="hljs-number">0.1</span>:  非常保守（通常只保留 <span class="hljs-number">1</span>-<span class="hljs-number">3</span> 个 token）
+  <span class="hljs-selector-tag">p</span> = <span class="hljs-number">0.5</span>:  中等
+  <span class="hljs-selector-tag">p</span> = <span class="hljs-number">0.9</span>:  常用默认值（保留概率主体的 token）
+  <span class="hljs-selector-tag">p</span> = <span class="hljs-number">0.95</span>: 高创造性
+  <span class="hljs-selector-tag">p</span> = <span class="hljs-number">1.0</span>:  等价于纯 temperature 采样
 
 优势：动态适应不同上下文
-  - 概率集中时 → 自动取少（可能只需1-3个token就覆盖90%）
-  - 概率均匀时 → 自动取多（可能需要100+个token才覆盖90%）
-</code></pre></div>
-<p><strong>Java 实现 Top-p 采样：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class TopPSampling {
+  - 概率集中时 → 自动取少（可能只需<span class="hljs-number">1</span>-<span class="hljs-number">3</span>个token就覆盖<span class="hljs-number">90%</span>）
+  - 概率均匀时 → 自动取多（可能需要<span class="hljs-number">100</span>+个token才覆盖<span class="hljs-number">90%</span>）
+</code></pre></div><p><strong>Java 实现 Top-p 采样：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">TopPSampling</span> {
 
-    /**
+    <span class="hljs-comment">/**
      * Top-p (Nucleus) 采样
-     * @param logits 原始 logits
-     * @param p 累积概率阈值 (如 0.9)
-     */
-    public static int sample(float[] logits, float p, float temperature,
-                              java.util.Random random) {
-        // 先应用 temperature
-        float[] probs = TemperatureSampling.applyTemperature(logits, temperature);
+     * <span class="hljs-doctag">@param</span> logits 原始 logits
+     * <span class="hljs-doctag">@param</span> p 累积概率阈值 (如 0.9)
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-type">int</span> <span class="hljs-title function_">sample</span><span class="hljs-params">(<span class="hljs-type">float</span>[] logits, <span class="hljs-type">float</span> p, <span class="hljs-type">float</span> temperature,
+                              java.util.Random random)</span> {
+        <span class="hljs-comment">// 先应用 temperature</span>
+        <span class="hljs-type">float</span>[] probs = TemperatureSampling.applyTemperature(logits, temperature);
 
-        // 按概率降序排序
-        record IndexedProb(int index, float prob) {}
-        var sorted = new IndexedProb[probs.length];
-        for (int i = 0; i &lt; probs.length; i++) {
-            sorted[i] = new IndexedProb(i, probs[i]);
+        <span class="hljs-comment">// 按概率降序排序</span>
+        <span class="hljs-keyword">record</span> <span class="hljs-title class_">IndexedProb</span><span class="hljs-params">(<span class="hljs-type">int</span> index, <span class="hljs-type">float</span> prob)</span> {}
+        <span class="hljs-type">var</span> <span class="hljs-variable">sorted</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">IndexedProb</span>[probs.length];
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; probs.length; i++) {
+            sorted[i] = <span class="hljs-keyword">new</span> <span class="hljs-title class_">IndexedProb</span>(i, probs[i]);
         }
         Arrays.sort(sorted, (a, b) -&gt; Float.compare(b.prob, a.prob));
 
-        // 找 nucleus：累积概率达到 p 的 token 集合
-        double cumulative = 0;
-        int nucleusSize = 0;
-        for (int i = 0; i &lt; sorted.length; i++) {
+        <span class="hljs-comment">// 找 nucleus：累积概率达到 p 的 token 集合</span>
+        <span class="hljs-type">double</span> <span class="hljs-variable">cumulative</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+        <span class="hljs-type">int</span> <span class="hljs-variable">nucleusSize</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; sorted.length; i++) {
             cumulative += sorted[i].prob;
-            nucleusSize = i + 1;
-            if (cumulative &gt;= p) break;
+            nucleusSize = i + <span class="hljs-number">1</span>;
+            <span class="hljs-keyword">if</span> (cumulative &gt;= p) <span class="hljs-keyword">break</span>;
         }
 
-        // 重建概率分布（只有 nucleus 内的）
-        var filteredProbs = new float[probs.length];
-        double filteredSum = 0;
-        for (int i = 0; i &lt; nucleusSize; i++) {
+        <span class="hljs-comment">// 重建概率分布（只有 nucleus 内的）</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">filteredProbs</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">float</span>[probs.length];
+        <span class="hljs-type">double</span> <span class="hljs-variable">filteredSum</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; nucleusSize; i++) {
             filteredProbs[sorted[i].index] = sorted[i].prob;
             filteredSum += sorted[i].prob;
         }
-        // 重新归一化
-        for (int i = 0; i &lt; filteredProbs.length; i++) {
-            filteredProbs[i] = (float) (filteredProbs[i] / filteredSum);
+        <span class="hljs-comment">// 重新归一化</span>
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; filteredProbs.length; i++) {
+            filteredProbs[i] = (<span class="hljs-type">float</span>) (filteredProbs[i] / filteredSum);
         }
 
-        return TemperatureSampling.sampleFromDistribution(filteredProbs, random);
+        <span class="hljs-keyword">return</span> TemperatureSampling.sampleFromDistribution(filteredProbs, random);
     }
 
-    public static void main(String[] args) {
-        // 演示 Top-p 在不同概率分布下的自适应行为
-        float[] peakedLogits = {10.0f, 1.0f, 0.5f, 0.2f, 0.1f};  // 尖峰分布
-        float[] flatLogits = {2.0f, 1.9f, 1.8f, 1.7f, 1.6f};     // 平坦分布
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">main</span><span class="hljs-params">(String[] args)</span> {
+        <span class="hljs-comment">// 演示 Top-p 在不同概率分布下的自适应行为</span>
+        <span class="hljs-type">float</span>[] peakedLogits = {<span class="hljs-number">10.0f</span>, <span class="hljs-number">1.0f</span>, <span class="hljs-number">0.5f</span>, <span class="hljs-number">0.2f</span>, <span class="hljs-number">0.1f</span>};  <span class="hljs-comment">// 尖峰分布</span>
+        <span class="hljs-type">float</span>[] flatLogits = {<span class="hljs-number">2.0f</span>, <span class="hljs-number">1.9f</span>, <span class="hljs-number">1.8f</span>, <span class="hljs-number">1.7f</span>, <span class="hljs-number">1.6f</span>};     <span class="hljs-comment">// 平坦分布</span>
 
-        var probs = TemperatureSampling.applyTemperature(peakedLogits, 1.0f);
-        System.out.println(&quot;尖峰分布: &quot; + Arrays.toString(probs));
-        // nucleus 很小 (~1-2 tokens)
+        <span class="hljs-type">var</span> <span class="hljs-variable">probs</span> <span class="hljs-operator">=</span> TemperatureSampling.applyTemperature(peakedLogits, <span class="hljs-number">1.0f</span>);
+        System.out.println(<span class="hljs-string">"尖峰分布: "</span> + Arrays.toString(probs));
+        <span class="hljs-comment">// nucleus 很小 (~1-2 tokens)</span>
 
-        probs = TemperatureSampling.applyTemperature(flatLogits, 1.0f);
-        System.out.println(&quot;平坦分布: &quot; + Arrays.toString(probs));
-        // nucleus 很大 (可能全5个都需要)
+        probs = TemperatureSampling.applyTemperature(flatLogits, <span class="hljs-number">1.0f</span>);
+        System.out.println(<span class="hljs-string">"平坦分布: "</span> + Arrays.toString(probs));
+        <span class="hljs-comment">// nucleus 很大 (可能全5个都需要)</span>
     }
 }
-</code></pre></div>
-<h3>Beam Search</h3>
+</code></pre></div><h3>Beam Search</h3>
 <p>保持 k 个候选序列（beam width），每步从 k × |V| 个候选中选出最优 k 个。</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Beam Search (beam width = 3):
-Step 1: [A:0.5] [B:0.3] [C:0.1]        ← 选 top-3
-Step 2: [A→X:0.2] [B→Y:0.15] [A→Z:0.1]  ← 从所有延续中选 top-3
-Step 3: ...
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Beam <span class="hljs-keyword">Search</span> (beam width = <span class="hljs-number">3</span>):
+<span class="hljs-keyword">Step</span> <span class="hljs-number">1</span>: [A:<span class="hljs-number">0.5</span>] [B:<span class="hljs-number">0.3</span>] [C:<span class="hljs-number">0.1</span>]        ← 选 <span class="hljs-built_in">top</span><span class="hljs-number">-3</span>
+<span class="hljs-keyword">Step</span> <span class="hljs-number">2</span>: [A→X:<span class="hljs-number">0.2</span>] [B→Y:<span class="hljs-number">0.15</span>] [A→Z:<span class="hljs-number">0.1</span>]  ← 从所有延续中选 <span class="hljs-built_in">top</span><span class="hljs-number">-3</span>
+<span class="hljs-keyword">Step</span> <span class="hljs-number">3</span>: ...
 最终：返回分数最高的完整序列
 
-得分 = Σ log P(token_t | tokens_{&lt;t})    (对数概率之和)
+得分 = Σ log P(token_t | <span class="hljs-type">tokens_</span>{&lt;t})    (对数概率之和)
 
 问题：
   - 对长序列不友好（log prob 始终为负，越长总分越低）
   - 常用长度惩罚：score / length^α
   - 输出可能缺乏多样性（所有 beam 趋同）
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class BeamSearch {
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">BeamSearch</span> {
 
-    record Beam(double score, List&lt;Integer&gt; tokens) {}
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">Beam</span><span class="hljs-params">(<span class="hljs-type">double</span> score, List&lt;Integer&gt; tokens)</span> {}
 
-    public static List&lt;Integer&gt; search(
-            java.util.function.Function&lt;List&lt;Integer&gt;, float[]&gt; modelForward,
-            int beamWidth, int maxLen, int eosTokenId) {
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> List&lt;Integer&gt; <span class="hljs-title function_">search</span><span class="hljs-params">(
+            java.util.function.Function&lt;List&lt;Integer&gt;, <span class="hljs-type">float</span>[]&gt; modelForward,
+            <span class="hljs-type">int</span> beamWidth, <span class="hljs-type">int</span> maxLen, <span class="hljs-type">int</span> eosTokenId)</span> {
 
-        var beams = new ArrayList&lt;Beam&gt;();
-        beams.add(new Beam(0.0, new ArrayList&lt;&gt;()));
+        <span class="hljs-type">var</span> <span class="hljs-variable">beams</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;Beam&gt;();
+        beams.add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">Beam</span>(<span class="hljs-number">0.0</span>, <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;&gt;()));
 
-        for (int step = 0; step &lt; maxLen; step++) {
-            var candidates = new ArrayList&lt;Beam&gt;();
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">step</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; step &lt; maxLen; step++) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">candidates</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;Beam&gt;();
 
-            for (var beam : beams) {
-                if (!beam.tokens.isEmpty() &amp;&amp;
-                    beam.tokens.get(beam.tokens.size() - 1) == eosTokenId) {
-                    candidates.add(beam);  // 保留已完成序列
-                    continue;
+            <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> beam : beams) {
+                <span class="hljs-keyword">if</span> (!beam.tokens.isEmpty() &amp;&amp;
+                    beam.tokens.get(beam.tokens.size() - <span class="hljs-number">1</span>) == eosTokenId) {
+                    candidates.add(beam);  <span class="hljs-comment">// 保留已完成序列</span>
+                    <span class="hljs-keyword">continue</span>;
                 }
 
-                float[] logits = modelForward.apply(beam.tokens);
-                float[] probs = TemperatureSampling.applyTemperature(logits, 1.0f);
+                <span class="hljs-type">float</span>[] logits = modelForward.apply(beam.tokens);
+                <span class="hljs-type">float</span>[] probs = TemperatureSampling.applyTemperature(logits, <span class="hljs-number">1.0f</span>);
 
-                for (int tokenId = 0; tokenId &lt; probs.length; tokenId++) {
-                    var newTokens = new ArrayList&lt;&gt;(beam.tokens);
+                <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">tokenId</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; tokenId &lt; probs.length; tokenId++) {
+                    <span class="hljs-type">var</span> <span class="hljs-variable">newTokens</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;&gt;(beam.tokens);
                     newTokens.add(tokenId);
-                    double newScore = beam.score + Math.log(probs[tokenId] + 1e-9);
-                    candidates.add(new Beam(newScore, newTokens));
+                    <span class="hljs-type">double</span> <span class="hljs-variable">newScore</span> <span class="hljs-operator">=</span> beam.score + Math.log(probs[tokenId] + <span class="hljs-number">1e-9</span>);
+                    candidates.add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">Beam</span>(newScore, newTokens));
                 }
             }
 
-            // 选 top-k candidates
+            <span class="hljs-comment">// 选 top-k candidates</span>
             candidates.sort((a, b) -&gt; Double.compare(b.score, a.score));
-            beams = new ArrayList&lt;&gt;(candidates.subList(0,
+            beams = <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;&gt;(candidates.subList(<span class="hljs-number">0</span>,
                 Math.min(beamWidth, candidates.size())));
         }
 
-        return beams.get(0).tokens;  // 返回最高分序列
+        <span class="hljs-keyword">return</span> beams.get(<span class="hljs-number">0</span>).tokens;  <span class="hljs-comment">// 返回最高分序列</span>
     }
 }
-</code></pre></div>
-<h3>惩罚机制</h3>
+</code></pre></div><h3>惩罚机制</h3>
 <p>除了采样策略，还可以通过惩罚项来抑制重复：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class RepetitionPenalties {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">RepetitionPenalties</span> {
 
-    /**
+    <span class="hljs-comment">/**
      * 重复惩罚 (Repetition Penalty)
      * 对已出现的 token 降低其概率
-     */
-    public static float[] applyRepetitionPenalty(
-            float[] logits, Set&lt;Integer&gt; seenTokens, float penalty) {
-        // penalty 通常取 1.1-1.5
-        // penalty &gt; 1: 惩罚已出现 token（让它们变难出现）
-        // penalty = 1: 不惩罚
-        // penalty &lt; 1: 鼓励已出现 token（让它们更容易出现）
-        float[] penalized = logits.clone();
-        for (int tid : seenTokens) {
-            if (penalized[tid] &gt; 0) {
-                penalized[tid] /= penalty;  // 降低正 logit
-            } else {
-                penalized[tid] *= penalty;  // 增大负 logit 的绝对值
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-type">float</span>[] applyRepetitionPenalty(
+            <span class="hljs-type">float</span>[] logits, Set&lt;Integer&gt; seenTokens, <span class="hljs-type">float</span> penalty) {
+        <span class="hljs-comment">// penalty 通常取 1.1-1.5</span>
+        <span class="hljs-comment">// penalty &gt; 1: 惩罚已出现 token（让它们变难出现）</span>
+        <span class="hljs-comment">// penalty = 1: 不惩罚</span>
+        <span class="hljs-comment">// penalty &lt; 1: 鼓励已出现 token（让它们更容易出现）</span>
+        <span class="hljs-type">float</span>[] penalized = logits.clone();
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> tid : seenTokens) {
+            <span class="hljs-keyword">if</span> (penalized[tid] &gt; <span class="hljs-number">0</span>) {
+                penalized[tid] /= penalty;  <span class="hljs-comment">// 降低正 logit</span>
+            } <span class="hljs-keyword">else</span> {
+                penalized[tid] *= penalty;  <span class="hljs-comment">// 增大负 logit 的绝对值</span>
             }
         }
-        return penalized;
+        <span class="hljs-keyword">return</span> penalized;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 频率惩罚 (Frequency Penalty)
      * 按出现次数降低概率
-     */
-    public static float[] applyFrequencyPenalty(
-            float[] logits, Map&lt;Integer, Integer&gt; tokenCounts, float freqPenalty) {
-        float[] penalized = logits.clone();
-        for (var entry : tokenCounts.entrySet()) {
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-type">float</span>[] applyFrequencyPenalty(
+            <span class="hljs-type">float</span>[] logits, Map&lt;Integer, Integer&gt; tokenCounts, <span class="hljs-type">float</span> freqPenalty) {
+        <span class="hljs-type">float</span>[] penalized = logits.clone();
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> entry : tokenCounts.entrySet()) {
             penalized[entry.getKey()] -= freqPenalty * entry.getValue();
         }
-        return penalized;
+        <span class="hljs-keyword">return</span> penalized;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 存在惩罚 (Presence Penalty)
      * 只要出现过就惩罚（不管出现几次）
-     */
-    public static float[] applyPresencePenalty(
-            float[] logits, Set&lt;Integer&gt; seenTokens, float presencePenalty) {
-        float[] penalized = logits.clone();
-        for (int tid : seenTokens) {
-            penalized[tid] -= presencePenalty;  // 出现过就扣分
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-type">float</span>[] applyPresencePenalty(
+            <span class="hljs-type">float</span>[] logits, Set&lt;Integer&gt; seenTokens, <span class="hljs-type">float</span> presencePenalty) {
+        <span class="hljs-type">float</span>[] penalized = logits.clone();
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> tid : seenTokens) {
+            penalized[tid] -= presencePenalty;  <span class="hljs-comment">// 出现过就扣分</span>
         }
-        return penalized;
+        <span class="hljs-keyword">return</span> penalized;
     }
 
-    public static void main(String[] args) {
-        float[] logits = {3.0f, 2.5f, 1.0f, 0.5f};
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">main</span><span class="hljs-params">(String[] args)</span> {
+        <span class="hljs-type">float</span>[] logits = {<span class="hljs-number">3.0f</span>, <span class="hljs-number">2.5f</span>, <span class="hljs-number">1.0f</span>, <span class="hljs-number">0.5f</span>};
 
-        System.out.println(&quot;原始: &quot; + Arrays.toString(logits));
-        System.out.println(&quot;重复惩罚(1.2): &quot; +
-            Arrays.toString(applyRepetitionPenalty(logits, Set.of(0), 1.2f)));
-        System.out.println(&quot;存在惩罚(0.5): &quot; +
-            Arrays.toString(applyPresencePenalty(logits, Set.of(0, 1), 0.5f)));
+        System.out.println(<span class="hljs-string">"原始: "</span> + Arrays.toString(logits));
+        System.out.println(<span class="hljs-string">"重复惩罚(1.2): "</span> +
+            Arrays.toString(applyRepetitionPenalty(logits, Set.of(<span class="hljs-number">0</span>), <span class="hljs-number">1.2f</span>)));
+        System.out.println(<span class="hljs-string">"存在惩罚(0.5): "</span> +
+            Arrays.toString(applyPresencePenalty(logits, Set.of(<span class="hljs-number">0</span>, <span class="hljs-number">1</span>), <span class="hljs-number">0.5f</span>)));
     }
 }
-</code></pre></div>
-<p><strong>惩罚参数配合使用建议：</strong></p>
+</code></pre></div><p><strong>惩罚参数配合使用建议：</strong></p>
 <table>
 <thead>
 <tr>
@@ -404,99 +393,93 @@ Step 3: ...
 <h2>推理性能优化</h2>
 <h3>KV Cache</h3>
 <p>KV Cache 是 LLM 推理最重要的性能优化。在自回归生成中，每个新 token 需要与所有历史 token 做 attention。如果不缓存，每个 step 都需要重新计算所有历史 token 的 K 和 V。</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>无 KV Cache:
-  Step 1: 计算 token1 的 Q,K,V → attention
-  Step 2: 计算 token1,token2 的 Q,K,V → attention  ← 重复计算了 token1!
-  Step 3: 计算 token1,token2,token3 的 Q,K,V → attention  ← 重复计算了 token1,token2!
-  计算量: O(n² × d) 每层每 token（因为重新计算）
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-attribute">无 KV Cache</span><span class="hljs-punctuation">:</span>
+  <span class="hljs-attribute">Step 1</span><span class="hljs-punctuation">:</span> <span class="hljs-string">计算 token1 的 Q,K,V → attention</span>
+  <span class="hljs-attribute">Step 2</span><span class="hljs-punctuation">:</span> <span class="hljs-string">计算 token1,token2 的 Q,K,V → attention  ← 重复计算了 token1!</span>
+  <span class="hljs-attribute">Step 3</span><span class="hljs-punctuation">:</span> <span class="hljs-string">计算 token1,token2,token3 的 Q,K,V → attention  ← 重复计算了 token1,token2!</span>
+  <span class="hljs-attribute">计算量</span><span class="hljs-punctuation">:</span> <span class="hljs-string">O(n² × d) 每层每 token（因为重新计算）</span>
 
-有 KV Cache:
-  Step 1: 计算 token1 的 Q,K,V → 缓存 K1,V1, attention
-  Step 2: 计算 token2 的 Q, K2, V2 → 读取 K1,V1, attention  ← 不重复
-  Step 3: 计算 token3 的 Q, K3, V3 → 读取 K1,K2,V1,V2, attention
-  计算量: O(n × d²) 每层每 token（只计算新 token）
-</code></pre></div>
-<p><strong>内存占用分析：</strong></p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>KV Cache 内存 = 2 × num_layers × batch_size × seq_len × num_heads × head_dim × dtype_size
+<span class="hljs-attribute">有 KV Cache</span><span class="hljs-punctuation">:</span>
+  <span class="hljs-attribute">Step 1</span><span class="hljs-punctuation">:</span> <span class="hljs-string">计算 token1 的 Q,K,V → 缓存 K1,V1, attention</span>
+  <span class="hljs-attribute">Step 2</span><span class="hljs-punctuation">:</span> <span class="hljs-string">计算 token2 的 Q, K2, V2 → 读取 K1,V1, attention  ← 不重复</span>
+  <span class="hljs-attribute">Step 3</span><span class="hljs-punctuation">:</span> <span class="hljs-string">计算 token3 的 Q, K3, V3 → 读取 K1,K2,V1,V2, attention</span>
+  <span class="hljs-attribute">计算量</span><span class="hljs-punctuation">:</span> <span class="hljs-string">O(n × d²) 每层每 token（只计算新 token）</span>
+</code></pre></div><p><strong>内存占用分析：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>KV Cache 内存 =<span class="hljs-number"> 2 </span>× num_layers × batch_size × seq_len × num_heads × head_dim × dtype_size
 
 示例（LLaMA 70B, half precision）：
-  2 × 80 × 1 × 4096 × 64 × 128 × 2 bytes
-  = 2 × 80 × 1 × 4096 × 8192 × 2
+ <span class="hljs-number"> 2 </span>×<span class="hljs-number"> 80 </span>×<span class="hljs-number"> 1 </span>×<span class="hljs-number"> 4096 </span>×<span class="hljs-number"> 64 </span>×<span class="hljs-number"> 128 </span>×<span class="hljs-number"> 2 </span>bytes
+  =<span class="hljs-number"> 2 </span>×<span class="hljs-number"> 80 </span>×<span class="hljs-number"> 1 </span>×<span class="hljs-number"> 4096 </span>×<span class="hljs-number"> 8192 </span>× 2
   ≈ 10.7 GB (仅 KV Cache!)
 
 扩展到 128K 上下文：
-  ≈ 10.7 GB × 32 = 342 GB (恐怖的 KV Cache)
-</code></pre></div>
-<h3>PagedAttention (vLLM)</h3>
+  ≈ 10.7 GB ×<span class="hljs-number"> 32 </span>=<span class="hljs-number"> 342 </span>GB (恐怖的 KV Cache)
+</code></pre></div><h3>PagedAttention (vLLM)</h3>
 <p>PagedAttention 是 vLLM 的核心创新，借鉴了操作系统的虚拟内存管理：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>传统 KV Cache 管理：
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>传统 KV <span class="hljs-keyword">Cache </span>管理：
   ┌────────────────────────────────────────┐
   │ Token1 KV │ Token2 KV │ Token3 KV │ ...│   ┌─ 连续分配的整块内存
   └────────────────────────────────────────┘   └─ 碎片化严重
 
 PagedAttention (分页管理):
-  Block 0: [Tok1, Tok2, Tok3]  ← 一页存多个 token 的 KV
-  Block 1: [Tok4, Tok5, Tok6]
-  Block 2: [Tok7, Tok8, Tok9]  ← 不要求连续
-  Block 3: [空闲]
-  Block 4: [Tok10,Tok11,Tok12]
+  <span class="hljs-keyword">Block </span><span class="hljs-number">0</span>: [Tok1, Tok2, Tok3]  ← 一页存多个 token 的 KV
+  <span class="hljs-keyword">Block </span><span class="hljs-number">1</span>: [Tok4, Tok5, Tok6]
+  <span class="hljs-keyword">Block </span><span class="hljs-number">2</span>: [Tok7, Tok8, Tok9]  ← 不要求连续
+  <span class="hljs-keyword">Block </span><span class="hljs-number">3</span>: [空闲]
+  <span class="hljs-keyword">Block </span><span class="hljs-number">4</span>: [Tok10,Tok11,Tok12]
 
 优势：
-  1. 零内存碎片（通过动态分配 page）
-  2. 内存共享（beam search 中不同 beam 共享同一 prefix 的 KV Cache）
-  3. 高吞吐（可把 GPU 内存利用率从 20-40% 提升到 80%+）
-</code></pre></div>
-<h3>Multi-Query / Grouped-Query Attention</h3>
+  <span class="hljs-number">1</span>. 零内存碎片（通过动态分配 page）
+  <span class="hljs-number">2</span>. 内存共享（<span class="hljs-keyword">beam </span>search 中不同 <span class="hljs-keyword">beam </span>共享同一 <span class="hljs-keyword">prefix </span>的 KV <span class="hljs-keyword">Cache）
+</span>  <span class="hljs-number">3</span>. 高吞吐（可把 GPU 内存利用率从 <span class="hljs-number">20</span><span class="hljs-number">-40</span>% 提升到 <span class="hljs-number">80</span>%+）
+</code></pre></div><h3>Multi-Query / Grouped-Query Attention</h3>
 <p>标准 Multi-Head Attention (MHA): Q, K, V 各有 h 个头
 Multi-Query Attention (MQA): Q 有 h 个头，但 K, V 只有 1 个头（所有 Q 头共享）
 Grouped-Query Attention (GQA): Q 有 h 个头，K, V 有 g 个头（g 组，每组共享）</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>MHA (标准):          MQA (极度压缩):       GQA (LLaMA 2 70B):
   Q K V               Q K V                 Q K V
   ■ ■ ■               ■ □ □                 ■ ◇ ◇
-  ■ ■ ■     h=4       ■ □ □       h=4       ■ ◇ ◇       h=4
-  ■ ■ ■               ■ □ □                 ■ ◆ ◆        g=2
+  ■ ■ ■     <span class="hljs-attribute">h</span>=4       ■ □ □       <span class="hljs-attribute">h</span>=4       ■ ◇ ◇       <span class="hljs-attribute">h</span>=4
+  ■ ■ ■               ■ □ □                 ■ ◆ ◆        <span class="hljs-attribute">g</span>=2
   ■ ■ ■               ■ □ □                 ■ ◆ ◆
 
 KV Cache 大小对比：
   MHA: size ∝ 2 × h     (1x)
-  MQA: size ∝ 2 × 1     (1/h x)  ← h=64 时缩小 64 倍!
-  GQA: size ∝ 2 × g     (g/h x)  ← g=8, h=64 时缩小 8 倍
-</code></pre></div>
-<p>GQA 是目前的最佳平衡点：LLaMA 2 70B 使用 g=8, h=64，KV Cache 缩小 8 倍，质量几乎无损失。</p>
+  MQA: size ∝ 2 × 1     (1/h x)  ← <span class="hljs-attribute">h</span>=64 时缩小 64 倍!
+  GQA: size ∝ 2 × g     (g/h x)  ← <span class="hljs-attribute">g</span>=8, <span class="hljs-attribute">h</span>=64 时缩小 8 倍
+</code></pre></div><p>GQA 是目前的最佳平衡点：LLaMA 2 70B 使用 g=8, h=64，KV Cache 缩小 8 倍，质量几乎无损失。</p>
 <h3>Speculative Decoding</h3>
 <p>用一个小模型（草稿模型，Draft Model）快速生成候选 token，大模型（目标模型，Target Model）一次性验证：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Speculative Decoding 流程：
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-attribute">Speculative Decoding 流程：
 ┌──────────────────────────────────────────────────────────┐
-│ Step 1: Draft Model 快速生成 k 个候选 token              │
-│   Draft(小模型): &quot;The quick brown fox jumps&quot; (5 tokens)  │
-│   速度: 2000 tokens/s (小模型快)                         │
-│                                                          │
-│ Step 2: Target Model 一次性验证所有 k 个 token           │
-│   Target(大模型): 前向传播一次，验证 5 个 token           │
-│   结果: 前 3 个通过，第 4 个拒绝，第 4 个位置校正         │
-│                                                          │
-│ Step 3: 返回通过 + 校正的 token                          │
-│   Output: &quot;The quick brown fox&quot;  (3 through + 1 corrected)│
-│                                                          │
-│ 加速比: 2-3x (实际吞吐提升)                              │
+│ Step 1</span><span class="hljs-punctuation">:</span> <span class="hljs-string">Draft Model 快速生成 k 个候选 token              │</span>
+<span class="hljs-attribute">│   Draft(小模型)</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"The quick brown fox jumps" (5 tokens)  │</span>
+<span class="hljs-attribute">│   速度</span><span class="hljs-punctuation">:</span> <span class="hljs-string">2000 tokens/s (小模型快)                         │</span>
+<span class="hljs-attribute">│                                                          │
+│ Step 2</span><span class="hljs-punctuation">:</span> <span class="hljs-string">Target Model 一次性验证所有 k 个 token           │</span>
+<span class="hljs-attribute">│   Target(大模型)</span><span class="hljs-punctuation">:</span> <span class="hljs-string">前向传播一次，验证 5 个 token           │</span>
+<span class="hljs-attribute">│   结果</span><span class="hljs-punctuation">:</span> <span class="hljs-string">前 3 个通过，第 4 个拒绝，第 4 个位置校正         │</span>
+<span class="hljs-attribute">│                                                          │
+│ Step 3</span><span class="hljs-punctuation">:</span> <span class="hljs-string">返回通过 + 校正的 token                          │</span>
+<span class="hljs-attribute">│   Output</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"The quick brown fox"  (3 through + 1 corrected)│</span>
+<span class="hljs-attribute">│                                                          │
+│ 加速比</span><span class="hljs-punctuation">:</span> <span class="hljs-string">2-3x (实际吞吐提升)                              │</span>
 └──────────────────────────────────────────────────────────┘
-</code></pre></div>
-<p><strong>正确性保证</strong>：Target Model 的验证过程确保了输出分布与直接使用 Target Model 完全相同（无质量损失）。</p>
+</code></pre></div><p><strong>正确性保证</strong>：Target Model 的验证过程确保了输出分布与直接使用 Target Model 完全相同（无质量损失）。</p>
 <h3>Continuous Batching</h3>
 <p>传统 Static Batching 的致命缺陷：一个 batch 中所有请求必须等最长的那个完成才能一起返回。</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Static Batching:
-Batch = [Req1(10 tokens), Req2(100 tokens), Req3(5 tokens)]
-  → Req3 和 Req1 完成了，但必须等 Req2 的 100 个 token 生成完
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Static <span class="hljs-keyword">Batching:
+</span><span class="hljs-keyword">Batch </span>= [Req1(<span class="hljs-number">10</span> tokens), Req2(<span class="hljs-number">100</span> tokens), Req3(<span class="hljs-number">5</span> tokens)]
+  → Req3 和 Req1 完成了，但必须等 Req2 的 <span class="hljs-number">100</span> 个 token 生成完
   → GPU 利用率低
 
-Continuous Batching:
-  时刻 0: Batch = [Req1, Req2, Req3]
-  时刻 1: Req3 完成(EOS) → 立即从 batch 移除，插入新请求 Req4
-  时刻 2: Req1 完成 → 移除，插入 Req5
-  时刻 3: Batch = [Req2(继续), Req4, Req5]
-  → GPU 始终满载，吞吐提升 10x+
-</code></pre></div>
-<h2>LLM 评估方法</h2>
+Continuous <span class="hljs-keyword">Batching:
+</span>  时刻 <span class="hljs-number">0</span>: <span class="hljs-keyword">Batch </span>= [Req1, Req2, Req3]
+  时刻 <span class="hljs-number">1</span>: Req3 完成(EOS) → 立即从 <span class="hljs-keyword">batch </span>移除，插入新请求 Req4
+  时刻 <span class="hljs-number">2</span>: Req1 完成 → 移除，插入 Req5
+  时刻 <span class="hljs-number">3</span>: <span class="hljs-keyword">Batch </span>= [Req2(继续), Req4, Req5]
+  → GPU 始终满载，吞吐提升 <span class="hljs-number">10</span>x+
+</code></pre></div><h2>LLM 评估方法</h2>
 <h3>Perplexity</h3>
 <p>困惑度（Perplexity）是语言模型的最经典指标：</p>
 <p>$$\text{PPL} = \exp\left(-\frac{1}{N}\sum_{i=1}^{N} \log P(w_i | w_{&lt;i})\right)$$</p>
@@ -507,193 +490,187 @@ Continuous Batching:
   PPL = 词汇表大小：等价于随机猜测
 
 局限性：
-  1. PPL 低 ≠ 生成质量高（可能只是学会了重复训练数据）
-  2. PPL 高可能只是 tokenizer 差异导致的（不同 tokenizer 的 PPL 不可直接比较）
-  3. 无法衡量事实准确性、逻辑一致性、有用性
-</code></pre></div>
-<h3>BLEU / ROUGE</h3>
+<span class="hljs-bullet">  1.</span> PPL 低 ≠ 生成质量高（可能只是学会了重复训练数据）
+<span class="hljs-bullet">  2.</span> PPL 高可能只是 tokenizer 差异导致的（不同 tokenizer 的 PPL 不可直接比较）
+<span class="hljs-bullet">  3.</span> 无法衡量事实准确性、逻辑一致性、有用性
+</code></pre></div><h3>BLEU / ROUGE</h3>
 <p>用于机器翻译（BLEU）和文本摘要（ROUGE）的 n-gram 匹配指标：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>BLEU: 计算生成文本和参考文本之间的 n-gram 精确匹配率
-  BLEU-1: unigram 匹配
-  BLEU-4: 1-4 gram 的几何平均（最常用）
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-attribute">BLEU</span><span class="hljs-punctuation">:</span> <span class="hljs-string">计算生成文本和参考文本之间的 n-gram 精确匹配率</span>
+  <span class="hljs-attribute">BLEU-1</span><span class="hljs-punctuation">:</span> <span class="hljs-string">unigram 匹配</span>
+  <span class="hljs-attribute">BLEU-4</span><span class="hljs-punctuation">:</span> <span class="hljs-string">1-4 gram 的几何平均（最常用）</span>
 
-ROUGE: 计算生成文本和参考文本之间的 n-gram 召回率
-  ROUGE-1: unigram 召回率
-  ROUGE-2: bigram 召回率
-  ROUGE-L: 最长公共子序列 (LCS)
+<span class="hljs-attribute">ROUGE</span><span class="hljs-punctuation">:</span> <span class="hljs-string">计算生成文本和参考文本之间的 n-gram 召回率</span>
+  <span class="hljs-attribute">ROUGE-1</span><span class="hljs-punctuation">:</span> <span class="hljs-string">unigram 召回率</span>
+  <span class="hljs-attribute">ROUGE-2</span><span class="hljs-punctuation">:</span> <span class="hljs-string">bigram 召回率</span>
+  <span class="hljs-attribute">ROUGE-L</span><span class="hljs-punctuation">:</span> <span class="hljs-string">最长公共子序列 (LCS)</span>
 
 问题：
-  - 过于字面：同义表达被视为错误
-  - 无法评估创造性和灵活性
-  - 在 LLM 时代几乎过时，仅用于极简单的翻译/摘要任务
-</code></pre></div>
-<h3>LLM-as-a-Judge</h3>
+  <span class="hljs-bullet">-</span> <span class="hljs-string">过于字面：同义表达被视为错误</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-string">无法评估创造性和灵活性</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-string">在 LLM 时代几乎过时，仅用于极简单的翻译/摘要任务</span>
+</code></pre></div><h3>LLM-as-a-Judge</h3>
 <p>LLM-as-a-Judge 是目前最实用的 LLM 评估方法。用能力较强的模型来评判另一个模型的输出：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>LLM-as-a-Judge 工作流：
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-attribute">LLM-as-a-Judge 工作流：
 
 输入：
-  原始问题: &quot;解释Spring Boot自动配置的原理&quot;
-  待评估回答: model_A 的输出
-  参考标准: 人工编写的 gold answer (可选)
+  原始问题</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"解释Spring Boot自动配置的原理"</span>
+  <span class="hljs-attribute">待评估回答</span><span class="hljs-punctuation">:</span> <span class="hljs-string">model_A 的输出</span>
+  <span class="hljs-attribute">参考标准</span><span class="hljs-punctuation">:</span> <span class="hljs-string">人工编写的 gold answer (可选)</span>
 
-Judge Prompt:
-  &quot;你是一个严格的评审。请从以下维度给这段回答打分(1-10)：
-   1. 准确性: 技术事实是否正确？
-   2. 完整性: 是否覆盖了关键要点？
-   3. 清晰度: 表达是否清晰易懂？
-   4. 实用性: 是否包含可操作的指导？
+<span class="hljs-attribute">Judge Prompt</span><span class="hljs-punctuation">:</span>
+  <span class="hljs-attribute">"你是一个严格的评审。请从以下维度给这段回答打分(1-10)：
+   1. 准确性</span><span class="hljs-punctuation">:</span> <span class="hljs-string">技术事实是否正确？</span>
+   <span class="hljs-attribute">2. 完整性</span><span class="hljs-punctuation">:</span> <span class="hljs-string">是否覆盖了关键要点？</span>
+   <span class="hljs-attribute">3. 清晰度</span><span class="hljs-punctuation">:</span> <span class="hljs-string">表达是否清晰易懂？</span>
+   <span class="hljs-attribute">4. 实用性</span><span class="hljs-punctuation">:</span> <span class="hljs-string">是否包含可操作的指导？</span>
 
-   请给出各维度分数和理由。&quot;
+   <span class="hljs-attribute">请给出各维度分数和理由。"
 
-输出:
-  准确性: 9, 完整性: 7, 清晰度: 8, 实用性: 8
-  理由: ...
-</code></pre></div>
-<p><strong>Java LLM-as-a-Judge 实现：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.util.*;
+输出</span><span class="hljs-punctuation">:</span>
+  <span class="hljs-attribute">准确性</span><span class="hljs-punctuation">:</span> <span class="hljs-string">9, 完整性: 7, 清晰度: 8, 实用性: 8</span>
+  <span class="hljs-attribute">理由</span><span class="hljs-punctuation">:</span> <span class="hljs-string">...</span>
+</code></pre></div><p><strong>Java LLM-as-a-Judge 实现：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> java.util.*;
 
-public class LlmAsJudge {
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">LlmAsJudge</span> {
 
-    public record EvaluationDimension(String name, String description, double weight) {}
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">EvaluationDimension</span><span class="hljs-params">(String name, String description, <span class="hljs-type">double</span> weight)</span> {}
 
-    public record EvaluationResult(
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">EvaluationResult</span><span class="hljs-params">(
         Map&lt;String, Double&gt; scores,
-        double weightedScore,
+        <span class="hljs-type">double</span> weightedScore,
         String reasoning
-    ) {
-        @Override
-        public String toString() {
-            var sb = new StringBuilder();
-            sb.append(String.format(&quot;总分: %.1f/10\n&quot;, weightedScore));
-            sb.append(&quot;--- 各维度 ---\n&quot;);
+    )</span> {
+        <span class="hljs-meta">@Override</span>
+        <span class="hljs-keyword">public</span> String <span class="hljs-title function_">toString</span><span class="hljs-params">()</span> {
+            <span class="hljs-type">var</span> <span class="hljs-variable">sb</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>();
+            sb.append(String.format(<span class="hljs-string">"总分: %.1f/10\n"</span>, weightedScore));
+            sb.append(<span class="hljs-string">"--- 各维度 ---\n"</span>);
             scores.forEach((dim, score) -&gt;
-                sb.append(String.format(&quot;  %s: %.1f/10\n&quot;, dim, score)));
-            sb.append(&quot;--- 评语 ---\n&quot;).append(reasoning);
-            return sb.toString();
+                sb.append(String.format(<span class="hljs-string">"  %s: %.1f/10\n"</span>, dim, score)));
+            sb.append(<span class="hljs-string">"--- 评语 ---\n"</span>).append(reasoning);
+            <span class="hljs-keyword">return</span> sb.toString();
         }
     }
 
-    private final List&lt;EvaluationDimension&gt; dimensions;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> List&lt;EvaluationDimension&gt; dimensions;
 
-    public LlmAsJudge(List&lt;EvaluationDimension&gt; dimensions) {
-        this.dimensions = dimensions;
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">LlmAsJudge</span><span class="hljs-params">(List&lt;EvaluationDimension&gt; dimensions)</span> {
+        <span class="hljs-built_in">this</span>.dimensions = dimensions;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 构建 Judge Prompt
-     */
-    public String buildJudgePrompt(String question, String answer, String reference) {
-        var sb = new StringBuilder();
-        sb.append(&quot;你是一个严格的评审。请从以下维度评估回答质量：\n\n&quot;);
+     */</span>
+    <span class="hljs-keyword">public</span> String <span class="hljs-title function_">buildJudgePrompt</span><span class="hljs-params">(String question, String answer, String reference)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">sb</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>();
+        sb.append(<span class="hljs-string">"你是一个严格的评审。请从以下维度评估回答质量：\n\n"</span>);
 
-        for (int i = 0; i &lt; dimensions.size(); i++) {
-            var dim = dimensions.get(i);
-            sb.append(String.format(&quot;%d. %s: %s\n&quot;, i + 1, dim.name(), dim.description()));
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; dimensions.size(); i++) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">dim</span> <span class="hljs-operator">=</span> dimensions.get(i);
+            sb.append(String.format(<span class="hljs-string">"%d. %s: %s\n"</span>, i + <span class="hljs-number">1</span>, dim.name(), dim.description()));
         }
 
-        sb.append(&quot;\n【问题】\n&quot;).append(question).append(&quot;\n\n&quot;);
-        sb.append(&quot;【待评估回答】\n&quot;).append(answer).append(&quot;\n\n&quot;);
+        sb.append(<span class="hljs-string">"\n【问题】\n"</span>).append(question).append(<span class="hljs-string">"\n\n"</span>);
+        sb.append(<span class="hljs-string">"【待评估回答】\n"</span>).append(answer).append(<span class="hljs-string">"\n\n"</span>);
 
-        if (reference != null &amp;&amp; !reference.isBlank()) {
-            sb.append(&quot;【参考答案】\n&quot;).append(reference).append(&quot;\n\n&quot;);
+        <span class="hljs-keyword">if</span> (reference != <span class="hljs-literal">null</span> &amp;&amp; !reference.isBlank()) {
+            sb.append(<span class="hljs-string">"【参考答案】\n"</span>).append(reference).append(<span class="hljs-string">"\n\n"</span>);
         }
 
-        sb.append(&quot;请以 JSON 格式返回各维度的 1-10 评分和简要理由。&quot;);
+        sb.append(<span class="hljs-string">"请以 JSON 格式返回各维度的 1-10 评分和简要理由。"</span>);
 
-        return sb.toString();
+        <span class="hljs-keyword">return</span> sb.toString();
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 多模型 Panel（多裁判取平均）
      * 每维度的最终分数 = 所有裁判的分数去掉最高最低后取平均
-     */
-    public EvaluationResult panelEvaluation(
-            List&lt;Map&lt;String, Double&gt;&gt; judgeResults) {
-        var finalScores = new LinkedHashMap&lt;String, Double&gt;();
+     */</span>
+    <span class="hljs-keyword">public</span> EvaluationResult <span class="hljs-title function_">panelEvaluation</span><span class="hljs-params">(
+            List&lt;Map&lt;String, Double&gt;&gt; judgeResults)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">finalScores</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">LinkedHashMap</span>&lt;String, Double&gt;();
 
-        for (var dim : dimensions) {
-            var dimScores = judgeResults.stream()
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> dim : dimensions) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">dimScores</span> <span class="hljs-operator">=</span> judgeResults.stream()
                 .map(r -&gt; r.get(dim.name()))
                 .sorted()
                 .toList();
 
-            // 去掉最高最低
-            double sum = 0;
-            int count = 0;
-            for (int i = 1; i &lt; dimScores.size() - 1; i++) {
+            <span class="hljs-comment">// 去掉最高最低</span>
+            <span class="hljs-type">double</span> <span class="hljs-variable">sum</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+            <span class="hljs-type">int</span> <span class="hljs-variable">count</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+            <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">1</span>; i &lt; dimScores.size() - <span class="hljs-number">1</span>; i++) {
                 sum += dimScores.get(i);
                 count++;
             }
-            finalScores.put(dim.name(), count &gt; 0 ? sum / count : dimScores.get(0));
+            finalScores.put(dim.name(), count &gt; <span class="hljs-number">0</span> ? sum / count : dimScores.get(<span class="hljs-number">0</span>));
         }
 
-        double weightedSum = 0;
-        double totalWeight = 0;
-        for (var dim : dimensions) {
+        <span class="hljs-type">double</span> <span class="hljs-variable">weightedSum</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+        <span class="hljs-type">double</span> <span class="hljs-variable">totalWeight</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> dim : dimensions) {
             weightedSum += finalScores.get(dim.name()) * dim.weight();
             totalWeight += dim.weight();
         }
 
-        return new EvaluationResult(finalScores,
-            weightedSum / totalWeight, &quot;Panel 综合评定&quot;);
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">EvaluationResult</span>(finalScores,
+            weightedSum / totalWeight, <span class="hljs-string">"Panel 综合评定"</span>);
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 位置偏差检测
      * 如果答案在前的分数显著高于答案在后 → 存在位置偏差
-     */
-    public static boolean detectPositionBias(
-            double scoreWhenFirst, double scoreWhenSecond, double threshold) {
-        return Math.abs(scoreWhenFirst - scoreWhenSecond) &gt; threshold;
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">detectPositionBias</span><span class="hljs-params">(
+            <span class="hljs-type">double</span> scoreWhenFirst, <span class="hljs-type">double</span> scoreWhenSecond, <span class="hljs-type">double</span> threshold)</span> {
+        <span class="hljs-keyword">return</span> Math.abs(scoreWhenFirst - scoreWhenSecond) &gt; threshold;
     }
 
-    public static void main(String[] args) {
-        var dims = List.of(
-            new EvaluationDimension(&quot;准确性&quot;, &quot;技术事实是否正确&quot;, 0.4),
-            new EvaluationDimension(&quot;完整性&quot;, &quot;是否覆盖关键要点&quot;, 0.2),
-            new EvaluationDimension(&quot;清晰度&quot;, &quot;表达是否清晰&quot;, 0.2),
-            new EvaluationDimension(&quot;实用性&quot;, &quot;是否包含可操作指导&quot;, 0.2)
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">main</span><span class="hljs-params">(String[] args)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">dims</span> <span class="hljs-operator">=</span> List.of(
+            <span class="hljs-keyword">new</span> <span class="hljs-title class_">EvaluationDimension</span>(<span class="hljs-string">"准确性"</span>, <span class="hljs-string">"技术事实是否正确"</span>, <span class="hljs-number">0.4</span>),
+            <span class="hljs-keyword">new</span> <span class="hljs-title class_">EvaluationDimension</span>(<span class="hljs-string">"完整性"</span>, <span class="hljs-string">"是否覆盖关键要点"</span>, <span class="hljs-number">0.2</span>),
+            <span class="hljs-keyword">new</span> <span class="hljs-title class_">EvaluationDimension</span>(<span class="hljs-string">"清晰度"</span>, <span class="hljs-string">"表达是否清晰"</span>, <span class="hljs-number">0.2</span>),
+            <span class="hljs-keyword">new</span> <span class="hljs-title class_">EvaluationDimension</span>(<span class="hljs-string">"实用性"</span>, <span class="hljs-string">"是否包含可操作指导"</span>, <span class="hljs-number">0.2</span>)
         );
 
-        var judge = new LlmAsJudge(dims);
-        var prompt = judge.buildJudgePrompt(
-            &quot;解释 CAP 理论&quot;,
-            &quot;CAP 理论是说分布式系统中一致性、可用性、分区容错性只能同时满足两个。&quot;,
-            &quot;CAP 定理由 Eric Brewer 在 2000 年提出...&quot;
+        <span class="hljs-type">var</span> <span class="hljs-variable">judge</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">LlmAsJudge</span>(dims);
+        <span class="hljs-type">var</span> <span class="hljs-variable">prompt</span> <span class="hljs-operator">=</span> judge.buildJudgePrompt(
+            <span class="hljs-string">"解释 CAP 理论"</span>,
+            <span class="hljs-string">"CAP 理论是说分布式系统中一致性、可用性、分区容错性只能同时满足两个。"</span>,
+            <span class="hljs-string">"CAP 定理由 Eric Brewer 在 2000 年提出..."</span>
 
         );
         System.out.println(prompt);
     }
 }
-</code></pre></div>
-<p><strong>位置偏差问题：</strong></p>
+</code></pre></div><p><strong>位置偏差问题：</strong></p>
 <p>LLM-as-a-Judge 的一个已知问题是位置偏差（Position Bias）-- 模型倾向于给先出现的回答更高分。</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Position Bias 检测：
-1. A vs B: 给 A 的打分 (4.5/5)
-2. B vs A (交换位置): 给 B 的打分 (4.2/5)
+<span class="hljs-bullet">1.</span> A vs B: 给 A 的打分 (4.5/5)
+<span class="hljs-bullet">2.</span> B vs A (交换位置): 给 B 的打分 (4.2/5)
   → 位置偏差 = (4.5 + 4.2) / 2 的差异 ≈ 0.3
 
 缓解策略：
-  - 双次评估：每个答案在第一位次各评一次取平均
-  - 随机打乱：输出前先随机排列，减少系统偏差
-  - 多模型 Panel：不同模型的偏好不同，取平均
-</code></pre></div>
-<h3>Arena Elo</h3>
+<span class="hljs-bullet">  -</span> 双次评估：每个答案在第一位次各评一次取平均
+<span class="hljs-bullet">  -</span> 随机打乱：输出前先随机排列，减少系统偏差
+<span class="hljs-bullet">  -</span> 多模型 Panel：不同模型的偏好不同，取平均
+</code></pre></div><h3>Arena Elo</h3>
 <p>LMSYS Chatbot Arena 是当前最有影响力的 LLM 评估平台。使用 Bradley-Terry 模型计算 Elo 分数。</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Chatbot Arena 流程：
-1. 用户输入任意问题
-2. 系统随机选择两个匿名模型，同时生成回答
-3. 用户投票（A更好/B更好/平局/都差）
-4. 根据所有投票计算 Elo 分数
+<span class="hljs-bullet">1.</span> 用户输入任意问题
+<span class="hljs-bullet">2.</span> 系统随机选择两个匿名模型，同时生成回答
+<span class="hljs-bullet">3.</span> 用户投票（A更好/B更好/平局/都差）
+<span class="hljs-bullet">4.</span> 根据所有投票计算 Elo 分数
 
 Elo 计算 (Bradley-Terry Model):
-  P(model_i beats model_j) = σ(Elo_i - Elo_j)
+  P(model<span class="hljs-emphasis">_i beats model_</span>j) = σ(Elo<span class="hljs-emphasis">_i - Elo_</span>j)
   其中 σ 是 sigmoid 函数
 
 优势：真实用户、真实问题、客观偏好
 劣势：偏向英语、受用户群体偏好影响、无法评估具体维度
-</code></pre></div>
-<h3>任务特定评估</h3>
+</code></pre></div><h3>任务特定评估</h3>
 <table>
 <thead>
 <tr>
@@ -747,68 +724,66 @@ Elo 计算 (Bradley-Terry Model):
 </tr>
 </tbody></table>
 <p><strong>HumanEval 评估模拟：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class HumanEvalEvaluator {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">HumanEvalEvaluator</span> {
 
-    /**
+    <span class="hljs-comment">/**
      * pass@k = 1 - C(n-c, k) / C(n, k)
      * 其中 n = 总生成数, c = 正确数, k = k
-     */
-    public static double passAtK(int totalGenerations, int correctCount, int k) {
-        if (totalGenerations - correctCount &lt; k) return 1.0;
-        return 1.0 - combination(totalGenerations - correctCount, k)
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-type">double</span> <span class="hljs-title function_">passAtK</span><span class="hljs-params">(<span class="hljs-type">int</span> totalGenerations, <span class="hljs-type">int</span> correctCount, <span class="hljs-type">int</span> k)</span> {
+        <span class="hljs-keyword">if</span> (totalGenerations - correctCount &lt; k) <span class="hljs-keyword">return</span> <span class="hljs-number">1.0</span>;
+        <span class="hljs-keyword">return</span> <span class="hljs-number">1.0</span> - combination(totalGenerations - correctCount, k)
                      / combination(totalGenerations, k);
     }
 
-    private static double combination(int n, int k) {
-        if (k &gt; n) return 0;
-        if (k == 0 || k == n) return 1;
-        double result = 1;
-        for (int i = 1; i &lt;= k; i++) {
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-type">double</span> <span class="hljs-title function_">combination</span><span class="hljs-params">(<span class="hljs-type">int</span> n, <span class="hljs-type">int</span> k)</span> {
+        <span class="hljs-keyword">if</span> (k &gt; n) <span class="hljs-keyword">return</span> <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">if</span> (k == <span class="hljs-number">0</span> || k == n) <span class="hljs-keyword">return</span> <span class="hljs-number">1</span>;
+        <span class="hljs-type">double</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> <span class="hljs-number">1</span>;
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">1</span>; i &lt;= k; i++) {
             result = result * (n - k + i) / i;
         }
-        return result;
+        <span class="hljs-keyword">return</span> result;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 验证代码正确性（简化：编译+运行测试用例）
-     */
-    public static boolean verifyCode(String generatedCode, List&lt;TestCase&gt; testCases) {
-        // 实际实现需要：
-        // 1. 在沙箱中编译代码
-        // 2. 运行所有测试用例
-        // 3. 所有测试通过才返回 true
-        return true; // 简化
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">verifyCode</span><span class="hljs-params">(String generatedCode, List&lt;TestCase&gt; testCases)</span> {
+        <span class="hljs-comment">// 实际实现需要：</span>
+        <span class="hljs-comment">// 1. 在沙箱中编译代码</span>
+        <span class="hljs-comment">// 2. 运行所有测试用例</span>
+        <span class="hljs-comment">// 3. 所有测试通过才返回 true</span>
+        <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>; <span class="hljs-comment">// 简化</span>
     }
 
-    record TestCase(String input, String expectedOutput) {}
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">TestCase</span><span class="hljs-params">(String input, String expectedOutput)</span> {}
 
-    public static void main(String[] args) {
-        // pass@1: 生成 10 份代码，其中 4 份正确
-        System.out.println(&quot;pass@1 = &quot; + passAtK(10, 4, 1));  // 0.4
-        // pass@10: 同上，但 k=10
-        System.out.println(&quot;pass@10 = &quot; + passAtK(10, 4, 10)); // 1.0
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">main</span><span class="hljs-params">(String[] args)</span> {
+        <span class="hljs-comment">// pass@1: 生成 10 份代码，其中 4 份正确</span>
+        System.out.println(<span class="hljs-string">"pass@1 = "</span> + passAtK(<span class="hljs-number">10</span>, <span class="hljs-number">4</span>, <span class="hljs-number">1</span>));  <span class="hljs-comment">// 0.4</span>
+        <span class="hljs-comment">// pass@10: 同上，但 k=10</span>
+        System.out.println(<span class="hljs-string">"pass@10 = "</span> + passAtK(<span class="hljs-number">10</span>, <span class="hljs-number">4</span>, <span class="hljs-number">10</span>)); <span class="hljs-comment">// 1.0</span>
     }
 }
-</code></pre></div>
-<h2>推理策略选择决策树</h2>
+</code></pre></div><h2>推理策略选择决策树</h2>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>你需要什么样的输出？
 ├── 确定性 + 可复现
-│   └── Greedy (Temperature=0) + 不需要惩罚
+│   └── Greedy (<span class="hljs-attribute">Temperature</span>=0) + 不需要惩罚
 │       场景：事实提取、分类、数据转换
 │
 ├── 高准确性 + 一定自然度
-│   └── Temperature=0.3 + Top-p=0.9
+│   └── <span class="hljs-attribute">Temperature</span>=0.3 + <span class="hljs-attribute">Top-p</span>=0.9
 │       场景：代码生成、事实问答、API 调用
 │
 ├── 自然对话
-│   └── Temperature=0.7 + Top-p=0.9 + FreqPenalty=0.1 + PresencePenalty=0.1
+│   └── <span class="hljs-attribute">Temperature</span>=0.7 + <span class="hljs-attribute">Top-p</span>=0.9 + <span class="hljs-attribute">FreqPenalty</span>=0.1 + <span class="hljs-attribute">PresencePenalty</span>=0.1
 │       场景：客服对话、通用聊天
 │
 └── 高创造性
-    └── Temperature=1.0-1.5 + Top-p=0.95 + PresencePenalty=0.3
+    └── <span class="hljs-attribute">Temperature</span>=1.0-1.5 + <span class="hljs-attribute">Top-p</span>=0.95 + <span class="hljs-attribute">PresencePenalty</span>=0.3
         场景：创意写作、头脑风暴、故事生成
-</code></pre></div>
-<h2>最佳实践</h2>
+</code></pre></div><h2>最佳实践</h2>
 <ol>
 <li><strong>默认推理参数</strong>：Temperature=0.7, Top-p=0.9, FreqPenalty=0.1, PresencePenalty=0.1，这是绝大多数场景的合理起点</li>
 <li><strong>生产环境</strong>：务必使用 KV Cache + Continuous Batching，这两种优化在 vLLM 中已默认启用</li>
@@ -820,14 +795,14 @@ Elo 计算 (Bradley-Terry Model):
 <p><strong>Q: Temperature=0 就是确定性吗？</strong></p>
 <p>A: 理论上是的，但实际上不同 Provider 的实现可能略有差异（精度问题）。对于需要严格确定性的场景（如 API 输出格式、数据提取），建议用 Structured Output 而不是依赖 temperature=0。</p>
 <p><strong>Q: Speculative Decoding 有没有质量损失？</strong></p>
-<p>A: 没有。Target Model 的验证过程确保了目标分布的正确性。加速来自于用 Draft Model 做&quot;投机&quot;，但最终输出与纯 Target Model 完全相同。</p>
+<p>A: 没有。Target Model 的验证过程确保了目标分布的正确性。加速来自于用 Draft Model 做"投机"，但最终输出与纯 Target Model 完全相同。</p>
 <p><strong>Q: 为什么不能只看 PPL？</strong></p>
-<p>A: PPL 衡量的是模型对训练分布的拟合程度，不是对用户需求的有用程度。一个背下整个训练集的模型PPL极低，但对新问题毫无用处。LLM-as-a-Judge 的&quot;有用性&quot;评分比 PPL 更接近实际需求。</p>
+<p>A: PPL 衡量的是模型对训练分布的拟合程度，不是对用户需求的有用程度。一个背下整个训练集的模型PPL极低，但对新问题毫无用处。LLM-as-a-Judge 的"有用性"评分比 PPL 更接近实际需求。</p>
 <h2>相关条目</h2>
 <ul>
-<li><a href="#/07-AI基础/07-Transformer架构深度解析" class="cross-ref" data-ref="07-Transformer架构深度解析">07-Transformer架构深度解析</a> — Transformer 架构（Attention、FFN等计算基础）</li>
-<li><a href="#/08-模型接入与推理/模型API/08-OpenAI兼容协议详解" class="cross-ref" data-ref="08-OpenAI兼容协议详解">08-OpenAI兼容协议详解</a> — 模型 API 中的 temperature、top_p 等参数使用</li>
-<li><a href="#/08-模型接入与推理/推理部署/08-模型能力矩阵与路由策略" class="cross-ref" data-ref="08-模型能力矩阵与路由策略">08-模型能力矩阵与路由策略</a> — 不同模型的推理能力和评估基准得分</li>
+<li><a href="#/07-AI基础/07-Transformer架构深度解析" class="cross-ref">07-Transformer架构深度解析</a> — Transformer 架构（Attention、FFN等计算基础）</li>
+<li><a href="#/08-模型接入与推理/模型API/08-OpenAI兼容协议详解" class="cross-ref">08-OpenAI兼容协议详解</a> — 模型 API 中的 temperature、top_p 等参数使用</li>
+<li><a href="#/08-模型接入与推理/推理部署/08-模型能力矩阵与路由策略" class="cross-ref">08-模型能力矩阵与路由策略</a> — 不同模型的推理能力和评估基准得分</li>
 </ul>
-</div>
+</body></html></div>
 </article>

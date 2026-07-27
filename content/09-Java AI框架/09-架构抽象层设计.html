@@ -1,48 +1,47 @@
 
-<article class="kb-entry" data-path="/09-Java AI框架/09-架构抽象层设计">
+<article class="kb-entry" data-path="/09-Java AI框架">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=09">09-Java AI框架</a></div>
     <h1>Architecture Abstraction Layer</h1>
-    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#architecture</span><span class="badge badge-tag">#port-adapter</span><span class="badge badge-tag">#abstraction</span><span class="badge badge-tag">#hexagonal</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#architecture</span><span class="badge badge-tag">#port-adapter</span><span class="badge badge-tag">#abstraction</span><span class="badge badge-tag">#hexagonal</span><span class="badge badge-tag">#clean-architecture</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://docs.spring.io/spring-ai/reference/" target="_blank" rel="noopener" class="source-link" title="Spring AI 架构参考">Spring AI 架构参考</a><a href="https://www.amazon.com/Clean-Architecture-Craftsmans-Software-Structure/dp/0134494164" target="_blank" rel="noopener" class="source-link" title="Clean Architecture (Robert C. Martin) — 依赖反转原则">Clean Architecture (Robert C. Martin) — 依赖反转原则</a></small></div>
   </div>
-  <div class="entry-body"><h1>Architecture Abstraction Layer</h1>
+  <div class="entry-body"><html><head></head><body><h1>Architecture Abstraction Layer</h1>
 <h2>概述</h2>
 <p>这是知识库最重要的架构文件之一。本条目定义了如何在 Spring AI / LangChain4j / SDK 之上构建一个<strong>业务无关的 AI 能力抽象层（Port &amp; Adapter）</strong>，实现框架锁定保护、厂商锁定保护和可测试性。</p>
 <h2>为什么要抽象</h2>
 <h3>问题场景</h3>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>问题 1: 框架锁定
-@Service
-public class OrderAnalysisService {
-    @Autowired
-    private ChatClient chatClient;  // 直接依赖 Spring AI
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>问题 <span class="hljs-number">1</span>: <span class="hljs-type"></span>框架锁定
+<span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-title class_"><span class="hljs-keyword">class</span> <span class="hljs-title">OrderAnalysisService</span> </span>{
+    <span class="hljs-meta">@Autowired</span>
+    <span class="hljs-keyword">private</span> ChatClient chatClient;  <span class="hljs-comment">// 直接依赖 Spring AI</span>
 
-    public String analyze(Order order) {
-        return chatClient.prompt()     // 业务代码与框架耦合
-            .user(&quot;分析订单: &quot; + order)
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">String</span> analyze(Order order) {
+        <span class="hljs-keyword">return</span> chatClient.prompt()     <span class="hljs-comment">// 业务代码与框架耦合</span>
+            .user(<span class="hljs-string">"分析订单: "</span> + order)
             .call()
             .content();
     }
 }
-// 如果明年 LangChain4j 成为主流怎么办？全部重写。
+<span class="hljs-comment">// 如果明年 LangChain4j 成为主流怎么办？全部重写。</span>
 
-问题 2: 厂商锁定
-@Service
-public class QaService {
-    @Autowired
-    private OpenAiClient openAiClient;  // 直接依赖 OpenAI SDK
+问题 <span class="hljs-number">2</span>: <span class="hljs-type"></span>厂商锁定
+<span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-title class_"><span class="hljs-keyword">class</span> <span class="hljs-title">QaService</span> </span>{
+    <span class="hljs-meta">@Autowired</span>
+    <span class="hljs-keyword">private</span> OpenAiClient openAiClient;  <span class="hljs-comment">// 直接依赖 OpenAI SDK</span>
 
-    // 无法切换到 Anthropic / Bedrock / 本地模型
-    // 无法做故障转移
-    // 测试需要 mock HTTP 调用
+    <span class="hljs-comment">// 无法切换到 Anthropic / Bedrock / 本地模型</span>
+    <span class="hljs-comment">// 无法做故障转移</span>
+    <span class="hljs-comment">// 测试需要 mock HTTP 调用</span>
 }
 
-问题 3: 测试困难
-// Mock ChatClient 的 Fluent API？非常困难。
-// Mock OpenAI SDK 的内部 HTTP 调用？不必要。
-// 真正的业务逻辑被埋没在框架调用中。
-</code></pre></div>
-<h3>解决方案：Port &amp; Adapter（六边形架构）</h3>
+问题 <span class="hljs-number">3</span>: <span class="hljs-type"></span>测试困难
+<span class="hljs-comment">// Mock ChatClient 的 Fluent API？非常困难。</span>
+<span class="hljs-comment">// Mock OpenAI SDK 的内部 HTTP 调用？不必要。</span>
+<span class="hljs-comment">// 真正的业务逻辑被埋没在框架调用中。</span>
+</code></pre></div><h3>解决方案：Port &amp; Adapter（六边形架构）</h3>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>                     ┌───────────────────────────────┐
                      │       业务代码层               │
                      │   (OrderService, QAService)   │
@@ -67,39 +66,38 @@ public class QaService {
                   │ Adapter     │  │ (OpenAI/Anthr/  │
                   │             │  │  Bedrock...)    │
                   └─────────────┘  └────────────────┘
-</code></pre></div>
-<h2>核心接口设计</h2>
+</code></pre></div><h2>核心接口设计</h2>
 <h3>1. ChatModelPort</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.ai.port;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">package</span> com.example.ai.port;
 
-import reactor.core.publisher.Flux;
-import java.util.List;
-import java.util.Map;
+<span class="hljs-keyword">import</span> reactor.core.publisher.Flux;
+<span class="hljs-keyword">import</span> java.util.List;
+<span class="hljs-keyword">import</span> java.util.Map;
 
-/**
+<span class="hljs-comment">/**
  * 聊天模型端口 — 核心接口
  * 所有 LLM 对话的能力抽象
- */
-public interface ChatModelPort {
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">ChatModelPort</span> {
 
-    /**
+    <span class="hljs-comment">/**
      * 同步聊天
-     */
-    ChatResponse chat(ChatRequest request);
+     */</span>
+    ChatResponse <span class="hljs-title function_">chat</span><span class="hljs-params">(ChatRequest request)</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 流式聊天
-     */
-    Flux&lt;ChatChunk&gt; chatStream(ChatRequest request);
+     */</span>
+    Flux&lt;ChatChunk&gt; <span class="hljs-title function_">chatStream</span><span class="hljs-params">(ChatRequest request)</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 获取模型信息
-     */
-    ModelInfo getModelInfo();
+     */</span>
+    ModelInfo <span class="hljs-title function_">getModelInfo</span><span class="hljs-params">()</span>;
 
-    // ──── 数据模型 ────
+    <span class="hljs-comment">// ──── 数据模型 ────</span>
 
-    record ChatRequest(
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">ChatRequest</span><span class="hljs-params">(
         List&lt;ChatMessage&gt; messages,        // 对话消息
         String requestId,                  // 请求追踪ID
         Double temperature,                // 温度参数
@@ -110,65 +108,65 @@ public interface ChatModelPort {
         String toolChoice,                 // 工具选择策略: auto/none/required
         ResponseFormat responseFormat,     // 输出格式
         Map&lt;String, Object&gt; metadata       // 扩展元数据（如conversationId）
-    ) {
-        public static Builder builder() {
-            return new Builder();
+    )</span> {
+        <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> Builder <span class="hljs-title function_">builder</span><span class="hljs-params">()</span> {
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Builder</span>();
         }
 
-        public static class Builder {
-            private final List&lt;ChatMessage&gt; messages = new ArrayList&lt;&gt;();
-            private String requestId = java.util.UUID.randomUUID().toString();
-            private Double temperature = 0.7;
-            private Integer maxTokens = 2048;
-            private Double topP = 0.9;
-            private List&lt;String&gt; stopSequences = List.of();
-            private List&lt;ToolDefinition&gt; tools = List.of();
-            private String toolChoice = &quot;auto&quot;;
-            private ResponseFormat responseFormat = ResponseFormat.TEXT;
-            private Map&lt;String, Object&gt; metadata = Map.of();
+        <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">Builder</span> {
+            <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> List&lt;ChatMessage&gt; messages = <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;&gt;();
+            <span class="hljs-keyword">private</span> <span class="hljs-type">String</span> <span class="hljs-variable">requestId</span> <span class="hljs-operator">=</span> java.util.UUID.randomUUID().toString();
+            <span class="hljs-keyword">private</span> <span class="hljs-type">Double</span> <span class="hljs-variable">temperature</span> <span class="hljs-operator">=</span> <span class="hljs-number">0.7</span>;
+            <span class="hljs-keyword">private</span> <span class="hljs-type">Integer</span> <span class="hljs-variable">maxTokens</span> <span class="hljs-operator">=</span> <span class="hljs-number">2048</span>;
+            <span class="hljs-keyword">private</span> <span class="hljs-type">Double</span> <span class="hljs-variable">topP</span> <span class="hljs-operator">=</span> <span class="hljs-number">0.9</span>;
+            <span class="hljs-keyword">private</span> List&lt;String&gt; stopSequences = List.of();
+            <span class="hljs-keyword">private</span> List&lt;ToolDefinition&gt; tools = List.of();
+            <span class="hljs-keyword">private</span> <span class="hljs-type">String</span> <span class="hljs-variable">toolChoice</span> <span class="hljs-operator">=</span> <span class="hljs-string">"auto"</span>;
+            <span class="hljs-keyword">private</span> <span class="hljs-type">ResponseFormat</span> <span class="hljs-variable">responseFormat</span> <span class="hljs-operator">=</span> ResponseFormat.TEXT;
+            <span class="hljs-keyword">private</span> Map&lt;String, Object&gt; metadata = Map.of();
 
-            public Builder addSystemMessage(String content) {
-                messages.add(new ChatMessage(&quot;system&quot;, content, null, null));
-                return this;
+            <span class="hljs-keyword">public</span> Builder <span class="hljs-title function_">addSystemMessage</span><span class="hljs-params">(String content)</span> {
+                messages.add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">ChatMessage</span>(<span class="hljs-string">"system"</span>, content, <span class="hljs-literal">null</span>, <span class="hljs-literal">null</span>));
+                <span class="hljs-keyword">return</span> <span class="hljs-built_in">this</span>;
             }
 
-            public Builder addUserMessage(String content) {
-                messages.add(new ChatMessage(&quot;user&quot;, content, null, null));
-                return this;
+            <span class="hljs-keyword">public</span> Builder <span class="hljs-title function_">addUserMessage</span><span class="hljs-params">(String content)</span> {
+                messages.add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">ChatMessage</span>(<span class="hljs-string">"user"</span>, content, <span class="hljs-literal">null</span>, <span class="hljs-literal">null</span>));
+                <span class="hljs-keyword">return</span> <span class="hljs-built_in">this</span>;
             }
 
-            public Builder addAssistantMessage(String content) {
-                messages.add(new ChatMessage(&quot;assistant&quot;, content, null, null));
-                return this;
+            <span class="hljs-keyword">public</span> Builder <span class="hljs-title function_">addAssistantMessage</span><span class="hljs-params">(String content)</span> {
+                messages.add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">ChatMessage</span>(<span class="hljs-string">"assistant"</span>, content, <span class="hljs-literal">null</span>, <span class="hljs-literal">null</span>));
+                <span class="hljs-keyword">return</span> <span class="hljs-built_in">this</span>;
             }
 
-            public Builder addToolResult(String toolCallId, String content) {
-                messages.add(new ChatMessage(&quot;tool&quot;, content, toolCallId, null));
-                return this;
+            <span class="hljs-keyword">public</span> Builder <span class="hljs-title function_">addToolResult</span><span class="hljs-params">(String toolCallId, String content)</span> {
+                messages.add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">ChatMessage</span>(<span class="hljs-string">"tool"</span>, content, toolCallId, <span class="hljs-literal">null</span>));
+                <span class="hljs-keyword">return</span> <span class="hljs-built_in">this</span>;
             }
 
-            public Builder temperature(Double temperature) {
-                this.temperature = temperature;
-                return this;
+            <span class="hljs-keyword">public</span> Builder <span class="hljs-title function_">temperature</span><span class="hljs-params">(Double temperature)</span> {
+                <span class="hljs-built_in">this</span>.temperature = temperature;
+                <span class="hljs-keyword">return</span> <span class="hljs-built_in">this</span>;
             }
 
-            public Builder maxTokens(Integer maxTokens) {
-                this.maxTokens = maxTokens;
-                return this;
+            <span class="hljs-keyword">public</span> Builder <span class="hljs-title function_">maxTokens</span><span class="hljs-params">(Integer maxTokens)</span> {
+                <span class="hljs-built_in">this</span>.maxTokens = maxTokens;
+                <span class="hljs-keyword">return</span> <span class="hljs-built_in">this</span>;
             }
 
-            public Builder tools(List&lt;ToolDefinition&gt; tools) {
-                this.tools = tools;
-                return this;
+            <span class="hljs-keyword">public</span> Builder <span class="hljs-title function_">tools</span><span class="hljs-params">(List&lt;ToolDefinition&gt; tools)</span> {
+                <span class="hljs-built_in">this</span>.tools = tools;
+                <span class="hljs-keyword">return</span> <span class="hljs-built_in">this</span>;
             }
 
-            public Builder responseFormat(ResponseFormat format) {
-                this.responseFormat = format;
-                return this;
+            <span class="hljs-keyword">public</span> Builder <span class="hljs-title function_">responseFormat</span><span class="hljs-params">(ResponseFormat format)</span> {
+                <span class="hljs-built_in">this</span>.responseFormat = format;
+                <span class="hljs-keyword">return</span> <span class="hljs-built_in">this</span>;
             }
 
-            public ChatRequest build() {
-                return new ChatRequest(
+            <span class="hljs-keyword">public</span> ChatRequest <span class="hljs-title function_">build</span><span class="hljs-params">()</span> {
+                <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ChatRequest</span>(
                     List.copyOf(messages), requestId, temperature,
                     maxTokens, topP, stopSequences, List.copyOf(tools),
                     toolChoice, responseFormat, Map.copyOf(metadata));
@@ -176,360 +174,354 @@ public interface ChatModelPort {
         }
     }
 
-    record ChatMessage(
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">ChatMessage</span><span class="hljs-params">(
         String role,          // system / user / assistant / tool
         String content,       // 文本内容
         String toolCallId,    // tool 消息的关联ID
         List&lt;ToolCall&gt; toolCalls  // assistant 消息的工具调用
-    ) {}
+    )</span> {}
 
-    record ChatResponse(
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">ChatResponse</span><span class="hljs-params">(
         String content,              // 文本内容
         List&lt;ToolCall&gt; toolCalls,    // 工具调用列表
         String finishReason,         // stop / length / tool_calls
         TokenUsage tokenUsage,       // Token 使用统计
         String modelId,              // 实际使用的模型ID
         Map&lt;String, Object&gt; metadata // 额外元数据
-    ) {}
+    )</span> {}
 
-    record ChatChunk(
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">ChatChunk</span><span class="hljs-params">(
         String delta,          // 增量文本
         String finishReason,   // 流结束时的原因
-        TokenUsage tokenUsage  // 累积token使用（可能为null）
-    ) {}
+        TokenUsage tokenUsage  // 累积token使用（可能为<span class="hljs-literal">null</span>）
+    )</span> {}
 
-    record ToolDefinition(
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">ToolDefinition</span><span class="hljs-params">(
         String name,
         String description,
         Map&lt;String, Object&gt; jsonSchema  // JSON Schema
-    ) {}
+    )</span> {}
 
-    record ToolCall(
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">ToolCall</span><span class="hljs-params">(
         String id,
         String name,
         String arguments  // JSON string
-    ) {}
+    )</span> {}
 
-    record TokenUsage(
-        int inputTokens,
-        int outputTokens,
-        int totalTokens
-    ) {
-        public static final TokenUsage EMPTY = new TokenUsage(0, 0, 0);
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">TokenUsage</span><span class="hljs-params">(
+        <span class="hljs-type">int</span> inputTokens,
+        <span class="hljs-type">int</span> outputTokens,
+        <span class="hljs-type">int</span> totalTokens
+    )</span> {
+        <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">TokenUsage</span> <span class="hljs-variable">EMPTY</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">TokenUsage</span>(<span class="hljs-number">0</span>, <span class="hljs-number">0</span>, <span class="hljs-number">0</span>);
 
-        public TokenUsage add(TokenUsage other) {
-            return new TokenUsage(
+        <span class="hljs-keyword">public</span> TokenUsage <span class="hljs-title function_">add</span><span class="hljs-params">(TokenUsage other)</span> {
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">TokenUsage</span>(
                 inputTokens + other.inputTokens,
                 outputTokens + other.outputTokens,
                 totalTokens + other.totalTokens);
         }
     }
 
-    record ModelInfo(
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">ModelInfo</span><span class="hljs-params">(
         String modelId,
         String provider,
-        int contextWindow,
-        double inputPricePer1M,
-        double outputPricePer1M,
-        boolean supportsVision,
-        boolean supportsToolCalling,
-        boolean supportsStreaming
-    ) {}
+        <span class="hljs-type">int</span> contextWindow,
+        <span class="hljs-type">double</span> inputPricePer1M,
+        <span class="hljs-type">double</span> outputPricePer1M,
+        <span class="hljs-type">boolean</span> supportsVision,
+        <span class="hljs-type">boolean</span> supportsToolCalling,
+        <span class="hljs-type">boolean</span> supportsStreaming
+    )</span> {}
 
-    enum ResponseFormat { TEXT, JSON_OBJECT, JSON_SCHEMA }
+    <span class="hljs-keyword">enum</span> <span class="hljs-title class_">ResponseFormat</span> { TEXT, JSON_OBJECT, JSON_SCHEMA }
 }
-</code></pre></div>
-<h3>2. EmbeddingModelPort</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.ai.port;
+</code></pre></div><h3>2. EmbeddingModelPort</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">package</span> com.example.ai.port;
 
-import java.util.List;
+<span class="hljs-keyword">import</span> java.util.List;
 
-/**
+<span class="hljs-comment">/**
  * Embedding 模型端口
- */
-public interface EmbeddingModelPort {
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">EmbeddingModelPort</span> {
 
-    /**
+    <span class="hljs-comment">/**
      * 对单个文本生成 Embedding
-     */
-    EmbeddingResponse embed(String text);
+     */</span>
+    EmbeddingResponse <span class="hljs-title function_">embed</span><span class="hljs-params">(String text)</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 批量生成 Embedding
-     */
-    EmbeddingResponse embed(List&lt;String&gt; texts);
+     */</span>
+    EmbeddingResponse <span class="hljs-title function_">embed</span><span class="hljs-params">(List&lt;String&gt; texts)</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 获取 Embedding 维度
-     */
-    int dimensions();
+     */</span>
+    <span class="hljs-type">int</span> <span class="hljs-title function_">dimensions</span><span class="hljs-params">()</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 获取模型信息
-     */
-    String getModelId();
+     */</span>
+    String <span class="hljs-title function_">getModelId</span><span class="hljs-params">()</span>;
 
-    // ──── 数据模型 ────
+    <span class="hljs-comment">// ──── 数据模型 ────</span>
 
-    record EmbeddingResponse(
-        List&lt;float[]&gt; embeddings,  // text 数量 × dimensions
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">EmbeddingResponse</span><span class="hljs-params">(
+        List&lt;<span class="hljs-type">float</span>[]&gt; embeddings,  // text 数量 × dimensions
         TokenUsage tokenUsage,
         String modelId
-    ) {}
+    )</span> {}
 
-    record TokenUsage(int totalTokens, String modelId) {}
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">TokenUsage</span><span class="hljs-params">(<span class="hljs-type">int</span> totalTokens, String modelId)</span> {}
 }
-</code></pre></div>
-<h3>3. RerankModelPort</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.ai.port;
+</code></pre></div><h3>3. RerankModelPort</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">package</span> com.example.ai.port;
 
-import java.util.List;
+<span class="hljs-keyword">import</span> java.util.List;
 
-/**
+<span class="hljs-comment">/**
  * 重排序模型端口
- */
-public interface RerankModelPort {
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">RerankModelPort</span> {
 
-    /**
+    <span class="hljs-comment">/**
      * 对候选文档重新排序
-     * @param query 查询文本
-     * @param documents 候选文档列表
-     * @param topN 返回前N个结果
-     */
-    RerankResponse rerank(String query, List&lt;String&gt; documents, int topN);
+     * <span class="hljs-doctag">@param</span> query 查询文本
+     * <span class="hljs-doctag">@param</span> documents 候选文档列表
+     * <span class="hljs-doctag">@param</span> topN 返回前N个结果
+     */</span>
+    RerankResponse <span class="hljs-title function_">rerank</span><span class="hljs-params">(String query, List&lt;String&gt; documents, <span class="hljs-type">int</span> topN)</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 带分数的重排序
-     */
-    RerankResponse rerank(String query, List&lt;ScoredDocument&gt; documents, int topN);
+     */</span>
+    RerankResponse <span class="hljs-title function_">rerank</span><span class="hljs-params">(String query, List&lt;ScoredDocument&gt; documents, <span class="hljs-type">int</span> topN)</span>;
 
-    // ──── 数据模型 ────
+    <span class="hljs-comment">// ──── 数据模型 ────</span>
 
-    record RerankResponse(
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">RerankResponse</span><span class="hljs-params">(
         List&lt;ScoredDocument&gt; results,
         String modelId,
-        long latencyMs
-    ) {}
+        <span class="hljs-type">long</span> latencyMs
+    )</span> {}
 
-    record ScoredDocument(
-        int index,           // 原始文档索引
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">ScoredDocument</span><span class="hljs-params">(
+        <span class="hljs-type">int</span> index,           // 原始文档索引
         String content,      // 文档内容
-        double score         // 相关度分数 (0-1)
+        <span class="hljs-type">double</span> score         // 相关度分数 (0-1)</span>
     ) {}
 }
-</code></pre></div>
-<h3>4. RetrievalPort</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.ai.port;
+</code></pre></div><h3>4. RetrievalPort</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">package</span> com.example.ai.port;
 
-import java.util.List;
-import java.util.Map;
+<span class="hljs-keyword">import</span> java.util.List;
+<span class="hljs-keyword">import</span> java.util.Map;
 
-/**
+<span class="hljs-comment">/**
  * 检索端口 — 向量检索 + 关键词检索 + 混合检索的统一抽象
- */
-public interface RetrievalPort {
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">RetrievalPort</span> {
 
-    /**
+    <span class="hljs-comment">/**
      * 语义搜索（基于 Embedding 的 ANN 检索）
-     */
-    RetrievalResult semanticSearch(RetrievalQuery query);
+     */</span>
+    RetrievalResult <span class="hljs-title function_">semanticSearch</span><span class="hljs-params">(RetrievalQuery query)</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 关键词搜索（基于 BM25 等）
-     */
-    RetrievalResult keywordSearch(RetrievalQuery query);
+     */</span>
+    RetrievalResult <span class="hljs-title function_">keywordSearch</span><span class="hljs-params">(RetrievalQuery query)</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 混合搜索（语义 + 关键词）
-     */
-    RetrievalResult hybridSearch(RetrievalQuery query, double semanticWeight);
+     */</span>
+    RetrievalResult <span class="hljs-title function_">hybridSearch</span><span class="hljs-params">(RetrievalQuery query, <span class="hljs-type">double</span> semanticWeight)</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 按 ID 获取文档
-     */
-    List&lt;RetrievalDocument&gt; getByIds(List&lt;String&gt; ids);
+     */</span>
+    List&lt;RetrievalDocument&gt; <span class="hljs-title function_">getByIds</span><span class="hljs-params">(List&lt;String&gt; ids)</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 按元数据过滤后的搜索
-     */
-    RetrievalResult searchWithMetadataFilter(RetrievalQuery query,
-        Map&lt;String, Object&gt; metadataFilter);
+     */</span>
+    RetrievalResult <span class="hljs-title function_">searchWithMetadataFilter</span><span class="hljs-params">(RetrievalQuery query,
+        Map&lt;String, Object&gt; metadataFilter)</span>;
 
-    // ──── 数据模型 ────
+    <span class="hljs-comment">// ──── 数据模型 ────</span>
 
-    record RetrievalQuery(
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">RetrievalQuery</span><span class="hljs-params">(
         String query,
-        int topK,
+        <span class="hljs-type">int</span> topK,
         Double similarityThreshold,
         Map&lt;String, Object&gt; filters,
         List&lt;String&gt; fields  // 返回哪些字段
-    ) {
-        public static RetrievalQuery of(String query, int topK) {
-            return new RetrievalQuery(query, topK, null, Map.of(), List.of(&quot;*&quot;));
+    )</span> {
+        <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> RetrievalQuery <span class="hljs-title function_">of</span><span class="hljs-params">(String query, <span class="hljs-type">int</span> topK)</span> {
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RetrievalQuery</span>(query, topK, <span class="hljs-literal">null</span>, Map.of(), List.of(<span class="hljs-string">"*"</span>));
         }
     }
 
-    record RetrievalResult(
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">RetrievalResult</span><span class="hljs-params">(
         List&lt;RetrievalDocument&gt; documents,
-        long totalHits,
-        long searchTimeMs,
+        <span class="hljs-type">long</span> totalHits,
+        <span class="hljs-type">long</span> searchTimeMs,
         RetrievalMethod method
-    ) {}
+    )</span> {}
 
-    record RetrievalDocument(
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">RetrievalDocument</span><span class="hljs-params">(
         String id,
         String content,
-        double score,
+        <span class="hljs-type">double</span> score,
         Map&lt;String, Object&gt; metadata,
-        float[] embedding  // 可选
-    ) {}
+        <span class="hljs-type">float</span>[] embedding  // 可选
+    )</span> {}
 
-    enum RetrievalMethod { SEMANTIC, KEYWORD, HYBRID }
+    <span class="hljs-keyword">enum</span> <span class="hljs-title class_">RetrievalMethod</span> { SEMANTIC, KEYWORD, HYBRID }
 }
-</code></pre></div>
-<h3>5. ConversationMemoryPort</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.ai.port;
+</code></pre></div><h3>5. ConversationMemoryPort</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">package</span> com.example.ai.port;
 
-import java.time.Instant;
-import java.util.List;
+<span class="hljs-keyword">import</span> java.time.Instant;
+<span class="hljs-keyword">import</span> java.util.List;
 
-/**
+<span class="hljs-comment">/**
  * 对话记忆端口
- */
-public interface ConversationMemoryPort {
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">ConversationMemoryPort</span> {
 
-    /**
+    <span class="hljs-comment">/**
      * 保存一条消息
-     */
-    void save(String conversationId, MemoryMessage message);
+     */</span>
+    <span class="hljs-keyword">void</span> <span class="hljs-title function_">save</span><span class="hljs-params">(String conversationId, MemoryMessage message)</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 批量保存消息
-     */
-    void saveAll(String conversationId, List&lt;MemoryMessage&gt; messages);
+     */</span>
+    <span class="hljs-keyword">void</span> <span class="hljs-title function_">saveAll</span><span class="hljs-params">(String conversationId, List&lt;MemoryMessage&gt; messages)</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 获取最近的 N 条消息
-     */
-    List&lt;MemoryMessage&gt; get(String conversationId, int lastN);
+     */</span>
+    List&lt;MemoryMessage&gt; <span class="hljs-title function_">get</span><span class="hljs-params">(String conversationId, <span class="hljs-type">int</span> lastN)</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 获取指定对话的所有消息
-     */
-    List&lt;MemoryMessage&gt; getAll(String conversationId);
+     */</span>
+    List&lt;MemoryMessage&gt; <span class="hljs-title function_">getAll</span><span class="hljs-params">(String conversationId)</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 删除指定对话
-     */
-    void delete(String conversationId);
+     */</span>
+    <span class="hljs-keyword">void</span> <span class="hljs-title function_">delete</span><span class="hljs-params">(String conversationId)</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 裁剪对话（保留最近 N 条 + 早期摘要）
-     */
-    void trim(String conversationId, int keepRecent, int summaryMaxTokens);
+     */</span>
+    <span class="hljs-keyword">void</span> <span class="hljs-title function_">trim</span><span class="hljs-params">(String conversationId, <span class="hljs-type">int</span> keepRecent, <span class="hljs-type">int</span> summaryMaxTokens)</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 获取对话摘要
-     */
-    String getSummary(String conversationId);
+     */</span>
+    String <span class="hljs-title function_">getSummary</span><span class="hljs-params">(String conversationId)</span>;
 
-    // ──── 数据模型 ────
+    <span class="hljs-comment">// ──── 数据模型 ────</span>
 
-    record MemoryMessage(
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">MemoryMessage</span><span class="hljs-params">(
         String role,          // user / assistant / system / tool
         String content,
         Instant timestamp,
         Map&lt;String, Object&gt; metadata  // 如 tool_call_id, token_usage
-    ) {}
+    )</span> {}
 }
-</code></pre></div>
-<h3>6. ToolRegistryPort</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.ai.port;
+</code></pre></div><h3>6. ToolRegistryPort</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">package</span> com.example.ai.port;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
-import java.util.function.Function;
+<span class="hljs-keyword">import</span> java.util.List;
+<span class="hljs-keyword">import</span> java.util.Map;
+<span class="hljs-keyword">import</span> java.util.Optional;
+<span class="hljs-keyword">import</span> java.util.function.Function;
 
-/**
+<span class="hljs-comment">/**
  * 工具注册端口
- */
-public interface ToolRegistryPort {
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">ToolRegistryPort</span> {
 
-    /**
+    <span class="hljs-comment">/**
      * 注册工具
-     */
-    void register(ToolDefinition definition, Function&lt;Map&lt;String, Object&gt;, String&gt; handler);
+     */</span>
+    <span class="hljs-keyword">void</span> <span class="hljs-title function_">register</span><span class="hljs-params">(ToolDefinition definition, Function&lt;Map&lt;String, Object&gt;, String&gt; handler)</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 获取工具定义
-     */
-    Optional&lt;ToolDefinition&gt; getTool(String name);
+     */</span>
+    Optional&lt;ToolDefinition&gt; <span class="hljs-title function_">getTool</span><span class="hljs-params">(String name)</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 获取所有已注册的工具
-     */
-    List&lt;ToolDefinition&gt; getAllTools();
+     */</span>
+    List&lt;ToolDefinition&gt; <span class="hljs-title function_">getAllTools</span><span class="hljs-params">()</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 执行工具
-     */
-    String execute(String toolName, Map&lt;String, Object&gt; arguments);
+     */</span>
+    String <span class="hljs-title function_">execute</span><span class="hljs-params">(String toolName, Map&lt;String, Object&gt; arguments)</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 获取工具注册数量
-     */
-    int toolCount();
+     */</span>
+    <span class="hljs-type">int</span> <span class="hljs-title function_">toolCount</span><span class="hljs-params">()</span>;
 
-    // ──── 数据模型 ────
+    <span class="hljs-comment">// ──── 数据模型 ────</span>
 
-    record ToolDefinition(
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">ToolDefinition</span><span class="hljs-params">(
         String name,
         String description,
         Map&lt;String, Object&gt; jsonSchema
-    ) {}
+    )</span> {}
 }
-</code></pre></div>
-<h3>7. PromptRepositoryPort</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.ai.port;
+</code></pre></div><h3>7. PromptRepositoryPort</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">package</span> com.example.ai.port;
 
-import java.util.List;
-import java.util.Map;
-import java.util.Optional;
+<span class="hljs-keyword">import</span> java.util.List;
+<span class="hljs-keyword">import</span> java.util.Map;
+<span class="hljs-keyword">import</span> java.util.Optional;
 
-/**
+<span class="hljs-comment">/**
  * Prompt 仓库端口 — 模板化、版本化的 Prompt 管理
- */
-public interface PromptRepositoryPort {
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">PromptRepositoryPort</span> {
 
-    /**
+    <span class="hljs-comment">/**
      * 获取 Prompt 模板
-     */
-    Optional&lt;PromptTemplate&gt; getPrompt(String promptId, String version);
+     */</span>
+    Optional&lt;PromptTemplate&gt; <span class="hljs-title function_">getPrompt</span><span class="hljs-params">(String promptId, String version)</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 获取最新版本的 Prompt
-     */
-    Optional&lt;PromptTemplate&gt; getLatestPrompt(String promptId);
+     */</span>
+    Optional&lt;PromptTemplate&gt; <span class="hljs-title function_">getLatestPrompt</span><span class="hljs-params">(String promptId)</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 验证参数是否满足 Prompt 模板需求
-     */
-    ValidationResult validateParams(String promptId, Map&lt;String, Object&gt; params);
+     */</span>
+    ValidationResult <span class="hljs-title function_">validateParams</span><span class="hljs-params">(String promptId, Map&lt;String, Object&gt; params)</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 渲染 Prompt（填充参数）
-     */
-    String render(String promptId, Map&lt;String, Object&gt; params);
+     */</span>
+    String <span class="hljs-title function_">render</span><span class="hljs-params">(String promptId, Map&lt;String, Object&gt; params)</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 注册 Prompt 模板
-     */
-    void register(String promptId, String version, PromptTemplate template);
+     */</span>
+    <span class="hljs-keyword">void</span> <span class="hljs-title function_">register</span><span class="hljs-params">(String promptId, String version, PromptTemplate template)</span>;
 
-    // ──── 数据模型 ────
+    <span class="hljs-comment">// ──── 数据模型 ────</span>
 
-    record PromptTemplate(
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">PromptTemplate</span><span class="hljs-params">(
         String promptId,
         String version,
         String template,                   // 包含 {{variable}} 占位符的模板
@@ -538,220 +530,216 @@ public interface PromptRepositoryPort {
         String description,
         String modelHint,                  // 推荐模型
         Map&lt;String, Object&gt; defaultParams   // 默认参数值
-    ) {}
+    )</span> {}
 
-    record ValidationResult(
-        boolean valid,
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">ValidationResult</span><span class="hljs-params">(
+        <span class="hljs-type">boolean</span> valid,
         List&lt;String&gt; missingVariables,
         List&lt;String&gt; extraVariables
-    ) {}
+    )</span> {}
 }
-</code></pre></div>
-<h3>8. EvaluationPort</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.ai.port;
+</code></pre></div><h3>8. EvaluationPort</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">package</span> com.example.ai.port;
 
-import java.util.List;
-import java.util.Map;
+<span class="hljs-keyword">import</span> java.util.List;
+<span class="hljs-keyword">import</span> java.util.Map;
 
-/**
+<span class="hljs-comment">/**
  * 评估端口 — AI 输出的质量评估
- */
-public interface EvaluationPort {
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">EvaluationPort</span> {
 
-    /**
+    <span class="hljs-comment">/**
      * 评估 AI 回答的质量
-     */
-    EvaluationResult evaluate(EvaluationRequest request);
+     */</span>
+    EvaluationResult <span class="hljs-title function_">evaluate</span><span class="hljs-params">(EvaluationRequest request)</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 批量评估（用于回归测试）
-     */
-    List&lt;EvaluationResult&gt; evaluateBatch(List&lt;EvaluationRequest&gt; requests);
+     */</span>
+    List&lt;EvaluationResult&gt; <span class="hljs-title function_">evaluateBatch</span><span class="hljs-params">(List&lt;EvaluationRequest&gt; requests)</span>;
 
-    // ──── 数据模型 ────
+    <span class="hljs-comment">// ──── 数据模型 ────</span>
 
-    record EvaluationRequest(
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">EvaluationRequest</span><span class="hljs-params">(
         String question,             // 原始问题
         String answer,               // AI 回答
-        String reference,            // 参考答案 (黄金数据集)
-        List&lt;String&gt; contextFacts,   // 已知事实（用于事实检查）
-        List&lt;String&gt; criteria        // 评估维度
+        String reference,            // 参考答案 (黄金数据集)</span>
+        List&lt;String&gt; contextFacts,   <span class="hljs-comment">// 已知事实（用于事实检查）</span>
+        List&lt;String&gt; criteria        <span class="hljs-comment">// 评估维度</span>
     ) {}
 
-    record EvaluationResult(
-        boolean passed,
-        double overallScore,              // 总分 0-1
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">EvaluationResult</span><span class="hljs-params">(
+        <span class="hljs-type">boolean</span> passed,
+        <span class="hljs-type">double</span> overallScore,              // 总分 0-1
         Map&lt;String, Double&gt; dimensionScores, // 各维度分数
         String feedback,                  // 评估反馈
         List&lt;String&gt; issues               // 发现的问题
-    ) {}
+    )</span> {}
 }
-</code></pre></div>
-<h3>9. ModelRouterPort</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.ai.port;
+</code></pre></div><h3>9. ModelRouterPort</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">package</span> com.example.ai.port;
 
-import java.util.List;
-import java.util.Map;
+<span class="hljs-keyword">import</span> java.util.List;
+<span class="hljs-keyword">import</span> java.util.Map;
 
-/**
+<span class="hljs-comment">/**
  * 模型路由端口
- */
-public interface ModelRouterPort {
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">ModelRouterPort</span> {
 
-    /**
+    <span class="hljs-comment">/**
      * 根据请求特征选择最合适的模型
-     */
-    RouteDecision route(ChatModelPort.ChatRequest request);
+     */</span>
+    RouteDecision <span class="hljs-title function_">route</span><span class="hljs-params">(ChatModelPort.ChatRequest request)</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 注册模型端点
-     */
-    void registerEndpoint(ModelEndpoint endpoint);
+     */</span>
+    <span class="hljs-keyword">void</span> <span class="hljs-title function_">registerEndpoint</span><span class="hljs-params">(ModelEndpoint endpoint)</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 获取所有已注册的端点
-     */
-    List&lt;ModelEndpoint&gt; getEndpoints();
+     */</span>
+    List&lt;ModelEndpoint&gt; <span class="hljs-title function_">getEndpoints</span><span class="hljs-params">()</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 更新端点状态
-     */
-    void updateEndpointStatus(String endpointId, EndpointStatus status);
+     */</span>
+    <span class="hljs-keyword">void</span> <span class="hljs-title function_">updateEndpointStatus</span><span class="hljs-params">(String endpointId, EndpointStatus status)</span>;
 
-    // ──── 数据模型 ────
+    <span class="hljs-comment">// ──── 数据模型 ────</span>
 
-    record RouteDecision(
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">RouteDecision</span><span class="hljs-params">(
         String endpointId,
         String modelId,
         String provider,
         String reason,            // 路由原因
-        double estimatedCost,     // 预估成本
+        <span class="hljs-type">double</span> estimatedCost,     // 预估成本
         Map&lt;String, Object&gt; metadata
-    ) {}
+    )</span> {}
 
-    record ModelEndpoint(
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">ModelEndpoint</span><span class="hljs-params">(
         String id,
         String modelId,
         String provider,
         ChatModelPort chatModel,
-        int priority,             // 1=首选, 2=备用, 3=本地兜底
-        double costPer1MInput,
-        double costPer1MOutput,
-        boolean supportsVision,
-        boolean supportsToolCalling,
-        List&lt;String&gt; supportedLanguages,  // &quot;zh&quot;, &quot;en&quot;, ...
+        <span class="hljs-type">int</span> priority,             // 1=首选, 2=备用, 3=本地兜底
+        <span class="hljs-type">double</span> costPer1MInput,
+        <span class="hljs-type">double</span> costPer1MOutput,
+        <span class="hljs-type">boolean</span> supportsVision,
+        <span class="hljs-type">boolean</span> supportsToolCalling,
+        List&lt;String&gt; supportedLanguages,  // "zh", "en", ...
         RouteRule routeRule       // 路由规则
-    ) {}
+    )</span> {}
 
-    record RouteRule(
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">RouteRule</span><span class="hljs-params">(
         List&lt;String&gt; taskTypes,    // 该模型擅长的任务
-        int minTaskComplexity,     // 最低任务复杂度 (1-10)
-        double maxCostPerRequest   // 最大单次请求预算
+        <span class="hljs-type">int</span> minTaskComplexity,     // 最低任务复杂度 (1-10)</span>
+        <span class="hljs-type">double</span> maxCostPerRequest   <span class="hljs-comment">// 最大单次请求预算</span>
     ) {}
 
-    enum EndpointStatus { ONLINE, DEGRADED, OFFLINE, MAINTENANCE }
+    <span class="hljs-keyword">enum</span> <span class="hljs-title class_">EndpointStatus</span> { ONLINE, DEGRADED, OFFLINE, MAINTENANCE }
 }
-</code></pre></div>
-<h3>10. AiTracePort</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.ai.port;
+</code></pre></div><h3>10. AiTracePort</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">package</span> com.example.ai.port;
 
-import java.time.Instant;
-import java.util.Map;
+<span class="hljs-keyword">import</span> java.time.Instant;
+<span class="hljs-keyword">import</span> java.util.Map;
 
-/**
+<span class="hljs-comment">/**
  * AI 追踪端口 — 请求级别的可观测性
- */
-public interface AiTracePort {
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">AiTracePort</span> {
 
-    /**
+    <span class="hljs-comment">/**
      * 开始一个追踪 Span
-     */
-    TraceSpan startSpan(String spanName, Map&lt;String, String&gt; attributes);
+     */</span>
+    TraceSpan <span class="hljs-title function_">startSpan</span><span class="hljs-params">(String spanName, Map&lt;String, String&gt; attributes)</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 记录事件（如工具调用、RAG检索）
-     */
-    void addEvent(TraceSpan span, String eventName, Map&lt;String, String&gt; attributes);
+     */</span>
+    <span class="hljs-keyword">void</span> <span class="hljs-title function_">addEvent</span><span class="hljs-params">(TraceSpan span, String eventName, Map&lt;String, String&gt; attributes)</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 记录 Token 使用量
-     */
-    void recordTokenUsage(TraceSpan span, ChatModelPort.TokenUsage usage);
+     */</span>
+    <span class="hljs-keyword">void</span> <span class="hljs-title function_">recordTokenUsage</span><span class="hljs-params">(TraceSpan span, ChatModelPort.TokenUsage usage)</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 结束 Span（成功）
-     */
-    void endSpan(TraceSpan span);
+     */</span>
+    <span class="hljs-keyword">void</span> <span class="hljs-title function_">endSpan</span><span class="hljs-params">(TraceSpan span)</span>;
 
-    /**
+    <span class="hljs-comment">/**
      * 结束 Span（失败）
-     */
-    void endSpanWithError(TraceSpan span, Throwable error);
+     */</span>
+    <span class="hljs-keyword">void</span> <span class="hljs-title function_">endSpanWithError</span><span class="hljs-params">(TraceSpan span, Throwable error)</span>;
 
-    // ──── 数据模型 ────
+    <span class="hljs-comment">// ──── 数据模型 ────</span>
 
-    record TraceSpan(
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">TraceSpan</span><span class="hljs-params">(
         String traceId,
         String spanId,
         String spanName,
         Instant startTime,
         Map&lt;String, String&gt; initialAttributes
-    ) {}
+    )</span> {}
 }
-</code></pre></div>
-<h2>适配器实现示例</h2>
+</code></pre></div><h2>适配器实现示例</h2>
 <h3>Spring AI ChatModel Adapter</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.ai.adapter;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">package</span> com.example.ai.adapter;
 
-import com.example.ai.port.ChatModelPort;
-import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.model.ChatModel;
-import reactor.core.publisher.Flux;
+<span class="hljs-keyword">import</span> com.example.ai.port.ChatModelPort;
+<span class="hljs-keyword">import</span> org.springframework.ai.chat.client.ChatClient;
+<span class="hljs-keyword">import</span> org.springframework.ai.chat.model.ChatModel;
+<span class="hljs-keyword">import</span> reactor.core.publisher.Flux;
 
-/**
+<span class="hljs-comment">/**
  * Spring AI ChatModel 适配器
  * 将 Spring AI 的 ChatClient 适配为 ChatModelPort
- */
-@Component
-@ConditionalOnBean(ChatModel.class)
-public class SpringAiChatModelAdapter implements ChatModelPort {
+ */</span>
+<span class="hljs-meta">@Component</span>
+<span class="hljs-meta">@ConditionalOnBean(ChatModel.class)</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">SpringAiChatModelAdapter</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">ChatModelPort</span> {
 
-    private final ChatClient chatClient;
-    private final ChatModel chatModel;
-    private final String modelId;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> ChatClient chatClient;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> ChatModel chatModel;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> String modelId;
 
-    public SpringAiChatModelAdapter(ChatClient.Builder builder,
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">SpringAiChatModelAdapter</span><span class="hljs-params">(ChatClient.Builder builder,
             ChatModel chatModel,
-            @Value(&quot;${app.ai.default-model:gpt-4o}&quot;) String modelId) {
-        this.chatClient = builder.build();
-        this.chatModel = chatModel;
-        this.modelId = modelId;
+            <span class="hljs-meta">@Value("${app.ai.default-model:gpt-4o}")</span> String modelId)</span> {
+        <span class="hljs-built_in">this</span>.chatClient = builder.build();
+        <span class="hljs-built_in">this</span>.chatModel = chatModel;
+        <span class="hljs-built_in">this</span>.modelId = modelId;
     }
 
-    @Override
-    public ChatResponse chat(ChatRequest request) {
-        var prompt = chatClient.prompt();
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> ChatResponse <span class="hljs-title function_">chat</span><span class="hljs-params">(ChatRequest request)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">prompt</span> <span class="hljs-operator">=</span> chatClient.prompt();
 
-        // 添加消息
-        for (var msg : request.messages()) {
-            switch (msg.role()) {
-                case &quot;system&quot; -&gt; prompt.system(msg.content());
-                case &quot;user&quot; -&gt; prompt.user(msg.content());
-                case &quot;assistant&quot; -&gt; {
-                    if (msg.toolCalls() != null) {
+        <span class="hljs-comment">// 添加消息</span>
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> msg : request.messages()) {
+            <span class="hljs-keyword">switch</span> (msg.role()) {
+                <span class="hljs-keyword">case</span> <span class="hljs-string">"system"</span> -&gt; prompt.system(msg.content());
+                <span class="hljs-keyword">case</span> <span class="hljs-string">"user"</span> -&gt; prompt.user(msg.content());
+                <span class="hljs-keyword">case</span> <span class="hljs-string">"assistant"</span> -&gt; {
+                    <span class="hljs-keyword">if</span> (msg.toolCalls() != <span class="hljs-literal">null</span>) {
                         prompt.messages(
-                            new org.springframework.ai.chat.messages
+                            <span class="hljs-keyword">new</span> <span class="hljs-title class_">org</span>.springframework.ai.chat.messages
                                 .AssistantMessage(msg.content()));
-                    } else {
+                    } <span class="hljs-keyword">else</span> {
                         prompt.messages(
-                            new org.springframework.ai.chat.messages
+                            <span class="hljs-keyword">new</span> <span class="hljs-title class_">org</span>.springframework.ai.chat.messages
                                 .AssistantMessage(msg.content()));
                     }
                 }
             }
         }
 
-        // 配置参数
+        <span class="hljs-comment">// 配置参数</span>
         prompt.options(
             org.springframework.ai.chat.prompt.ChatOptionsBuilder.builder()
                 .withTemperature(request.temperature())
@@ -759,100 +747,99 @@ public class SpringAiChatModelAdapter implements ChatModelPort {
                 .withTopP(request.topP())
                 .build());
 
-        // 执行
-        var response = prompt.call().chatResponse();
-        var output = response.getResult().getOutput();
+        <span class="hljs-comment">// 执行</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">response</span> <span class="hljs-operator">=</span> prompt.call().chatResponse();
+        <span class="hljs-type">var</span> <span class="hljs-variable">output</span> <span class="hljs-operator">=</span> response.getResult().getOutput();
 
-        // 转换 Token 使用量
-        var usage = new TokenUsage(0, 0, 0);
-        if (response.getMetadata() != null &amp;&amp; response.getMetadata().getUsage() != null) {
-            var u = response.getMetadata().getUsage();
-            usage = new TokenUsage(
-                (int) u.getPromptTokens(),
-                (int) u.getGenerationTokens(),
-                (int) u.getTotalTokens());
+        <span class="hljs-comment">// 转换 Token 使用量</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">usage</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">TokenUsage</span>(<span class="hljs-number">0</span>, <span class="hljs-number">0</span>, <span class="hljs-number">0</span>);
+        <span class="hljs-keyword">if</span> (response.getMetadata() != <span class="hljs-literal">null</span> &amp;&amp; response.getMetadata().getUsage() != <span class="hljs-literal">null</span>) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">u</span> <span class="hljs-operator">=</span> response.getMetadata().getUsage();
+            usage = <span class="hljs-keyword">new</span> <span class="hljs-title class_">TokenUsage</span>(
+                (<span class="hljs-type">int</span>) u.getPromptTokens(),
+                (<span class="hljs-type">int</span>) u.getGenerationTokens(),
+                (<span class="hljs-type">int</span>) u.getTotalTokens());
         }
 
-        // 转换工具调用
-        var toolCalls = new ArrayList&lt;ToolCall&gt;();
-        if (output instanceof AssistantMessage am &amp;&amp; am.getToolCalls() != null) {
-            for (var tc : am.getToolCalls()) {
-                toolCalls.add(new ToolCall(tc.id(), tc.name(), tc.arguments()));
+        <span class="hljs-comment">// 转换工具调用</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">toolCalls</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;ToolCall&gt;();
+        <span class="hljs-keyword">if</span> (output <span class="hljs-keyword">instanceof</span> AssistantMessage am &amp;&amp; am.getToolCalls() != <span class="hljs-literal">null</span>) {
+            <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> tc : am.getToolCalls()) {
+                toolCalls.add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">ToolCall</span>(tc.id(), tc.name(), tc.arguments()));
             }
         }
 
-        return new ChatResponse(
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ChatResponse</span>(
             output.getContent(),
             toolCalls,
             response.getResult().getMetadata().getFinishReason(),
             usage,
             modelId,
-            Map.of(&quot;framework&quot;, &quot;spring-ai&quot;, &quot;provider&quot;, &quot;auto-detected&quot;));
+            Map.of(<span class="hljs-string">"framework"</span>, <span class="hljs-string">"spring-ai"</span>, <span class="hljs-string">"provider"</span>, <span class="hljs-string">"auto-detected"</span>));
     }
 
-    @Override
-    public Flux&lt;ChatChunk&gt; chatStream(ChatRequest request) {
-        var prompt = chatClient.prompt();
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> Flux&lt;ChatChunk&gt; <span class="hljs-title function_">chatStream</span><span class="hljs-params">(ChatRequest request)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">prompt</span> <span class="hljs-operator">=</span> chatClient.prompt();
 
-        for (var msg : request.messages()) {
-            switch (msg.role()) {
-                case &quot;system&quot; -&gt; prompt.system(msg.content());
-                case &quot;user&quot; -&gt; prompt.user(msg.content());
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> msg : request.messages()) {
+            <span class="hljs-keyword">switch</span> (msg.role()) {
+                <span class="hljs-keyword">case</span> <span class="hljs-string">"system"</span> -&gt; prompt.system(msg.content());
+                <span class="hljs-keyword">case</span> <span class="hljs-string">"user"</span> -&gt; prompt.user(msg.content());
             }
         }
 
-        return prompt.stream().chatResponse()
+        <span class="hljs-keyword">return</span> prompt.stream().chatResponse()
             .map(chunk -&gt; {
-                var content = chunk.getResult().getOutput().getContent();
-                var finishReason = chunk.getResult().getMetadata()
+                <span class="hljs-type">var</span> <span class="hljs-variable">content</span> <span class="hljs-operator">=</span> chunk.getResult().getOutput().getContent();
+                <span class="hljs-type">var</span> <span class="hljs-variable">finishReason</span> <span class="hljs-operator">=</span> chunk.getResult().getMetadata()
                     .getFinishReason();
-                return new ChatChunk(content, finishReason, null);
+                <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ChatChunk</span>(content, finishReason, <span class="hljs-literal">null</span>);
             });
     }
 
-    @Override
-    public ModelInfo getModelInfo() {
-        return new ModelInfo(
-            modelId, &quot;auto&quot;, 128000, 3.0, 15.0,
-            true, true, true);
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> ModelInfo <span class="hljs-title function_">getModelInfo</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ModelInfo</span>(
+            modelId, <span class="hljs-string">"auto"</span>, <span class="hljs-number">128000</span>, <span class="hljs-number">3.0</span>, <span class="hljs-number">15.0</span>,
+            <span class="hljs-literal">true</span>, <span class="hljs-literal">true</span>, <span class="hljs-literal">true</span>);
     }
 }
-</code></pre></div>
-<h3>OpenAI SDK 直接适配器（降级方案）</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.ai.adapter;
+</code></pre></div><h3>OpenAI SDK 直接适配器（降级方案）</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">package</span> com.example.ai.adapter;
 
-import com.example.ai.port.ChatModelPort;
-import com.openai.client.OpenAiClient;
-import com.openai.client.okhttp.OpenAiOkHttpClient;
-import com.openai.models.chat.completions.*;
-import reactor.core.publisher.Flux;
+<span class="hljs-keyword">import</span> com.example.ai.port.ChatModelPort;
+<span class="hljs-keyword">import</span> com.openai.client.OpenAiClient;
+<span class="hljs-keyword">import</span> com.openai.client.okhttp.OpenAiOkHttpClient;
+<span class="hljs-keyword">import</span> com.openai.models.chat.completions.*;
+<span class="hljs-keyword">import</span> reactor.core.publisher.Flux;
 
-/**
+<span class="hljs-comment">/**
  * OpenAI SDK 直接适配器
  * 当 Spring AI 不支持某个 OpenAI 最新特性时使用
- */
-@Component
-@ConditionalOnProperty(name = &quot;app.ai.adapter&quot;, havingValue = &quot;openai-sdk&quot;)
-public class OpenAiSdkChatModelAdapter implements ChatModelPort {
+ */</span>
+<span class="hljs-meta">@Component</span>
+<span class="hljs-meta">@ConditionalOnProperty(name = "app.ai.adapter", havingValue = "openai-sdk")</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">OpenAiSdkChatModelAdapter</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">ChatModelPort</span> {
 
-    private final OpenAiClient client;
-    private final String modelId;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> OpenAiClient client;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> String modelId;
 
-    public OpenAiSdkChatModelAdapter(
-            @Value(&quot;${openai.api-key}&quot;) String apiKey,
-            @Value(&quot;${openai.model:gpt-4o}&quot;) String modelId) {
-        this.client = OpenAiOkHttpClient.builder()
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">OpenAiSdkChatModelAdapter</span><span class="hljs-params">(
+            <span class="hljs-meta">@Value("${openai.api-key}")</span> String apiKey,
+            <span class="hljs-meta">@Value("${openai.model:gpt-4o}")</span> String modelId)</span> {
+        <span class="hljs-built_in">this</span>.client = OpenAiOkHttpClient.builder()
             .apiKey(apiKey)
             .build();
-        this.modelId = modelId;
+        <span class="hljs-built_in">this</span>.modelId = modelId;
     }
 
-    @Override
-    public ChatResponse chat(ChatRequest request) {
-        var messages = convertMessages(request.messages());
-        var tools = convertTools(request.tools());
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> ChatResponse <span class="hljs-title function_">chat</span><span class="hljs-params">(ChatRequest request)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">messages</span> <span class="hljs-operator">=</span> convertMessages(request.messages());
+        <span class="hljs-type">var</span> <span class="hljs-variable">tools</span> <span class="hljs-operator">=</span> convertTools(request.tools());
 
-        var params = ChatCompletionCreateParams.builder()
+        <span class="hljs-type">var</span> <span class="hljs-variable">params</span> <span class="hljs-operator">=</span> ChatCompletionCreateParams.builder()
             .model(modelId)
             .messages(messages)
             .tools(tools)
@@ -860,90 +847,90 @@ public class OpenAiSdkChatModelAdapter implements ChatModelPort {
             .maxTokens(request.maxTokens())
             .build();
 
-        var response = client.chat().completions().create(params);
-        var choice = response.choices().get(0);
+        <span class="hljs-type">var</span> <span class="hljs-variable">response</span> <span class="hljs-operator">=</span> client.chat().completions().create(params);
+        <span class="hljs-type">var</span> <span class="hljs-variable">choice</span> <span class="hljs-operator">=</span> response.choices().get(<span class="hljs-number">0</span>);
 
-        // 转换 Token 使用量
-        var usage = new TokenUsage(
-            response.usage().map(CompletionUsage::promptTokens).orElse(0),
-            response.usage().map(CompletionUsage::completionTokens).orElse(0),
-            response.usage().map(CompletionUsage::totalTokens).orElse(0));
+        <span class="hljs-comment">// 转换 Token 使用量</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">usage</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">TokenUsage</span>(
+            response.usage().map(CompletionUsage::promptTokens).orElse(<span class="hljs-number">0</span>),
+            response.usage().map(CompletionUsage::completionTokens).orElse(<span class="hljs-number">0</span>),
+            response.usage().map(CompletionUsage::totalTokens).orElse(<span class="hljs-number">0</span>));
 
-        // 转换工具调用
-        var toolCalls = new ArrayList&lt;ToolCall&gt;();
+        <span class="hljs-comment">// 转换工具调用</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">toolCalls</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;ToolCall&gt;();
         choice.message().toolCalls().ifPresent(tcs -&gt; {
-            for (var tc : tcs) {
-                toolCalls.add(new ToolCall(
+            <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> tc : tcs) {
+                toolCalls.add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">ToolCall</span>(
                     tc.id(), tc.function().name(), tc.function().arguments()));
             }
         });
 
-        return new ChatResponse(
-            choice.message().content().orElse(&quot;&quot;),
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ChatResponse</span>(
+            choice.message().content().orElse(<span class="hljs-string">""</span>),
             toolCalls,
-            choice.finishReason() != null ?
-                choice.finishReason().toString() : &quot;stop&quot;,
+            choice.finishReason() != <span class="hljs-literal">null</span> ?
+                choice.finishReason().toString() : <span class="hljs-string">"stop"</span>,
             usage,
             modelId,
-            Map.of(&quot;adapter&quot;, &quot;openai-sdk-direct&quot;));
+            Map.of(<span class="hljs-string">"adapter"</span>, <span class="hljs-string">"openai-sdk-direct"</span>));
     }
 
-    @Override
-    public Flux&lt;ChatChunk&gt; chatStream(ChatRequest request) {
-        // 使用 OpenAI SDK 的流式 API
-        return Flux.create(sink -&gt; {
-            var messages = convertMessages(request.messages());
-            var params = ChatCompletionCreateParams.builder()
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> Flux&lt;ChatChunk&gt; <span class="hljs-title function_">chatStream</span><span class="hljs-params">(ChatRequest request)</span> {
+        <span class="hljs-comment">// 使用 OpenAI SDK 的流式 API</span>
+        <span class="hljs-keyword">return</span> Flux.create(sink -&gt; {
+            <span class="hljs-type">var</span> <span class="hljs-variable">messages</span> <span class="hljs-operator">=</span> convertMessages(request.messages());
+            <span class="hljs-type">var</span> <span class="hljs-variable">params</span> <span class="hljs-operator">=</span> ChatCompletionCreateParams.builder()
                 .model(modelId)
                 .messages(messages)
-                .stream(true)
+                .stream(<span class="hljs-literal">true</span>)
                 .temperature(request.temperature())
                 .maxTokens(request.maxTokens())
                 .build();
 
-            try (var stream = client.chat().completions().createStream(params)) {
+            <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">stream</span> <span class="hljs-operator">=</span> client.chat().completions().createStream(params)) {
                 stream.forEach(chunk -&gt; {
-                    var choices = chunk.choices();
-                    if (!choices.isEmpty()) {
-                        var delta = choices.get(0).delta();
-                        var content = delta.content().orElse(&quot;&quot;);
-                        var finishReason = choices.get(0).finishReason();
-                        sink.next(new ChatChunk(content,
-                            finishReason != null ? finishReason.toString() : null, null));
+                    <span class="hljs-type">var</span> <span class="hljs-variable">choices</span> <span class="hljs-operator">=</span> chunk.choices();
+                    <span class="hljs-keyword">if</span> (!choices.isEmpty()) {
+                        <span class="hljs-type">var</span> <span class="hljs-variable">delta</span> <span class="hljs-operator">=</span> choices.get(<span class="hljs-number">0</span>).delta();
+                        <span class="hljs-type">var</span> <span class="hljs-variable">content</span> <span class="hljs-operator">=</span> delta.content().orElse(<span class="hljs-string">""</span>);
+                        <span class="hljs-type">var</span> <span class="hljs-variable">finishReason</span> <span class="hljs-operator">=</span> choices.get(<span class="hljs-number">0</span>).finishReason();
+                        sink.next(<span class="hljs-keyword">new</span> <span class="hljs-title class_">ChatChunk</span>(content,
+                            finishReason != <span class="hljs-literal">null</span> ? finishReason.toString() : <span class="hljs-literal">null</span>, <span class="hljs-literal">null</span>));
                     }
                 });
                 sink.complete();
-            } catch (Exception e) {
+            } <span class="hljs-keyword">catch</span> (Exception e) {
                 sink.error(e);
             }
         });
     }
 
-    @Override
-    public ModelInfo getModelInfo() {
-        return new ModelInfo(
-            modelId, &quot;openai&quot;, 128000, 3.0, 15.0,
-            true, true, true);
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> ModelInfo <span class="hljs-title function_">getModelInfo</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ModelInfo</span>(
+            modelId, <span class="hljs-string">"openai"</span>, <span class="hljs-number">128000</span>, <span class="hljs-number">3.0</span>, <span class="hljs-number">15.0</span>,
+            <span class="hljs-literal">true</span>, <span class="hljs-literal">true</span>, <span class="hljs-literal">true</span>);
     }
 
-    private List&lt;ChatCompletionMessageParam&gt; convertMessages(
-            List&lt;ChatMessage&gt; messages) {
-        return messages.stream().map(msg -&gt; switch (msg.role()) {
-            case &quot;system&quot; -&gt; ChatCompletionMessageParam.ofSystem(msg.content());
-            case &quot;user&quot; -&gt; ChatCompletionMessageParam.ofUser(msg.content());
-            case &quot;assistant&quot; -&gt; ChatCompletionMessageParam.ofAssistant(
+    <span class="hljs-keyword">private</span> List&lt;ChatCompletionMessageParam&gt; <span class="hljs-title function_">convertMessages</span><span class="hljs-params">(
+            List&lt;ChatMessage&gt; messages)</span> {
+        <span class="hljs-keyword">return</span> messages.stream().map(msg -&gt; <span class="hljs-keyword">switch</span> (msg.role()) {
+            <span class="hljs-keyword">case</span> <span class="hljs-string">"system"</span> -&gt; ChatCompletionMessageParam.ofSystem(msg.content());
+            <span class="hljs-keyword">case</span> <span class="hljs-string">"user"</span> -&gt; ChatCompletionMessageParam.ofUser(msg.content());
+            <span class="hljs-keyword">case</span> <span class="hljs-string">"assistant"</span> -&gt; ChatCompletionMessageParam.ofAssistant(
                 ChatCompletionAssistantMessageParam.builder()
                     .content(msg.content())
                     .build());
-            default -&gt; throw new IllegalArgumentException(
-                &quot;Unsupported role: &quot; + msg.role());
+            <span class="hljs-keyword">default</span> -&gt; <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">IllegalArgumentException</span>(
+                <span class="hljs-string">"Unsupported role: "</span> + msg.role());
         }).toList();
     }
 
-    private List&lt;ChatCompletionTool&gt; convertTools(
-            List&lt;ToolDefinition&gt; tools) {
-        if (tools == null || tools.isEmpty()) return List.of();
-        return tools.stream().map(t -&gt; ChatCompletionTool.builder()
+    <span class="hljs-keyword">private</span> List&lt;ChatCompletionTool&gt; <span class="hljs-title function_">convertTools</span><span class="hljs-params">(
+            List&lt;ToolDefinition&gt; tools)</span> {
+        <span class="hljs-keyword">if</span> (tools == <span class="hljs-literal">null</span> || tools.isEmpty()) <span class="hljs-keyword">return</span> List.of();
+        <span class="hljs-keyword">return</span> tools.stream().map(t -&gt; ChatCompletionTool.builder()
             .function(FunctionDefinition.builder()
                 .name(t.name())
                 .description(t.description())
@@ -953,56 +940,54 @@ public class OpenAiSdkChatModelAdapter implements ChatModelPort {
             .build()).toList();
     }
 }
-</code></pre></div>
-<h2>依赖注入：自动切换</h2>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">package com.example.ai.config;
+</code></pre></div><h2>依赖注入：自动切换</h2>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">package</span> com.example.ai.config;
 
-/**
+<span class="hljs-comment">/**
  * 自动选择适配器的配置
  * 优先级：Spring AI Adapter &gt; OpenAI SDK Adapter &gt; Anthropic SDK Adapter
- */
-@Configuration
-public class AiAdapterAutoConfiguration {
+ */</span>
+<span class="hljs-meta">@Configuration</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">AiAdapterAutoConfiguration</span> {
 
-    /**
+    <span class="hljs-comment">/**
      * 当 Spring AI ChatModel 可用时使用 Spring AI 适配器
-     */
-    @Bean
-    @ConditionalOnBean(ChatModel.class)
-    @ConditionalOnMissingBean(name = &quot;primaryChatModelPort&quot;)
-    @Primary
-    public ChatModelPort springAiChatAdapter(ChatClient.Builder builder,
-            ChatModel chatModel) {
-        return new SpringAiChatModelAdapter(builder, chatModel, &quot;gpt-4o&quot;);
+     */</span>
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-meta">@ConditionalOnBean(ChatModel.class)</span>
+    <span class="hljs-meta">@ConditionalOnMissingBean(name = "primaryChatModelPort")</span>
+    <span class="hljs-meta">@Primary</span>
+    <span class="hljs-keyword">public</span> ChatModelPort <span class="hljs-title function_">springAiChatAdapter</span><span class="hljs-params">(ChatClient.Builder builder,
+            ChatModel chatModel)</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">SpringAiChatModelAdapter</span>(builder, chatModel, <span class="hljs-string">"gpt-4o"</span>);
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 当明确配置使用 OpenAI SDK 时
-     */
-    @Bean
-    @ConditionalOnProperty(name = &quot;app.ai.adapter&quot;, havingValue = &quot;openai-sdk&quot;)
-    public ChatModelPort openAiSdkAdapter(
-            @Value(&quot;${openai.api-key}&quot;) String apiKey,
-            @Value(&quot;${openai.model:gpt-4o}&quot;) String model) {
-        return new OpenAiSdkChatModelAdapter(apiKey, model);
+     */</span>
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-meta">@ConditionalOnProperty(name = "app.ai.adapter", havingValue = "openai-sdk")</span>
+    <span class="hljs-keyword">public</span> ChatModelPort <span class="hljs-title function_">openAiSdkAdapter</span><span class="hljs-params">(
+            <span class="hljs-meta">@Value("${openai.api-key}")</span> String apiKey,
+            <span class="hljs-meta">@Value("${openai.model:gpt-4o}")</span> String model)</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">OpenAiSdkChatModelAdapter</span>(apiKey, model);
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 当明确配置使用 Anthropic SDK 时
-     */
-    @Bean
-    @ConditionalOnProperty(name = &quot;app.ai.adapter&quot;, havingValue = &quot;anthropic-sdk&quot;)
-    public ChatModelPort anthropicSdkAdapter(
-            @Value(&quot;${anthropic.api-key}&quot;) String apiKey) {
-        // return new AnthropicSdkChatModelAdapter(apiKey);
-        throw new UnsupportedOperationException(&quot;待实现&quot;);
+     */</span>
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-meta">@ConditionalOnProperty(name = "app.ai.adapter", havingValue = "anthropic-sdk")</span>
+    <span class="hljs-keyword">public</span> ChatModelPort <span class="hljs-title function_">anthropicSdkAdapter</span><span class="hljs-params">(
+            <span class="hljs-meta">@Value("${anthropic.api-key}")</span> String apiKey)</span> {
+        <span class="hljs-comment">// return new AnthropicSdkChatModelAdapter(apiKey);</span>
+        <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">UnsupportedOperationException</span>(<span class="hljs-string">"待实现"</span>);
     }
 }
-</code></pre></div>
-<h2>分层架构图</h2>
+</code></pre></div><h2>分层架构图</h2>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌─────────────────────────────────────────────────────────────────────┐
 │                         表现层 (Presentation)                        │
-│  REST Controller │ SSE Endpoint │ WebSocket │ GraphQL               │
+│  <span class="hljs-attribute">REST</span> Controller │ SSE Endpoint │ WebSocket │ GraphQL               │
 ├─────────────────────────────────────────────────────────────────────┤
 │                         应用层 (Application)                         │
 │  OrderAnalysisService │ QAService │ InsuranceAgentService           │
@@ -1010,7 +995,7 @@ public class AiAdapterAutoConfiguration {
 │  └─ 零依赖具体框架或 SDK                                             │
 ├─────────────────────────────────────────────────────────────────────┤
 │                         领域层 (Domain)                              │
-│  Order │ Policy │ Claim │ AnalysisResult (纯 POJO)                  │
+│  <span class="hljs-attribute">Order</span> │ Policy │ Claim │ AnalysisResult (纯 POJO)                  │
 ├─────────────────────────────────────────────────────────────────────┤
 │                     基础设施层 (Infrastructure)                      │
 │  ┌─────────────────────────────────────────────────────────────┐    │
@@ -1030,47 +1015,45 @@ public class AiAdapterAutoConfiguration {
   表现层 → 应用层 → 领域层
               ↓
          基础设施层 (Port实现，通过 DI 反转依赖)
-</code></pre></div>
-<h2>单元测试优势</h2>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+</code></pre></div><h2>单元测试优势</h2>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">/**
  * 测试业务逻辑 — 只需 mock Port 接口
- */
-@ExtendWith(MockitoExtension.class)
-class OrderAnalysisServiceTest {
+ */</span>
+<span class="hljs-meta">@ExtendWith(MockitoExtension.class)</span>
+<span class="hljs-keyword">class</span> <span class="hljs-title class_">OrderAnalysisServiceTest</span> {
 
-    @Mock
-    private ChatModelPort chatModel;
+    <span class="hljs-meta">@Mock</span>
+    <span class="hljs-keyword">private</span> ChatModelPort chatModel;
 
-    @Mock
-    private RetrievalPort retrieval;
+    <span class="hljs-meta">@Mock</span>
+    <span class="hljs-keyword">private</span> RetrievalPort retrieval;
 
-    @InjectMocks
-    private OrderAnalysisService service;
+    <span class="hljs-meta">@InjectMocks</span>
+    <span class="hljs-keyword">private</span> OrderAnalysisService service;
 
-    @Test
-    void shouldAnalyzeOrderCorrectly() {
-        // Given
-        var order = new Order(&quot;ORD-001&quot;, 99.90, &quot;pending&quot;);
-        when(chatModel.chat(any())).thenReturn(
-            new ChatModelPort.ChatResponse(
-                &quot;订单正常&quot;, List.of(), &quot;stop&quot;,
-                new ChatModelPort.TokenUsage(50, 20, 70),
-                &quot;test-model&quot;, Map.of()));
+    <span class="hljs-meta">@Test</span>
+    <span class="hljs-keyword">void</span> <span class="hljs-title function_">shouldAnalyzeOrderCorrectly</span><span class="hljs-params">()</span> {
+        <span class="hljs-comment">// Given</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">order</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Order</span>(<span class="hljs-string">"ORD-001"</span>, <span class="hljs-number">99.90</span>, <span class="hljs-string">"pending"</span>);
+        <span class="hljs-keyword">when</span>(chatModel.chat(any())).thenReturn(
+            <span class="hljs-keyword">new</span> <span class="hljs-title class_">ChatModelPort</span>.ChatResponse(
+                <span class="hljs-string">"订单正常"</span>, List.of(), <span class="hljs-string">"stop"</span>,
+                <span class="hljs-keyword">new</span> <span class="hljs-title class_">ChatModelPort</span>.TokenUsage(<span class="hljs-number">50</span>, <span class="hljs-number">20</span>, <span class="hljs-number">70</span>),
+                <span class="hljs-string">"test-model"</span>, Map.of()));
 
-        // When
-        var result = service.analyze(order);
+        <span class="hljs-comment">// When</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> service.analyze(order);
 
-        // Then
-        assertEquals(&quot;订单正常&quot;, result);
-        // 验证调用了正确的参数
-        var captor = ArgumentCaptor.forClass(ChatModelPort.ChatRequest.class);
+        <span class="hljs-comment">// Then</span>
+        assertEquals(<span class="hljs-string">"订单正常"</span>, result);
+        <span class="hljs-comment">// 验证调用了正确的参数</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">captor</span> <span class="hljs-operator">=</span> ArgumentCaptor.forClass(ChatModelPort.ChatRequest.class);
         verify(chatModel).chat(captor.capture());
-        assertTrue(captor.getValue().messages().get(0).content()
-            .contains(&quot;ORD-001&quot;));
+        assertTrue(captor.getValue().messages().get(<span class="hljs-number">0</span>).content()
+            .contains(<span class="hljs-string">"ORD-001"</span>));
     }
 }
-</code></pre></div>
-<h2>最佳实践</h2>
+</code></pre></div><h2>最佳实践</h2>
 <ol>
 <li><strong>业务代码只依赖 Port 接口</strong>：通过构造函数注入，永远不 import Spring AI 或任何 SDK 的类</li>
 <li><strong>Port 接口定义在独立的 Maven 模块</strong>：<code>ai-port</code> 模块零外部依赖，只有 JDK + Reactor（用于 Flux）</li>
@@ -1082,18 +1065,18 @@ class OrderAnalysisServiceTest {
 </ol>
 <h2>常见问题</h2>
 <p><strong>Q: 这样是不是过度设计？</strong></p>
-<p>A: 如果你只用一个模型提供商且不打算换，可能是。但 AI 领域变化极快：(1) 模型价格战导致成本优化频繁，(2) 新模型/新协议不断出现，(3) 不同任务需要不同模型。Port &amp; Adapter 的成本远低于&quot;从头重写所有 AI 调用代码&quot;。</p>
+<p>A: 如果你只用一个模型提供商且不打算换，可能是。但 AI 领域变化极快：(1) 模型价格战导致成本优化频繁，(2) 新模型/新协议不断出现，(3) 不同任务需要不同模型。Port &amp; Adapter 的成本远低于"从头重写所有 AI 调用代码"。</p>
 <p><strong>Q: Port 接口如何处理不同 Provider 的特有特性（如 Anthropic cache_control）？</strong></p>
 <p>A: 两种方式：(1) 通过 <code>metadata</code> map 透传（灵活但不优雅），(2) 当特性足够通用时升级为 Port 方法的正式参数。经验法则：如果只有一个 Provider 支持的特性，走 metadata；如果两个以上 Provider 都支持，升级为正式参数。</p>
 <p><strong>Q: 适配层会有性能损失吗？</strong></p>
 <p>A: 几乎为零。适配层主要是对象转换（DTO → SDK 对象 → DTO），都是 in-memory 操作，相比网络 I/O（LLM API 调用通常 500ms-30s）完全可以忽略。</p>
 <h2>相关条目</h2>
 <ul>
-<li><a href="#/09-Java AI框架/09-SpringAI2深度解析" class="cross-ref" data-ref="09-SpringAI2深度解析">09-SpringAI2深度解析</a> — Spring AI 框架深度使用</li>
-<li><a href="#/09-Java AI框架/09-LangChain4j对比与选型" class="cross-ref" data-ref="09-LangChain4j对比与选型">09-LangChain4j对比与选型</a> — 框架对比和选型</li>
-<li><a href="#/08-模型接入与推理/推理部署/08-模型能力矩阵与路由策略" class="cross-ref" data-ref="08-模型能力矩阵与路由策略">08-模型能力矩阵与路由策略</a> — 模型路由实现</li>
-<li><a href="#/08-模型接入与推理/模型API/08-云模型API与SDK使用" class="cross-ref" data-ref="08-云模型API与SDK使用">08-云模型API与SDK使用</a> — 各 Provider SDK 使用（作为 Adapter 的实现参考）</li>
-<li><a href="#/14-AI平台与LLMOps/14-模型网关与Prompt管理" class="cross-ref" data-ref="14-模型网关与Prompt管理">14-模型网关与Prompt管理</a> — 模型网关和平台治理</li>
+<li><a href="#/09-Java AI框架/09-SpringAI2深度解析" class="cross-ref">09-SpringAI2深度解析</a> — Spring AI 框架深度使用</li>
+<li><a href="#/09-Java AI框架/09-LangChain4j对比与选型" class="cross-ref">09-LangChain4j对比与选型</a> — 框架对比和选型</li>
+<li><a href="#/08-模型接入与推理/推理部署/08-模型能力矩阵与路由策略" class="cross-ref">08-模型能力矩阵与路由策略</a> — 模型路由实现</li>
+<li><a href="#/08-模型接入与推理/模型API/08-云模型API与SDK使用" class="cross-ref">08-云模型API与SDK使用</a> — 各 Provider SDK 使用（作为 Adapter 的实现参考）</li>
+<li><a href="#/14-AI平台与LLMOps/14-模型网关与Prompt管理" class="cross-ref">14-模型网关与Prompt管理</a> — 模型网关和平台治理</li>
 </ul>
-</div>
+</body></html></div>
 </article>

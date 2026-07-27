@@ -1,12 +1,12 @@
 
-<article class="kb-entry" data-path="/06-云原生与SRE/容器与编排/06-Docker与Kubernetes云原生部署">
+<article class="kb-entry" data-path="/06-云原生与SRE">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=06">06-云原生与SRE</a></div>
     <h1>Docker 与 Kubernetes — Java 应用云原生部署</h1>
-    <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#docker</span><span class="badge badge-tag">#kubernetes</span><span class="badge badge-tag">#helm</span><span class="badge badge-tag">#java-container</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#docker</span><span class="badge badge-tag">#kubernetes</span><span class="badge badge-tag">#helm</span><span class="badge badge-tag">#java-container</span><span class="badge badge-tag">#distroless</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://docs.docker.com/reference/" target="_blank" rel="noopener" class="source-link" title="Docker 官方文档">Docker 官方文档</a><a href="https://kubernetes.io/docs/home/" target="_blank" rel="noopener" class="source-link" title="Kubernetes 官方文档">Kubernetes 官方文档</a><a href="https://helm.sh/docs/" target="_blank" rel="noopener" class="source-link" title="Helm 官方文档">Helm 官方文档</a><a href="https://www.oreilly.com/library/view/kubernetes-up-and/" target="_blank" rel="noopener" class="source-link" title="《Kubernetes: Up and Running》— Brendan Burns 等">《Kubernetes: Up and Running》— Brendan Burns 等</a></small></div>
   </div>
-  <div class="entry-body"><h1>Docker 与 Kubernetes — Java 应用云原生部署</h1>
+  <div class="entry-body"><html><head></head><body><h1>Docker 与 Kubernetes — Java 应用云原生部署</h1>
 <h2>概述</h2>
 <p>容器化和编排是现代 Java 应用部署的标准方式。对于 AI 应用，容器化还涉及 GPU 资源调度、模型推理服务的 K8s 集成、大镜像优化等额外挑战。</p>
 <p>本文覆盖 Docker 核心原理与 Java 镜像最佳实践、Kubernetes 核心资源、Java 应用 K8s 部署策略、Helm 包管理，以及 AI 服务部署的特殊考量。</p>
@@ -17,99 +17,95 @@
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌──────────────────────┐
 │ writable layer (R/W)  │ ← 容器层（临时，容器删除即丢失）
 ├──────────────────────┤
-│ COPY --from=builder   │ ← 构建产物层 (10 MB)
+│ COPY <span class="hljs-attribute">--from</span>=builder   │ ← 构建产物层 (10 MB)
 ├──────────────────────┤
 │ COPY app.jar          │ ← 应用层 (50 MB)
 ├──────────────────────┤
-│ RUN apt-get install   │ ← 依赖安装层 (200 MB)
+│ <span class="hljs-built_in">RUN</span> apt-<span class="hljs-built_in">get</span> install   │ ← 依赖安装层 (200 MB)
 ├──────────────────────┤
-│ FROM eclipse-temurin  │ ← 基础镜像层 (200 MB)
+│ <span class="hljs-keyword">FROM</span> eclipse-temurin  │ ← 基础镜像层 (200 MB)
 ├──────────────────────┤
-│ FROM ubuntu:24.04     │ ← OS 层 (70 MB)
+│ <span class="hljs-keyword">FROM</span> ubuntu:24.04     │ ← OS 层 (70 MB)
 └──────────────────────┘
-</code></pre></div>
-<p><strong>分层复用：</strong> 如果多个镜像共享相同的基础层，Docker 只存储一份（Content-Addressable Storage）。</p>
+</code></pre></div><p><strong>分层复用：</strong> 如果多个镜像共享相同的基础层，Docker 只存储一份（Content-Addressable Storage）。</p>
 <h3>1.2 Java Dockerfile 最佳实践</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">dockerfile</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-dockerfile"># ============================================
-# Stage 1: Build
-# ============================================
-FROM eclipse-temurin:25-jdk-alpine AS builder
+<div class="code-block"><div class="code-header"><span class="code-lang">dockerfile</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-dockerfile"><span class="hljs-comment"># ============================================</span>
+<span class="hljs-comment"># Stage 1: Build</span>
+<span class="hljs-comment"># ============================================</span>
+<span class="hljs-keyword">FROM</span> eclipse-temurin:<span class="hljs-number">25</span>-jdk-alpine AS builder
 
-WORKDIR /workspace
+<span class="hljs-keyword">WORKDIR</span><span class="language-bash"> /workspace</span>
 
-# 1. 先复制依赖描述文件（利用 Docker 层缓存）
-COPY pom.xml mvnw ./
-COPY .mvn .mvn
+<span class="hljs-comment"># 1. 先复制依赖描述文件（利用 Docker 层缓存）</span>
+<span class="hljs-keyword">COPY</span><span class="language-bash"> pom.xml mvnw ./</span>
+<span class="hljs-keyword">COPY</span><span class="language-bash"> .mvn .mvn</span>
 
-# 2. 下载依赖（此层在 pom.xml 不变时可缓存）
-RUN --mount=type=cache,target=/root/.m2 \
-    ./mvnw dependency:go-offline -B
+<span class="hljs-comment"># 2. 下载依赖（此层在 pom.xml 不变时可缓存）</span>
+<span class="hljs-keyword">RUN</span><span class="language-bash"> --mount=<span class="hljs-built_in">type</span>=cache,target=/root/.m2 \
+    ./mvnw dependency:go-offline -B</span>
 
-# 3. 复制源码并构建
-COPY src src
-RUN --mount=type=cache,target=/root/.m2 \
-    ./mvnw package -DskipTests -B
+<span class="hljs-comment"># 3. 复制源码并构建</span>
+<span class="hljs-keyword">COPY</span><span class="language-bash"> src src</span>
+<span class="hljs-keyword">RUN</span><span class="language-bash"> --mount=<span class="hljs-built_in">type</span>=cache,target=/root/.m2 \
+    ./mvnw package -DskipTests -B</span>
 
-# 4. 使用 Spring Boot layertools 提取分层 JAR
-RUN java -Djarmode=layertools -jar target/*.jar extract \
-    --destination /extracted
+<span class="hljs-comment"># 4. 使用 Spring Boot layertools 提取分层 JAR</span>
+<span class="hljs-keyword">RUN</span><span class="language-bash"> java -Djarmode=layertools -jar target/*.jar extract \
+    --destination /extracted</span>
 
-# ============================================
-# Stage 2: Runtime（最小化镜像）
-# ============================================
-FROM eclipse-temurin:25-jre-alpine AS runtime
+<span class="hljs-comment"># ============================================</span>
+<span class="hljs-comment"># Stage 2: Runtime（最小化镜像）</span>
+<span class="hljs-comment"># ============================================</span>
+<span class="hljs-keyword">FROM</span> eclipse-temurin:<span class="hljs-number">25</span>-jre-alpine AS runtime
 
-# 安全：创建非 root 用户
-RUN addgroup -S appgroup &amp;&amp; adduser -S appuser -G appgroup
+<span class="hljs-comment"># 安全：创建非 root 用户</span>
+<span class="hljs-keyword">RUN</span><span class="language-bash"> addgroup -S appgroup &amp;&amp; adduser -S appuser -G appgroup</span>
 
-WORKDIR /app
+<span class="hljs-keyword">WORKDIR</span><span class="language-bash"> /app</span>
 
-# 按变更频率分层复制，最大化缓存利用
-COPY --from=builder /extracted/dependencies/ ./
-COPY --from=builder /extracted/spring-boot-loader/ ./
-COPY --from=builder /extracted/snapshot-dependencies/ ./
-COPY --from=builder /extracted/application/ ./
+<span class="hljs-comment"># 按变更频率分层复制，最大化缓存利用</span>
+<span class="hljs-keyword">COPY</span><span class="language-bash"> --from=builder /extracted/dependencies/ ./</span>
+<span class="hljs-keyword">COPY</span><span class="language-bash"> --from=builder /extracted/spring-boot-loader/ ./</span>
+<span class="hljs-keyword">COPY</span><span class="language-bash"> --from=builder /extracted/snapshot-dependencies/ ./</span>
+<span class="hljs-keyword">COPY</span><span class="language-bash"> --from=builder /extracted/application/ ./</span>
 
-# JVM 容器感知参数
-ENV JAVA_OPTS=&quot;-XX:+UseZGC \
+<span class="hljs-comment"># JVM 容器感知参数</span>
+<span class="hljs-keyword">ENV</span> JAVA_OPTS=<span class="hljs-string">"-XX:+UseZGC \
  -XX:MaxRAMPercentage=75.0 \
  -XX:+ExitOnOutOfMemoryError \
  -XX:+HeapDumpOnOutOfMemoryError \
- -XX:HeapDumpPath=/tmp/heapdump.hprof&quot;
+ -XX:HeapDumpPath=/tmp/heapdump.hprof"</span>
 
-USER appuser
-EXPOSE 8080
+<span class="hljs-keyword">USER</span> appuser
+<span class="hljs-keyword">EXPOSE</span> <span class="hljs-number">8080</span>
 
-HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
-  CMD wget -qO- http://localhost:8080/actuator/health/liveness || exit 1
+<span class="hljs-keyword">HEALTHCHECK</span><span class="language-bash"> --interval=30s --<span class="hljs-built_in">timeout</span>=3s --retries=3 \
+  CMD wget -qO- http://localhost:8080/actuator/health/liveness || <span class="hljs-built_in">exit</span> 1</span>
 
-ENTRYPOINT [&quot;sh&quot;, &quot;-c&quot;, &quot;java $JAVA_OPTS org.springframework.boot.loader.launch.JarLauncher&quot;]
-</code></pre></div>
-<h3>1.3 JVM 容器感知配置</h3>
+<span class="hljs-keyword">ENTRYPOINT</span><span class="language-bash"> [<span class="hljs-string">"sh"</span>, <span class="hljs-string">"-c"</span>, <span class="hljs-string">"java <span class="hljs-variable">$JAVA_OPTS</span> org.springframework.boot.loader.launch.JarLauncher"</span>]</span>
+</code></pre></div><h3>1.3 JVM 容器感知配置</h3>
 <p>JDK 10+ 默认启用 <code>UseContainerSupport</code>，JVM 自动读取 cgroup 限制而非宿主机配置。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-ini"># 核心参数
--XX:+UseContainerSupport           # 自动检测 cgroup 限制（默认开启）
--XX:MaxRAMPercentage=75.0          # 使用容器内存的 75% 作为最大堆
--XX:InitialRAMPercentage=50.0      # 初始堆为容器内存的 50%
+<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-ini"><span class="hljs-comment"># 核心参数</span>
+-XX:+UseContainerSupport           <span class="hljs-comment"># 自动检测 cgroup 限制（默认开启）</span>
+-XX:<span class="hljs-attr">MaxRAMPercentage</span>=<span class="hljs-number">75.0</span>          <span class="hljs-comment"># 使用容器内存的 75% 作为最大堆</span>
+-XX:<span class="hljs-attr">InitialRAMPercentage</span>=<span class="hljs-number">50.0</span>      <span class="hljs-comment"># 初始堆为容器内存的 50%</span>
 
-# GC 选择
--XX:+UseZGC                        # ZGC：低延迟（&lt;1ms），大堆（TB 级别）
--XX:+UseG1GC                       # G1：均衡选择（默认）
--XX:+UseSerialGC                   # Serial：小内存容器（&lt;512MB）
+<span class="hljs-comment"># GC 选择</span>
+-XX:+UseZGC                        <span class="hljs-comment"># ZGC：低延迟（&lt;1ms），大堆（TB 级别）</span>
+-XX:+UseG1GC                       <span class="hljs-comment"># G1：均衡选择（默认）</span>
+-XX:+UseSerialGC                   <span class="hljs-comment"># Serial：小内存容器（&lt;512MB）</span>
 
-# Spring Boot 配合
--XX:+ExitOnOutOfMemoryError        # OOM 时退出而非僵死（K8s 重启）
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># K8s 资源配置（与 JVM 参数匹配）
-resources:
-  requests:
-    memory: &quot;1Gi&quot;
-    cpu: &quot;500m&quot;
-  limits:
-    memory: &quot;2Gi&quot;    # JVM 检测到 limits=2Gi
-    cpu: &quot;2000m&quot;     # MaxRAMPercentage=75 → max heap = 1.5Gi
-</code></pre></div>
-<h3>1.4 最小化基础镜像选择</h3>
+<span class="hljs-comment"># Spring Boot 配合</span>
+-XX:+ExitOnOutOfMemoryError        <span class="hljs-comment"># OOM 时退出而非僵死（K8s 重启）</span>
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-comment"># K8s 资源配置（与 JVM 参数匹配）</span>
+<span class="hljs-attr">resources:</span>
+  <span class="hljs-attr">requests:</span>
+    <span class="hljs-attr">memory:</span> <span class="hljs-string">"1Gi"</span>
+    <span class="hljs-attr">cpu:</span> <span class="hljs-string">"500m"</span>
+  <span class="hljs-attr">limits:</span>
+    <span class="hljs-attr">memory:</span> <span class="hljs-string">"2Gi"</span>    <span class="hljs-comment"># JVM 检测到 limits=2Gi</span>
+    <span class="hljs-attr">cpu:</span> <span class="hljs-string">"2000m"</span>     <span class="hljs-comment"># MaxRAMPercentage=75 → max heap = 1.5Gi</span>
+</code></pre></div><h3>1.4 最小化基础镜像选择</h3>
 <table>
 <thead>
 <tr>
@@ -150,79 +146,77 @@ resources:
 </tr>
 </tbody></table>
 <p><strong>distroless 镜像注意：</strong> 没有 Shell（不能 exec 进去调试），没有包管理器。通过 K8s ephemeral containers 进行调试。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">dockerfile</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-dockerfile"># Distroless 多阶段构建
-FROM eclipse-temurin:25-jdk-alpine AS builder
-# ... 构建步骤 ...
+<div class="code-block"><div class="code-header"><span class="code-lang">dockerfile</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-dockerfile"><span class="hljs-comment"># Distroless 多阶段构建</span>
+<span class="hljs-keyword">FROM</span> eclipse-temurin:<span class="hljs-number">25</span>-jdk-alpine AS builder
+<span class="hljs-comment"># ... 构建步骤 ...</span>
 
-FROM gcr.io/distroless/java25-debian12
-COPY --from=builder /app /app
-WORKDIR /app
-USER 65532:65532
-CMD [&quot;Main.jar&quot;]
-</code></pre></div>
-<h3>1.5 Docker Compose 本地开发</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># docker-compose.yml
-services:
-  postgres:
-    image: pgvector/pgvector:pg17
-    environment:
-      POSTGRES_DB: ai_knowledge
-      POSTGRES_USER: app
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
-    ports: [&quot;5432:5432&quot;]
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    healthcheck:
-      test: [&quot;CMD-SHELL&quot;, &quot;pg_isready -U app -d ai_knowledge&quot;]
-      interval: 5s
-      timeout: 5s
-      retries: 5
+<span class="hljs-keyword">FROM</span> gcr.io/distroless/java25-debian12
+<span class="hljs-keyword">COPY</span><span class="language-bash"> --from=builder /app /app</span>
+<span class="hljs-keyword">WORKDIR</span><span class="language-bash"> /app</span>
+<span class="hljs-keyword">USER</span> <span class="hljs-number">65532</span>:<span class="hljs-number">65532</span>
+<span class="hljs-keyword">CMD</span><span class="language-bash"> [<span class="hljs-string">"Main.jar"</span>]</span>
+</code></pre></div><h3>1.5 Docker Compose 本地开发</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-comment"># docker-compose.yml</span>
+<span class="hljs-attr">services:</span>
+  <span class="hljs-attr">postgres:</span>
+    <span class="hljs-attr">image:</span> <span class="hljs-string">pgvector/pgvector:pg17</span>
+    <span class="hljs-attr">environment:</span>
+      <span class="hljs-attr">POSTGRES_DB:</span> <span class="hljs-string">ai_knowledge</span>
+      <span class="hljs-attr">POSTGRES_USER:</span> <span class="hljs-string">app</span>
+      <span class="hljs-attr">POSTGRES_PASSWORD:</span> <span class="hljs-string">${DB_PASSWORD}</span>
+    <span class="hljs-attr">ports:</span> [<span class="hljs-string">"5432:5432"</span>]
+    <span class="hljs-attr">volumes:</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-string">pgdata:/var/lib/postgresql/data</span>
+    <span class="hljs-attr">healthcheck:</span>
+      <span class="hljs-attr">test:</span> [<span class="hljs-string">"CMD-SHELL"</span>, <span class="hljs-string">"pg_isready -U app -d ai_knowledge"</span>]
+      <span class="hljs-attr">interval:</span> <span class="hljs-string">5s</span>
+      <span class="hljs-attr">timeout:</span> <span class="hljs-string">5s</span>
+      <span class="hljs-attr">retries:</span> <span class="hljs-number">5</span>
 
-  redis:
-    image: redis:7.4-alpine
-    ports: [&quot;6379:6379&quot;]
-    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD}
-    volumes:
-      - redisdata:/data
+  <span class="hljs-attr">redis:</span>
+    <span class="hljs-attr">image:</span> <span class="hljs-string">redis:7.4-alpine</span>
+    <span class="hljs-attr">ports:</span> [<span class="hljs-string">"6379:6379"</span>]
+    <span class="hljs-attr">command:</span> <span class="hljs-string">redis-server</span> <span class="hljs-string">--appendonly</span> <span class="hljs-literal">yes</span> <span class="hljs-string">--requirepass</span> <span class="hljs-string">${REDIS_PASSWORD}</span>
+    <span class="hljs-attr">volumes:</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-string">redisdata:/data</span>
 
-  ollama:
-    image: ollama/ollama:latest
-    ports: [&quot;11434:11434&quot;]
-    volumes:
-      - ollama_data:/root/.ollama
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [gpu]
+  <span class="hljs-attr">ollama:</span>
+    <span class="hljs-attr">image:</span> <span class="hljs-string">ollama/ollama:latest</span>
+    <span class="hljs-attr">ports:</span> [<span class="hljs-string">"11434:11434"</span>]
+    <span class="hljs-attr">volumes:</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-string">ollama_data:/root/.ollama</span>
+    <span class="hljs-attr">deploy:</span>
+      <span class="hljs-attr">resources:</span>
+        <span class="hljs-attr">reservations:</span>
+          <span class="hljs-attr">devices:</span>
+            <span class="hljs-bullet">-</span> <span class="hljs-attr">driver:</span> <span class="hljs-string">nvidia</span>
+              <span class="hljs-attr">count:</span> <span class="hljs-number">1</span>
+              <span class="hljs-attr">capabilities:</span> [<span class="hljs-string">gpu</span>]
 
-  ai-rag-service:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    ports: [&quot;8080:8080&quot;]
-    environment:
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/ai_knowledge
-      SPRING_DATASOURCE_USERNAME: app
-      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD}
-      SPRING_DATA_REDIS_HOST: redis
-      SPRING_DATA_REDIS_PASSWORD: ${REDIS_PASSWORD}
-      SPRING_AI_OLLAMA_BASE_URL: http://ollama:11434
-      JAVA_OPTS: &quot;-XX:+UseZGC -XX:MaxRAMPercentage=75.0&quot;
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_started
+  <span class="hljs-attr">ai-rag-service:</span>
+    <span class="hljs-attr">build:</span>
+      <span class="hljs-attr">context:</span> <span class="hljs-string">.</span>
+      <span class="hljs-attr">dockerfile:</span> <span class="hljs-string">Dockerfile</span>
+    <span class="hljs-attr">ports:</span> [<span class="hljs-string">"8080:8080"</span>]
+    <span class="hljs-attr">environment:</span>
+      <span class="hljs-attr">SPRING_DATASOURCE_URL:</span> <span class="hljs-string">jdbc:postgresql://postgres:5432/ai_knowledge</span>
+      <span class="hljs-attr">SPRING_DATASOURCE_USERNAME:</span> <span class="hljs-string">app</span>
+      <span class="hljs-attr">SPRING_DATASOURCE_PASSWORD:</span> <span class="hljs-string">${DB_PASSWORD}</span>
+      <span class="hljs-attr">SPRING_DATA_REDIS_HOST:</span> <span class="hljs-string">redis</span>
+      <span class="hljs-attr">SPRING_DATA_REDIS_PASSWORD:</span> <span class="hljs-string">${REDIS_PASSWORD}</span>
+      <span class="hljs-attr">SPRING_AI_OLLAMA_BASE_URL:</span> <span class="hljs-string">http://ollama:11434</span>
+      <span class="hljs-attr">JAVA_OPTS:</span> <span class="hljs-string">"-XX:+UseZGC -XX:MaxRAMPercentage=75.0"</span>
+    <span class="hljs-attr">depends_on:</span>
+      <span class="hljs-attr">postgres:</span>
+        <span class="hljs-attr">condition:</span> <span class="hljs-string">service_healthy</span>
+      <span class="hljs-attr">redis:</span>
+        <span class="hljs-attr">condition:</span> <span class="hljs-string">service_started</span>
 
-volumes:
-  pgdata:
-  redisdata:
-  ollama_data:
-</code></pre></div>
-<hr>
+<span class="hljs-attr">volumes:</span>
+  <span class="hljs-attr">pgdata:</span>
+  <span class="hljs-attr">redisdata:</span>
+  <span class="hljs-attr">ollama_data:</span>
+</code></pre></div><hr>
 <h2>二、Kubernetes 核心概念</h2>
 <h3>2.1 核心资源关系</h3>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌─────────────────────────────────────────────────────────┐
@@ -247,174 +241,170 @@ volumes:
 │  │ ConfigMap │  │  Secret   │  │    PVC    │          │
 │  └───────────┘  └───────────┘  └───────────┘          │
 └─────────────────────────────────────────────────────────┘
-</code></pre></div>
-<h3>2.2 Pod 生命周期与健康检查</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">apiVersion: v1
-kind: Pod
-metadata:
-  name: ai-rag-service
-spec:
-  terminationGracePeriodSeconds: 60  # 优雅关闭时间
+</code></pre></div><h3>2.2 Pod 生命周期与健康检查</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">v1</span>
+<span class="hljs-attr">kind:</span> <span class="hljs-string">Pod</span>
+<span class="hljs-attr">metadata:</span>
+  <span class="hljs-attr">name:</span> <span class="hljs-string">ai-rag-service</span>
+<span class="hljs-attr">spec:</span>
+  <span class="hljs-attr">terminationGracePeriodSeconds:</span> <span class="hljs-number">60</span>  <span class="hljs-comment"># 优雅关闭时间</span>
 
-  containers:
-  - name: app
-    image: registry.example.com/ai-rag-service:1.0.0
-    ports:
-    - containerPort: 8080
+  <span class="hljs-attr">containers:</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">app</span>
+    <span class="hljs-attr">image:</span> <span class="hljs-string">registry.example.com/ai-rag-service:1.0.0</span>
+    <span class="hljs-attr">ports:</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-attr">containerPort:</span> <span class="hljs-number">8080</span>
 
-    # Startup Probe（启动探测）
-    # 仅在容器启动阶段执行，通过后才执行 Liveness/Readiness
-    startupProbe:
-      httpGet:
-        path: /actuator/health/readiness
-        port: 8080
-      initialDelaySeconds: 10
-      periodSeconds: 5
-      failureThreshold: 30  # 最多 150 秒启动时间
+    <span class="hljs-comment"># Startup Probe（启动探测）</span>
+    <span class="hljs-comment"># 仅在容器启动阶段执行，通过后才执行 Liveness/Readiness</span>
+    <span class="hljs-attr">startupProbe:</span>
+      <span class="hljs-attr">httpGet:</span>
+        <span class="hljs-attr">path:</span> <span class="hljs-string">/actuator/health/readiness</span>
+        <span class="hljs-attr">port:</span> <span class="hljs-number">8080</span>
+      <span class="hljs-attr">initialDelaySeconds:</span> <span class="hljs-number">10</span>
+      <span class="hljs-attr">periodSeconds:</span> <span class="hljs-number">5</span>
+      <span class="hljs-attr">failureThreshold:</span> <span class="hljs-number">30</span>  <span class="hljs-comment"># 最多 150 秒启动时间</span>
 
-    # Liveness Probe（存活探测）
-    # 失败 → Kubelet 重启容器
-    livenessProbe:
-      httpGet:
-        path: /actuator/health/liveness
-        port: 8080
-      initialDelaySeconds: 0    # Startup Probe 通过后立即开始
-      periodSeconds: 15
-      timeoutSeconds: 3
-      failureThreshold: 3       # 连续 3 次失败 → 重启
+    <span class="hljs-comment"># Liveness Probe（存活探测）</span>
+    <span class="hljs-comment"># 失败 → Kubelet 重启容器</span>
+    <span class="hljs-attr">livenessProbe:</span>
+      <span class="hljs-attr">httpGet:</span>
+        <span class="hljs-attr">path:</span> <span class="hljs-string">/actuator/health/liveness</span>
+        <span class="hljs-attr">port:</span> <span class="hljs-number">8080</span>
+      <span class="hljs-attr">initialDelaySeconds:</span> <span class="hljs-number">0</span>    <span class="hljs-comment"># Startup Probe 通过后立即开始</span>
+      <span class="hljs-attr">periodSeconds:</span> <span class="hljs-number">15</span>
+      <span class="hljs-attr">timeoutSeconds:</span> <span class="hljs-number">3</span>
+      <span class="hljs-attr">failureThreshold:</span> <span class="hljs-number">3</span>       <span class="hljs-comment"># 连续 3 次失败 → 重启</span>
 
-    # Readiness Probe（就绪探测）
-    # 失败 → 从 Service Endpoints 移除，不接收流量
-    readinessProbe:
-      httpGet:
-        path: /actuator/health/readiness
-        port: 8080
-      initialDelaySeconds: 0
-      periodSeconds: 10
-      timeoutSeconds: 3
-      failureThreshold: 3
+    <span class="hljs-comment"># Readiness Probe（就绪探测）</span>
+    <span class="hljs-comment"># 失败 → 从 Service Endpoints 移除，不接收流量</span>
+    <span class="hljs-attr">readinessProbe:</span>
+      <span class="hljs-attr">httpGet:</span>
+        <span class="hljs-attr">path:</span> <span class="hljs-string">/actuator/health/readiness</span>
+        <span class="hljs-attr">port:</span> <span class="hljs-number">8080</span>
+      <span class="hljs-attr">initialDelaySeconds:</span> <span class="hljs-number">0</span>
+      <span class="hljs-attr">periodSeconds:</span> <span class="hljs-number">10</span>
+      <span class="hljs-attr">timeoutSeconds:</span> <span class="hljs-number">3</span>
+      <span class="hljs-attr">failureThreshold:</span> <span class="hljs-number">3</span>
 
-    # 优雅关闭：preStop Hook + Spring graceful shutdown
-    lifecycle:
-      preStop:
-        exec:
-          command: [&quot;/bin/sh&quot;, &quot;-c&quot;, &quot;sleep 10&quot;] # 等待 Endpoints 更新传播
+    <span class="hljs-comment"># 优雅关闭：preStop Hook + Spring graceful shutdown</span>
+    <span class="hljs-attr">lifecycle:</span>
+      <span class="hljs-attr">preStop:</span>
+        <span class="hljs-attr">exec:</span>
+          <span class="hljs-attr">command:</span> [<span class="hljs-string">"/bin/sh"</span>, <span class="hljs-string">"-c"</span>, <span class="hljs-string">"sleep 10"</span>] <span class="hljs-comment"># 等待 Endpoints 更新传播</span>
 
-    env:
-    - name: SERVER_SHUTDOWN
-      value: &quot;graceful&quot;
-    - name: SPRING_LIFECYCLE_TIMEOUT_PER_SHUTDOWN_PHASE
-      value: &quot;30s&quot;
+    <span class="hljs-attr">env:</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">SERVER_SHUTDOWN</span>
+      <span class="hljs-attr">value:</span> <span class="hljs-string">"graceful"</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">SPRING_LIFECYCLE_TIMEOUT_PER_SHUTDOWN_PHASE</span>
+      <span class="hljs-attr">value:</span> <span class="hljs-string">"30s"</span>
 
-    # 资源限制
-    resources:
-      requests:           # 调度保证
-        memory: &quot;1Gi&quot;
-        cpu: &quot;500m&quot;
-      limits:             # 硬限制
-        memory: &quot;2Gi&quot;
-        cpu: &quot;2000m&quot;
-</code></pre></div>
-<h3>2.3 Deployment 与滚动更新</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: ai-rag-service
-spec:
-  replicas: 3
-  revisionHistoryLimit: 5
+    <span class="hljs-comment"># 资源限制</span>
+    <span class="hljs-attr">resources:</span>
+      <span class="hljs-attr">requests:</span>           <span class="hljs-comment"># 调度保证</span>
+        <span class="hljs-attr">memory:</span> <span class="hljs-string">"1Gi"</span>
+        <span class="hljs-attr">cpu:</span> <span class="hljs-string">"500m"</span>
+      <span class="hljs-attr">limits:</span>             <span class="hljs-comment"># 硬限制</span>
+        <span class="hljs-attr">memory:</span> <span class="hljs-string">"2Gi"</span>
+        <span class="hljs-attr">cpu:</span> <span class="hljs-string">"2000m"</span>
+</code></pre></div><h3>2.3 Deployment 与滚动更新</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">apps/v1</span>
+<span class="hljs-attr">kind:</span> <span class="hljs-string">Deployment</span>
+<span class="hljs-attr">metadata:</span>
+  <span class="hljs-attr">name:</span> <span class="hljs-string">ai-rag-service</span>
+<span class="hljs-attr">spec:</span>
+  <span class="hljs-attr">replicas:</span> <span class="hljs-number">3</span>
+  <span class="hljs-attr">revisionHistoryLimit:</span> <span class="hljs-number">5</span>
 
-  strategy:
-    type: RollingUpdate
-    rollingUpdate:
-      maxSurge: 1         # 允许超出 replicas 的 Pod 数
-      maxUnavailable: 0   # 更新期间不可用 Pod 数（0=先启动新 Pod 再停止旧 Pod）
+  <span class="hljs-attr">strategy:</span>
+    <span class="hljs-attr">type:</span> <span class="hljs-string">RollingUpdate</span>
+    <span class="hljs-attr">rollingUpdate:</span>
+      <span class="hljs-attr">maxSurge:</span> <span class="hljs-number">1</span>         <span class="hljs-comment"># 允许超出 replicas 的 Pod 数</span>
+      <span class="hljs-attr">maxUnavailable:</span> <span class="hljs-number">0</span>   <span class="hljs-comment"># 更新期间不可用 Pod 数（0=先启动新 Pod 再停止旧 Pod）</span>
 
-  selector:
-    matchLabels:
-      app: ai-rag-service
+  <span class="hljs-attr">selector:</span>
+    <span class="hljs-attr">matchLabels:</span>
+      <span class="hljs-attr">app:</span> <span class="hljs-string">ai-rag-service</span>
 
-  template:
-    metadata:
-      labels:
-        app: ai-rag-service
-        version: &quot;1.0.0&quot;
-    spec:
-      # Pod 反亲和：尽量分布到不同节点
-      affinity:
-        podAntiAffinity:
-          preferredDuringSchedulingIgnoredDuringExecution:
-          - weight: 100
-            podAffinityTerm:
-              labelSelector:
-                matchLabels:
-                  app: ai-rag-service
-              topologyKey: kubernetes.io/hostname
+  <span class="hljs-attr">template:</span>
+    <span class="hljs-attr">metadata:</span>
+      <span class="hljs-attr">labels:</span>
+        <span class="hljs-attr">app:</span> <span class="hljs-string">ai-rag-service</span>
+        <span class="hljs-attr">version:</span> <span class="hljs-string">"1.0.0"</span>
+    <span class="hljs-attr">spec:</span>
+      <span class="hljs-comment"># Pod 反亲和：尽量分布到不同节点</span>
+      <span class="hljs-attr">affinity:</span>
+        <span class="hljs-attr">podAntiAffinity:</span>
+          <span class="hljs-attr">preferredDuringSchedulingIgnoredDuringExecution:</span>
+          <span class="hljs-bullet">-</span> <span class="hljs-attr">weight:</span> <span class="hljs-number">100</span>
+            <span class="hljs-attr">podAffinityTerm:</span>
+              <span class="hljs-attr">labelSelector:</span>
+                <span class="hljs-attr">matchLabels:</span>
+                  <span class="hljs-attr">app:</span> <span class="hljs-string">ai-rag-service</span>
+              <span class="hljs-attr">topologyKey:</span> <span class="hljs-string">kubernetes.io/hostname</span>
 
-      containers:
-      - name: app
-        image: registry.example.com/ai-rag-service:1.0.0
-        # ... (Pod 配置同上)
-</code></pre></div>
-<h3>2.4 Service 与 Ingress</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># Service
-apiVersion: v1
-kind: Service
-metadata:
-  name: ai-rag-service
-spec:
-  type: ClusterIP
-  selector:
-    app: ai-rag-service
-  ports:
-  - name: http
-    port: 8080
-    targetPort: 8080
-  sessionAffinity: None   # AI 推理服务通常无状态，不需要 Session 亲和
+      <span class="hljs-attr">containers:</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">app</span>
+        <span class="hljs-attr">image:</span> <span class="hljs-string">registry.example.com/ai-rag-service:1.0.0</span>
+        <span class="hljs-comment"># ... (Pod 配置同上)</span>
+</code></pre></div><h3>2.4 Service 与 Ingress</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-comment"># Service</span>
+<span class="hljs-attr">apiVersion:</span> <span class="hljs-string">v1</span>
+<span class="hljs-attr">kind:</span> <span class="hljs-string">Service</span>
+<span class="hljs-attr">metadata:</span>
+  <span class="hljs-attr">name:</span> <span class="hljs-string">ai-rag-service</span>
+<span class="hljs-attr">spec:</span>
+  <span class="hljs-attr">type:</span> <span class="hljs-string">ClusterIP</span>
+  <span class="hljs-attr">selector:</span>
+    <span class="hljs-attr">app:</span> <span class="hljs-string">ai-rag-service</span>
+  <span class="hljs-attr">ports:</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">http</span>
+    <span class="hljs-attr">port:</span> <span class="hljs-number">8080</span>
+    <span class="hljs-attr">targetPort:</span> <span class="hljs-number">8080</span>
+  <span class="hljs-attr">sessionAffinity:</span> <span class="hljs-string">None</span>   <span class="hljs-comment"># AI 推理服务通常无状态，不需要 Session 亲和</span>
 
----
-# Ingress
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: ai-api-ingress
-  annotations:
-    nginx.ingress.kubernetes.io/proxy-body-size: &quot;50m&quot;
-    nginx.ingress.kubernetes.io/proxy-read-timeout: &quot;300&quot;
-    nginx.ingress.kubernetes.io/proxy-send-timeout: &quot;300&quot;
-    cert-manager.io/cluster-issuer: letsencrypt-prod
-spec:
-  ingressClassName: nginx
-  tls:
-  - hosts:
-    - ai-api.example.com
-    secretName: ai-api-tls
-  rules:
-  - host: ai-api.example.com
-    http:
-      paths:
-      - path: /api/v1/rag
-        pathType: Prefix
-        backend:
-          service:
-            name: ai-rag-service
-            port:
-              number: 8080
-      - path: /api/v1/agent
-        pathType: Prefix
-        backend:
-          service:
-            name: ai-agent-service
-            port:
-              number: 8080
-</code></pre></div>
-<h3>2.5 ConfigMap 与 Secret</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: ai-service-config
-data:
-  application.yml: |
+<span class="hljs-meta">---</span>
+<span class="hljs-comment"># Ingress</span>
+<span class="hljs-attr">apiVersion:</span> <span class="hljs-string">networking.k8s.io/v1</span>
+<span class="hljs-attr">kind:</span> <span class="hljs-string">Ingress</span>
+<span class="hljs-attr">metadata:</span>
+  <span class="hljs-attr">name:</span> <span class="hljs-string">ai-api-ingress</span>
+  <span class="hljs-attr">annotations:</span>
+    <span class="hljs-attr">nginx.ingress.kubernetes.io/proxy-body-size:</span> <span class="hljs-string">"50m"</span>
+    <span class="hljs-attr">nginx.ingress.kubernetes.io/proxy-read-timeout:</span> <span class="hljs-string">"300"</span>
+    <span class="hljs-attr">nginx.ingress.kubernetes.io/proxy-send-timeout:</span> <span class="hljs-string">"300"</span>
+    <span class="hljs-attr">cert-manager.io/cluster-issuer:</span> <span class="hljs-string">letsencrypt-prod</span>
+<span class="hljs-attr">spec:</span>
+  <span class="hljs-attr">ingressClassName:</span> <span class="hljs-string">nginx</span>
+  <span class="hljs-attr">tls:</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-attr">hosts:</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-string">ai-api.example.com</span>
+    <span class="hljs-attr">secretName:</span> <span class="hljs-string">ai-api-tls</span>
+  <span class="hljs-attr">rules:</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-attr">host:</span> <span class="hljs-string">ai-api.example.com</span>
+    <span class="hljs-attr">http:</span>
+      <span class="hljs-attr">paths:</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">path:</span> <span class="hljs-string">/api/v1/rag</span>
+        <span class="hljs-attr">pathType:</span> <span class="hljs-string">Prefix</span>
+        <span class="hljs-attr">backend:</span>
+          <span class="hljs-attr">service:</span>
+            <span class="hljs-attr">name:</span> <span class="hljs-string">ai-rag-service</span>
+            <span class="hljs-attr">port:</span>
+              <span class="hljs-attr">number:</span> <span class="hljs-number">8080</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">path:</span> <span class="hljs-string">/api/v1/agent</span>
+        <span class="hljs-attr">pathType:</span> <span class="hljs-string">Prefix</span>
+        <span class="hljs-attr">backend:</span>
+          <span class="hljs-attr">service:</span>
+            <span class="hljs-attr">name:</span> <span class="hljs-string">ai-agent-service</span>
+            <span class="hljs-attr">port:</span>
+              <span class="hljs-attr">number:</span> <span class="hljs-number">8080</span>
+</code></pre></div><h3>2.5 ConfigMap 与 Secret</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">v1</span>
+<span class="hljs-attr">kind:</span> <span class="hljs-string">ConfigMap</span>
+<span class="hljs-attr">metadata:</span>
+  <span class="hljs-attr">name:</span> <span class="hljs-string">ai-service-config</span>
+<span class="hljs-attr">data:</span>
+  <span class="hljs-attr">application.yml:</span> <span class="hljs-string">|
     spring:
       ai:
         ollama:
@@ -432,260 +422,251 @@ data:
     logging:
       level:
         com.example.ai: DEBUG
+</span>
+<span class="hljs-meta">---</span>
+<span class="hljs-attr">apiVersion:</span> <span class="hljs-string">v1</span>
+<span class="hljs-attr">kind:</span> <span class="hljs-string">Secret</span>
+<span class="hljs-attr">metadata:</span>
+  <span class="hljs-attr">name:</span> <span class="hljs-string">ai-service-secrets</span>
+<span class="hljs-attr">type:</span> <span class="hljs-string">Opaque</span>
+<span class="hljs-attr">stringData:</span>
+  <span class="hljs-attr">openai-api-key:</span> <span class="hljs-string">"sk-..."</span>        <span class="hljs-comment"># 生产环境使用 External Secrets Operator</span>
+  <span class="hljs-attr">db-password:</span> <span class="hljs-string">"secure-password"</span>
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-comment"># Deployment 中使用</span>
+<span class="hljs-attr">spec:</span>
+  <span class="hljs-attr">containers:</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">app</span>
+    <span class="hljs-attr">envFrom:</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-attr">configMapRef:</span>
+        <span class="hljs-attr">name:</span> <span class="hljs-string">ai-service-config</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-attr">secretRef:</span>
+        <span class="hljs-attr">name:</span> <span class="hljs-string">ai-service-secrets</span>
+    <span class="hljs-attr">volumeMounts:</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">config</span>
+      <span class="hljs-attr">mountPath:</span> <span class="hljs-string">/app/config</span>
+      <span class="hljs-attr">readOnly:</span> <span class="hljs-literal">true</span>
+  <span class="hljs-attr">volumes:</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">config</span>
+    <span class="hljs-attr">configMap:</span>
+      <span class="hljs-attr">name:</span> <span class="hljs-string">ai-service-config</span>
+</code></pre></div><h3>2.6 HPA（水平自动伸缩）</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">autoscaling/v2</span>
+<span class="hljs-attr">kind:</span> <span class="hljs-string">HorizontalPodAutoscaler</span>
+<span class="hljs-attr">metadata:</span>
+  <span class="hljs-attr">name:</span> <span class="hljs-string">ai-rag-service-hpa</span>
+<span class="hljs-attr">spec:</span>
+  <span class="hljs-attr">scaleTargetRef:</span>
+    <span class="hljs-attr">apiVersion:</span> <span class="hljs-string">apps/v1</span>
+    <span class="hljs-attr">kind:</span> <span class="hljs-string">Deployment</span>
+    <span class="hljs-attr">name:</span> <span class="hljs-string">ai-rag-service</span>
+  <span class="hljs-attr">minReplicas:</span> <span class="hljs-number">2</span>
+  <span class="hljs-attr">maxReplicas:</span> <span class="hljs-number">10</span>
+  <span class="hljs-attr">metrics:</span>
+  <span class="hljs-comment"># CPU 利用率</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-attr">type:</span> <span class="hljs-string">Resource</span>
+    <span class="hljs-attr">resource:</span>
+      <span class="hljs-attr">name:</span> <span class="hljs-string">cpu</span>
+      <span class="hljs-attr">target:</span>
+        <span class="hljs-attr">type:</span> <span class="hljs-string">Utilization</span>
+        <span class="hljs-attr">averageUtilization:</span> <span class="hljs-number">70</span>
 
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: ai-service-secrets
-type: Opaque
-stringData:
-  openai-api-key: &quot;sk-...&quot;        # 生产环境使用 External Secrets Operator
-  db-password: &quot;secure-password&quot;
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># Deployment 中使用
-spec:
-  containers:
-  - name: app
-    envFrom:
-    - configMapRef:
-        name: ai-service-config
-    - secretRef:
-        name: ai-service-secrets
-    volumeMounts:
-    - name: config
-      mountPath: /app/config
-      readOnly: true
-  volumes:
-  - name: config
-    configMap:
-      name: ai-service-config
-</code></pre></div>
-<h3>2.6 HPA（水平自动伸缩）</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">apiVersion: autoscaling/v2
-kind: HorizontalPodAutoscaler
-metadata:
-  name: ai-rag-service-hpa
-spec:
-  scaleTargetRef:
-    apiVersion: apps/v1
-    kind: Deployment
-    name: ai-rag-service
-  minReplicas: 2
-  maxReplicas: 10
-  metrics:
-  # CPU 利用率
-  - type: Resource
-    resource:
-      name: cpu
-      target:
-        type: Utilization
-        averageUtilization: 70
+  <span class="hljs-comment"># 自定义指标（如请求延迟 P95）</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-attr">type:</span> <span class="hljs-string">Pods</span>
+    <span class="hljs-attr">pods:</span>
+      <span class="hljs-attr">metric:</span>
+        <span class="hljs-attr">name:</span> <span class="hljs-string">http_request_duration_milliseconds_p95</span>
+      <span class="hljs-attr">target:</span>
+        <span class="hljs-attr">type:</span> <span class="hljs-string">AverageValue</span>
+        <span class="hljs-attr">averageValue:</span> <span class="hljs-string">"500"</span>   <span class="hljs-comment"># P95 延迟超过 500ms 时扩展</span>
 
-  # 自定义指标（如请求延迟 P95）
-  - type: Pods
-    pods:
-      metric:
-        name: http_request_duration_milliseconds_p95
-      target:
-        type: AverageValue
-        averageValue: &quot;500&quot;   # P95 延迟超过 500ms 时扩展
-
-  behavior:
-    scaleDown:
-      stabilizationWindowSeconds: 300  # 稳定窗口 5 分钟
-      policies:
-      - type: Percent
-        value: 50
-        periodSeconds: 60
-    scaleUp:
-      stabilizationWindowSeconds: 30
-      policies:
-      - type: Percent
-        value: 100
-        periodSeconds: 15
-      - type: Pods
-        value: 4
-        periodSeconds: 15
-      selectPolicy: Max
-</code></pre></div>
-<hr>
+  <span class="hljs-attr">behavior:</span>
+    <span class="hljs-attr">scaleDown:</span>
+      <span class="hljs-attr">stabilizationWindowSeconds:</span> <span class="hljs-number">300</span>  <span class="hljs-comment"># 稳定窗口 5 分钟</span>
+      <span class="hljs-attr">policies:</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">type:</span> <span class="hljs-string">Percent</span>
+        <span class="hljs-attr">value:</span> <span class="hljs-number">50</span>
+        <span class="hljs-attr">periodSeconds:</span> <span class="hljs-number">60</span>
+    <span class="hljs-attr">scaleUp:</span>
+      <span class="hljs-attr">stabilizationWindowSeconds:</span> <span class="hljs-number">30</span>
+      <span class="hljs-attr">policies:</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">type:</span> <span class="hljs-string">Percent</span>
+        <span class="hljs-attr">value:</span> <span class="hljs-number">100</span>
+        <span class="hljs-attr">periodSeconds:</span> <span class="hljs-number">15</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">type:</span> <span class="hljs-string">Pods</span>
+        <span class="hljs-attr">value:</span> <span class="hljs-number">4</span>
+        <span class="hljs-attr">periodSeconds:</span> <span class="hljs-number">15</span>
+      <span class="hljs-attr">selectPolicy:</span> <span class="hljs-string">Max</span>
+</code></pre></div><hr>
 <h2>三、Helm</h2>
 <h3>3.1 Chart 结构</h3>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>ai-rag-service/
-├── Chart.yaml            # Chart 元数据
-├── values.yaml           # 默认配置值
-├── values-prod.yaml      # 生产环境覆盖
-├── templates/
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>ai-rag-service<span class="hljs-symbol">/</span>
+├── Chart.yaml            <span class="hljs-comment"># Chart 元数据</span>
+├── values.yaml           <span class="hljs-comment"># 默认配置值</span>
+├── values-prod.yaml      <span class="hljs-comment"># 生产环境覆盖</span>
+├── templates<span class="hljs-symbol">/</span>
 │   ├── deployment.yaml
 │   ├── service.yaml
 │   ├── ingress.yaml
 │   ├── configmap.yaml
 │   ├── secret.yaml
 │   ├── hpa.yaml
-│   └── _helpers.tpl      # 模板辅助函数
-└── charts/               # 子 Chart 依赖
-</code></pre></div>
-<h3>3.2 Chart.yaml</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">apiVersion: v2
-name: ai-rag-service
-description: AI RAG Knowledge Service
-type: application
-version: 1.0.0
-appVersion: &quot;1.0.0&quot;
-dependencies:
-  - name: postgresql
-    version: &quot;15.x.x&quot;
-    repository: &quot;https://charts.bitnami.com/bitnami&quot;
-    condition: postgresql.enabled
-  - name: redis
-    version: &quot;19.x.x&quot;
-    repository: &quot;https://charts.bitnami.com/bitnami&quot;
-    condition: redis.enabled
-</code></pre></div>
-<h3>3.3 values.yaml 模板</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># values.yaml
-replicaCount: 3
+│   └── _helpers.tpl      <span class="hljs-comment"># 模板辅助函数</span>
+└── charts<span class="hljs-symbol">/</span>               <span class="hljs-comment"># 子 Chart 依赖</span>
+</code></pre></div><h3>3.2 Chart.yaml</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">v2</span>
+<span class="hljs-attr">name:</span> <span class="hljs-string">ai-rag-service</span>
+<span class="hljs-attr">description:</span> <span class="hljs-string">AI</span> <span class="hljs-string">RAG</span> <span class="hljs-string">Knowledge</span> <span class="hljs-string">Service</span>
+<span class="hljs-attr">type:</span> <span class="hljs-string">application</span>
+<span class="hljs-attr">version:</span> <span class="hljs-number">1.0</span><span class="hljs-number">.0</span>
+<span class="hljs-attr">appVersion:</span> <span class="hljs-string">"1.0.0"</span>
+<span class="hljs-attr">dependencies:</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">postgresql</span>
+    <span class="hljs-attr">version:</span> <span class="hljs-string">"15.x.x"</span>
+    <span class="hljs-attr">repository:</span> <span class="hljs-string">"https://charts.bitnami.com/bitnami"</span>
+    <span class="hljs-attr">condition:</span> <span class="hljs-string">postgresql.enabled</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">redis</span>
+    <span class="hljs-attr">version:</span> <span class="hljs-string">"19.x.x"</span>
+    <span class="hljs-attr">repository:</span> <span class="hljs-string">"https://charts.bitnami.com/bitnami"</span>
+    <span class="hljs-attr">condition:</span> <span class="hljs-string">redis.enabled</span>
+</code></pre></div><h3>3.3 values.yaml 模板</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-comment"># values.yaml</span>
+<span class="hljs-attr">replicaCount:</span> <span class="hljs-number">3</span>
 
-image:
-  repository: registry.example.com/ai-rag-service
-  tag: &quot;1.0.0&quot;
-  pullPolicy: IfNotPresent
+<span class="hljs-attr">image:</span>
+  <span class="hljs-attr">repository:</span> <span class="hljs-string">registry.example.com/ai-rag-service</span>
+  <span class="hljs-attr">tag:</span> <span class="hljs-string">"1.0.0"</span>
+  <span class="hljs-attr">pullPolicy:</span> <span class="hljs-string">IfNotPresent</span>
 
-service:
-  type: ClusterIP
-  port: 8080
+<span class="hljs-attr">service:</span>
+  <span class="hljs-attr">type:</span> <span class="hljs-string">ClusterIP</span>
+  <span class="hljs-attr">port:</span> <span class="hljs-number">8080</span>
 
-ingress:
-  enabled: true
-  className: nginx
-  hosts:
-    - host: ai-api.example.com
-      paths:
-        - path: /api/v1/rag
-          pathType: Prefix
+<span class="hljs-attr">ingress:</span>
+  <span class="hljs-attr">enabled:</span> <span class="hljs-literal">true</span>
+  <span class="hljs-attr">className:</span> <span class="hljs-string">nginx</span>
+  <span class="hljs-attr">hosts:</span>
+    <span class="hljs-bullet">-</span> <span class="hljs-attr">host:</span> <span class="hljs-string">ai-api.example.com</span>
+      <span class="hljs-attr">paths:</span>
+        <span class="hljs-bullet">-</span> <span class="hljs-attr">path:</span> <span class="hljs-string">/api/v1/rag</span>
+          <span class="hljs-attr">pathType:</span> <span class="hljs-string">Prefix</span>
 
-resources:
-  limits:
-    memory: &quot;2Gi&quot;
-    cpu: &quot;2000m&quot;
-  requests:
-    memory: &quot;1Gi&quot;
-    cpu: &quot;500m&quot;
+<span class="hljs-attr">resources:</span>
+  <span class="hljs-attr">limits:</span>
+    <span class="hljs-attr">memory:</span> <span class="hljs-string">"2Gi"</span>
+    <span class="hljs-attr">cpu:</span> <span class="hljs-string">"2000m"</span>
+  <span class="hljs-attr">requests:</span>
+    <span class="hljs-attr">memory:</span> <span class="hljs-string">"1Gi"</span>
+    <span class="hljs-attr">cpu:</span> <span class="hljs-string">"500m"</span>
 
-autoscaling:
-  enabled: true
-  minReplicas: 2
-  maxReplicas: 10
-  targetCPUUtilizationPercentage: 70
+<span class="hljs-attr">autoscaling:</span>
+  <span class="hljs-attr">enabled:</span> <span class="hljs-literal">true</span>
+  <span class="hljs-attr">minReplicas:</span> <span class="hljs-number">2</span>
+  <span class="hljs-attr">maxReplicas:</span> <span class="hljs-number">10</span>
+  <span class="hljs-attr">targetCPUUtilizationPercentage:</span> <span class="hljs-number">70</span>
 
-jvm:
-  gc: &quot;ZGC&quot;
-  maxRAMPercentage: 75.0
+<span class="hljs-attr">jvm:</span>
+  <span class="hljs-attr">gc:</span> <span class="hljs-string">"ZGC"</span>
+  <span class="hljs-attr">maxRAMPercentage:</span> <span class="hljs-number">75.0</span>
 
-# 模型服务和 Embedding 配置
-ai:
-  openai:
-    apiKeySecretName: &quot;ai-service-secrets&quot;
-    apiKeySecretKey: &quot;openai-api-key&quot;
-  ollama:
-    baseUrl: &quot;http://ollama-service:11434&quot;
-  embedding:
-    model: &quot;text-embedding-3-small&quot;
-    dimensions: 1536
+<span class="hljs-comment"># 模型服务和 Embedding 配置</span>
+<span class="hljs-attr">ai:</span>
+  <span class="hljs-attr">openai:</span>
+    <span class="hljs-attr">apiKeySecretName:</span> <span class="hljs-string">"ai-service-secrets"</span>
+    <span class="hljs-attr">apiKeySecretKey:</span> <span class="hljs-string">"openai-api-key"</span>
+  <span class="hljs-attr">ollama:</span>
+    <span class="hljs-attr">baseUrl:</span> <span class="hljs-string">"http://ollama-service:11434"</span>
+  <span class="hljs-attr">embedding:</span>
+    <span class="hljs-attr">model:</span> <span class="hljs-string">"text-embedding-3-small"</span>
+    <span class="hljs-attr">dimensions:</span> <span class="hljs-number">1536</span>
 
-# 依赖服务配置
-postgresql:
-  enabled: true
-  auth:
-    username: app
-    database: ai_knowledge
-    existingSecret: db-credentials
+<span class="hljs-comment"># 依赖服务配置</span>
+<span class="hljs-attr">postgresql:</span>
+  <span class="hljs-attr">enabled:</span> <span class="hljs-literal">true</span>
+  <span class="hljs-attr">auth:</span>
+    <span class="hljs-attr">username:</span> <span class="hljs-string">app</span>
+    <span class="hljs-attr">database:</span> <span class="hljs-string">ai_knowledge</span>
+    <span class="hljs-attr">existingSecret:</span> <span class="hljs-string">db-credentials</span>
 
-redis:
-  enabled: true
-  auth:
-    existingSecret: redis-credentials
-</code></pre></div>
-<hr>
+<span class="hljs-attr">redis:</span>
+  <span class="hljs-attr">enabled:</span> <span class="hljs-literal">true</span>
+  <span class="hljs-attr">auth:</span>
+    <span class="hljs-attr">existingSecret:</span> <span class="hljs-string">redis-credentials</span>
+</code></pre></div><hr>
 <h2>四、AI 服务部署</h2>
 <h3>4.1 vLLM 推理服务 K8s 部署</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: vllm-qwen3
-spec:
-  replicas: 1
-  selector:
-    matchLabels:
-      app: vllm-qwen3
-  template:
-    spec:
-      containers:
-      - name: vllm
-        image: vllm/vllm-openai:latest
-        command:
-        - python
-        - -m
-        - vllm.entrypoints.openai.api_server
-        args:
-        - --model
-        - Qwen/Qwen3-14B
-        - --tensor-parallel-size
-        - &quot;1&quot;
-        - --max-model-len
-        - &quot;32768&quot;
-        - --gpu-memory-utilization
-        - &quot;0.90&quot;
-        ports:
-        - containerPort: 8000
-        resources:
-          limits:
-            nvidia.com/gpu: 1
-          requests:
-            nvidia.com/gpu: 1
-        volumeMounts:
-        - name: model-cache
-          mountPath: /root/.cache/huggingface
-        env:
-        - name: HF_HOME
-          value: /root/.cache/huggingface
-      volumes:
-      - name: model-cache
-        persistentVolumeClaim:
-          claimName: hf-model-cache
-</code></pre></div>
-<h3>4.2 GPU 调度</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># GPU 节点选择
-spec:
-  nodeSelector:
-    accelerator: nvidia-tesla-t4
-  tolerations:
-  - key: &quot;nvidia.com/gpu&quot;
-    operator: &quot;Exists&quot;
-    effect: &quot;NoSchedule&quot;
-</code></pre></div>
-<h3>4.3 KServe（Serverless 模型推理）</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">apiVersion: serving.kserve.io/v1beta1
-kind: InferenceService
-metadata:
-  name: qwen3-14b
-spec:
-  predictor:
-    pytorch:
-      storageUri: &quot;s3://models/qwen3-14b&quot;
-      resources:
-        limits:
-          nvidia.com/gpu: 1
-        requests:
-          nvidia.com/gpu: 1
-      # Scale to zero when idle
-      minReplicas: 0
-      maxReplicas: 3
-      scaleTarget: 1
-      scaleMetric: concurrency
-</code></pre></div>
-<hr>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">apps/v1</span>
+<span class="hljs-attr">kind:</span> <span class="hljs-string">Deployment</span>
+<span class="hljs-attr">metadata:</span>
+  <span class="hljs-attr">name:</span> <span class="hljs-string">vllm-qwen3</span>
+<span class="hljs-attr">spec:</span>
+  <span class="hljs-attr">replicas:</span> <span class="hljs-number">1</span>
+  <span class="hljs-attr">selector:</span>
+    <span class="hljs-attr">matchLabels:</span>
+      <span class="hljs-attr">app:</span> <span class="hljs-string">vllm-qwen3</span>
+  <span class="hljs-attr">template:</span>
+    <span class="hljs-attr">spec:</span>
+      <span class="hljs-attr">containers:</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">vllm</span>
+        <span class="hljs-attr">image:</span> <span class="hljs-string">vllm/vllm-openai:latest</span>
+        <span class="hljs-attr">command:</span>
+        <span class="hljs-bullet">-</span> <span class="hljs-string">python</span>
+        <span class="hljs-bullet">-</span> <span class="hljs-string">-m</span>
+        <span class="hljs-bullet">-</span> <span class="hljs-string">vllm.entrypoints.openai.api_server</span>
+        <span class="hljs-attr">args:</span>
+        <span class="hljs-bullet">-</span> <span class="hljs-string">--model</span>
+        <span class="hljs-bullet">-</span> <span class="hljs-string">Qwen/Qwen3-14B</span>
+        <span class="hljs-bullet">-</span> <span class="hljs-string">--tensor-parallel-size</span>
+        <span class="hljs-bullet">-</span> <span class="hljs-string">"1"</span>
+        <span class="hljs-bullet">-</span> <span class="hljs-string">--max-model-len</span>
+        <span class="hljs-bullet">-</span> <span class="hljs-string">"32768"</span>
+        <span class="hljs-bullet">-</span> <span class="hljs-string">--gpu-memory-utilization</span>
+        <span class="hljs-bullet">-</span> <span class="hljs-string">"0.90"</span>
+        <span class="hljs-attr">ports:</span>
+        <span class="hljs-bullet">-</span> <span class="hljs-attr">containerPort:</span> <span class="hljs-number">8000</span>
+        <span class="hljs-attr">resources:</span>
+          <span class="hljs-attr">limits:</span>
+            <span class="hljs-attr">nvidia.com/gpu:</span> <span class="hljs-number">1</span>
+          <span class="hljs-attr">requests:</span>
+            <span class="hljs-attr">nvidia.com/gpu:</span> <span class="hljs-number">1</span>
+        <span class="hljs-attr">volumeMounts:</span>
+        <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">model-cache</span>
+          <span class="hljs-attr">mountPath:</span> <span class="hljs-string">/root/.cache/huggingface</span>
+        <span class="hljs-attr">env:</span>
+        <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">HF_HOME</span>
+          <span class="hljs-attr">value:</span> <span class="hljs-string">/root/.cache/huggingface</span>
+      <span class="hljs-attr">volumes:</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">model-cache</span>
+        <span class="hljs-attr">persistentVolumeClaim:</span>
+          <span class="hljs-attr">claimName:</span> <span class="hljs-string">hf-model-cache</span>
+</code></pre></div><h3>4.2 GPU 调度</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-comment"># GPU 节点选择</span>
+<span class="hljs-attr">spec:</span>
+  <span class="hljs-attr">nodeSelector:</span>
+    <span class="hljs-attr">accelerator:</span> <span class="hljs-string">nvidia-tesla-t4</span>
+  <span class="hljs-attr">tolerations:</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-attr">key:</span> <span class="hljs-string">"nvidia.com/gpu"</span>
+    <span class="hljs-attr">operator:</span> <span class="hljs-string">"Exists"</span>
+    <span class="hljs-attr">effect:</span> <span class="hljs-string">"NoSchedule"</span>
+</code></pre></div><h3>4.3 KServe（Serverless 模型推理）</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">serving.kserve.io/v1beta1</span>
+<span class="hljs-attr">kind:</span> <span class="hljs-string">InferenceService</span>
+<span class="hljs-attr">metadata:</span>
+  <span class="hljs-attr">name:</span> <span class="hljs-string">qwen3-14b</span>
+<span class="hljs-attr">spec:</span>
+  <span class="hljs-attr">predictor:</span>
+    <span class="hljs-attr">pytorch:</span>
+      <span class="hljs-attr">storageUri:</span> <span class="hljs-string">"s3://models/qwen3-14b"</span>
+      <span class="hljs-attr">resources:</span>
+        <span class="hljs-attr">limits:</span>
+          <span class="hljs-attr">nvidia.com/gpu:</span> <span class="hljs-number">1</span>
+        <span class="hljs-attr">requests:</span>
+          <span class="hljs-attr">nvidia.com/gpu:</span> <span class="hljs-number">1</span>
+      <span class="hljs-comment"># Scale to zero when idle</span>
+      <span class="hljs-attr">minReplicas:</span> <span class="hljs-number">0</span>
+      <span class="hljs-attr">maxReplicas:</span> <span class="hljs-number">3</span>
+      <span class="hljs-attr">scaleTarget:</span> <span class="hljs-number">1</span>
+      <span class="hljs-attr">scaleMetric:</span> <span class="hljs-string">concurrency</span>
+</code></pre></div><hr>
 <h2>常见问题</h2>
 <p><strong>Q: JVM 容器内存 OOMKilled 怎么办？</strong>
 A: 检查 <code>limits.memory</code> 是否大于 <code>MaxRAMPercentage</code> 的堆 + Metaspace + 线程栈 + 直接内存 + Native 内存。公式：<code>总内存 &gt;= 堆(75%) + Metaspace(256MB) + 线程栈(1MB * threads) + 直接内存 + 系统开销(200MB)</code>。</p>
@@ -698,9 +679,9 @@ A: 攻击面最小（无 Shell、无包管理器、无系统工具），CVE 少�
 <hr>
 <h2>相关条目</h2>
 <ul>
-<li><a href="#/06-云原生与SRE/可观测性与CI/06-OpenTelemetry可观测性体系" class="cross-ref" data-ref="06-OpenTelemetry可观测性体系">06-OpenTelemetry可观测性体系</a> — 可观测性与监控</li>
-<li><a href="#/06-云原生与SRE/可观测性与CI/06-CICD与基础设施即代码" class="cross-ref" data-ref="06-CICD与基础设施即代码">06-CICD与基础设施即代码</a> — CI/CD 流水线和 GitOps</li>
-<li><a href="#/05-分布式架构/弹性设计/05-熔断限流与弹性设计" class="cross-ref" data-ref="05-熔断限流与弹性设计">05-熔断限流与弹性设计</a> — K8s 中的弹性设计</li>
+<li><a href="#/06-云原生与SRE/可观测性与CI/06-OpenTelemetry可观测性体系" class="cross-ref">06-OpenTelemetry可观测性体系</a> — 可观测性与监控</li>
+<li><a href="#/06-云原生与SRE/可观测性与CI/06-CICD与基础设施即代码" class="cross-ref">06-CICD与基础设施即代码</a> — CI/CD 流水线和 GitOps</li>
+<li><a href="#/05-分布式架构/弹性设计/05-熔断限流与弹性设计" class="cross-ref">05-熔断限流与弹性设计</a> — K8s 中的弹性设计</li>
 </ul>
-</div>
+</body></html></div>
 </article>

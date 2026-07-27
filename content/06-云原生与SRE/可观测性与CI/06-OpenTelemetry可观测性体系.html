@@ -1,12 +1,12 @@
 
-<article class="kb-entry" data-path="/06-云原生与SRE/可观测性与CI/06-OpenTelemetry可观测性体系">
+<article class="kb-entry" data-path="/06-云原生与SRE">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=06">06-云原生与SRE</a></div>
     <h1>OpenTelemetry 可观测性体系</h1>
-    <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#opentelemetry</span><span class="badge badge-tag">#observability</span><span class="badge badge-tag">#metrics</span><span class="badge badge-tag">#tracing</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#opentelemetry</span><span class="badge badge-tag">#observability</span><span class="badge badge-tag">#metrics</span><span class="badge badge-tag">#tracing</span><span class="badge badge-tag">#logging</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://opentelemetry.io/docs/languages/java/" target="_blank" rel="noopener" class="source-link" title="OpenTelemetry Java 官方文档">OpenTelemetry Java 官方文档</a><a href="https://opentelemetry.io/docs/specs/semconv/gen-ai/" target="_blank" rel="noopener" class="source-link" title="OpenTelemetry GenAI 语义约定">OpenTelemetry GenAI 语义约定</a><a href="https://grafana.com/docs/grafana/latest/" target="_blank" rel="noopener" class="source-link" title="Grafana 官方文档">Grafana 官方文档</a><a href="https://prometheus.io/docs/introduction/overview/" target="_blank" rel="noopener" class="source-link" title="Prometheus 官方文档">Prometheus 官方文档</a></small></div>
   </div>
-  <div class="entry-body"><h1>OpenTelemetry 可观测性体系</h1>
+  <div class="entry-body"><html><head></head><body><h1>OpenTelemetry 可观测性体系</h1>
 <h2>概述</h2>
 <p>可观测性（Observability）是生产系统运维的基础能力。OpenTelemetry（OTel）作为 CNCF 孵化项目，已成为分布式追踪、指标和日志的统一标准。在 AI 应用中，GenAI 语义约定（SemConv）为 LLM 调用、RAG 检索、Tool Calling 提供了标准化的观测维度。</p>
 <p>本文深入 OTel 架构、Java 集成方案、GenAI 语义约定的完整应用、Prometheus + Grafana 实现，以及 AI 应用专属的 Dashboard 和告警设计。</p>
@@ -23,30 +23,29 @@
 </thead>
 <tbody><tr>
 <td>Metrics</td>
-<td>&quot;系统发生了什么？&quot;</td>
+<td>"系统发生了什么？"</td>
 <td>Prometheus</td>
 <td>Counter/Gauge/Histogram/Summary</td>
 </tr>
 <tr>
 <td>Tracing</td>
-<td>&quot;一次请求如何流转？&quot;</td>
+<td>"一次请求如何流转？"</td>
 <td>Tempo/Jaeger</td>
 <td>Span/Trace</td>
 </tr>
 <tr>
 <td>Logging</td>
-<td>&quot;具体发生了什么？&quot;</td>
+<td>"具体发生了什么？"</td>
 <td>Loki/ELK</td>
 <td>结构化日志</td>
 </tr>
 </tbody></table>
 <p><strong>三者关系：</strong> Metrics 发现问题，Tracing 定位问题范围，Logging 提供问题细节。</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>请求示例：
-  Metrics: &quot;延迟 P99 从 200ms 飙升到 2s&quot;（发现问题）
-  Tracing: &quot;RAG 检索耗时 1.5s，ES 查询占 1.2s&quot;（定位范围）
-  Logging: &quot;ES 查询日志显示 shard failure&quot;（定位原因）
-</code></pre></div>
-<hr>
+<span class="hljs-symbol">  Metrics:</span> <span class="hljs-string">"延迟 P99 从 200ms 飙升到 2s"</span>（发现问题）
+<span class="hljs-symbol">  Tracing:</span> <span class="hljs-string">"RAG 检索耗时 1.5s，ES 查询占 1.2s"</span>（定位范围）
+<span class="hljs-symbol">  Logging:</span> <span class="hljs-string">"ES 查询日志显示 shard failure"</span>（定位原因）
+</code></pre></div><hr>
 <h2>二、OpenTelemetry 架构</h2>
 <h3>2.1 核心组件</h3>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌──────────────────────────────────────────────────────────────────┐
@@ -57,11 +56,11 @@
 │  └──────┬──────┘  └──────┬──────┘  └──────┬───────────────────┘ │
 │         │                │                │                      │
 │  ┌──────▼────────────────▼────────────────▼──────────────────┐  │
-│  │              OTel SDK / API                                │  │
-│  │  SpanProcessor / MetricReader / LogRecordProcessor         │  │
+│  │              OTel SDK <span class="hljs-symbol">/</span> API                                │  │
+│  │  SpanProcessor <span class="hljs-symbol">/</span> MetricReader <span class="hljs-symbol">/</span> LogRecordProcessor         │  │
 │  └──────┬─────────────────────────────────────────────────────┘  │
 └─────────┼────────────────────────────────────────────────────────┘
-          │ OTLP (OpenTelemetry Protocol): gRPC/HTTP
+          │ OTLP (OpenTelemetry Protocol): gRPC<span class="hljs-symbol">/HTTP</span>
           ▼
 ┌─────────────────────────────────────────────────────┐
 │               OTel Collector                        │
@@ -74,33 +73,30 @@
 └─────────────────┬─────────────────┬─────────────────┘
                   │                 │
          ┌────────▼────┐   ┌───────▼──────┐
-         │  Prometheus  │   │  Tempo/Jaeger│
+         │  Prometheus  │   │  Tempo<span class="hljs-operator">/</span>Jaeger│
          │  (Metrics)   │   │  (Traces)    │
          └──────────────┘   └──────────────┘
-</code></pre></div>
-<h3>2.2 Context Propagation</h3>
+</code></pre></div><h3>2.2 Context Propagation</h3>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>HTTP Request Headers:
-  traceparent: 00-&lt;trace_id&gt;-&lt;span_id&gt;-01
+  traceparent: <span class="hljs-number">00</span>-&lt;trace_id&gt;-&lt;span_id&gt;-01
   tracestate: vendor-specific-key=value
 
 W3C TraceContext 格式：
-  version(2hex)-trace-id(32hex)-span-id(16hex)-trace-flags(2hex)
-  例: 00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01
-</code></pre></div>
-<h3>2.3 Span 结构</h3>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Trace:
-├── Span A: &quot;POST /api/chat&quot;              [duration: 3.2s]
-│   ├── Span B: &quot;llm request gpt-4&quot;       [duration: 3.0s]
-│   │   └── Span C: &quot;openai.chat.completions&quot;  [duration: 2.9s]
-│   ├── Span D: &quot;rag retrieve&quot;            [duration: 0.15s]
-│   │   ├── Span E: &quot;embed query&quot;         [duration: 0.05s]
-│   │   └── Span F: &quot;pgvector search&quot;     [duration: 0.10s]
-│   └── Span G: &quot;prompt assemble&quot;         [duration: 0.02s]
-</code></pre></div>
-<hr>
+  version(2<span class="hljs-built_in">hex</span>)-trace-<span class="hljs-built_in">id</span>(32<span class="hljs-built_in">hex</span>)-span-<span class="hljs-built_in">id</span>(16<span class="hljs-built_in">hex</span>)-trace-flags(2<span class="hljs-built_in">hex</span>)
+  例: <span class="hljs-number">00</span>-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01
+</code></pre></div><h3>2.3 Span 结构</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-params">Trace:</span>
+├── Span <span class="hljs-params">A:</span> <span class="hljs-string">"POST /api/chat"</span>              [<span class="hljs-params">duration:</span> <span class="hljs-number">3.2</span>s]
+│   ├── Span <span class="hljs-params">B:</span> <span class="hljs-string">"llm request gpt-4"</span>       [<span class="hljs-params">duration:</span> <span class="hljs-number">3.0</span>s]
+│   │   └── Span <span class="hljs-params">C:</span> <span class="hljs-string">"openai.chat.completions"</span>  [<span class="hljs-params">duration:</span> <span class="hljs-number">2.9</span>s]
+│   ├── Span <span class="hljs-params">D:</span> <span class="hljs-string">"rag retrieve"</span>            [<span class="hljs-params">duration:</span> <span class="hljs-number">0.15</span>s]
+│   │   ├── Span <span class="hljs-params">E:</span> <span class="hljs-string">"embed query"</span>         [<span class="hljs-params">duration:</span> <span class="hljs-number">0.05</span>s]
+│   │   └── Span <span class="hljs-params">F:</span> <span class="hljs-string">"pgvector search"</span>     [<span class="hljs-params">duration:</span> <span class="hljs-number">0.10</span>s]
+│   └── Span <span class="hljs-params">G:</span> <span class="hljs-string">"prompt assemble"</span>         [<span class="hljs-params">duration:</span> <span class="hljs-number">0.02</span>s]
+</code></pre></div><hr>
 <h2>三、Java 集成</h2>
 <h3>3.1 OpenTelemetry Java Agent（零代码接入）</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># 启动时附加 Java Agent
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-comment"># 启动时附加 Java Agent</span>
 java -javaagent:opentelemetry-javaagent.jar \
   -Dotel.service.name=ai-rag-service \
   -Dotel.traces.exporter=otlp \
@@ -109,8 +105,7 @@ java -javaagent:opentelemetry-javaagent.jar \
   -Dotel.exporter.otlp.endpoint=http://otel-collector:4317 \
   -Dotel.resource.attributes=deployment.environment=production \
   -jar ai-rag-service.jar
-</code></pre></div>
-<p><strong>Agent 自动埋点覆盖：</strong></p>
+</code></pre></div><p><strong>Agent 自动埋点覆盖：</strong></p>
 <ul>
 <li>Spring Web (HTTP Server/Client)</li>
 <li>JDBC (数据库查询)</li>
@@ -121,39 +116,39 @@ java -javaagent:opentelemetry-javaagent.jar \
 <li>等等（60+ 库）</li>
 </ul>
 <h3>3.2 手动埋点</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Configuration
-public class OpenTelemetryConfig {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Configuration</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">OpenTelemetryConfig</span> {
 
-    @Bean
-    public OpenTelemetry openTelemetry() {
-        var resource = Resource.getDefault()
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-keyword">public</span> OpenTelemetry <span class="hljs-title function_">openTelemetry</span><span class="hljs-params">()</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">resource</span> <span class="hljs-operator">=</span> Resource.getDefault()
                 .merge(Resource.builder()
-                        .put(ResourceAttributes.SERVICE_NAME, &quot;ai-rag-service&quot;)
-                        .put(ResourceAttributes.SERVICE_VERSION, &quot;1.0.0&quot;)
+                        .put(ResourceAttributes.SERVICE_NAME, <span class="hljs-string">"ai-rag-service"</span>)
+                        .put(ResourceAttributes.SERVICE_VERSION, <span class="hljs-string">"1.0.0"</span>)
                         .put(ResourceAttributes.DEPLOYMENT_ENVIRONMENT,
-                                System.getenv().getOrDefault(&quot;ENV&quot;, &quot;dev&quot;))
+                                System.getenv().getOrDefault(<span class="hljs-string">"ENV"</span>, <span class="hljs-string">"dev"</span>))
                         .build());
 
-        var sdkTracerProvider = SdkTracerProvider.builder()
+        <span class="hljs-type">var</span> <span class="hljs-variable">sdkTracerProvider</span> <span class="hljs-operator">=</span> SdkTracerProvider.builder()
                 .setResource(resource)
                 .addSpanProcessor(BatchSpanProcessor
                         .builder(OtlpGrpcSpanExporter.builder()
-                                .setEndpoint(&quot;http://otel-collector:4317&quot;)
+                                .setEndpoint(<span class="hljs-string">"http://otel-collector:4317"</span>)
                                 .build())
                         .build())
                 .build();
 
-        var sdkMeterProvider = SdkMeterProvider.builder()
+        <span class="hljs-type">var</span> <span class="hljs-variable">sdkMeterProvider</span> <span class="hljs-operator">=</span> SdkMeterProvider.builder()
                 .setResource(resource)
                 .registerMetricReader(PeriodicMetricReader
                         .builder(OtlpGrpcMetricExporter.builder()
-                                .setEndpoint(&quot;http://otel-collector:4317&quot;)
+                                .setEndpoint(<span class="hljs-string">"http://otel-collector:4317"</span>)
                                 .build())
-                        .setInterval(Duration.ofSeconds(30))
+                        .setInterval(Duration.ofSeconds(<span class="hljs-number">30</span>))
                         .build())
                 .build();
 
-        return OpenTelemetrySdk.builder()
+        <span class="hljs-keyword">return</span> OpenTelemetrySdk.builder()
                 .setTracerProvider(sdkTracerProvider)
                 .setMeterProvider(sdkMeterProvider)
                 .setPropagators(ContextPropagators.create(
@@ -161,212 +156,206 @@ public class OpenTelemetryConfig {
                 .build();
     }
 }
-</code></pre></div>
-<h3>3.3 Micrometer 桥接</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">management:
-  metrics:
-    tags:
-      application: ai-rag-service
-      environment: production
-  tracing:
-    sampling:
-      probability: 0.1  # 10% 采样率（生产环境）
-  otlp:
-    metrics:
-      export:
-        enabled: true
-        url: http://otel-collector:4317
-    tracing:
-      endpoint: http://otel-collector:4317
+</code></pre></div><h3>3.3 Micrometer 桥接</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-attr">management:</span>
+  <span class="hljs-attr">metrics:</span>
+    <span class="hljs-attr">tags:</span>
+      <span class="hljs-attr">application:</span> <span class="hljs-string">ai-rag-service</span>
+      <span class="hljs-attr">environment:</span> <span class="hljs-string">production</span>
+  <span class="hljs-attr">tracing:</span>
+    <span class="hljs-attr">sampling:</span>
+      <span class="hljs-attr">probability:</span> <span class="hljs-number">0.1</span>  <span class="hljs-comment"># 10% 采样率（生产环境）</span>
+  <span class="hljs-attr">otlp:</span>
+    <span class="hljs-attr">metrics:</span>
+      <span class="hljs-attr">export:</span>
+        <span class="hljs-attr">enabled:</span> <span class="hljs-literal">true</span>
+        <span class="hljs-attr">url:</span> <span class="hljs-string">http://otel-collector:4317</span>
+    <span class="hljs-attr">tracing:</span>
+      <span class="hljs-attr">endpoint:</span> <span class="hljs-string">http://otel-collector:4317</span>
 
-  endpoints:
-    web:
-      exposure:
-        include: health,info,prometheus,metrics
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Spring Boot Actuator + Micrometer 自定义指标
-@Component
-public class AiServiceMetrics {
+  <span class="hljs-attr">endpoints:</span>
+    <span class="hljs-attr">web:</span>
+      <span class="hljs-attr">exposure:</span>
+        <span class="hljs-attr">include:</span> <span class="hljs-string">health,info,prometheus,metrics</span>
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// Spring Boot Actuator + Micrometer 自定义指标</span>
+<span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">AiServiceMetrics</span> {
 
-    private final MeterRegistry meterRegistry;
-    private final Counter llmRequestCounter;
-    private final Timer llmRequestTimer;
-    private final Histogram retrievalResultCount;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> MeterRegistry meterRegistry;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Counter llmRequestCounter;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Timer llmRequestTimer;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Histogram retrievalResultCount;
 
-    public AiServiceMetrics(MeterRegistry meterRegistry) {
-        this.llmRequestCounter = Counter.builder(&quot;ai.llm.requests&quot;)
-                .description(&quot;LLM API call count&quot;)
-                .tag(&quot;provider&quot;, &quot;openai&quot;)
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">AiServiceMetrics</span><span class="hljs-params">(MeterRegistry meterRegistry)</span> {
+        <span class="hljs-built_in">this</span>.llmRequestCounter = Counter.builder(<span class="hljs-string">"ai.llm.requests"</span>)
+                .description(<span class="hljs-string">"LLM API call count"</span>)
+                .tag(<span class="hljs-string">"provider"</span>, <span class="hljs-string">"openai"</span>)
                 .register(meterRegistry);
 
-        this.llmRequestTimer = Timer.builder(&quot;ai.llm.request.duration&quot;)
-                .description(&quot;LLM API response time&quot;)
-                .publishPercentiles(0.5, 0.95, 0.99)
+        <span class="hljs-built_in">this</span>.llmRequestTimer = Timer.builder(<span class="hljs-string">"ai.llm.request.duration"</span>)
+                .description(<span class="hljs-string">"LLM API response time"</span>)
+                .publishPercentiles(<span class="hljs-number">0.5</span>, <span class="hljs-number">0.95</span>, <span class="hljs-number">0.99</span>)
                 .register(meterRegistry);
 
-        this.retrievalResultCount = Histogram.builder(&quot;ai.retrieval.results&quot;)
-                .description(&quot;RAG retrieval result count&quot;)
-                .serviceLevelObjectives(1, 5, 10, 20, 50)
+        <span class="hljs-built_in">this</span>.retrievalResultCount = Histogram.builder(<span class="hljs-string">"ai.retrieval.results"</span>)
+                .description(<span class="hljs-string">"RAG retrieval result count"</span>)
+                .serviceLevelObjectives(<span class="hljs-number">1</span>, <span class="hljs-number">5</span>, <span class="hljs-number">10</span>, <span class="hljs-number">20</span>, <span class="hljs-number">50</span>)
                 .register(meterRegistry);
     }
 
-    public &lt;T&gt; T recordLlmCall(String model, Supplier&lt;T&gt; call) {
+    <span class="hljs-keyword">public</span> &lt;T&gt; T <span class="hljs-title function_">recordLlmCall</span><span class="hljs-params">(String model, Supplier&lt;T&gt; call)</span> {
         llmRequestCounter.increment();
-        return llmRequestTimer.record(call);
+        <span class="hljs-keyword">return</span> llmRequestTimer.record(call);
     }
 
-    public void recordRetrievalResults(int count) {
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">recordRetrievalResults</span><span class="hljs-params">(<span class="hljs-type">int</span> count)</span> {
         retrievalResultCount.record(count);
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>四、GenAI 语义约定</h2>
 <h3>4.1 LLM Span</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
-public class TracedLlmService {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">TracedLlmService</span> {
 
-    private final Tracer tracer;
-    private final Meter meter;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Tracer tracer;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Meter meter;
 
-    public record LlmCallResult(String content, int inputTokens, int outputTokens,
-                                 String model, String provider, Duration duration) {}
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">LlmCallResult</span><span class="hljs-params">(String content, <span class="hljs-type">int</span> inputTokens, <span class="hljs-type">int</span> outputTokens,
+                                 String model, String provider, Duration duration)</span> {}
 
-    public String chat(String prompt) {
-        // 创建 LLM Span
-        var span = tracer.spanBuilder(&quot;chat gpt-4o&quot;)
+    <span class="hljs-keyword">public</span> String <span class="hljs-title function_">chat</span><span class="hljs-params">(String prompt)</span> {
+        <span class="hljs-comment">// 创建 LLM Span</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">span</span> <span class="hljs-operator">=</span> tracer.spanBuilder(<span class="hljs-string">"chat gpt-4o"</span>)
                 .setSpanKind(SpanKind.CLIENT)
-                .setAttribute(&quot;gen_ai.system&quot;, &quot;openai&quot;)           // 提供商
-                .setAttribute(&quot;gen_ai.operation.name&quot;, &quot;chat&quot;)     // 操作类型
-                .setAttribute(&quot;gen_ai.request.model&quot;, &quot;gpt-4o&quot;)    // 模型名称
-                .setAttribute(&quot;gen_ai.request.max_tokens&quot;, 4096)
-                .setAttribute(&quot;gen_ai.request.temperature&quot;, 0.7)
-                .setAttribute(&quot;gen_ai.request.top_p&quot;, 1.0)
-                // Prompt 内容（可采样存储）
-                .setAttribute(&quot;gen_ai.prompt&quot;, prompt)
+                .setAttribute(<span class="hljs-string">"gen_ai.system"</span>, <span class="hljs-string">"openai"</span>)           <span class="hljs-comment">// 提供商</span>
+                .setAttribute(<span class="hljs-string">"gen_ai.operation.name"</span>, <span class="hljs-string">"chat"</span>)     <span class="hljs-comment">// 操作类型</span>
+                .setAttribute(<span class="hljs-string">"gen_ai.request.model"</span>, <span class="hljs-string">"gpt-4o"</span>)    <span class="hljs-comment">// 模型名称</span>
+                .setAttribute(<span class="hljs-string">"gen_ai.request.max_tokens"</span>, <span class="hljs-number">4096</span>)
+                .setAttribute(<span class="hljs-string">"gen_ai.request.temperature"</span>, <span class="hljs-number">0.7</span>)
+                .setAttribute(<span class="hljs-string">"gen_ai.request.top_p"</span>, <span class="hljs-number">1.0</span>)
+                <span class="hljs-comment">// Prompt 内容（可采样存储）</span>
+                .setAttribute(<span class="hljs-string">"gen_ai.prompt"</span>, prompt)
                 .startSpan();
 
-        try (var scope = span.makeCurrent()) {
-            // 执行 LLM 调用
-            var result = openAiClient.chatCompletion(new ChatRequest(prompt, &quot;gpt-4o&quot;));
+        <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">scope</span> <span class="hljs-operator">=</span> span.makeCurrent()) {
+            <span class="hljs-comment">// 执行 LLM 调用</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> openAiClient.chatCompletion(<span class="hljs-keyword">new</span> <span class="hljs-title class_">ChatRequest</span>(prompt, <span class="hljs-string">"gpt-4o"</span>));
 
-            // 记录响应属性
-            span.setAttribute(&quot;gen_ai.response.id&quot;, result.id());
-            span.setAttribute(&quot;gen_ai.response.model&quot;, result.model());
-            span.setAttribute(&quot;gen_ai.response.finish_reasons&quot;,
-                    String.join(&quot;,&quot;, result.choices().getFirst().finishReason()));
-            span.setAttribute(&quot;gen_ai.usage.input_tokens&quot;, result.usage().promptTokens());
-            span.setAttribute(&quot;gen_ai.usage.output_tokens&quot;, result.usage().completionTokens());
-            span.setAttribute(&quot;gen_ai.usage.total_tokens&quot;, result.usage().totalTokens());
-            // Content（可采样存储）
-            span.setAttribute(&quot;gen_ai.completion&quot;,
+            <span class="hljs-comment">// 记录响应属性</span>
+            span.setAttribute(<span class="hljs-string">"gen_ai.response.id"</span>, result.id());
+            span.setAttribute(<span class="hljs-string">"gen_ai.response.model"</span>, result.model());
+            span.setAttribute(<span class="hljs-string">"gen_ai.response.finish_reasons"</span>,
+                    String.join(<span class="hljs-string">","</span>, result.choices().getFirst().finishReason()));
+            span.setAttribute(<span class="hljs-string">"gen_ai.usage.input_tokens"</span>, result.usage().promptTokens());
+            span.setAttribute(<span class="hljs-string">"gen_ai.usage.output_tokens"</span>, result.usage().completionTokens());
+            span.setAttribute(<span class="hljs-string">"gen_ai.usage.total_tokens"</span>, result.usage().totalTokens());
+            <span class="hljs-comment">// Content（可采样存储）</span>
+            span.setAttribute(<span class="hljs-string">"gen_ai.completion"</span>,
                     result.choices().getFirst().message().content());
 
-            return result.choices().getFirst().message().content();
-        } catch (Exception e) {
+            <span class="hljs-keyword">return</span> result.choices().getFirst().message().content();
+        } <span class="hljs-keyword">catch</span> (Exception e) {
             span.setStatus(StatusCode.ERROR, e.getMessage());
             span.recordException(e);
-            throw e;
-        } finally {
+            <span class="hljs-keyword">throw</span> e;
+        } <span class="hljs-keyword">finally</span> {
             span.end();
         }
     }
 }
-</code></pre></div>
-<h3>4.2 Tool Call Span</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Component
-public class TracedToolExecutor {
+</code></pre></div><h3>4.2 Tool Call Span</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">TracedToolExecutor</span> {
 
-    private final Tracer tracer;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Tracer tracer;
 
-    public ToolResult executeTool(String toolName, Map&lt;String, Object&gt; params) {
-        var span = tracer.spanBuilder(&quot;execute_tool &quot; + toolName)
+    <span class="hljs-keyword">public</span> ToolResult <span class="hljs-title function_">executeTool</span><span class="hljs-params">(String toolName, Map&lt;String, Object&gt; params)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">span</span> <span class="hljs-operator">=</span> tracer.spanBuilder(<span class="hljs-string">"execute_tool "</span> + toolName)
                 .setSpanKind(SpanKind.INTERNAL)
-                // GenAI 工具调用约定
-                .setAttribute(&quot;gen_ai.tool.name&quot;, toolName)
-                .setAttribute(&quot;gen_ai.tool.parameters&quot;,
+                <span class="hljs-comment">// GenAI 工具调用约定</span>
+                .setAttribute(<span class="hljs-string">"gen_ai.tool.name"</span>, toolName)
+                .setAttribute(<span class="hljs-string">"gen_ai.tool.parameters"</span>,
                         JsonUtils.toJson(params))
-                .setAttribute(&quot;gen_ai.tool.call.id&quot;,
+                .setAttribute(<span class="hljs-string">"gen_ai.tool.call.id"</span>,
                         UUID.randomUUID().toString())
                 .startSpan();
 
-        try (var scope = span.makeCurrent()) {
-            var result = toolRegistry.execute(toolName, params);
-            span.setAttribute(&quot;gen_ai.tool.result&quot;,
+        <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">scope</span> <span class="hljs-operator">=</span> span.makeCurrent()) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> toolRegistry.execute(toolName, params);
+            span.setAttribute(<span class="hljs-string">"gen_ai.tool.result"</span>,
                     JsonUtils.toJson(result));
-            span.setAttribute(&quot;gen_ai.tool.success&quot;, true);
-            return result;
-        } catch (Exception e) {
-            span.setAttribute(&quot;gen_ai.tool.success&quot;, false);
-            span.setAttribute(&quot;error.type&quot;, e.getClass().getSimpleName());
+            span.setAttribute(<span class="hljs-string">"gen_ai.tool.success"</span>, <span class="hljs-literal">true</span>);
+            <span class="hljs-keyword">return</span> result;
+        } <span class="hljs-keyword">catch</span> (Exception e) {
+            span.setAttribute(<span class="hljs-string">"gen_ai.tool.success"</span>, <span class="hljs-literal">false</span>);
+            span.setAttribute(<span class="hljs-string">"error.type"</span>, e.getClass().getSimpleName());
             span.recordException(e);
-            throw e;
-        } finally {
+            <span class="hljs-keyword">throw</span> e;
+        } <span class="hljs-keyword">finally</span> {
             span.end();
         }
     }
 }
-</code></pre></div>
-<h3>4.3 RAG 检索 Span</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
-public class TracedRagService {
+</code></pre></div><h3>4.3 RAG 检索 Span</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">TracedRagService</span> {
 
-    private final Tracer tracer;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Tracer tracer;
 
-    public List&lt;Document&gt; retrieve(String query) {
-        var span = tracer.spanBuilder(&quot;rag_retrieve&quot;)
+    <span class="hljs-keyword">public</span> List&lt;Document&gt; <span class="hljs-title function_">retrieve</span><span class="hljs-params">(String query)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">span</span> <span class="hljs-operator">=</span> tracer.spanBuilder(<span class="hljs-string">"rag_retrieve"</span>)
                 .setSpanKind(SpanKind.INTERNAL)
-                // GenAI RAG 检索约定
-                .setAttribute(&quot;gen_ai.retrieval.query&quot;, query)
-                .setAttribute(&quot;gen_ai.retrieval.strategy&quot;, &quot;hybrid&quot;)  // bm25/vector/hybrid
-                .setAttribute(&quot;gen_ai.retrieval.top_k&quot;, 10)
+                <span class="hljs-comment">// GenAI RAG 检索约定</span>
+                .setAttribute(<span class="hljs-string">"gen_ai.retrieval.query"</span>, query)
+                .setAttribute(<span class="hljs-string">"gen_ai.retrieval.strategy"</span>, <span class="hljs-string">"hybrid"</span>)  <span class="hljs-comment">// bm25/vector/hybrid</span>
+                .setAttribute(<span class="hljs-string">"gen_ai.retrieval.top_k"</span>, <span class="hljs-number">10</span>)
                 .startSpan();
 
-        try (var scope = span.makeCurrent()) {
-            // Embedding
-            var embedSpan = tracer.spanBuilder(&quot;rag_embed_query&quot;)
-                    .setAttribute(&quot;gen_ai.system&quot;, &quot;openai&quot;)
-                    .setAttribute(&quot;gen_ai.operation.name&quot;, &quot;embeddings&quot;)
-                    .setAttribute(&quot;gen_ai.request.model&quot;, &quot;text-embedding-3-small&quot;)
+        <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">scope</span> <span class="hljs-operator">=</span> span.makeCurrent()) {
+            <span class="hljs-comment">// Embedding</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">embedSpan</span> <span class="hljs-operator">=</span> tracer.spanBuilder(<span class="hljs-string">"rag_embed_query"</span>)
+                    .setAttribute(<span class="hljs-string">"gen_ai.system"</span>, <span class="hljs-string">"openai"</span>)
+                    .setAttribute(<span class="hljs-string">"gen_ai.operation.name"</span>, <span class="hljs-string">"embeddings"</span>)
+                    .setAttribute(<span class="hljs-string">"gen_ai.request.model"</span>, <span class="hljs-string">"text-embedding-3-small"</span>)
                     .startSpan();
-            var embedding = embedQuery(query);
-            embedSpan.setAttribute(&quot;gen_ai.usage.total_tokens&quot;, embedding.tokenCount());
+            <span class="hljs-type">var</span> <span class="hljs-variable">embedding</span> <span class="hljs-operator">=</span> embedQuery(query);
+            embedSpan.setAttribute(<span class="hljs-string">"gen_ai.usage.total_tokens"</span>, embedding.tokenCount());
             embedSpan.end();
 
-            // Vector Search
-            var vectorSpan = tracer.spanBuilder(&quot;rag_vector_search&quot;)
-                    .setAttribute(&quot;gen_ai.retrieval.search_type&quot;, &quot;knn&quot;)
-                    .setAttribute(&quot;db.system&quot;, &quot;elasticsearch&quot;)
+            <span class="hljs-comment">// Vector Search</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">vectorSpan</span> <span class="hljs-operator">=</span> tracer.spanBuilder(<span class="hljs-string">"rag_vector_search"</span>)
+                    .setAttribute(<span class="hljs-string">"gen_ai.retrieval.search_type"</span>, <span class="hljs-string">"knn"</span>)
+                    .setAttribute(<span class="hljs-string">"db.system"</span>, <span class="hljs-string">"elasticsearch"</span>)
                     .startSpan();
-            var vectorResults = vectorStore.similaritySearch(embedding.vector(), 10);
-            vectorSpan.setAttribute(&quot;gen_ai.retrieval.document_count&quot;, vectorResults.size());
-            vectorSpan.setAttribute(&quot;gen_ai.retrieval.duration_ms&quot;, vectorSpanDuration);
+            <span class="hljs-type">var</span> <span class="hljs-variable">vectorResults</span> <span class="hljs-operator">=</span> vectorStore.similaritySearch(embedding.vector(), <span class="hljs-number">10</span>);
+            vectorSpan.setAttribute(<span class="hljs-string">"gen_ai.retrieval.document_count"</span>, vectorResults.size());
+            vectorSpan.setAttribute(<span class="hljs-string">"gen_ai.retrieval.duration_ms"</span>, vectorSpanDuration);
             vectorSpan.end();
 
-            // BM25 Search
-            var bm25Span = tracer.spanBuilder(&quot;rag_bm25_search&quot;)
-                    .setAttribute(&quot;gen_ai.retrieval.search_type&quot;, &quot;keyword&quot;)
+            <span class="hljs-comment">// BM25 Search</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">bm25Span</span> <span class="hljs-operator">=</span> tracer.spanBuilder(<span class="hljs-string">"rag_bm25_search"</span>)
+                    .setAttribute(<span class="hljs-string">"gen_ai.retrieval.search_type"</span>, <span class="hljs-string">"keyword"</span>)
                     .startSpan();
-            var bm25Results = searchEngine.bm25Search(query, 10);
-            bm25Span.setAttribute(&quot;gen_ai.retrieval.document_count&quot;, bm25Results.size());
+            <span class="hljs-type">var</span> <span class="hljs-variable">bm25Results</span> <span class="hljs-operator">=</span> searchEngine.bm25Search(query, <span class="hljs-number">10</span>);
+            bm25Span.setAttribute(<span class="hljs-string">"gen_ai.retrieval.document_count"</span>, bm25Results.size());
             bm25Span.end();
 
-            // RRF Fusion
-            var fused = rrfFusion(vectorResults, bm25Results);
-            span.setAttribute(&quot;gen_ai.retrieval.final_document_count&quot;, fused.size());
-            span.setAttribute(&quot;gen_ai.retrieval.min_score&quot;,
-                    fused.stream().mapToDouble(Document::score).min().orElse(0));
-            span.setAttribute(&quot;gen_ai.retrieval.max_score&quot;,
-                    fused.stream().mapToDouble(Document::score).max().orElse(0));
+            <span class="hljs-comment">// RRF Fusion</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">fused</span> <span class="hljs-operator">=</span> rrfFusion(vectorResults, bm25Results);
+            span.setAttribute(<span class="hljs-string">"gen_ai.retrieval.final_document_count"</span>, fused.size());
+            span.setAttribute(<span class="hljs-string">"gen_ai.retrieval.min_score"</span>,
+                    fused.stream().mapToDouble(Document::score).min().orElse(<span class="hljs-number">0</span>));
+            span.setAttribute(<span class="hljs-string">"gen_ai.retrieval.max_score"</span>,
+                    fused.stream().mapToDouble(Document::score).max().orElse(<span class="hljs-number">0</span>));
 
-            return fused;
-        } finally {
+            <span class="hljs-keyword">return</span> fused;
+        } <span class="hljs-keyword">finally</span> {
             span.end();
         }
     }
 }
-</code></pre></div>
-<h3>4.4 完整的 GenAI Span 属性清单</h3>
+</code></pre></div><h3>4.4 完整的 GenAI Span 属性清单</h3>
 <table>
 <thead>
 <tr>
@@ -542,193 +531,185 @@ public class TracedRagService {
 <hr>
 <h2>五、Prometheus + Grafana</h2>
 <h3>5.1 Metric 类型</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Counter: 只增不减（请求计数、错误计数）
-Counter requestCounter = Counter.builder(&quot;http_requests_total&quot;)
-        .description(&quot;Total HTTP requests&quot;)
-        .tag(&quot;method&quot;, &quot;GET&quot;)
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// Counter: 只增不减（请求计数、错误计数）</span>
+<span class="hljs-type">Counter</span> <span class="hljs-variable">requestCounter</span> <span class="hljs-operator">=</span> Counter.builder(<span class="hljs-string">"http_requests_total"</span>)
+        .description(<span class="hljs-string">"Total HTTP requests"</span>)
+        .tag(<span class="hljs-string">"method"</span>, <span class="hljs-string">"GET"</span>)
         .register(meterRegistry);
 requestCounter.increment();
 
-// Gauge: 瞬时值（内存使用、活跃连接数）
-Gauge memoryGauge = Gauge.builder(&quot;jvm_memory_used_bytes&quot;, () -&gt;
+<span class="hljs-comment">// Gauge: 瞬时值（内存使用、活跃连接数）</span>
+<span class="hljs-type">Gauge</span> <span class="hljs-variable">memoryGauge</span> <span class="hljs-operator">=</span> Gauge.builder(<span class="hljs-string">"jvm_memory_used_bytes"</span>, () -&gt;
                 Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory())
         .register(meterRegistry);
 
-// Histogram: 分布统计（请求延迟、响应大小）
-Histogram latencyHistogram = Histogram.builder(&quot;http_request_duration_seconds&quot;)
-        .serviceLevelObjectives(0.01, 0.05, 0.1, 0.5, 1.0, 5.0)
+<span class="hljs-comment">// Histogram: 分布统计（请求延迟、响应大小）</span>
+<span class="hljs-type">Histogram</span> <span class="hljs-variable">latencyHistogram</span> <span class="hljs-operator">=</span> Histogram.builder(<span class="hljs-string">"http_request_duration_seconds"</span>)
+        .serviceLevelObjectives(<span class="hljs-number">0.01</span>, <span class="hljs-number">0.05</span>, <span class="hljs-number">0.1</span>, <span class="hljs-number">0.5</span>, <span class="hljs-number">1.0</span>, <span class="hljs-number">5.0</span>)
         .register(meterRegistry);
-latencyHistogram.record(0.25);
+latencyHistogram.record(<span class="hljs-number">0.25</span>);
 
-// Summary: 客户端百分比计算（与 Histogram 类似，但分位数在客户端计算）
-</code></pre></div>
-<h3>5.2 PromQL 查询</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">promql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-promql"># AI 请求量
-rate(ai_llm_requests_total[5m])
+<span class="hljs-comment">// Summary: 客户端百分比计算（与 Histogram 类似，但分位数在客户端计算）</span>
+</code></pre></div><h3>5.2 PromQL 查询</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">promql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-promql"><span class="hljs-meta"># AI 请求量</span>
+rate(ai_llm_requests_total[<span class="hljs-number">5</span>m])
 
-# LLM 调用 P95 延迟
-histogram_quantile(0.95, rate(ai_llm_request_duration_seconds_bucket[5m]))
+<span class="hljs-meta"># LLM 调用 P95 延迟</span>
+histogram_quantile(<span class="hljs-number">0.95</span>, rate(ai_llm_request_duration_seconds_bucket[<span class="hljs-number">5</span>m]))
 
-# Token 消耗速率（按模型）
-sum by(model) (rate(gen_ai_usage_input_tokens_total[1h]))
-sum by(model) (rate(gen_ai_usage_output_tokens_total[1h]))
+<span class="hljs-meta"># Token 消耗速率（按模型）</span>
+<span class="hljs-keyword">sum</span> <span class="hljs-keyword">by</span>(model) (rate(gen_ai_usage_input_tokens_total[<span class="hljs-number">1</span>h]))
+<span class="hljs-keyword">sum</span> <span class="hljs-keyword">by</span>(model) (rate(gen_ai_usage_output_tokens_total[<span class="hljs-number">1</span>h]))
 
-# RAG 检索延迟
-avg(gen_ai_retrieval_duration_ms) by (strategy)
+<span class="hljs-meta"># RAG 检索延迟</span>
+<span class="hljs-keyword">avg</span>(gen_ai_retrieval_duration_ms) <span class="hljs-keyword">by</span> (strategy)
 
-# 错误率
-rate(ai_llm_requests_total{status=&quot;error&quot;}[5m])
-  / rate(ai_llm_requests_total[5m]) * 100
+<span class="hljs-meta"># 错误率</span>
+rate(ai_llm_requests_total{status=<span class="hljs-string">"error"</span>}[<span class="hljs-number">5</span>m])
+  / rate(ai_llm_requests_total[<span class="hljs-number">5</span>m]) * <span class="hljs-number">100</span>
 
-# LLM 调用 QPS 按 Provider
-sum by (gen_ai_system) (rate(ai_llm_requests_total[5m]))
-</code></pre></div>
-<h3>5.3 AI 应用 Dashboard 设计</h3>
+<span class="hljs-meta"># LLM 调用 QPS 按 Provider</span>
+<span class="hljs-keyword">sum</span> <span class="hljs-keyword">by</span> (gen_ai_system) (rate(ai_llm_requests_total[<span class="hljs-number">5</span>m]))
+</code></pre></div><h3>5.3 AI 应用 Dashboard 设计</h3>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌─────────────────────────────────────────────────────────┐
 │  AI Service Dashboard                                   │
 ├──────────────┬──────────────┬──────────────┬────────────┤
 │ 总请求量      │ 成功率        │ P95 延迟      │ 平均 Token/请求│
-│ 12,345       │ 98.5%        │ 2.3s         │ 1,850       │
+│ <span class="hljs-number">12</span>,<span class="hljs-number">345</span>       │ <span class="hljs-number">98.5</span>%        │ <span class="hljs-number">2.3</span>s         │ <span class="hljs-number">1</span>,<span class="hljs-number">850</span>       │
 ├──────────────┴──────────────┴──────────────┴────────────┤
 │                                                         │
 │  LLM 调用趋势 (折线图)                                   │
 │  ┌─────────────────────────────────────────────────────┐│
-│  │  QPS by Provider (openai vs anthropic vs ollama)    ││
+│  │  QPS <span class="hljs-built_in">by</span> Provider (openai vs anthropic vs ollama)    ││
 │  └─────────────────────────────────────────────────────┘│
 │                                                         │
 │  Token 消耗 (堆叠面积图)                                  │
 │  ┌─────────────────────────────────────────────────────┐│
-│  │  Input Tokens | Output Tokens | Total Tokens        ││
+│  │  Input Tokens | <span class="hljs-type">Output</span> Tokens | <span class="hljs-type">Total</span> Tokens        ││
 │  └─────────────────────────────────────────────────────┘│
 │                                                         │
 │  RAG 检索性能 (双线图)                                    │
 │  ┌─────────────────────────────────────────────────────┐│
-│  │  检索延迟 (ms) | 检索结果数量                          ││
+│  │  检索延迟 (ms) | <span class="hljs-type">检索结果数量                          ││
 │  └─────────────────────────────────────────────────────┘│
 │                                                         │
-│  Tool 调用统计 (饼图 + 表格)                              │
+│  Tool</span> 调用统计 (饼图 + 表格)                              │
 │  ┌─────────────────────────────────────────────────────┐│
-│  │  search:45% | db_query:30% | calculator:15% | ...   ││
+│  │  search:<span class="hljs-number">45</span>% | <span class="hljs-type">db_query</span>:<span class="hljs-number">30</span>% | <span class="hljs-type">calculator</span>:<span class="hljs-number">15</span>% | <span class="hljs-type">...   ││
 │  └─────────────────────────────────────────────────────┘│
 │                                                         │
 │  成本估算 (计数器)                                        │
 │  ┌─────────────────────────────────────────────────────┐│
-│  │  今日总成本: $42.17 | 估算月成本: $1,265              ││
+│  │  今日总成本: $42</span><span class="hljs-number">.17</span> | <span class="hljs-type">估算月成本: $1</span>,<span class="hljs-number">265</span>              ││
 │  └─────────────────────────────────────────────────────┘│
 │                                                         │
 │  错误分布 (饼图)                                          │
 │  ┌─────────────────────────────────────────────────────┐│
-│  │  timeout:45% | rate_limit:30% | server_error:25%    ││
+│  │  <span class="hljs-built_in">timeout</span>:<span class="hljs-number">45</span>% | <span class="hljs-type">rate_limit</span>:<span class="hljs-number">30</span>% | <span class="hljs-type">server_error</span>:<span class="hljs-number">25</span>%    ││
 │  └─────────────────────────────────────────────────────┘│
 └─────────────────────────────────────────────────────────┘
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>六、Tempo 与 Loki</h2>
 <h3>6.1 Tempo 分布式追踪</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># Tempo 配置（用于 Trace 查询）
-tempo:
-  receivers:
-    otlp:
-      protocols:
-        grpc:
-          endpoint: 0.0.0.0:4317
-  storage:
-    trace:
-      backend: s3
-      s3:
-        bucket: tempo-traces
-</code></pre></div>
-<p><strong>Grafana TraceQL 查询：</strong></p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code># 查找 P95 延迟的 LLM 调用
-{ span.gen_ai.operation.name = &quot;chat&quot; &amp;&amp;
-  duration &gt; 5s }
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-comment"># Tempo 配置（用于 Trace 查询）</span>
+<span class="hljs-attr">tempo:</span>
+  <span class="hljs-attr">receivers:</span>
+    <span class="hljs-attr">otlp:</span>
+      <span class="hljs-attr">protocols:</span>
+        <span class="hljs-attr">grpc:</span>
+          <span class="hljs-attr">endpoint:</span> <span class="hljs-number">0.0</span><span class="hljs-number">.0</span><span class="hljs-number">.0</span><span class="hljs-string">:4317</span>
+  <span class="hljs-attr">storage:</span>
+    <span class="hljs-attr">trace:</span>
+      <span class="hljs-attr">backend:</span> <span class="hljs-string">s3</span>
+      <span class="hljs-attr">s3:</span>
+        <span class="hljs-attr">bucket:</span> <span class="hljs-string">tempo-traces</span>
+</code></pre></div><p><strong>Grafana TraceQL 查询：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-meta"># 查找 P95 延迟的 LLM 调用</span>
+{ span.gen_ai.operation.name <span class="hljs-punctuation">=</span> <span class="hljs-string">"chat"</span> <span class="hljs-meta">&amp;&amp;</span>
+  duration &gt; <span class="hljs-number">5</span>s }
 
-# 查找包含错误的 Tool Call
-{ span.gen_ai.tool.name = &quot;database_query&quot; &amp;&amp;
-  status.code = ERROR }
+<span class="hljs-meta"># 查找包含错误的 Tool Call</span>
+{ span.gen_ai.tool.name <span class="hljs-punctuation">=</span> <span class="hljs-string">"database_query"</span> <span class="hljs-meta">&amp;&amp;</span>
+  status.code <span class="hljs-punctuation">=</span> ERROR }
 
-# 查找特定用户的 RAG 检索
-{ resource.service.name = &quot;ai-rag-service&quot; &amp;&amp;
-  span.gen_ai.retrieval.strategy = &quot;hybrid&quot; }
-</code></pre></div>
-<h3>6.2 Loki 日志聚合</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># application.yml — 日志输出格式设置为 JSON
-logging:
-  pattern:
-    console: &#39;{&quot;timestamp&quot;:&quot;%d{ISO8601}&quot;,&quot;level&quot;:&quot;%level&quot;,&quot;logger&quot;:&quot;%logger&quot;,&quot;message&quot;:&quot;%msg&quot;,&quot;traceId&quot;:&quot;%mdc{traceId}&quot;,&quot;spanId&quot;:&quot;%mdc{spanId}&quot;}%n&#39;
-</code></pre></div>
-<p><strong>LogQL 查询：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">logql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-logql"># 按 traceId 关联日志
-{app=&quot;ai-rag-service&quot;} |= &quot;error&quot; | json | traceId = `abc123`
+<span class="hljs-meta"># 查找特定用户的 RAG 检索</span>
+{ resource.service.name <span class="hljs-punctuation">=</span> <span class="hljs-string">"ai-rag-service"</span> <span class="hljs-meta">&amp;&amp;</span>
+  span.gen_ai.retrieval.strategy <span class="hljs-punctuation">=</span> <span class="hljs-string">"hybrid"</span> }
+</code></pre></div><h3>6.2 Loki 日志聚合</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-comment"># application.yml — 日志输出格式设置为 JSON</span>
+<span class="hljs-attr">logging:</span>
+  <span class="hljs-attr">pattern:</span>
+    <span class="hljs-attr">console:</span> <span class="hljs-string">'{"timestamp":"%d{ISO8601}","level":"%level","logger":"%logger","message":"%msg","traceId":"%mdc{traceId}","spanId":"%mdc{spanId}"}%n'</span>
+</code></pre></div><p><strong>LogQL 查询：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">logql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-logql"><span class="hljs-meta"># 按 traceId 关联日志</span>
+{app<span class="hljs-punctuation">=</span><span class="hljs-string">"ai-rag-service"</span>} <span class="hljs-string">|= "</span>error<span class="hljs-string">" | json | traceId = `abc123`</span>
 
-# 错误日志趋势
-rate({app=&quot;ai-rag-service&quot;} |= &quot;ERROR&quot; [5m])
+<span class="hljs-meta"># 错误日志趋势</span>
+rate<span class="hljs-punctuation">(</span>{app<span class="hljs-punctuation">=</span><span class="hljs-string">"ai-rag-service"</span>} <span class="hljs-string">|= "</span>ERROR<span class="hljs-string">" [5m])</span>
 
-# Token 使用日志
-{app=&quot;ai-rag-service&quot;} | json
-  | line_format &quot;{{.gen_ai_system}} {{.gen_ai_usage_total_tokens}}&quot;
-</code></pre></div>
-<hr>
+<span class="hljs-meta"># Token 使用日志</span>
+{app<span class="hljs-punctuation">=</span><span class="hljs-string">"ai-rag-service"</span>} <span class="hljs-string">| json</span>
+  <span class="hljs-string">| line_format "</span>{{.gen_ai_system}} {{.gen_ai_usage_total_tokens}}<span class="hljs-string">"</span>
+</code></pre></div><hr>
 <h2>七、告警设计</h2>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># Prometheus Alert Rules
-groups:
-  - name: ai-service-alerts
-    rules:
-      # 1. 错误率告警
-      - alert: HighLlmErrorRate
-        expr: |
-          rate(ai_llm_requests_total{status=&quot;error&quot;}[5m])
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-comment"># Prometheus Alert Rules</span>
+<span class="hljs-attr">groups:</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">ai-service-alerts</span>
+    <span class="hljs-attr">rules:</span>
+      <span class="hljs-comment"># 1. 错误率告警</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">alert:</span> <span class="hljs-string">HighLlmErrorRate</span>
+        <span class="hljs-attr">expr:</span> <span class="hljs-string">|
+          rate(ai_llm_requests_total{status="error"}[5m])
           / rate(ai_llm_requests_total[5m]) &gt; 0.05
-        for: 5m
-        labels:
-          severity: critical
-        annotations:
-          summary: &quot;LLM 错误率超过 5%&quot;
-          description: &quot;当前错误率 {{ $value | humanizePercentage }}&quot;
+</span>        <span class="hljs-attr">for:</span> <span class="hljs-string">5m</span>
+        <span class="hljs-attr">labels:</span>
+          <span class="hljs-attr">severity:</span> <span class="hljs-string">critical</span>
+        <span class="hljs-attr">annotations:</span>
+          <span class="hljs-attr">summary:</span> <span class="hljs-string">"LLM 错误率超过 5%"</span>
+          <span class="hljs-attr">description:</span> <span class="hljs-string">"当前错误率 <span class="hljs-template-variable">{{ $value | humanizePercentage }}</span>"</span>
 
-      # 2. P95 延迟告警
-      - alert: HighLlmLatency
-        expr: |
+      <span class="hljs-comment"># 2. P95 延迟告警</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">alert:</span> <span class="hljs-string">HighLlmLatency</span>
+        <span class="hljs-attr">expr:</span> <span class="hljs-string">|
           histogram_quantile(0.95,
             rate(ai_llm_request_duration_seconds_bucket[5m])) &gt; 10
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: &quot;LLM P95 延迟超过 10 秒&quot;
+</span>        <span class="hljs-attr">for:</span> <span class="hljs-string">5m</span>
+        <span class="hljs-attr">labels:</span>
+          <span class="hljs-attr">severity:</span> <span class="hljs-string">warning</span>
+        <span class="hljs-attr">annotations:</span>
+          <span class="hljs-attr">summary:</span> <span class="hljs-string">"LLM P95 延迟超过 10 秒"</span>
 
-      # 3. Token 消耗异常
-      - alert: TokenConsumptionAnomaly
-        expr: |
+      <span class="hljs-comment"># 3. Token 消耗异常</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">alert:</span> <span class="hljs-string">TokenConsumptionAnomaly</span>
+        <span class="hljs-attr">expr:</span> <span class="hljs-string">|
           rate(gen_ai_usage_total_tokens_total[1h])
           / rate(gen_ai_usage_total_tokens_total[1h] offset 24h) &gt; 1.5
-        for: 15m
-        labels:
-          severity: warning
-        annotations:
-          summary: &quot;Token 消耗比昨天同时间增长 50%&quot;
+</span>        <span class="hljs-attr">for:</span> <span class="hljs-string">15m</span>
+        <span class="hljs-attr">labels:</span>
+          <span class="hljs-attr">severity:</span> <span class="hljs-string">warning</span>
+        <span class="hljs-attr">annotations:</span>
+          <span class="hljs-attr">summary:</span> <span class="hljs-string">"Token 消耗比昨天同时间增长 50%"</span>
 
-      # 4. RAG 检索异常
-      - alert: RagRetrievalZeroResults
-        expr: |
-          rate(gen_ai_retrieval_document_count_bucket{le=&quot;0&quot;}[10m]) &gt; 0.1
-        for: 5m
-        labels:
-          severity: warning
-        annotations:
-          summary: &quot;RAG 无结果返回率超过 10%&quot;
+      <span class="hljs-comment"># 4. RAG 检索异常</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">alert:</span> <span class="hljs-string">RagRetrievalZeroResults</span>
+        <span class="hljs-attr">expr:</span> <span class="hljs-string">|
+          rate(gen_ai_retrieval_document_count_bucket{le="0"}[10m]) &gt; 0.1
+</span>        <span class="hljs-attr">for:</span> <span class="hljs-string">5m</span>
+        <span class="hljs-attr">labels:</span>
+          <span class="hljs-attr">severity:</span> <span class="hljs-string">warning</span>
+        <span class="hljs-attr">annotations:</span>
+          <span class="hljs-attr">summary:</span> <span class="hljs-string">"RAG 无结果返回率超过 10%"</span>
 
-      # 5. 熔断器开启告警
-      - alert: CircuitBreakerOpen
-        expr: |
-          resilience4j_circuitbreaker_state{state=&quot;open&quot;} == 1
-        for: 1m
-        labels:
-          severity: critical
-        annotations:
-          summary: &quot;熔断器 {{ $labels.name }} 已开启&quot;
-</code></pre></div>
-<hr>
+      <span class="hljs-comment"># 5. 熔断器开启告警</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-attr">alert:</span> <span class="hljs-string">CircuitBreakerOpen</span>
+        <span class="hljs-attr">expr:</span> <span class="hljs-string">|
+          resilience4j_circuitbreaker_state{state="open"} == 1
+</span>        <span class="hljs-attr">for:</span> <span class="hljs-string">1m</span>
+        <span class="hljs-attr">labels:</span>
+          <span class="hljs-attr">severity:</span> <span class="hljs-string">critical</span>
+        <span class="hljs-attr">annotations:</span>
+          <span class="hljs-attr">summary:</span> <span class="hljs-string">"熔断器 <span class="hljs-template-variable">{{ $labels.name }}</span> 已开启"</span>
+</code></pre></div><hr>
 <h2>常见问题</h2>
 <p><strong>Q: 追踪采样率如何设置？</strong>
 A: 生产环境通常 1-10%。高 QPS 服务更低。根据 <code>tail sampling</code> 策略保留错误/慢请求的全量数据。</p>
@@ -741,9 +722,9 @@ A: LLM Prompt 和 Completion 内容通常较大，建议通过自定义 SpanProc
 <hr>
 <h2>相关条目</h2>
 <ul>
-<li><a href="#/06-云原生与SRE/容器与编排/06-Docker与Kubernetes云原生部署" class="cross-ref" data-ref="06-Docker与Kubernetes云原生部署">06-Docker与Kubernetes云原生部署</a> — K8s 中的可观测性集成</li>
-<li><a href="#/06-云原生与SRE/可观测性与CI/06-CICD与基础设施即代码" class="cross-ref" data-ref="06-CICD与基础设施即代码">06-CICD与基础设施即代码</a> — CI/CD 中的可观测性</li>
-<li><a href="#/14-AI平台与LLMOps/14-模型网关与Prompt管理" class="cross-ref" data-ref="14-模型网关与Prompt管理">14-模型网关与Prompt管理</a> — AI 平台可观测性</li>
+<li><a href="#/06-云原生与SRE/容器与编排/06-Docker与Kubernetes云原生部署" class="cross-ref">06-Docker与Kubernetes云原生部署</a> — K8s 中的可观测性集成</li>
+<li><a href="#/06-云原生与SRE/可观测性与CI/06-CICD与基础设施即代码" class="cross-ref">06-CICD与基础设施即代码</a> — CI/CD 中的可观测性</li>
+<li><a href="#/14-AI平台与LLMOps/14-模型网关与Prompt管理" class="cross-ref">14-模型网关与Prompt管理</a> — AI 平台可观测性</li>
 </ul>
-</div>
+</body></html></div>
 </article>

@@ -1,12 +1,12 @@
 
-<article class="kb-entry" data-path="/11-检索与RAG/检索技术/11-向量检索与混合检索">
+<article class="kb-entry" data-path="/11-检索与RAG">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=11">11-检索与RAG</a></div>
     <h1>向量检索与混合检索：从HNSW到RRF融合</h1>
-    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#vector-search</span><span class="badge badge-tag">#hnsw</span><span class="badge badge-tag">#ivfflat</span><span class="badge badge-tag">#bm25</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#vector-search</span><span class="badge badge-tag">#hnsw</span><span class="badge badge-tag">#ivfflat</span><span class="badge badge-tag">#bm25</span><span class="badge badge-tag">#hybrid-search</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://arxiv.org/abs/1603.09320" target="_blank" rel="noopener" class="source-link" title="HNSW论文 — Efficient and robust approximate nearest neighbor search">HNSW论文 — Efficient and robust approximate nearest neighbor search</a><a href="https://github.com/pgvector/pgvector" target="_blank" rel="noopener" class="source-link" title="pgvector 官方文档 — HNSW和IVFFlat索引">pgvector 官方文档 — HNSW和IVFFlat索引</a><a href="https://www.elastic.co/guide/en/elasticsearch/reference/current/knn-search.html" target="_blank" rel="noopener" class="source-link" title="Elasticsearch kNN 检索官方文档">Elasticsearch kNN 检索官方文档</a><a href="https://plg.uwaterloo.ca/~gvcormac/climax/" target="_blank" rel="noopener" class="source-link" title="RRF (Reciprocal Rank Fusion) 原始论文">RRF (Reciprocal Rank Fusion) 原始论文</a></small></div>
   </div>
-  <div class="entry-body"><h1>向量检索与混合检索：从HNSW到RRF融合</h1>
+  <div class="entry-body"><html><head></head><body><h1>向量检索与混合检索：从HNSW到RRF融合</h1>
 <h2>概述</h2>
 <p>检索是RAG系统的核心环节。现代检索系统通常结合两种范式：稠密向量检索（语义匹配）和稀疏关键词检索（精确匹配）。本文从向量检索的底层索引结构（HNSW、IVFFlat）出发，推导BM25的数学原理，最终构建完整的混合检索+RRF融合方案，并提供在PostgreSQL pgvector和Elasticsearch上的完整Java实现。</p>
 <hr>
@@ -78,99 +78,95 @@
 <h2>二、HNSW索引深入</h2>
 <h3>2.1 图结构</h3>
 <p>HNSW (Hierarchical Navigable Small World) 构建一个多层图：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Layer 2:  ●──────●        （最顶层，节点最少，长距离连接）
-         /        \
-Layer 1: ●──●──●──●──●    （中间层）
-        / \/ \/ \/ \/ \
-Layer 0: ●─●─●─●─●─●─●─●  （底层，所有节点，短距离连接）
-</code></pre></div>
-<p><strong>关键参数</strong>：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Layer <span class="hljs-number">2</span>:  ●──────●        （最顶层，节点最少，长距离连接）
+         /        <span class="hljs-string">\</span>
+Layer <span class="hljs-number">1</span>: ●──●──●──●──●    （中间层）
+        / <span class="hljs-string">\/</span> <span class="hljs-string">\/</span> <span class="hljs-string">\/</span> <span class="hljs-string">\/</span> <span class="hljs-string">\</span>
+Layer <span class="hljs-number">0</span>: ●─●─●─●─●─●─●─●  （底层，所有节点，短距离连接）
+</code></pre></div><p><strong>关键参数</strong>：</p>
 <ul>
 <li><strong>M (max_connections)</strong>：每个节点每层的最大连接数。典型值16-64。更大的M → 更高召回率 + 更多内存。</li>
 <li><strong>ef_construction</strong>：构建索引时的动态候选列表大小。典型值128-512。更大的值 → 更高质量的图 + 更长的构建时间。</li>
 <li><strong>ef_search</strong>：搜索时的动态候选列表大小。典型值64-256。更大的值 → 更高召回率 + 更多搜索延迟。</li>
 </ul>
 <h3>2.2 插入算法</h3>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>function INSERT(new_element, HNSW_graph):
-    L = random_level()  // 随机选择层级（指数衰减分布）
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-keyword">function</span> INSERT(<span class="hljs-keyword">new</span><span class="hljs-number">_</span>element, HNSW<span class="hljs-number">_</span>graph):
+    L = random<span class="hljs-number">_</span>level()  <span class="hljs-comment">// 随机选择层级（指数衰减分布）</span>
+    entry<span class="hljs-number">_p</span>oint = get<span class="hljs-number">_</span>entry<span class="hljs-number">_p</span>oint()
+    
+    <span class="hljs-keyword">for</span> lc from max<span class="hljs-number">_</span>level down to L+<span class="hljs-number">1</span>:
+        <span class="hljs-comment">// 在高层找到最近的入口点</span>
+        entry<span class="hljs-number">_p</span>oint = greedy<span class="hljs-number">_</span>search(<span class="hljs-keyword">new</span><span class="hljs-number">_</span>element, entry<span class="hljs-number">_p</span>oint, <span class="hljs-number">1</span>, lc)
+    
+    <span class="hljs-keyword">for</span> lc from min(L, max<span class="hljs-number">_</span>level) down to <span class="hljs-number">0</span>:
+        <span class="hljs-comment">// 在当前层搜索ef_construction个最近邻</span>
+        candidates = search<span class="hljs-number">_</span>layer(<span class="hljs-keyword">new</span><span class="hljs-number">_</span>element, entry<span class="hljs-number">_p</span>oint, ef<span class="hljs-number">_</span>construction, lc)
+        <span class="hljs-comment">// 启发式邻居选择：挑选多样化的邻居</span>
+        neighbors = select<span class="hljs-number">_n</span>eighbors<span class="hljs-number">_</span>heuristic(<span class="hljs-keyword">new</span><span class="hljs-number">_</span>element, candidates, M, lc)
+        <span class="hljs-comment">// 添加双向连接</span>
+        <span class="hljs-keyword">for</span> neighbor <span class="hljs-keyword">in</span> neighbors:
+            connect(<span class="hljs-keyword">new</span><span class="hljs-number">_</span>element, neighbor)
+            <span class="hljs-comment">// 裁剪：如果neighbor的连接数超过M，剪掉最远的</span>
+            <span class="hljs-keyword">if</span> |neighbor.connections(lc)| &gt; M:
+                prune<span class="hljs-number">_n</span>eighbors(neighbor, lc)
+</code></pre></div><h3>2.3 搜索算法</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>function <span class="hljs-keyword">SEARCH</span>(<span class="hljs-keyword">query</span>, k, ef_search):
     entry_point = get_entry_point()
     
-    for lc from max_level down to L+1:
-        // 在高层找到最近的入口点
-        entry_point = greedy_search(new_element, entry_point, 1, lc)
+    <span class="hljs-comment">// 从顶层开始，逐层下降</span>
+    <span class="hljs-keyword">for</span> lc from max_level down to 1:
+        entry_point = greedy_search(<span class="hljs-keyword">query</span>, entry_point, 1, lc)
     
-    for lc from min(L, max_level) down to 0:
-        // 在当前层搜索ef_construction个最近邻
-        candidates = search_layer(new_element, entry_point, ef_construction, lc)
-        // 启发式邻居选择：挑选多样化的邻居
-        neighbors = select_neighbors_heuristic(new_element, candidates, M, lc)
-        // 添加双向连接
-        for neighbor in neighbors:
-            connect(new_element, neighbor)
-            // 裁剪：如果neighbor的连接数超过M，剪掉最远的
-            if |neighbor.connections(lc)| &gt; M:
-                prune_neighbors(neighbor, lc)
-</code></pre></div>
-<h3>2.3 搜索算法</h3>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>function SEARCH(query, k, ef_search):
-    entry_point = get_entry_point()
+    <span class="hljs-comment">// 在底层做精细搜索</span>
+    candidates = search_layer(<span class="hljs-keyword">query</span>, entry_point, ef_search, 0)
     
-    // 从顶层开始，逐层下降
-    for lc from max_level down to 1:
-        entry_point = greedy_search(query, entry_point, 1, lc)
-    
-    // 在底层做精细搜索
-    candidates = search_layer(query, entry_point, ef_search, 0)
-    
-    // 从candidates中取前k个作为结果
-    return top_k(candidates, k)
-</code></pre></div>
-<h3>2.4 pgvector中的HNSW配置</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- 创建HNSW索引
-CREATE INDEX ON chunk_embeddings
-    USING hnsw (embedding vector_cosine_ops)
-    WITH (
-        m = 16,                  -- 每个节点最大连接数（典型值16-64）
-        ef_construction = 200    -- 构建时候选列表大小（典型值128-512）
+    <span class="hljs-comment">// 从candidates中取前k个作为结果</span>
+    <span class="hljs-keyword">return</span> top_k(candidates, k)
+</code></pre></div><h3>2.4 pgvector中的HNSW配置</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-sql"><span class="hljs-comment">-- 创建HNSW索引</span>
+<span class="hljs-keyword">CREATE</span> INDEX <span class="hljs-keyword">ON</span> chunk_embeddings
+    <span class="hljs-keyword">USING</span> hnsw (embedding vector_cosine_ops)
+    <span class="hljs-keyword">WITH</span> (
+        m <span class="hljs-operator">=</span> <span class="hljs-number">16</span>,                  <span class="hljs-comment">-- 每个节点最大连接数（典型值16-64）</span>
+        ef_construction <span class="hljs-operator">=</span> <span class="hljs-number">200</span>    <span class="hljs-comment">-- 构建时候选列表大小（典型值128-512）</span>
     );
 
--- 查询时设置ef_search（会话级别）
-SET hnsw.ef_search = 100;       -- 典型值64-256
+<span class="hljs-comment">-- 查询时设置ef_search（会话级别）</span>
+<span class="hljs-keyword">SET</span> hnsw.ef_search <span class="hljs-operator">=</span> <span class="hljs-number">100</span>;       <span class="hljs-comment">-- 典型值64-256</span>
 
--- 向量相似度检索
-SELECT c.chunk_id, c.content,
-       1 - (e.embedding &lt;=&gt; &#39;[0.1, 0.2, ...]&#39;::vector) AS similarity
-FROM chunk_embeddings e
-JOIN chunks c ON e.chunk_id = c.chunk_id
-ORDER BY e.embedding &lt;=&gt; &#39;[0.1, 0.2, ...]&#39;::vector
-LIMIT 10;
-</code></pre></div>
-<p><strong>推荐的初始化SQL（Spring Boot自动配置）</strong>：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
-import org.springframework.context.annotation.Configuration;
-import org.springframework.context.event.EventListener;
-import org.springframework.boot.context.event.ApplicationReadyEvent;
-import javax.sql.DataSource;
+<span class="hljs-comment">-- 向量相似度检索</span>
+<span class="hljs-keyword">SELECT</span> c.chunk_id, c.content,
+       <span class="hljs-number">1</span> <span class="hljs-operator">-</span> (e.embedding <span class="hljs-operator">&lt;=&gt;</span> <span class="hljs-string">'[0.1, 0.2, ...]'</span>::vector) <span class="hljs-keyword">AS</span> similarity
+<span class="hljs-keyword">FROM</span> chunk_embeddings e
+<span class="hljs-keyword">JOIN</span> chunks c <span class="hljs-keyword">ON</span> e.chunk_id <span class="hljs-operator">=</span> c.chunk_id
+<span class="hljs-keyword">ORDER</span> <span class="hljs-keyword">BY</span> e.embedding <span class="hljs-operator">&lt;=&gt;</span> <span class="hljs-string">'[0.1, 0.2, ...]'</span>::vector
+LIMIT <span class="hljs-number">10</span>;
+</code></pre></div><p><strong>推荐的初始化SQL（Spring Boot自动配置）</strong>：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
+<span class="hljs-keyword">import</span> org.springframework.context.annotation.Configuration;
+<span class="hljs-keyword">import</span> org.springframework.context.event.EventListener;
+<span class="hljs-keyword">import</span> org.springframework.boot.context.event.ApplicationReadyEvent;
+<span class="hljs-keyword">import</span> javax.sql.DataSource;
 
-@Configuration
-public class PgVectorInitializer {
+<span class="hljs-meta">@Configuration</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">PgVectorInitializer</span> {
 
-    private final DataSource dataSource;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> DataSource dataSource;
 
-    public PgVectorInitializer(DataSource dataSource) {
-        this.dataSource = dataSource;
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">PgVectorInitializer</span><span class="hljs-params">(DataSource dataSource)</span> {
+        <span class="hljs-built_in">this</span>.dataSource = dataSource;
     }
 
-    @EventListener(ApplicationReadyEvent.class)
-    public void initializePgVector() {
-        try (var conn = dataSource.getConnection();
-             var stmt = conn.createStatement()) {
+    <span class="hljs-meta">@EventListener(ApplicationReadyEvent.class)</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">initializePgVector</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">conn</span> <span class="hljs-operator">=</span> dataSource.getConnection();
+             <span class="hljs-type">var</span> <span class="hljs-variable">stmt</span> <span class="hljs-operator">=</span> conn.createStatement()) {
 
-            // 启用pgvector扩展
-            stmt.execute(&quot;CREATE EXTENSION IF NOT EXISTS vector&quot;);
+            <span class="hljs-comment">// 启用pgvector扩展</span>
+            stmt.execute(<span class="hljs-string">"CREATE EXTENSION IF NOT EXISTS vector"</span>);
 
-            // 创建表
-            stmt.execute(&quot;&quot;&quot;
+            <span class="hljs-comment">// 创建表</span>
+            stmt.execute(<span class="hljs-string">"""
                 CREATE TABLE IF NOT EXISTS chunk_embeddings (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                     chunk_id UUID NOT NULL,
@@ -178,23 +174,22 @@ public class PgVectorInitializer {
                     model_name VARCHAR(128),
                     created_at TIMESTAMPTZ DEFAULT now()
                 )
-                &quot;&quot;&quot;);
+                """</span>);
 
-            // 创建HNSW索引（如果不存在）
-            stmt.execute(&quot;&quot;&quot;
+            <span class="hljs-comment">// 创建HNSW索引（如果不存在）</span>
+            stmt.execute(<span class="hljs-string">"""
                 CREATE INDEX IF NOT EXISTS idx_chunk_embeddings_hnsw
                 ON chunk_embeddings
                 USING hnsw (embedding vector_cosine_ops)
                 WITH (m = 16, ef_construction = 200)
-                &quot;&quot;&quot;);
+                """</span>);
 
-        } catch (Exception e) {
-            // 初始化失败不阻止应用启动
+        } <span class="hljs-keyword">catch</span> (Exception e) {
+            <span class="hljs-comment">// 初始化失败不阻止应用启动</span>
         }
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>三、IVFFlat索引</h2>
 <h3>3.1 工作原理</h3>
 <p>IVFFlat (Inverted File with Flat compression) 将向量空间划分为K个聚类区域：</p>
@@ -206,30 +201,27 @@ public class PgVectorInitializer {
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>向量空间划分：
     Cluster 1: [v11, v12, v13, ...]  ← 倒排列表 1
     Cluster 2: [v21, v22, ...]       ← 倒排列表 2
-    ...
+<span class="hljs-keyword">    .</span>..
     Cluster K: [vK1, vK2, ...]       ← 倒排列表 K
 
 查询过程：
     query → 计算与K个聚类中心的距离
          → 选最近的nprobe个聚类
          → 在这nprobe个聚类的所有向量中精确搜索
-</code></pre></div>
-<h3>3.2 pgvector IVFFlat配置</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- 创建IVFFlat索引（需要先有数据用于训练）
-CREATE INDEX ON chunk_embeddings
-    USING ivfflat (embedding vector_cosine_ops)
-    WITH (lists = 100);  -- 聚类数K，典型值：rows/1000
+</code></pre></div><h3>3.2 pgvector IVFFlat配置</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-sql"><span class="hljs-comment">-- 创建IVFFlat索引（需要先有数据用于训练）</span>
+<span class="hljs-keyword">CREATE</span> INDEX <span class="hljs-keyword">ON</span> chunk_embeddings
+    <span class="hljs-keyword">USING</span> ivfflat (embedding vector_cosine_ops)
+    <span class="hljs-keyword">WITH</span> (lists <span class="hljs-operator">=</span> <span class="hljs-number">100</span>);  <span class="hljs-comment">-- 聚类数K，典型值：rows/1000</span>
 
--- 查询时设置探测数
-SET ivfflat.probes = 10; -- 探测最近的nprobe个聚类，典型值：sqrt(lists)
-</code></pre></div>
-<p><strong>IVFFlat vs HNSW选择建议</strong>：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>数据量 &lt; 100K + 需要频繁增量更新 → HNSW
-数据量 &gt; 10M + 内存受限 → IVFFlat
+<span class="hljs-comment">-- 查询时设置探测数</span>
+<span class="hljs-keyword">SET</span> ivfflat.probes <span class="hljs-operator">=</span> <span class="hljs-number">10</span>; <span class="hljs-comment">-- 探测最近的nprobe个聚类，典型值：sqrt(lists)</span>
+</code></pre></div><p><strong>IVFFlat vs HNSW选择建议</strong>：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>数据量 <span class="hljs-attribute">&lt; 100K + 需要频繁增量更新 → HNSW
+数据量 &gt;</span> 10M + 内存受限 → IVFFlat
 召回率要求 &gt; 99% → HNSW
 构建时间敏感 → IVFFlat
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>四、BM25稀疏检索</h2>
 <h3>4.1 从TF-IDF到BM25的演变</h3>
 <p><strong>TF-IDF的缺陷</strong>：</p>
@@ -254,85 +246,83 @@ SET ivfflat.probes = 10; -- 探测最近的nprobe个聚类，典型值：sqrt(li
 $$IDF(q_i) = \ln\left(1 + \frac{N - n(q_i) + 0.5}{n(q_i) + 0.5}\right)$$</p>
 <p>其中$N$为文档总数，$n(q_i)$为包含词$q_i$的文档数。</p>
 <h3>4.3 Elasticsearch BM25实现</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import co.elastic.clients.elasticsearch.ElasticsearchClient;
-import co.elastic.clients.elasticsearch.core.SearchResponse;
-import co.elastic.clients.elasticsearch.core.search.Hit;
-import co.elastic.clients.json.jackson.JacksonJsonpMapper;
-import co.elastic.clients.transport.rest_client.RestClientTransport;
-import org.elasticsearch.client.RestClient;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> co.elastic.clients.elasticsearch.ElasticsearchClient;
+<span class="hljs-keyword">import</span> co.elastic.clients.elasticsearch.core.SearchResponse;
+<span class="hljs-keyword">import</span> co.elastic.clients.elasticsearch.core.search.Hit;
+<span class="hljs-keyword">import</span> co.elastic.clients.json.jackson.JacksonJsonpMapper;
+<span class="hljs-keyword">import</span> co.elastic.clients.transport.rest_client.RestClientTransport;
+<span class="hljs-keyword">import</span> org.elasticsearch.client.RestClient;
 
-public class ElasticsearchBm25Search {
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ElasticsearchBm25Search</span> {
 
-    private final ElasticsearchClient esClient;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> ElasticsearchClient esClient;
 
-    public ElasticsearchBm25Search(String esUrl) {
-        var restClient = RestClient.builder(
-            java.net.http.HttpClient.newHttpClient()  // 简化示例
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">ElasticsearchBm25Search</span><span class="hljs-params">(String esUrl)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">restClient</span> <span class="hljs-operator">=</span> RestClient.builder(
+            java.net.http.HttpClient.newHttpClient()  <span class="hljs-comment">// 简化示例</span>
         );
-        // 实际项目中使用RestClient.builder(HttpHost.create(esUrl)).build()
-        this.esClient = null; // 实际初始化
+        <span class="hljs-comment">// 实际项目中使用RestClient.builder(HttpHost.create(esUrl)).build()</span>
+        <span class="hljs-built_in">this</span>.esClient = <span class="hljs-literal">null</span>; <span class="hljs-comment">// 实际初始化</span>
     }
 
-    /**
+    <span class="hljs-comment">/**
      * BM25检索
-     */
-    public record SearchResult(String chunkId, String content,
-                                double score, Map&lt;String, Object&gt; highlights) {}
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">SearchResult</span><span class="hljs-params">(String chunkId, String content,
+                                <span class="hljs-type">double</span> score, Map&lt;String, Object&gt; highlights)</span> {}
 
-    public List&lt;SearchResult&gt; bm25Search(String query, String indexName, int size) throws Exception {
-        var response = esClient.search(s -&gt; s
+    <span class="hljs-keyword">public</span> List&lt;SearchResult&gt; <span class="hljs-title function_">bm25Search</span><span class="hljs-params">(String query, String indexName, <span class="hljs-type">int</span> size)</span> <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-type">var</span> <span class="hljs-variable">response</span> <span class="hljs-operator">=</span> esClient.search(s -&gt; s
             .index(indexName)
             .query(q -&gt; q
                 .match(m -&gt; m
-                    .field(&quot;content&quot;)
+                    .field(<span class="hljs-string">"content"</span>)
                     .query(query)
                 )
             )
             .size(size)
             .highlight(h -&gt; h
-                .fields(&quot;content&quot;, hf -&gt; hf
-                    .fragmentSize(150)
-                    .numberOfFragments(3)
+                .fields(<span class="hljs-string">"content"</span>, hf -&gt; hf
+                    .fragmentSize(<span class="hljs-number">150</span>)
+                    .numberOfFragments(<span class="hljs-number">3</span>)
                 )
             )
-            .explain(true), // 开启explain查看BM25计算细节
+            .explain(<span class="hljs-literal">true</span>), <span class="hljs-comment">// 开启explain查看BM25计算细节</span>
             Map.class
         );
 
-        return response.hits().hits().stream()
-            .map(hit -&gt; new SearchResult(
-                (String) hit.source().get(&quot;chunk_id&quot;),
-                (String) hit.source().get(&quot;content&quot;),
-                hit.score() != null ? hit.score() : 0.0,
-                hit.highlight() != null ? hit.highlight() : Map.of()
+        <span class="hljs-keyword">return</span> response.hits().hits().stream()
+            .map(hit -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">SearchResult</span>(
+                (String) hit.source().get(<span class="hljs-string">"chunk_id"</span>),
+                (String) hit.source().get(<span class="hljs-string">"content"</span>),
+                hit.score() != <span class="hljs-literal">null</span> ? hit.score() : <span class="hljs-number">0.0</span>,
+                hit.highlight() != <span class="hljs-literal">null</span> ? hit.highlight() : Map.of()
             ))
             .toList();
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 使用explain API查看BM25打分细节（调试用）
-     */
-    public String explainScore(String query, String documentId, String indexName) throws Exception {
-        var response = esClient.explain(e -&gt; e
+     */</span>
+    <span class="hljs-keyword">public</span> String <span class="hljs-title function_">explainScore</span><span class="hljs-params">(String query, String documentId, String indexName)</span> <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-type">var</span> <span class="hljs-variable">response</span> <span class="hljs-operator">=</span> esClient.explain(e -&gt; e
             .index(indexName)
             .id(documentId)
-            .query(q -&gt; q.match(m -&gt; m.field(&quot;content&quot;).query(query)))
+            .query(q -&gt; q.match(m -&gt; m.field(<span class="hljs-string">"content"</span>).query(query)))
         );
-        return response.explanation().toString();
+        <span class="hljs-keyword">return</span> response.explanation().toString();
     }
 }
-</code></pre></div>
-<h3>4.4 PostgreSQL BM25 (ts_rank)</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- PostgreSQL全文搜索示例
-SELECT c.chunk_id, c.content,
-       ts_rank(to_tsvector(&#39;chinese&#39;, c.content),
-               to_tsquery(&#39;chinese&#39;, &#39;向量 &amp; 检索 &amp; 混合&#39;)) AS rank
-FROM chunks c
-WHERE to_tsvector(&#39;chinese&#39;, c.content) @@ to_tsquery(&#39;chinese&#39;, &#39;向量 &amp; 检索 &amp; 混合&#39;)
-ORDER BY rank DESC
-LIMIT 10;
-</code></pre></div>
-<p>注意：PostgreSQL的全文搜索默认使用<code>ts_rank</code>，不是严格意义上的BM25，但效果接近。</p>
+</code></pre></div><h3>4.4 PostgreSQL BM25 (ts_rank)</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-sql"><span class="hljs-comment">-- PostgreSQL全文搜索示例</span>
+<span class="hljs-keyword">SELECT</span> c.chunk_id, c.content,
+       ts_rank(to_tsvector(<span class="hljs-string">'chinese'</span>, c.content),
+               to_tsquery(<span class="hljs-string">'chinese'</span>, <span class="hljs-string">'向量 &amp; 检索 &amp; 混合'</span>)) <span class="hljs-keyword">AS</span> rank
+<span class="hljs-keyword">FROM</span> chunks c
+<span class="hljs-keyword">WHERE</span> to_tsvector(<span class="hljs-string">'chinese'</span>, c.content) @@ to_tsquery(<span class="hljs-string">'chinese'</span>, <span class="hljs-string">'向量 &amp; 检索 &amp; 混合'</span>)
+<span class="hljs-keyword">ORDER</span> <span class="hljs-keyword">BY</span> rank <span class="hljs-keyword">DESC</span>
+LIMIT <span class="hljs-number">10</span>;
+</code></pre></div><p>注意：PostgreSQL的全文搜索默认使用<code>ts_rank</code>，不是严格意义上的BM25，但效果接近。</p>
 <hr>
 <h2>五、混合检索与RRF融合</h2>
 <h3>5.1 稠密+稀疏的互补性</h3>
@@ -376,83 +366,82 @@ LIMIT 10;
 <li>$k$：平滑参数，经典默认值60。$k \to 0$时排名差距越大权重差异越大</li>
 </ul>
 <p><strong>RRF计算示例</strong>：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>文档A: 向量检索排名1, BM25排名3
-  RRF(A) = 1/(60+1) + 1/(60+3) = 0.01639 + 0.01587 = 0.03226
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>文档<span class="hljs-keyword">A</span>: 向量检索排名<span class="hljs-number">1</span>, BM25排名<span class="hljs-number">3</span>
+  RRF(<span class="hljs-keyword">A</span>) = <span class="hljs-number">1</span>/(<span class="hljs-number">60</span>+<span class="hljs-number">1</span>) + <span class="hljs-number">1</span>/(<span class="hljs-number">60</span>+<span class="hljs-number">3</span>) = <span class="hljs-number">0.01639</span> + <span class="hljs-number">0.01587</span> = <span class="hljs-number">0.03226</span>
 
-文档B: 向量检索排名2, BM25排名1
-  RRF(B) = 1/(60+2) + 1/(60+1) = 0.01613 + 0.01639 = 0.03252
+文档B: 向量检索排名<span class="hljs-number">2</span>, BM25排名<span class="hljs-number">1</span>
+  RRF(B) = <span class="hljs-number">1</span>/(<span class="hljs-number">60</span>+<span class="hljs-number">2</span>) + <span class="hljs-number">1</span>/(<span class="hljs-number">60</span>+<span class="hljs-number">1</span>) = <span class="hljs-number">0.01613</span> + <span class="hljs-number">0.01639</span> = <span class="hljs-number">0.03252</span>
 
-B排在A前面，虽然A的向量排名更高
-</code></pre></div>
-<h3>5.3 Java实现 — RRF融合算法</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.util.*;
-import java.util.stream.Collectors;
+B排在<span class="hljs-keyword">A</span>前面，虽然<span class="hljs-keyword">A</span>的向量排名更高
+</code></pre></div><h3>5.3 Java实现 — RRF融合算法</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> java.util.*;
+<span class="hljs-keyword">import</span> java.util.stream.Collectors;
 
-public class HybridSearchService {
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">HybridSearchService</span> {
 
-    /**
+    <span class="hljs-comment">/**
      * 混合检索结果
-     */
-    public record HybridSearchResult(
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">HybridSearchResult</span><span class="hljs-params">(
         String chunkId,
         String content,
-        double rrfScore,
-        double vectorScore,    // 原始向量相似度
-        double bm25Score,      // 原始BM25分数
-        int vectorRank,
-        int bm25Rank,
+        <span class="hljs-type">double</span> rrfScore,
+        <span class="hljs-type">double</span> vectorScore,    // 原始向量相似度
+        <span class="hljs-type">double</span> bm25Score,      // 原始BM25分数
+        <span class="hljs-type">int</span> vectorRank,
+        <span class="hljs-type">int</span> bm25Rank,
         Map&lt;String, Object&gt; metadata
-    ) {}
+    )</span> {}
 
-    /**
+    <span class="hljs-comment">/**
      * 执行混合检索 + RRF融合
-     */
-    public List&lt;HybridSearchResult&gt; hybridSearch(
-            String query, float[] queryEmbedding,
+     */</span>
+    <span class="hljs-keyword">public</span> List&lt;HybridSearchResult&gt; <span class="hljs-title function_">hybridSearch</span><span class="hljs-params">(
+            String query, <span class="hljs-type">float</span>[] queryEmbedding,
             String tenantId, List&lt;String&gt; accessLevels,
-            int topK) {
+            <span class="hljs-type">int</span> topK)</span> {
 
-        // 1. 向量检索（pgvector）
-        var vectorResults = vectorSearch(queryEmbedding, tenantId, accessLevels, topK * 2);
+        <span class="hljs-comment">// 1. 向量检索（pgvector）</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">vectorResults</span> <span class="hljs-operator">=</span> vectorSearch(queryEmbedding, tenantId, accessLevels, topK * <span class="hljs-number">2</span>);
 
-        // 2. BM25检索（Elasticsearch或PostgreSQL ts_rank）
-        var bm25Results = bm25Search(query, tenantId, accessLevels, topK * 2);
+        <span class="hljs-comment">// 2. BM25检索（Elasticsearch或PostgreSQL ts_rank）</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">bm25Results</span> <span class="hljs-operator">=</span> bm25Search(query, tenantId, accessLevels, topK * <span class="hljs-number">2</span>);
 
-        // 3. RRF融合
-        return rrfFusion(vectorResults, bm25Results, 60, topK);
+        <span class="hljs-comment">// 3. RRF融合</span>
+        <span class="hljs-keyword">return</span> rrfFusion(vectorResults, bm25Results, <span class="hljs-number">60</span>, topK);
     }
 
-    /**
+    <span class="hljs-comment">/**
      * RRF融合核心算法
-     * @param k RRF平滑参数，默认60
-     */
-    public List&lt;HybridSearchResult&gt; rrfFusion(
+     * <span class="hljs-doctag">@param</span> k RRF平滑参数，默认60
+     */</span>
+    <span class="hljs-keyword">public</span> List&lt;HybridSearchResult&gt; <span class="hljs-title function_">rrfFusion</span><span class="hljs-params">(
             List&lt;RankedResult&gt; vectorResults,
             List&lt;RankedResult&gt; bm25Results,
-            int k, int topK) {
+            <span class="hljs-type">int</span> k, <span class="hljs-type">int</span> topK)</span> {
 
-        // 构建 chunkId → RRF累积分数 的映射
-        var rrfScores = new HashMap&lt;String, RrfAccumulator&gt;();
+        <span class="hljs-comment">// 构建 chunkId → RRF累积分数 的映射</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">rrfScores</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">HashMap</span>&lt;String, RrfAccumulator&gt;();
 
-        // 处理向量检索结果
-        for (int i = 0; i &lt; vectorResults.size(); i++) {
-            var r = vectorResults.get(i);
-            var acc = rrfScores.computeIfAbsent(r.chunkId(), id -&gt; new RrfAccumulator());
-            acc.addVectorScore(r.score(), i + 1, k);
+        <span class="hljs-comment">// 处理向量检索结果</span>
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; vectorResults.size(); i++) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">r</span> <span class="hljs-operator">=</span> vectorResults.get(i);
+            <span class="hljs-type">var</span> <span class="hljs-variable">acc</span> <span class="hljs-operator">=</span> rrfScores.computeIfAbsent(r.chunkId(), id -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">RrfAccumulator</span>());
+            acc.addVectorScore(r.score(), i + <span class="hljs-number">1</span>, k);
         }
 
-        // 处理BM25检索结果
-        for (int i = 0; i &lt; bm25Results.size(); i++) {
-            var r = bm25Results.get(i);
-            var acc = rrfScores.computeIfAbsent(r.chunkId(), id -&gt; new RrfAccumulator());
-            acc.addBm25Score(r.score(), i + 1, k);
+        <span class="hljs-comment">// 处理BM25检索结果</span>
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; bm25Results.size(); i++) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">r</span> <span class="hljs-operator">=</span> bm25Results.get(i);
+            <span class="hljs-type">var</span> <span class="hljs-variable">acc</span> <span class="hljs-operator">=</span> rrfScores.computeIfAbsent(r.chunkId(), id -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">RrfAccumulator</span>());
+            acc.addBm25Score(r.score(), i + <span class="hljs-number">1</span>, k);
         }
 
-        // 按RRF分数排序，取Top-K
-        return rrfScores.entrySet().stream()
+        <span class="hljs-comment">// 按RRF分数排序，取Top-K</span>
+        <span class="hljs-keyword">return</span> rrfScores.entrySet().stream()
             .map(e -&gt; {
-                var acc = e.getValue();
-                return new HybridSearchResult(
+                <span class="hljs-type">var</span> <span class="hljs-variable">acc</span> <span class="hljs-operator">=</span> e.getValue();
+                <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">HybridSearchResult</span>(
                     e.getKey(),
                     getContent(e.getKey()),
                     acc.getRrfScore(),
@@ -468,262 +457,256 @@ public class HybridSearchService {
             .toList();
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 加权分数融合（Weighted Sum）— RRF的替代方案
      * 需要对向量相似度和BM25分数做归一化（Min-Max或Softmax）
-     */
-    public List&lt;HybridSearchResult&gt; weightedFusion(
+     */</span>
+    <span class="hljs-keyword">public</span> List&lt;HybridSearchResult&gt; <span class="hljs-title function_">weightedFusion</span><span class="hljs-params">(
             List&lt;RankedResult&gt; vectorResults,
             List&lt;RankedResult&gt; bm25Results,
-            double vectorWeight, // 典型值0.7
-            double bm25Weight,   // 典型值0.3
-            int topK) {
+            <span class="hljs-type">double</span> vectorWeight, // 典型值<span class="hljs-number">0.7</span>
+            <span class="hljs-type">double</span> bm25Weight,   // 典型值<span class="hljs-number">0.3</span>
+            <span class="hljs-type">int</span> topK)</span> {
 
-        // Min-Max归一化
-        if (vectorResults.isEmpty() || bm25Results.isEmpty()) {
-            return List.of();
+        <span class="hljs-comment">// Min-Max归一化</span>
+        <span class="hljs-keyword">if</span> (vectorResults.isEmpty() || bm25Results.isEmpty()) {
+            <span class="hljs-keyword">return</span> List.of();
         }
 
-        var vMax = vectorResults.getFirst().score();
-        var vMin = vectorResults.getLast().score();
-        var bMax = bm25Results.getFirst().score();
-        var bMin = bm25Results.getLast().score();
+        <span class="hljs-type">var</span> <span class="hljs-variable">vMax</span> <span class="hljs-operator">=</span> vectorResults.getFirst().score();
+        <span class="hljs-type">var</span> <span class="hljs-variable">vMin</span> <span class="hljs-operator">=</span> vectorResults.getLast().score();
+        <span class="hljs-type">var</span> <span class="hljs-variable">bMax</span> <span class="hljs-operator">=</span> bm25Results.getFirst().score();
+        <span class="hljs-type">var</span> <span class="hljs-variable">bMin</span> <span class="hljs-operator">=</span> bm25Results.getLast().score();
 
-        var scores = new HashMap&lt;String, Double&gt;();
+        <span class="hljs-type">var</span> <span class="hljs-variable">scores</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">HashMap</span>&lt;String, Double&gt;();
 
-        for (var r : vectorResults) {
-            var normalized = vMax == vMin ? 1.0
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> r : vectorResults) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">normalized</span> <span class="hljs-operator">=</span> vMax == vMin ? <span class="hljs-number">1.0</span>
                 : (r.score() - vMin) / (vMax - vMin);
             scores.merge(r.chunkId(), normalized * vectorWeight, Double::sum);
         }
 
-        for (var r : bm25Results) {
-            var normalized = bMax == bMin ? 1.0
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> r : bm25Results) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">normalized</span> <span class="hljs-operator">=</span> bMax == bMin ? <span class="hljs-number">1.0</span>
                 : (r.score() - bMin) / (bMax - bMin);
             scores.merge(r.chunkId(), normalized * bm25Weight, Double::sum);
         }
 
-        return scores.entrySet().stream()
+        <span class="hljs-keyword">return</span> scores.entrySet().stream()
             .sorted(Map.Entry.&lt;String, Double&gt;comparingByValue().reversed())
             .limit(topK)
-            .map(e -&gt; new HybridSearchResult(
+            .map(e -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">HybridSearchResult</span>(
                 e.getKey(), getContent(e.getKey()),
-                e.getValue(), 0, 0, 0, 0, getMetadata(e.getKey())
+                e.getValue(), <span class="hljs-number">0</span>, <span class="hljs-number">0</span>, <span class="hljs-number">0</span>, <span class="hljs-number">0</span>, getMetadata(e.getKey())
             ))
             .toList();
     }
 
-    // --- 辅助类型 ---
-    public record RankedResult(String chunkId, double score) {}
+    <span class="hljs-comment">// --- 辅助类型 ---</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">RankedResult</span><span class="hljs-params">(String chunkId, <span class="hljs-type">double</span> score)</span> {}
 
-    private static class RrfAccumulator {
-        double vectorScore = 0;
-        double bm25Score = 0;
-        int vectorRank = -1;
-        int bm25Rank = -1;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">RrfAccumulator</span> {
+        <span class="hljs-type">double</span> <span class="hljs-variable">vectorScore</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+        <span class="hljs-type">double</span> <span class="hljs-variable">bm25Score</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+        <span class="hljs-type">int</span> <span class="hljs-variable">vectorRank</span> <span class="hljs-operator">=</span> -<span class="hljs-number">1</span>;
+        <span class="hljs-type">int</span> <span class="hljs-variable">bm25Rank</span> <span class="hljs-operator">=</span> -<span class="hljs-number">1</span>;
 
-        void addVectorScore(double score, int rank, int k) {
-            this.vectorScore = score;
-            this.vectorRank = rank;
+        <span class="hljs-keyword">void</span> <span class="hljs-title function_">addVectorScore</span><span class="hljs-params">(<span class="hljs-type">double</span> score, <span class="hljs-type">int</span> rank, <span class="hljs-type">int</span> k)</span> {
+            <span class="hljs-built_in">this</span>.vectorScore = score;
+            <span class="hljs-built_in">this</span>.vectorRank = rank;
         }
 
-        void addBm25Score(double score, int rank, int k) {
-            this.bm25Score = score;
-            this.bm25Rank = rank;
+        <span class="hljs-keyword">void</span> <span class="hljs-title function_">addBm25Score</span><span class="hljs-params">(<span class="hljs-type">double</span> score, <span class="hljs-type">int</span> rank, <span class="hljs-type">int</span> k)</span> {
+            <span class="hljs-built_in">this</span>.bm25Score = score;
+            <span class="hljs-built_in">this</span>.bm25Rank = rank;
         }
 
-        double getRrfScore() {
-            double sum = 0;
-            if (vectorRank &gt; 0) sum += 1.0 / (60 + vectorRank);
-            if (bm25Rank &gt; 0) sum += 1.0 / (60 + bm25Rank);
-            return sum;
+        <span class="hljs-type">double</span> <span class="hljs-title function_">getRrfScore</span><span class="hljs-params">()</span> {
+            <span class="hljs-type">double</span> <span class="hljs-variable">sum</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+            <span class="hljs-keyword">if</span> (vectorRank &gt; <span class="hljs-number">0</span>) sum += <span class="hljs-number">1.0</span> / (<span class="hljs-number">60</span> + vectorRank);
+            <span class="hljs-keyword">if</span> (bm25Rank &gt; <span class="hljs-number">0</span>) sum += <span class="hljs-number">1.0</span> / (<span class="hljs-number">60</span> + bm25Rank);
+            <span class="hljs-keyword">return</span> sum;
         }
     }
 
-    // --- 占位方法 ---
-    private List&lt;RankedResult&gt; vectorSearch(float[] embedding, String tenantId,
-                                             List&lt;String&gt; accessLevels, int limit) {
-        // 调用pgvector进行向量检索
-        return List.of();
+    <span class="hljs-comment">// --- 占位方法 ---</span>
+    <span class="hljs-keyword">private</span> List&lt;RankedResult&gt; <span class="hljs-title function_">vectorSearch</span><span class="hljs-params">(<span class="hljs-type">float</span>[] embedding, String tenantId,
+                                             List&lt;String&gt; accessLevels, <span class="hljs-type">int</span> limit)</span> {
+        <span class="hljs-comment">// 调用pgvector进行向量检索</span>
+        <span class="hljs-keyword">return</span> List.of();
     }
 
-    private List&lt;RankedResult&gt; bm25Search(String query, String tenantId,
-                                           List&lt;String&gt; accessLevels, int limit) {
-        // 调用Elasticsearch进行BM25检索
-        return List.of();
+    <span class="hljs-keyword">private</span> List&lt;RankedResult&gt; <span class="hljs-title function_">bm25Search</span><span class="hljs-params">(String query, String tenantId,
+                                           List&lt;String&gt; accessLevels, <span class="hljs-type">int</span> limit)</span> {
+        <span class="hljs-comment">// 调用Elasticsearch进行BM25检索</span>
+        <span class="hljs-keyword">return</span> List.of();
     }
 
-    private String getContent(String chunkId) { return &quot;&quot;; }
-    private Map&lt;String, Object&gt; getMetadata(String chunkId) { return Map.of(); }
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">getContent</span><span class="hljs-params">(String chunkId)</span> { <span class="hljs-keyword">return</span> <span class="hljs-string">""</span>; }
+    <span class="hljs-keyword">private</span> Map&lt;String, Object&gt; <span class="hljs-title function_">getMetadata</span><span class="hljs-params">(String chunkId)</span> { <span class="hljs-keyword">return</span> Map.of(); }
 }
-</code></pre></div>
-<h3>5.4 Elasticsearch混合检索（BM25 + kNN + RRF）</h3>
+</code></pre></div><h3>5.4 Elasticsearch混合检索（BM25 + kNN + RRF）</h3>
 <p>Elasticsearch 8.12+原生支持混合检索：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">/**
  * Elasticsearch原生混合检索 — BM25 + kNN + RRF
- */
-public List&lt;SearchResult&gt; esHybridSearch(
+ */</span>
+<span class="hljs-keyword">public</span> List&lt;SearchResult&gt; <span class="hljs-title function_">esHybridSearch</span><span class="hljs-params">(
         ElasticsearchClient esClient,
-        String query, float[] queryEmbedding,
-        String indexName, int topK) throws Exception {
+        String query, <span class="hljs-type">float</span>[] queryEmbedding,
+        String indexName, <span class="hljs-type">int</span> topK)</span> <span class="hljs-keyword">throws</span> Exception {
 
-    var response = esClient.search(s -&gt; s
+    <span class="hljs-type">var</span> <span class="hljs-variable">response</span> <span class="hljs-operator">=</span> esClient.search(s -&gt; s
         .index(indexName)
         .size(topK)
-        // BM25子查询
+        <span class="hljs-comment">// BM25子查询</span>
         .query(q -&gt; q.bool(b -&gt; b
             .should(sq -&gt; sq.match(m -&gt; m
-                .field(&quot;content&quot;)
+                .field(<span class="hljs-string">"content"</span>)
                 .query(query)
-                .boost(1.0f)
+                .boost(<span class="hljs-number">1.0f</span>)
             ))
         ))
-        // kNN子查询
+        <span class="hljs-comment">// kNN子查询</span>
         .knn(k -&gt; k
-            .field(&quot;embedding&quot;)
+            .field(<span class="hljs-string">"embedding"</span>)
             .queryVector(Arrays.stream(queryEmbedding)
                 .boxed().toList())
-            .k(topK * 2)
-            .numCandidates(topK * 4)
+            .k(topK * <span class="hljs-number">2</span>)
+            .numCandidates(topK * <span class="hljs-number">4</span>)
         )
-        // RRF融合
+        <span class="hljs-comment">// RRF融合</span>
         .rank(r -&gt; r.rrf(rrf -&gt; rrf
-            .windowSize(topK * 2)
-            .rankConstant(60)
+            .windowSize(topK * <span class="hljs-number">2</span>)
+            .rankConstant(<span class="hljs-number">60</span>)
         )),
         Map.class
     );
 
-    return response.hits().hits().stream()
-        .map(hit -&gt; new SearchResult(
-            (String) hit.source().get(&quot;chunk_id&quot;),
-            (String) hit.source().get(&quot;content&quot;),
-            hit.score() != null ? hit.score() : 0.0,
+    <span class="hljs-keyword">return</span> response.hits().hits().stream()
+        .map(hit -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">SearchResult</span>(
+            (String) hit.source().get(<span class="hljs-string">"chunk_id"</span>),
+            (String) hit.source().get(<span class="hljs-string">"content"</span>),
+            hit.score() != <span class="hljs-literal">null</span> ? hit.score() : <span class="hljs-number">0.0</span>,
             Map.of()
         ))
         .toList();
 }
-</code></pre></div>
-<h3>5.5 PostgreSQL混合检索（ts_rank + pgvector + RRF）</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- PostgreSQL混合检索完整SQL
-WITH vector_results AS (
-    SELECT c.chunk_id, c.content,
-           1 - (e.embedding &lt;=&gt; :query_vector::vector) AS vector_score,
-           ROW_NUMBER() OVER (ORDER BY e.embedding &lt;=&gt; :query_vector::vector) AS vector_rank
-    FROM chunk_embeddings e
-    JOIN chunks c ON e.chunk_id = c.chunk_id
-    WHERE c.status = &#39;active&#39;
-      AND c.tenant_id = :tenant_id
-    ORDER BY e.embedding &lt;=&gt; :query_vector::vector
+</code></pre></div><h3>5.5 PostgreSQL混合检索（ts_rank + pgvector + RRF）</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-sql"><span class="hljs-comment">-- PostgreSQL混合检索完整SQL</span>
+<span class="hljs-keyword">WITH</span> vector_results <span class="hljs-keyword">AS</span> (
+    <span class="hljs-keyword">SELECT</span> c.chunk_id, c.content,
+           <span class="hljs-number">1</span> <span class="hljs-operator">-</span> (e.embedding <span class="hljs-operator">&lt;=&gt;</span> :query_vector::vector) <span class="hljs-keyword">AS</span> vector_score,
+           <span class="hljs-built_in">ROW_NUMBER</span>() <span class="hljs-keyword">OVER</span> (<span class="hljs-keyword">ORDER</span> <span class="hljs-keyword">BY</span> e.embedding <span class="hljs-operator">&lt;=&gt;</span> :query_vector::vector) <span class="hljs-keyword">AS</span> vector_rank
+    <span class="hljs-keyword">FROM</span> chunk_embeddings e
+    <span class="hljs-keyword">JOIN</span> chunks c <span class="hljs-keyword">ON</span> e.chunk_id <span class="hljs-operator">=</span> c.chunk_id
+    <span class="hljs-keyword">WHERE</span> c.status <span class="hljs-operator">=</span> <span class="hljs-string">'active'</span>
+      <span class="hljs-keyword">AND</span> c.tenant_id <span class="hljs-operator">=</span> :tenant_id
+    <span class="hljs-keyword">ORDER</span> <span class="hljs-keyword">BY</span> e.embedding <span class="hljs-operator">&lt;=&gt;</span> :query_vector::vector
     LIMIT :limit
 ),
-bm25_results AS (
-    SELECT c.chunk_id, c.content,
-           ts_rank(to_tsvector(&#39;chinese&#39;, c.content),
-                   plainto_tsquery(&#39;chinese&#39;, :query_text)) AS bm25_score,
-           ROW_NUMBER() OVER (ORDER BY
-               ts_rank(to_tsvector(&#39;chinese&#39;, c.content),
-                       plainto_tsquery(&#39;chinese&#39;, :query_text)) DESC
-           ) AS bm25_rank
-    FROM chunks c
-    WHERE to_tsvector(&#39;chinese&#39;, c.content) @@ plainto_tsquery(&#39;chinese&#39;, :query_text)
-      AND c.status = &#39;active&#39;
-      AND c.tenant_id = :tenant_id
-    ORDER BY bm25_score DESC
+bm25_results <span class="hljs-keyword">AS</span> (
+    <span class="hljs-keyword">SELECT</span> c.chunk_id, c.content,
+           ts_rank(to_tsvector(<span class="hljs-string">'chinese'</span>, c.content),
+                   plainto_tsquery(<span class="hljs-string">'chinese'</span>, :query_text)) <span class="hljs-keyword">AS</span> bm25_score,
+           <span class="hljs-built_in">ROW_NUMBER</span>() <span class="hljs-keyword">OVER</span> (<span class="hljs-keyword">ORDER</span> <span class="hljs-keyword">BY</span>
+               ts_rank(to_tsvector(<span class="hljs-string">'chinese'</span>, c.content),
+                       plainto_tsquery(<span class="hljs-string">'chinese'</span>, :query_text)) <span class="hljs-keyword">DESC</span>
+           ) <span class="hljs-keyword">AS</span> bm25_rank
+    <span class="hljs-keyword">FROM</span> chunks c
+    <span class="hljs-keyword">WHERE</span> to_tsvector(<span class="hljs-string">'chinese'</span>, c.content) @@ plainto_tsquery(<span class="hljs-string">'chinese'</span>, :query_text)
+      <span class="hljs-keyword">AND</span> c.status <span class="hljs-operator">=</span> <span class="hljs-string">'active'</span>
+      <span class="hljs-keyword">AND</span> c.tenant_id <span class="hljs-operator">=</span> :tenant_id
+    <span class="hljs-keyword">ORDER</span> <span class="hljs-keyword">BY</span> bm25_score <span class="hljs-keyword">DESC</span>
     LIMIT :limit
 ),
-combined AS (
-    SELECT
-        COALESCE(v.chunk_id, b.chunk_id) AS chunk_id,
-        COALESCE(v.content, b.content) AS content,
-        COALESCE(v.vector_score, 0) AS vector_score,
-        COALESCE(b.bm25_score, 0) AS bm25_score,
-        COALESCE(v.vector_rank, :fallback_rank) AS vector_rank,
-        COALESCE(b.bm25_rank, :fallback_rank) AS bm25_rank
-    FROM vector_results v
-    FULL OUTER JOIN bm25_results b ON v.chunk_id = b.chunk_id
+combined <span class="hljs-keyword">AS</span> (
+    <span class="hljs-keyword">SELECT</span>
+        <span class="hljs-built_in">COALESCE</span>(v.chunk_id, b.chunk_id) <span class="hljs-keyword">AS</span> chunk_id,
+        <span class="hljs-built_in">COALESCE</span>(v.content, b.content) <span class="hljs-keyword">AS</span> content,
+        <span class="hljs-built_in">COALESCE</span>(v.vector_score, <span class="hljs-number">0</span>) <span class="hljs-keyword">AS</span> vector_score,
+        <span class="hljs-built_in">COALESCE</span>(b.bm25_score, <span class="hljs-number">0</span>) <span class="hljs-keyword">AS</span> bm25_score,
+        <span class="hljs-built_in">COALESCE</span>(v.vector_rank, :fallback_rank) <span class="hljs-keyword">AS</span> vector_rank,
+        <span class="hljs-built_in">COALESCE</span>(b.bm25_rank, :fallback_rank) <span class="hljs-keyword">AS</span> bm25_rank
+    <span class="hljs-keyword">FROM</span> vector_results v
+    <span class="hljs-keyword">FULL</span> <span class="hljs-keyword">OUTER</span> <span class="hljs-keyword">JOIN</span> bm25_results b <span class="hljs-keyword">ON</span> v.chunk_id <span class="hljs-operator">=</span> b.chunk_id
 )
-SELECT chunk_id, content, vector_score, bm25_score,
-       (1.0 / (60 + vector_rank) + 1.0 / (60 + bm25_rank)) AS rrf_score
-FROM combined
-ORDER BY rrf_score DESC
+<span class="hljs-keyword">SELECT</span> chunk_id, content, vector_score, bm25_score,
+       (<span class="hljs-number">1.0</span> <span class="hljs-operator">/</span> (<span class="hljs-number">60</span> <span class="hljs-operator">+</span> vector_rank) <span class="hljs-operator">+</span> <span class="hljs-number">1.0</span> <span class="hljs-operator">/</span> (<span class="hljs-number">60</span> <span class="hljs-operator">+</span> bm25_rank)) <span class="hljs-keyword">AS</span> rrf_score
+<span class="hljs-keyword">FROM</span> combined
+<span class="hljs-keyword">ORDER</span> <span class="hljs-keyword">BY</span> rrf_score <span class="hljs-keyword">DESC</span>
 LIMIT :top_k;
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>六、元数据过滤策略</h2>
 <h3>6.1 Pre-filtering vs Post-filtering</h3>
 <p><strong>Pre-filtering（先过滤再检索）</strong>：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- pgvector: WHERE子句在ORDER BY之前执行
-SELECT c.chunk_id, c.content,
-       1 - (e.embedding &lt;=&gt; :query_vector) AS similarity
-FROM chunk_embeddings e
-JOIN chunks c ON e.chunk_id = c.chunk_id
-WHERE c.tenant_id = :tenant_id           -- 过滤
-  AND c.access_level IN (:access_levels)  -- 过滤
-  AND c.created_at &gt; :since               -- 过滤
-ORDER BY e.embedding &lt;=&gt; :query_vector
-LIMIT 10;
-</code></pre></div>
-<ul>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-sql"><span class="hljs-comment">-- pgvector: WHERE子句在ORDER BY之前执行</span>
+<span class="hljs-keyword">SELECT</span> c.chunk_id, c.content,
+       <span class="hljs-number">1</span> <span class="hljs-operator">-</span> (e.embedding <span class="hljs-operator">&lt;=&gt;</span> :query_vector) <span class="hljs-keyword">AS</span> similarity
+<span class="hljs-keyword">FROM</span> chunk_embeddings e
+<span class="hljs-keyword">JOIN</span> chunks c <span class="hljs-keyword">ON</span> e.chunk_id <span class="hljs-operator">=</span> c.chunk_id
+<span class="hljs-keyword">WHERE</span> c.tenant_id <span class="hljs-operator">=</span> :tenant_id           <span class="hljs-comment">-- 过滤</span>
+  <span class="hljs-keyword">AND</span> c.access_level <span class="hljs-keyword">IN</span> (:access_levels)  <span class="hljs-comment">-- 过滤</span>
+  <span class="hljs-keyword">AND</span> c.created_at <span class="hljs-operator">&gt;</span> :since               <span class="hljs-comment">-- 过滤</span>
+<span class="hljs-keyword">ORDER</span> <span class="hljs-keyword">BY</span> e.embedding <span class="hljs-operator">&lt;=&gt;</span> :query_vector
+LIMIT <span class="hljs-number">10</span>;
+</code></pre></div><ul>
 <li><strong>优点</strong>：精确控制返回数量</li>
 <li><strong>缺点</strong>：可能排除了语义相关但不满足过滤条件的文档（更安全的选择）</li>
 </ul>
 <p><strong>Post-filtering（先检索再过滤）</strong>：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- 先检索更多，再在应用层过滤
-SELECT ... LIMIT 50  -- 取更多
--- 然后在Java代码中过滤
-</code></pre></div>
-<ul>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-sql"><span class="hljs-comment">-- 先检索更多，再在应用层过滤</span>
+<span class="hljs-keyword">SELECT</span> ... LIMIT <span class="hljs-number">50</span>  <span class="hljs-comment">-- 取更多</span>
+<span class="hljs-comment">-- 然后在Java代码中过滤</span>
+</code></pre></div><ul>
 <li><strong>优点</strong>：不会因过滤条件漏掉潜在相关文档</li>
 <li><strong>缺点</strong>：返回数量不可控</li>
 </ul>
 <p><strong>最佳实践</strong>：Pre-filtering + 适当扩大检索范围（<code>limit * 1.5 ~ 2</code>）。</p>
 <h3>6.2 Java实现</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class FilteredSearchService {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">FilteredSearchService</span> {
 
-    /**
+    <span class="hljs-comment">/**
      * Pre-filtering策略：在SQL/ES层面完成过滤
-     */
-    public List&lt;HybridSearchResult&gt; searchWithFilters(
-            float[] queryEmbedding, String query,
-            FilterCriteria criteria, int topK) {
+     */</span>
+    <span class="hljs-keyword">public</span> List&lt;HybridSearchResult&gt; <span class="hljs-title function_">searchWithFilters</span><span class="hljs-params">(
+            <span class="hljs-type">float</span>[] queryEmbedding, String query,
+            FilterCriteria criteria, <span class="hljs-type">int</span> topK)</span> {
 
-        var expandedLimit = (int) (topK * 2.0); // 扩大检索范围
+        <span class="hljs-type">var</span> <span class="hljs-variable">expandedLimit</span> <span class="hljs-operator">=</span> (<span class="hljs-type">int</span>) (topK * <span class="hljs-number">2.0</span>); <span class="hljs-comment">// 扩大检索范围</span>
 
-        var vectorResults = vectorSearchWithFilters(
+        <span class="hljs-type">var</span> <span class="hljs-variable">vectorResults</span> <span class="hljs-operator">=</span> vectorSearchWithFilters(
             queryEmbedding, criteria, expandedLimit
         );
-        var bm25Results = bm25SearchWithFilters(
+        <span class="hljs-type">var</span> <span class="hljs-variable">bm25Results</span> <span class="hljs-operator">=</span> bm25SearchWithFilters(
             query, criteria, expandedLimit
         );
 
-        var fused = rrfFusion(vectorResults, bm25Results, 60, topK);
+        <span class="hljs-type">var</span> <span class="hljs-variable">fused</span> <span class="hljs-operator">=</span> rrfFusion(vectorResults, bm25Results, <span class="hljs-number">60</span>, topK);
 
-        // 后置检查（双保险）
-        return fused.stream()
+        <span class="hljs-comment">// 后置检查（双保险）</span>
+        <span class="hljs-keyword">return</span> fused.stream()
             .filter(r -&gt; criteria.matches(r.metadata()))
             .limit(topK)
             .toList();
     }
 
-    public record FilterCriteria(
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">FilterCriteria</span><span class="hljs-params">(
         String tenantId,
         List&lt;String&gt; accessLevels,
         String category,
         List&lt;String&gt; tags,
         java.time.Instant since,
         java.time.Instant until
-    ) {
-        public boolean matches(Map&lt;String, Object&gt; metadata) {
-            if (tenantId != null &amp;&amp; !tenantId.equals(metadata.get(&quot;tenant_id&quot;))) return false;
-            if (!accessLevels.isEmpty() &amp;&amp; !accessLevels.contains(metadata.get(&quot;access_level&quot;))) return false;
-            // ... 更多条件
-            return true;
+    )</span> {
+        <span class="hljs-keyword">public</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">matches</span><span class="hljs-params">(Map&lt;String, Object&gt; metadata)</span> {
+            <span class="hljs-keyword">if</span> (tenantId != <span class="hljs-literal">null</span> &amp;&amp; !tenantId.equals(metadata.get(<span class="hljs-string">"tenant_id"</span>))) <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+            <span class="hljs-keyword">if</span> (!accessLevels.isEmpty() &amp;&amp; !accessLevels.contains(metadata.get(<span class="hljs-string">"access_level"</span>))) <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+            <span class="hljs-comment">// ... 更多条件</span>
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
         }
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>七、性能数据</h2>
 <table>
 <thead>
@@ -797,10 +780,10 @@ SELECT ... LIMIT 50  -- 取更多
 </ul>
 <h2>相关条目</h2>
 <ul>
-<li><a href="#/11-检索与RAG/检索技术/11-重排与上下文处理" class="cross-ref" data-ref="11-重排与上下文处理">11-重排与上下文处理</a> — 检索后的重排优化</li>
-<li><a href="#/11-检索与RAG/RAG实现/11-高级RAG模式" class="cross-ref" data-ref="11-高级RAG模式">11-高级RAG模式</a> — 基于混合检索的高级RAG模式</li>
-<li><a href="#/11-检索与RAG/RAG实现/11-完整RAG流水线实现" class="cross-ref" data-ref="11-完整RAG流水线实现">11-完整RAG流水线实现</a> — 完整RAG流水线</li>
-<li><a href="#/04-数据与中间件/数据库与缓存/04-PostgreSQL与pgvector深度解析" class="cross-ref" data-ref="04-PostgreSQL与pgvector深度解析">04-PostgreSQL与pgvector深度解析</a> — pgvector深入</li>
+<li><a href="#/11-检索与RAG/检索技术/11-重排与上下文处理" class="cross-ref">11-重排与上下文处理</a> — 检索后的重排优化</li>
+<li><a href="#/11-检索与RAG/RAG实现/11-高级RAG模式" class="cross-ref">11-高级RAG模式</a> — 基于混合检索的高级RAG模式</li>
+<li><a href="#/11-检索与RAG/RAG实现/11-完整RAG流水线实现" class="cross-ref">11-完整RAG流水线实现</a> — 完整RAG流水线</li>
+<li><a href="#/04-数据与中间件/数据库与缓存/04-PostgreSQL与pgvector深度解析" class="cross-ref">04-PostgreSQL与pgvector深度解析</a> — pgvector深入</li>
 </ul>
-</div>
+</body></html></div>
 </article>

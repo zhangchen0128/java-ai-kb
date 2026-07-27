@@ -1,12 +1,12 @@
 
-<article class="kb-entry" data-path="/05-分布式架构/事务与一致性/05-分布式一致性与事务方案">
+<article class="kb-entry" data-path="/05-分布式架构">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=05">05-分布式架构</a></div>
     <h1>分布式一致性与事务方案</h1>
-    <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#distributed-transaction</span><span class="badge badge-tag">#saga</span><span class="badge badge-tag">#tcc</span><span class="badge badge-tag">#outbox</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#distributed-transaction</span><span class="badge badge-tag">#saga</span><span class="badge badge-tag">#tcc</span><span class="badge badge-tag">#outbox</span><span class="badge badge-tag">#seata</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://seata.apache.org/docs/" target="_blank" rel="noopener" class="source-link" title="Seata 官方文档 — AT/TCC/Saga/XA 模式">Seata 官方文档 — AT/TCC/Saga/XA 模式</a><a href="https://www.oreilly.com/library/view/designing-data-intensive-applications/" target="_blank" rel="noopener" class="source-link" title="《Designing Data-Intensive Applications》— Martin Kleppmann，第7-9章分布式事务与一致性">《Designing Data-Intensive Applications》— Martin Kleppmann，第7-9章分布式事务与一致性</a><a href="https://microservices.io/patterns/data/saga.html" target="_blank" rel="noopener" class="source-link" title="Chris Richardson — Saga Pattern 详解">Chris Richardson — Saga Pattern 详解</a></small></div>
   </div>
-  <div class="entry-body"><h1>分布式一致性与事务方案</h1>
+  <div class="entry-body"><html><head></head><body><h1>分布式一致性与事务方案</h1>
 <h2>概述</h2>
 <p>分布式事务是微服务架构中最具挑战性的问题之一。在 AI 应用中，Agent 工具调用涉及多个外部系统、向量索引更新跨多个数据库、异步推理结果需要可靠投递——这些场景都需要合适的分布式事务或一致性保障机制。</p>
 <p>本文从一致性模型出发，系统对比 2PC/XA、Saga、TCC、本地消息表、Outbox Pattern 和 Seata 六大方案，提供决策树和 Spring 实现代码。</p>
@@ -63,21 +63,20 @@
 <p><strong>原理：</strong></p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>              Coordinator
               (TM)
-          /       |       \
-         /        |        \
+          <span class="hljs-symbol">/</span>       |       \
+         <span class="hljs-symbol">/</span>        |        \
    Participant  Participant  Participant
       (RM1)       (RM2)        (RM3)
 
-Phase 1 — Prepare（投票）：
-  1. TM → all RM: &quot;准备提交&quot;
-  2. RM 执行事务但不提交，写 Undo/Redo 日志
-  3. RM → TM: &quot;Ready&quot; 或 &quot;Abort&quot;
+Phase <span class="hljs-number">1</span> — Prepare（投票）：
+  <span class="hljs-number">1</span>. TM → all <span class="hljs-params">RM:</span> <span class="hljs-string">"准备提交"</span>
+  <span class="hljs-number">2</span>. RM 执行事务但不提交，写 Undo<span class="hljs-symbol">/Redo</span> 日志
+  <span class="hljs-number">3</span>. RM → <span class="hljs-params">TM:</span> <span class="hljs-string">"Ready"</span> 或 <span class="hljs-string">"Abort"</span>
 
-Phase 2 — Commit/Abort（决策）：
-  1a. 所有 RM Ready → TM → all RM: &quot;提交&quot; → 各 RM 提交
-  1b. 任一 RM Abort → TM → all RM: &quot;回滚&quot; → 各 RM 回滚
-</code></pre></div>
-<p><strong>故障分析：</strong></p>
+Phase <span class="hljs-number">2</span> — Commit<span class="hljs-operator">/</span>Abort（决策）：
+  <span class="hljs-number">1</span>a. 所有 RM Ready → TM → all <span class="hljs-params">RM:</span> <span class="hljs-string">"提交"</span> → 各 RM 提交
+  <span class="hljs-number">1</span>b. 任一 RM Abort → TM → all <span class="hljs-params">RM:</span> <span class="hljs-string">"回滚"</span> → 各 RM 回滚
+</code></pre></div><p><strong>故障分析：</strong></p>
 <table>
 <thead>
 <tr>
@@ -108,66 +107,64 @@ Phase 2 — Commit/Abort（决策）：
 </tr>
 </tbody></table>
 <p><strong>JTA/JDBC 实现：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Configuration
-public class XADataSourceConfig {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Configuration</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">XADataSourceConfig</span> {
 
-    @Bean
-    @Primary
-    public DataSource dataSource() throws Exception {
-        var xaDs = new PGXADataSource();
-        xaDs.setURL(&quot;jdbc:postgresql://localhost:5432/db_a&quot;);
-        xaDs.setUser(&quot;postgres&quot;);
-        xaDs.setPassword(&quot;${DB_PASSWORD}&quot;);
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-meta">@Primary</span>
+    <span class="hljs-keyword">public</span> DataSource <span class="hljs-title function_">dataSource</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-type">var</span> <span class="hljs-variable">xaDs</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">PGXADataSource</span>();
+        xaDs.setURL(<span class="hljs-string">"jdbc:postgresql://localhost:5432/db_a"</span>);
+        xaDs.setUser(<span class="hljs-string">"postgres"</span>);
+        xaDs.setPassword(<span class="hljs-string">"${DB_PASSWORD}"</span>);
 
-        var atomikosDs = new AtomikosDataSourceBean();
+        <span class="hljs-type">var</span> <span class="hljs-variable">atomikosDs</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">AtomikosDataSourceBean</span>();
         atomikosDs.setXaDataSource(xaDs);
-        atomikosDs.setUniqueResourceName(&quot;postgres-db-a&quot;);
-        atomikosDs.setMinPoolSize(3);
-        atomikosDs.setMaxPoolSize(10);
-        return atomikosDs;
+        atomikosDs.setUniqueResourceName(<span class="hljs-string">"postgres-db-a"</span>);
+        atomikosDs.setMinPoolSize(<span class="hljs-number">3</span>);
+        atomikosDs.setMaxPoolSize(<span class="hljs-number">10</span>);
+        <span class="hljs-keyword">return</span> atomikosDs;
     }
 
-    @Bean
-    public PlatformTransactionManager transactionManager() {
-        return new JtaTransactionManager(
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-keyword">public</span> PlatformTransactionManager <span class="hljs-title function_">transactionManager</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">JtaTransactionManager</span>(
                 AtomikosJtaConfiguration.userTransaction(),
                 AtomikosJtaConfiguration.transactionManager());
     }
 }
 
-// Spring @Transactional + JTA（跨数据源分布式事务）
-@Service
-public class OrderXAService {
+<span class="hljs-comment">// Spring @Transactional + JTA（跨数据源分布式事务）</span>
+<span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">OrderXAService</span> {
 
-    @Transactional  // JTA 事务管理器管理 2PC
-    public void createOrder(Order order, Payment payment) {
-        orderRepo.save(order);   // DB-A
-        paymentRepo.save(payment); // DB-B
-        // 两个操作在同一个 XA 事务中
+    <span class="hljs-meta">@Transactional</span>  <span class="hljs-comment">// JTA 事务管理器管理 2PC</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">createOrder</span><span class="hljs-params">(Order order, Payment payment)</span> {
+        orderRepo.save(order);   <span class="hljs-comment">// DB-A</span>
+        paymentRepo.save(payment); <span class="hljs-comment">// DB-B</span>
+        <span class="hljs-comment">// 两个操作在同一个 XA 事务中</span>
     }
 }
-</code></pre></div>
-<p><strong>2PC 评价：</strong> 强一致性保证，但性能差（同步阻塞）、单点故障风险（协调者）、锁定时间长。现代微服务架构很少使用。</p>
+</code></pre></div><p><strong>2PC 评价：</strong> 强一致性保证，但性能差（同步阻塞）、单点故障风险（协调者）、锁定时间长。现代微服务架构很少使用。</p>
 <h3>2.2 Saga</h3>
 <p>Saga 将一个长事务拆分为多个本地事务序列，每个本地事务有对应的补偿操作。</p>
 <p><strong>编排式 (Choreography) vs 协调式 (Orchestration)：</strong></p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Choreography（去中心化，事件驱动）：
-Service A → 事件 → Service B → 事件 → Service C
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Choreography（去中心化，事件驱动）：<span class="hljs-built_in">
+Service </span>A → 事件 →<span class="hljs-built_in"> Service </span>B → 事件 →<span class="hljs-built_in"> Service </span>C
           ← 补偿事件 ←         ← 补偿事件 ←
 优点：松耦合，简单
 缺点：流程不可见，循环依赖风险
 
 Orchestration（中心化，协调者驱动）：
 Saga Orchestrator
-  ├▶ Service A (success)
-  ├▶ Service B (success)
-  ├▶ Service C (failed!)
-  ├▶ Service B (compensate)
-  └▶ Service A (compensate)
+  ├▶<span class="hljs-built_in"> Service </span>A (success)
+  ├▶<span class="hljs-built_in"> Service </span>B (success)
+  ├▶<span class="hljs-built_in"> Service </span>C (failed!)
+  ├▶<span class="hljs-built_in"> Service </span>B (compensate)
+  └▶<span class="hljs-built_in"> Service </span>A (compensate)
 优点：流程可见，集中控制
 缺点：协调者成为单点
-</code></pre></div>
-<p><strong>核心问题与解决：</strong></p>
+</code></pre></div><p><strong>核心问题与解决：</strong></p>
 <table>
 <thead>
 <tr>
@@ -197,134 +194,130 @@ Saga Orchestrator
 <td>幂等 + 唯一键防悬挂</td>
 </tr>
 </tbody></table>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Saga Orchestration 实现
-@Service
-public class CreateOrderSagaOrchestrator {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// Saga Orchestration 实现</span>
+<span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">CreateOrderSagaOrchestrator</span> {
 
-    private final OrderService orderService;
-    private final InventoryService inventoryService;
-    private final PaymentService paymentService;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> OrderService orderService;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> InventoryService inventoryService;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> PaymentService paymentService;
 
-    public record SagaContext(Long orderId, Long inventoryId, Long paymentId) {}
-    public record SagaStepResult(boolean success, String service, String error) {}
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">SagaContext</span><span class="hljs-params">(Long orderId, Long inventoryId, Long paymentId)</span> {}
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">SagaStepResult</span><span class="hljs-params">(<span class="hljs-type">boolean</span> success, String service, String error)</span> {}
 
-    public SagaContext execute(CreateOrderRequest request) {
-        var context = new SagaContext(null, null, null);
+    <span class="hljs-keyword">public</span> SagaContext <span class="hljs-title function_">execute</span><span class="hljs-params">(CreateOrderRequest request)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">context</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">SagaContext</span>(<span class="hljs-literal">null</span>, <span class="hljs-literal">null</span>, <span class="hljs-literal">null</span>);
 
-        try {
-            // Step 1: 创建订单
-            var order = orderService.createOrder(request);
-            context = new SagaContext(order.id(), null, null);
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-comment">// Step 1: 创建订单</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">order</span> <span class="hljs-operator">=</span> orderService.createOrder(request);
+            context = <span class="hljs-keyword">new</span> <span class="hljs-title class_">SagaContext</span>(order.id(), <span class="hljs-literal">null</span>, <span class="hljs-literal">null</span>);
 
-            // Step 2: 锁定库存
-            var inventory = inventoryService.reserve(
+            <span class="hljs-comment">// Step 2: 锁定库存</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">inventory</span> <span class="hljs-operator">=</span> inventoryService.reserve(
                     request.productId(), request.quantity(), order.id());
-            context = new SagaContext(order.id(), inventory.reservationId(), null);
+            context = <span class="hljs-keyword">new</span> <span class="hljs-title class_">SagaContext</span>(order.id(), inventory.reservationId(), <span class="hljs-literal">null</span>);
 
-            // Step 3: 处理支付
-            var payment = paymentService.charge(
+            <span class="hljs-comment">// Step 3: 处理支付</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">payment</span> <span class="hljs-operator">=</span> paymentService.charge(
                     order.id(), request.amount());
-            context = new SagaContext(order.id(), inventory.reservationId(), payment.id());
+            context = <span class="hljs-keyword">new</span> <span class="hljs-title class_">SagaContext</span>(order.id(), inventory.reservationId(), payment.id());
 
-            // Step 4: 确认订单（所有步骤成功）
+            <span class="hljs-comment">// Step 4: 确认订单（所有步骤成功）</span>
             orderService.confirmOrder(order.id());
-            return context;
+            <span class="hljs-keyword">return</span> context;
 
-        } catch (InsufficientInventoryException e) {
-            // 库存不足，补偿已完成的步骤
-            if (context.orderId() != null) {
-                orderService.cancelOrder(context.orderId());  // 补偿订单
+        } <span class="hljs-keyword">catch</span> (InsufficientInventoryException e) {
+            <span class="hljs-comment">// 库存不足，补偿已完成的步骤</span>
+            <span class="hljs-keyword">if</span> (context.orderId() != <span class="hljs-literal">null</span>) {
+                orderService.cancelOrder(context.orderId());  <span class="hljs-comment">// 补偿订单</span>
             }
-            throw new SagaFailedException(&quot;Insufficient inventory&quot;, e);
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">SagaFailedException</span>(<span class="hljs-string">"Insufficient inventory"</span>, e);
 
-        } catch (PaymentFailedException e) {
-            // 支付失败，补偿订单和库存
-            if (context.inventoryId() != null) {
-                inventoryService.releaseReservation(context.inventoryId());  // 补偿库存
+        } <span class="hljs-keyword">catch</span> (PaymentFailedException e) {
+            <span class="hljs-comment">// 支付失败，补偿订单和库存</span>
+            <span class="hljs-keyword">if</span> (context.inventoryId() != <span class="hljs-literal">null</span>) {
+                inventoryService.releaseReservation(context.inventoryId());  <span class="hljs-comment">// 补偿库存</span>
             }
-            if (context.orderId() != null) {
-                orderService.cancelOrder(context.orderId());  // 补偿订单
+            <span class="hljs-keyword">if</span> (context.orderId() != <span class="hljs-literal">null</span>) {
+                orderService.cancelOrder(context.orderId());  <span class="hljs-comment">// 补偿订单</span>
             }
-            throw new SagaFailedException(&quot;Payment failed&quot;, e);
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">SagaFailedException</span>(<span class="hljs-string">"Payment failed"</span>, e);
         }
     }
 }
-</code></pre></div>
-<p><strong>事件驱动 Saga（Choreography）：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Component
-public class OrderEventsSaga {
+</code></pre></div><p><strong>事件驱动 Saga（Choreography）：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">OrderEventsSaga</span> {
 
-    @EventListener
-    public void onOrderCreated(OrderCreatedEvent event) {
-        try {
+    <span class="hljs-meta">@EventListener</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">onOrderCreated</span><span class="hljs-params">(OrderCreatedEvent event)</span> {
+        <span class="hljs-keyword">try</span> {
             inventoryService.reserve(event.productId(), event.quantity(), event.orderId());
-            eventPublisher.publish(new InventoryReservedEvent(event.orderId(), event.productId()));
-        } catch (InsufficientInventoryException e) {
-            // 库存不足 → 取消订单
+            eventPublisher.publish(<span class="hljs-keyword">new</span> <span class="hljs-title class_">InventoryReservedEvent</span>(event.orderId(), event.productId()));
+        } <span class="hljs-keyword">catch</span> (InsufficientInventoryException e) {
+            <span class="hljs-comment">// 库存不足 → 取消订单</span>
             orderService.cancelOrder(event.orderId());
-            eventPublisher.publish(new OrderCancelledEvent(event.orderId(), &quot;INSUFFICIENT_INVENTORY&quot;));
+            eventPublisher.publish(<span class="hljs-keyword">new</span> <span class="hljs-title class_">OrderCancelledEvent</span>(event.orderId(), <span class="hljs-string">"INSUFFICIENT_INVENTORY"</span>));
         }
     }
 
-    @EventListener
-    public void onInventoryReserved(InventoryReservedEvent event) {
-        try {
+    <span class="hljs-meta">@EventListener</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">onInventoryReserved</span><span class="hljs-params">(InventoryReservedEvent event)</span> {
+        <span class="hljs-keyword">try</span> {
             paymentService.charge(event.orderId());
-            eventPublisher.publish(new PaymentCompletedEvent(event.orderId()));
-        } catch (PaymentFailedException e) {
-            // 支付失败 → 释放库存 + 取消订单
+            eventPublisher.publish(<span class="hljs-keyword">new</span> <span class="hljs-title class_">PaymentCompletedEvent</span>(event.orderId()));
+        } <span class="hljs-keyword">catch</span> (PaymentFailedException e) {
+            <span class="hljs-comment">// 支付失败 → 释放库存 + 取消订单</span>
             inventoryService.releaseReservation(event.reservationId());
             orderService.cancelOrder(event.orderId());
-            eventPublisher.publish(new OrderCancelledEvent(event.orderId(), &quot;PAYMENT_FAILED&quot;));
+            eventPublisher.publish(<span class="hljs-keyword">new</span> <span class="hljs-title class_">OrderCancelledEvent</span>(event.orderId(), <span class="hljs-string">"PAYMENT_FAILED"</span>));
         }
     }
 }
-</code></pre></div>
-<h3>2.3 TCC (Try-Confirm-Cancel)</h3>
+</code></pre></div><h3>2.3 TCC (Try-Confirm-Cancel)</h3>
 <p>TCC 是 Saga 的变体，每个操作分为三个阶段：</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Try（预留资源）:
-  - 冻结库存 10 件 → 可用库存 -10，冻结库存 +10
-  - 冻结金额 100 元 → 可用余额 -100，冻结金额 +100
+  - 冻结库存 10 件 → 可用库存 <span class="hljs-string">-10</span>，冻结库存 <span class="hljs-string">+10</span>
+  - 冻结金额 100 元 → 可用余额 <span class="hljs-string">-100</span>，冻结金额 <span class="hljs-string">+100</span>
 
 Confirm（确认执行）:
-  - 扣减冻结库存 → 冻结库存 -10
-  - 扣减冻结金额 → 冻结金额 -100
+  - 扣减冻结库存 → 冻结库存 <span class="hljs-string">-10</span>
+  - 扣减冻结金额 → 冻结金额 <span class="hljs-string">-100</span>
 
 Cancel（取消释放）:
-  - 解冻库存 → 冻结库存 -10，可用库存 +10
-  - 解冻金额 → 冻结金额 -100，可用余额 +100
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// TCC 实现（简化版本）
-@Service
-public class TccTransferService {
+  - 解冻库存 → 冻结库存 <span class="hljs-string">-10</span>，可用库存 <span class="hljs-string">+10</span>
+  - 解冻金额 → 冻结金额 <span class="hljs-string">-100</span>，可用余额 <span class="hljs-string">+100</span>
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// TCC 实现（简化版本）</span>
+<span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">TccTransferService</span> {
 
-    // Try 阶段：冻结资源
-    @Transactional
-    public void tryTransfer(Long fromAccount, Long toAccount, BigDecimal amount) {
-        accountRepo.freezeAmount(fromAccount, amount);  // 冻结转出金额
-        accountRepo.freezeAmount(toAccount, BigDecimal.ZERO); // 标记转入准备
-        tccLogRepo.insert(fromAccount, toAccount, amount, &quot;TRY&quot;);
+    <span class="hljs-comment">// Try 阶段：冻结资源</span>
+    <span class="hljs-meta">@Transactional</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">tryTransfer</span><span class="hljs-params">(Long fromAccount, Long toAccount, BigDecimal amount)</span> {
+        accountRepo.freezeAmount(fromAccount, amount);  <span class="hljs-comment">// 冻结转出金额</span>
+        accountRepo.freezeAmount(toAccount, BigDecimal.ZERO); <span class="hljs-comment">// 标记转入准备</span>
+        tccLogRepo.insert(fromAccount, toAccount, amount, <span class="hljs-string">"TRY"</span>);
     }
 
-    // Confirm 阶段：实际扣减
-    @Transactional
-    public void confirmTransfer(Long tccId) {
-        var log = tccLogRepo.findById(tccId);
+    <span class="hljs-comment">// Confirm 阶段：实际扣减</span>
+    <span class="hljs-meta">@Transactional</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">confirmTransfer</span><span class="hljs-params">(Long tccId)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">log</span> <span class="hljs-operator">=</span> tccLogRepo.findById(tccId);
         accountRepo.deductFrozen(log.fromAccount(), log.amount());
         accountRepo.addBalance(log.toAccount(), log.amount());
-        tccLogRepo.updateStatus(tccId, &quot;CONFIRMED&quot;);
+        tccLogRepo.updateStatus(tccId, <span class="hljs-string">"CONFIRMED"</span>);
     }
 
-    // Cancel 阶段：解冻资源
-    @Transactional
-    public void cancelTransfer(Long tccId) {
-        var log = tccLogRepo.findById(tccId);
+    <span class="hljs-comment">// Cancel 阶段：解冻资源</span>
+    <span class="hljs-meta">@Transactional</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">cancelTransfer</span><span class="hljs-params">(Long tccId)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">log</span> <span class="hljs-operator">=</span> tccLogRepo.findById(tccId);
         accountRepo.unfreeze(log.fromAccount(), log.amount());
-        tccLogRepo.updateStatus(tccId, &quot;CANCELLED&quot;);
+        tccLogRepo.updateStatus(tccId, <span class="hljs-string">"CANCELLED"</span>);
     }
 }
-</code></pre></div>
-<p><strong>TCC vs Saga 对比：</strong></p>
+</code></pre></div><p><strong>TCC vs Saga 对比：</strong></p>
 <table>
 <thead>
 <tr>
@@ -356,93 +349,89 @@ public class TccTransferService {
 </tbody></table>
 <h3>2.4 本地消息表</h3>
 <p>原理：在同一数据库事务中将业务操作和消息记录原子写入，然后异步轮询发送消息。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- 本地消息表
-CREATE TABLE event_outbox (
-    id BIGSERIAL PRIMARY KEY,
-    aggregate_type VARCHAR(100) NOT NULL,
-    aggregate_id VARCHAR(100) NOT NULL,
-    event_type VARCHAR(200) NOT NULL,
-    payload JSONB NOT NULL,
-    status VARCHAR(20) NOT NULL DEFAULT &#39;PENDING&#39;,
-    retry_count INT DEFAULT 0,
-    created_at TIMESTAMPTZ DEFAULT NOW(),
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-sql"><span class="hljs-comment">-- 本地消息表</span>
+<span class="hljs-keyword">CREATE TABLE</span> event_outbox (
+    id BIGSERIAL <span class="hljs-keyword">PRIMARY KEY</span>,
+    aggregate_type <span class="hljs-type">VARCHAR</span>(<span class="hljs-number">100</span>) <span class="hljs-keyword">NOT NULL</span>,
+    aggregate_id <span class="hljs-type">VARCHAR</span>(<span class="hljs-number">100</span>) <span class="hljs-keyword">NOT NULL</span>,
+    event_type <span class="hljs-type">VARCHAR</span>(<span class="hljs-number">200</span>) <span class="hljs-keyword">NOT NULL</span>,
+    payload JSONB <span class="hljs-keyword">NOT NULL</span>,
+    status <span class="hljs-type">VARCHAR</span>(<span class="hljs-number">20</span>) <span class="hljs-keyword">NOT NULL</span> <span class="hljs-keyword">DEFAULT</span> <span class="hljs-string">'PENDING'</span>,
+    retry_count <span class="hljs-type">INT</span> <span class="hljs-keyword">DEFAULT</span> <span class="hljs-number">0</span>,
+    created_at TIMESTAMPTZ <span class="hljs-keyword">DEFAULT</span> NOW(),
     processed_at TIMESTAMPTZ
 );
 
-CREATE INDEX idx_outbox_status ON event_outbox(status, created_at);
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
-public class LocalMessageTableService {
+<span class="hljs-keyword">CREATE</span> INDEX idx_outbox_status <span class="hljs-keyword">ON</span> event_outbox(status, created_at);
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">LocalMessageTableService</span> {
 
-    private final OrderRepository orderRepo;
-    private final JdbcTemplate jdbc;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> OrderRepository orderRepo;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> JdbcTemplate jdbc;
 
-    // 原子写入：业务表 + 消息表
-    @Transactional
-    public void createOrder(Order order) {
-        // 1. 写入业务表
+    <span class="hljs-comment">// 原子写入：业务表 + 消息表</span>
+    <span class="hljs-meta">@Transactional</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">createOrder</span><span class="hljs-params">(Order order)</span> {
+        <span class="hljs-comment">// 1. 写入业务表</span>
         orderRepo.save(order);
 
-        // 2. 写入消息表（同一事务）
-        var sql = &quot;&quot;&quot;
+        <span class="hljs-comment">// 2. 写入消息表（同一事务）</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">sql</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
             INSERT INTO event_outbox (aggregate_type, aggregate_id, event_type, payload)
             VALUES (?, ?, ?, ?::jsonb)
-            &quot;&quot;&quot;;
-        jdbc.update(sql, &quot;Order&quot;, order.getId(), &quot;OrderCreated&quot;,
+            """</span>;
+        jdbc.update(sql, <span class="hljs-string">"Order"</span>, order.getId(), <span class="hljs-string">"OrderCreated"</span>,
                 toJson(order));
     }
 
-    // 定时轮询发送（@Scheduled）
-    @Scheduled(fixedDelay = 1000)
-    public void pollAndPublish() {
-        var events = jdbc.query(
-                &quot;SELECT * FROM event_outbox WHERE status = &#39;PENDING&#39; ORDER BY id LIMIT 100&quot;,
-                new BeanPropertyRowMapper&lt;&gt;(OutboxEvent.class));
+    <span class="hljs-comment">// 定时轮询发送（@Scheduled）</span>
+    <span class="hljs-meta">@Scheduled(fixedDelay = 1000)</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">pollAndPublish</span><span class="hljs-params">()</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">events</span> <span class="hljs-operator">=</span> jdbc.query(
+                <span class="hljs-string">"SELECT * FROM event_outbox WHERE status = 'PENDING' ORDER BY id LIMIT 100"</span>,
+                <span class="hljs-keyword">new</span> <span class="hljs-title class_">BeanPropertyRowMapper</span>&lt;&gt;(OutboxEvent.class));
 
-        for (var event : events) {
-            try {
-                kafkaTemplate.send(&quot;orders&quot;, event.getAggregateId(),
-                        event.getPayload()).get(5, TimeUnit.SECONDS);
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> event : events) {
+            <span class="hljs-keyword">try</span> {
+                kafkaTemplate.send(<span class="hljs-string">"orders"</span>, event.getAggregateId(),
+                        event.getPayload()).get(<span class="hljs-number">5</span>, TimeUnit.SECONDS);
 
-                jdbc.update(&quot;UPDATE event_outbox SET status = &#39;SENT&#39;, processed_at = NOW() WHERE id = ?&quot;,
+                jdbc.update(<span class="hljs-string">"UPDATE event_outbox SET status = 'SENT', processed_at = NOW() WHERE id = ?"</span>,
                         event.getId());
-            } catch (Exception e) {
-                jdbc.update(&quot;&quot;&quot;
+            } <span class="hljs-keyword">catch</span> (Exception e) {
+                jdbc.update(<span class="hljs-string">"""
                     UPDATE event_outbox
                     SET retry_count = retry_count + 1,
-                        status = CASE WHEN retry_count &gt;= 10 THEN &#39;DEAD&#39; ELSE &#39;PENDING&#39; END
+                        status = CASE WHEN retry_count &gt;= 10 THEN 'DEAD' ELSE 'PENDING' END
                     WHERE id = ?
-                    &quot;&quot;&quot;, event.getId());
+                    """</span>, event.getId());
             }
         }
     }
 }
-</code></pre></div>
-<h3>2.5 Outbox Pattern（CDC 方式）</h3>
+</code></pre></div><h3>2.5 Outbox Pattern（CDC 方式）</h3>
 <p>使用 CDC（Change Data Capture）工具监听 outbox 表的变更，推送到消息队列。相比轮询方式，延迟更低、无业务代码侵入。</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>架构：
 PostgreSQL (outbox表) ──CDC──▶ Debezium Connector ──▶ Kafka Topic ──▶ 消费者
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-json">// Debezium Connector 配置
-{
-  &quot;name&quot;: &quot;outbox-connector&quot;,
-  &quot;config&quot;: {
-    &quot;connector.class&quot;: &quot;io.debezium.connector.postgresql.PostgresConnector&quot;,
-    &quot;database.hostname&quot;: &quot;postgres&quot;,
-    &quot;database.port&quot;: &quot;5432&quot;,
-    &quot;database.user&quot;: &quot;debezium&quot;,
-    &quot;database.password&quot;: &quot;${DEBEZIUM_PASSWORD}&quot;,
-    &quot;database.dbname&quot;: &quot;app&quot;,
-    &quot;table.include.list&quot;: &quot;public.event_outbox&quot;,
-    &quot;transforms&quot;: &quot;outbox&quot;,
-    &quot;transforms.outbox.type&quot;: &quot;io.debezium.transforms.outbox.EventRouter&quot;,
-    &quot;transforms.outbox.route.topic.replacement&quot;: &quot;${routedByValue}.events&quot;,
-    &quot;transforms.outbox.table.field.event.timestamp&quot;: &quot;created_at&quot;,
-    &quot;transforms.outbox.table.field.event.payload&quot;: &quot;payload&quot;
-  }
-}
-</code></pre></div>
-<h3>2.6 Seata</h3>
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-json"><span class="hljs-comment">// Debezium Connector 配置</span>
+<span class="hljs-punctuation">{</span>
+  <span class="hljs-attr">"name"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"outbox-connector"</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">"config"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">"connector.class"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"io.debezium.connector.postgresql.PostgresConnector"</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">"database.hostname"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"postgres"</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">"database.port"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"5432"</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">"database.user"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"debezium"</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">"database.password"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"${DEBEZIUM_PASSWORD}"</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">"database.dbname"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"app"</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">"table.include.list"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"public.event_outbox"</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">"transforms"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"outbox"</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">"transforms.outbox.type"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"io.debezium.transforms.outbox.EventRouter"</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">"transforms.outbox.route.topic.replacement"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"${routedByValue}.events"</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">"transforms.outbox.table.field.event.timestamp"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"created_at"</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">"transforms.outbox.table.field.event.payload"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"payload"</span>
+  <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">}</span>
+</code></pre></div><h3>2.6 Seata</h3>
 <p>Seata 提供四种事务模式，满足不同场景：</p>
 <table>
 <thead>
@@ -483,37 +472,36 @@ PostgreSQL (outbox表) ──CDC──▶ Debezium Connector ──▶ Kafka Top
 <td>需要跨数据库强一致</td>
 </tr>
 </tbody></table>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Seata AT 模式（最常用，完全无侵入）
-@Service
-public class SeataOrderService {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// Seata AT 模式（最常用，完全无侵入）</span>
+<span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">SeataOrderService</span> {
 
-    @GlobalTransactional(timeoutMills = 300000, name = &quot;create-order-saga&quot;)
-    public void createOrder(OrderRequest request) {
-        // AT 模式自动代理 SQL，解析 UNDO_LOG
-        orderRepo.save(request.toOrder());        // 本地事务 1
-        inventoryClient.deduct(request.items());  // 远程 RPC → 本地事务 2
-        paymentClient.charge(request.amount());   // 远程 RPC → 本地事务 3
+    <span class="hljs-meta">@GlobalTransactional(timeoutMills = 300000, name = "create-order-saga")</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">createOrder</span><span class="hljs-params">(OrderRequest request)</span> {
+        <span class="hljs-comment">// AT 模式自动代理 SQL，解析 UNDO_LOG</span>
+        orderRepo.save(request.toOrder());        <span class="hljs-comment">// 本地事务 1</span>
+        inventoryClient.deduct(request.items());  <span class="hljs-comment">// 远程 RPC → 本地事务 2</span>
+        paymentClient.charge(request.amount());   <span class="hljs-comment">// 远程 RPC → 本地事务 3</span>
     }
 }
 
-// application.yml
+<span class="hljs-comment">// application.yml</span>
 seata:
   tx-service-group: my_tx_group
   service:
     vgroup-mapping:
-      my_tx_group: default
+      my_tx_group: <span class="hljs-keyword">default</span>
   registry:
     type: nacos
   config:
     type: nacos
-</code></pre></div>
-<p><strong>AT 模式原理：</strong> 代理 JDBC 连接，解析 SQL → 生成前镜像和后镜像 → 写入 UNDO_LOG → 提交时异步删除 UNDO_LOG，回滚时使用 UNDO_LOG 回退。</p>
+</code></pre></div><p><strong>AT 模式原理：</strong> 代理 JDBC 连接，解析 SQL → 生成前镜像和后镜像 → 写入 UNDO_LOG → 提交时异步删除 UNDO_LOG，回滚时使用 UNDO_LOG 回退。</p>
 <hr>
 <h2>三、选型决策树</h2>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>数据一致性要求？
 ├── 强一致（跨数据库 ACID）
 │   └── 数据库支持 XA？
-│       ├── 是 → 2PC/XA 或 Seata XA
+│       ├── 是 → <span class="hljs-number">2</span>PC/XA 或 Seata XA
 │       └── 否 → 重新审视是否需要强一致
 │
 ├── 最终一致（微服务场景）
@@ -529,97 +517,95 @@ seata:
 │   │   └── 精简运维 → 本地消息表
 │   │
 │   └── 团队已有 Seata 经验？
-│       ├── 是 → Seata AT 模式（无侵入首选）
+│       ├── 是 → Seata <span class="hljs-keyword">AT</span> 模式（无侵入首选）
 │       └── 否 → 评估 Seata 运维成本
 │
 └── 事件丢失可接受（日志/监控场景）
     └── 直接发消息队列 + 消费者幂等
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>四、Spring 最佳实践</h2>
 <h3>4.1 Saga 完整实现（Orchestration + 持久化）</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Entity
-@Table(name = &quot;saga_instance&quot;)
-public class SagaInstance {
-    @Id
-    private String sagaId;
-    private String sagaType;
-    private String status;       // RUNNING, COMPLETED, COMPENSATING, FAILED
-    private int currentStep;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Entity</span>
+<span class="hljs-meta">@Table(name = "saga_instance")</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">SagaInstance</span> {
+    <span class="hljs-meta">@Id</span>
+    <span class="hljs-keyword">private</span> String sagaId;
+    <span class="hljs-keyword">private</span> String sagaType;
+    <span class="hljs-keyword">private</span> String status;       <span class="hljs-comment">// RUNNING, COMPLETED, COMPENSATING, FAILED</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-type">int</span> currentStep;
 
-    @OneToMany(mappedBy = &quot;saga&quot;, cascade = ALL)
-    @OrderBy(&quot;stepOrder ASC&quot;)
-    private List&lt;SagaStep&gt; steps;
+    <span class="hljs-meta">@OneToMany(mappedBy = "saga", cascade = ALL)</span>
+    <span class="hljs-meta">@OrderBy("stepOrder ASC")</span>
+    <span class="hljs-keyword">private</span> List&lt;SagaStep&gt; steps;
 
-    public boolean isCompensatable() { /* ... */ }
+    <span class="hljs-keyword">public</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">isCompensatable</span><span class="hljs-params">()</span> { <span class="hljs-comment">/* ... */</span> }
 }
 
-@Entity
-@Table(name = &quot;saga_step&quot;)
-public class SagaStep {
-    @Id
-    private String stepId;
-    private String stepName;
-    private int stepOrder;
-    private String status; // PENDING, SUCCEEDED, FAILED, COMPENSATED
-    private String serviceName;
-    private String compensatable;
+<span class="hljs-meta">@Entity</span>
+<span class="hljs-meta">@Table(name = "saga_step")</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">SagaStep</span> {
+    <span class="hljs-meta">@Id</span>
+    <span class="hljs-keyword">private</span> String stepId;
+    <span class="hljs-keyword">private</span> String stepName;
+    <span class="hljs-keyword">private</span> <span class="hljs-type">int</span> stepOrder;
+    <span class="hljs-keyword">private</span> String status; <span class="hljs-comment">// PENDING, SUCCEEDED, FAILED, COMPENSATED</span>
+    <span class="hljs-keyword">private</span> String serviceName;
+    <span class="hljs-keyword">private</span> String compensatable;
 
-    @ManyToOne
-    @JoinColumn(name = &quot;saga_id&quot;)
-    private SagaInstance saga;
+    <span class="hljs-meta">@ManyToOne</span>
+    <span class="hljs-meta">@JoinColumn(name = "saga_id")</span>
+    <span class="hljs-keyword">private</span> SagaInstance saga;
 }
 
-@Service
-public class PersistentSagaOrchestrator {
+<span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">PersistentSagaOrchestrator</span> {
 
-    private final SagaInstanceRepo sagaRepo;
-    private final Map&lt;String, SagaStepHandler&gt; handlers;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> SagaInstanceRepo sagaRepo;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Map&lt;String, SagaStepHandler&gt; handlers;
 
-    public void startSaga(String sagaId, SagaStepHandler... steps) {
-        var saga = new SagaInstance(sagaId, &quot;create-order&quot;, &quot;RUNNING&quot;, 0);
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">startSaga</span><span class="hljs-params">(String sagaId, SagaStepHandler... steps)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">saga</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">SagaInstance</span>(sagaId, <span class="hljs-string">"create-order"</span>, <span class="hljs-string">"RUNNING"</span>, <span class="hljs-number">0</span>);
         sagaRepo.save(saga);
 
-        try {
-            for (var handler : steps) {
-                var stepResult = handler.execute(saga);
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> handler : steps) {
+                <span class="hljs-type">var</span> <span class="hljs-variable">stepResult</span> <span class="hljs-operator">=</span> handler.execute(saga);
                 saga.advanceStep(stepResult);
                 sagaRepo.save(saga);
             }
             saga.markCompleted();
             sagaRepo.save(saga);
-        } catch (Exception e) {
-            // 触发补偿
+        } <span class="hljs-keyword">catch</span> (Exception e) {
+            <span class="hljs-comment">// 触发补偿</span>
             compensate(saga);
-            throw e;
+            <span class="hljs-keyword">throw</span> e;
         }
     }
 
-    public void compensate(SagaInstance saga) {
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">compensate</span><span class="hljs-params">(SagaInstance saga)</span> {
         saga.markCompensating();
         sagaRepo.save(saga);
 
-        // 逆序补偿已完成的步骤
-        var completedSteps = saga.getCompletedStepsInReverse();
-        for (var step : completedSteps) {
-            try {
-                var handler = handlers.get(step.getStepName());
+        <span class="hljs-comment">// 逆序补偿已完成的步骤</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">completedSteps</span> <span class="hljs-operator">=</span> saga.getCompletedStepsInReverse();
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> step : completedSteps) {
+            <span class="hljs-keyword">try</span> {
+                <span class="hljs-type">var</span> <span class="hljs-variable">handler</span> <span class="hljs-operator">=</span> handlers.get(step.getStepName());
                 handler.compensate(step);
-                step.setStatus(&quot;COMPENSATED&quot;);
-            } catch (Exception e) {
-                // 补偿失败，标记需要人工介入
+                step.setStatus(<span class="hljs-string">"COMPENSATED"</span>);
+            } <span class="hljs-keyword">catch</span> (Exception e) {
+                <span class="hljs-comment">// 补偿失败，标记需要人工介入</span>
                 step.markCompensationFailed(e);
                 saga.markFailed();
                 sagaRepo.save(saga);
-                alertService.sendAlert(&quot;Saga compensation failed: &quot; + saga.getSagaId());
-                return;
+                alertService.sendAlert(<span class="hljs-string">"Saga compensation failed: "</span> + saga.getSagaId());
+                <span class="hljs-keyword">return</span>;
             }
         }
         sagaRepo.save(saga);
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>常见问题</h2>
 <p><strong>Q: 为什么不用 2PC？</strong>
 A: 2PC 的同步阻塞、单点故障和长锁定问题使其不适合现代微服务。仅在数据库支持 XA 且对强一致性有硬性要求时使用。</p>
@@ -637,221 +623,217 @@ A: Producer 端：本地消息表/Outbox。Broker 端：acks=all + min.insync.re
 <p>TCC 模式与 AT 模式在设计哲学上有本质区别。AT 模式依赖 Seata 自动拦截 SQL、管理 undo_log，对业务代码零侵入——开发者只需添加 <code>@GlobalTransactional</code> 注解；而 TCC 模式要求开发者手动实现 <code>try</code>、<code>confirm</code>、<code>cancel</code> 三个接口，资源控制粒度更细、隔离性更强，适用于对金额/库存有严格并发控制要求的金融场景。从隔离性角度看，AT 模式依赖全局锁提供写隔离，但可能出现脏读（因为阶段一已提交本地事务）；TCC 模式通过 Try 阶段的资源预留，天然避免脏读问题。从性能角度看，AT 模式在绝大多数 OLTP 场景下性能优于 TCC，因为 TCC 的 Try 阶段需要进行显式的冻结操作，涉及更多 SQL 交互。选择原则是：一般业务优先 AT 模式降本增效；资金账户、库存扣减等需要严格资源隔离的场景使用 TCC 模式。</p>
 <h3>5.2 Spring Boot + Seata 集成</h3>
 <p>在 Spring Boot 4.x 项目中集成 Seata AT 模式，首先需要在父 POM 中声明 Seata 版本，然后在每个需要参与分布式事务的微服务模块中添加依赖。Spring Boot 4.x 基于 Jakarta EE 10，Seata 从 2.x 版本起提供了对 Spring Boot 4.x 的原生支持，底层 JDBC 代理也适配了 JDK 25 的 Virtual Threads 特性，使分支事务的执行可以通过虚拟线程并发调度，进一步提高全局事务吞吐量。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;!-- pom.xml — 父 POM 声明版本 --&gt;
-&lt;dependencyManagement&gt;
-    &lt;dependencies&gt;
-        &lt;dependency&gt;
-            &lt;groupId&gt;org.apache.seata&lt;/groupId&gt;
-            &lt;artifactId&gt;seata-bom&lt;/artifactId&gt;
-            &lt;version&gt;2.4.0&lt;/version&gt;
-            &lt;scope&gt;import&lt;/scope&gt;
-            &lt;type&gt;pom&lt;/type&gt;
-        &lt;/dependency&gt;
-    &lt;/dependencies&gt;
-&lt;/dependencyManagement&gt;
+<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-xml"><span class="hljs-comment">&lt;!-- pom.xml — 父 POM 声明版本 --&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">dependencyManagement</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">dependencies</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.apache.seata<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>seata-bom<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">version</span>&gt;</span>2.4.0<span class="hljs-tag">&lt;/<span class="hljs-name">version</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">scope</span>&gt;</span>import<span class="hljs-tag">&lt;/<span class="hljs-name">scope</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">type</span>&gt;</span>pom<span class="hljs-tag">&lt;/<span class="hljs-name">type</span>&gt;</span>
+        <span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+    <span class="hljs-tag">&lt;/<span class="hljs-name">dependencies</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependencyManagement</span>&gt;</span>
 
-&lt;!-- 每个微服务模块引入 --&gt;
-&lt;dependency&gt;
-    &lt;groupId&gt;org.apache.seata&lt;/groupId&gt;
-    &lt;artifactId&gt;seata-spring-boot-starter&lt;/artifactId&gt;
-&lt;/dependency&gt;
-&lt;dependency&gt;
-    &lt;groupId&gt;com.alibaba.cloud&lt;/groupId&gt;
-    &lt;artifactId&gt;spring-cloud-starter-alibaba-seata&lt;/artifactId&gt;
-    &lt;version&gt;2025.0.0.0&lt;/version&gt;
-&lt;/dependency&gt;
-</code></pre></div>
-<p>配置方面，每个参与全局事务的微服务都需要配置 <code>application.yml</code> 连接 Seata Server（TC）。Seata Server 的注册中心推荐使用 Nacos，配置存储推荐使用外部数据库（MySQL 或 PostgreSQL）以确保 TC 本身的高可用。<code>seata.tx-service-group</code> 是业务应用连接到特定 TC 集群的逻辑名称，通过 <code>seata.service.vgroup-mapping</code> 映射到 TC 集群的物理名称，一个 TC 集群可以同时服务多个事务分组。<code>seata.data-source-proxy-mode</code> 默认 AT 模式会自动代理所有 <code>DataSource</code>，如果只想代理特定数据源，可使用 <code>seata.enable-auto-data-source-proxy: false</code> 手动配置 <code>SeataDataSourceProxy</code>。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># application.yml
-seata:
-  enabled: true
-  tx-service-group: my_tx_group              # 事务分组（逻辑名）
-  enable-auto-data-source-proxy: true         # AT 模式自动代理数据源
-  client:
-    rm:
-      async-commit-buffer-limit: 10000        # 异步提交缓冲上限
-      report-retry-count: 5                   # 报告重试次数
-      table-meta-check-enable: true           # 开启表元数据检查
-    tm:
-      commit-retry-count: 5                   # 提交重试
-      rollback-retry-count: 5                 # 回滚重试
-      degrade-check-allow-times: 10           # 降级检查允许次数
-  service:
-    vgroup-mapping:
-      my_tx_group: default                    # 事务分组→TC集群映射
-    enable-degrade: false                     # 是否开启降级
-  registry:
-    type: nacos                               # 注册中心类型
-    nacos:
-      application: seata-server
-      server-addr: localhost:8848
-      group: SEATA_GROUP
-      namespace: &quot;&quot;
-      username: nacos
-      password: ${NACOS_PASSWORD}
-  config:
-    type: nacos                               # 配置中心类型
-    nacos:
-      server-addr: localhost:8848
-      group: SEATA_GROUP
-      username: nacos
-      password: ${NACOS_PASSWORD}
+<span class="hljs-comment">&lt;!-- 每个微服务模块引入 --&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>org.apache.seata<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>seata-spring-boot-starter<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">dependency</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">groupId</span>&gt;</span>com.alibaba.cloud<span class="hljs-tag">&lt;/<span class="hljs-name">groupId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">artifactId</span>&gt;</span>spring-cloud-starter-alibaba-seata<span class="hljs-tag">&lt;/<span class="hljs-name">artifactId</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">version</span>&gt;</span>2025.0.0.0<span class="hljs-tag">&lt;/<span class="hljs-name">version</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">dependency</span>&gt;</span>
+</code></pre></div><p>配置方面，每个参与全局事务的微服务都需要配置 <code>application.yml</code> 连接 Seata Server（TC）。Seata Server 的注册中心推荐使用 Nacos，配置存储推荐使用外部数据库（MySQL 或 PostgreSQL）以确保 TC 本身的高可用。<code>seata.tx-service-group</code> 是业务应用连接到特定 TC 集群的逻辑名称，通过 <code>seata.service.vgroup-mapping</code> 映射到 TC 集群的物理名称，一个 TC 集群可以同时服务多个事务分组。<code>seata.data-source-proxy-mode</code> 默认 AT 模式会自动代理所有 <code>DataSource</code>，如果只想代理特定数据源，可使用 <code>seata.enable-auto-data-source-proxy: false</code> 手动配置 <code>SeataDataSourceProxy</code>。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-comment"># application.yml</span>
+<span class="hljs-attr">seata:</span>
+  <span class="hljs-attr">enabled:</span> <span class="hljs-literal">true</span>
+  <span class="hljs-attr">tx-service-group:</span> <span class="hljs-string">my_tx_group</span>              <span class="hljs-comment"># 事务分组（逻辑名）</span>
+  <span class="hljs-attr">enable-auto-data-source-proxy:</span> <span class="hljs-literal">true</span>         <span class="hljs-comment"># AT 模式自动代理数据源</span>
+  <span class="hljs-attr">client:</span>
+    <span class="hljs-attr">rm:</span>
+      <span class="hljs-attr">async-commit-buffer-limit:</span> <span class="hljs-number">10000</span>        <span class="hljs-comment"># 异步提交缓冲上限</span>
+      <span class="hljs-attr">report-retry-count:</span> <span class="hljs-number">5</span>                   <span class="hljs-comment"># 报告重试次数</span>
+      <span class="hljs-attr">table-meta-check-enable:</span> <span class="hljs-literal">true</span>           <span class="hljs-comment"># 开启表元数据检查</span>
+    <span class="hljs-attr">tm:</span>
+      <span class="hljs-attr">commit-retry-count:</span> <span class="hljs-number">5</span>                   <span class="hljs-comment"># 提交重试</span>
+      <span class="hljs-attr">rollback-retry-count:</span> <span class="hljs-number">5</span>                 <span class="hljs-comment"># 回滚重试</span>
+      <span class="hljs-attr">degrade-check-allow-times:</span> <span class="hljs-number">10</span>           <span class="hljs-comment"># 降级检查允许次数</span>
+  <span class="hljs-attr">service:</span>
+    <span class="hljs-attr">vgroup-mapping:</span>
+      <span class="hljs-attr">my_tx_group:</span> <span class="hljs-string">default</span>                    <span class="hljs-comment"># 事务分组→TC集群映射</span>
+    <span class="hljs-attr">enable-degrade:</span> <span class="hljs-literal">false</span>                     <span class="hljs-comment"># 是否开启降级</span>
+  <span class="hljs-attr">registry:</span>
+    <span class="hljs-attr">type:</span> <span class="hljs-string">nacos</span>                               <span class="hljs-comment"># 注册中心类型</span>
+    <span class="hljs-attr">nacos:</span>
+      <span class="hljs-attr">application:</span> <span class="hljs-string">seata-server</span>
+      <span class="hljs-attr">server-addr:</span> <span class="hljs-string">localhost:8848</span>
+      <span class="hljs-attr">group:</span> <span class="hljs-string">SEATA_GROUP</span>
+      <span class="hljs-attr">namespace:</span> <span class="hljs-string">""</span>
+      <span class="hljs-attr">username:</span> <span class="hljs-string">nacos</span>
+      <span class="hljs-attr">password:</span> <span class="hljs-string">${NACOS_PASSWORD}</span>
+  <span class="hljs-attr">config:</span>
+    <span class="hljs-attr">type:</span> <span class="hljs-string">nacos</span>                               <span class="hljs-comment"># 配置中心类型</span>
+    <span class="hljs-attr">nacos:</span>
+      <span class="hljs-attr">server-addr:</span> <span class="hljs-string">localhost:8848</span>
+      <span class="hljs-attr">group:</span> <span class="hljs-string">SEATA_GROUP</span>
+      <span class="hljs-attr">username:</span> <span class="hljs-string">nacos</span>
+      <span class="hljs-attr">password:</span> <span class="hljs-string">${NACOS_PASSWORD}</span>
 
-spring:
-  datasource:
-    url: jdbc:postgresql://localhost:5432/order_db
-    username: postgres
-    password: ${DB_PASSWORD}
-    driver-class-name: org.postgresql.Driver
-</code></pre></div>
-<p><code>@GlobalTransactional</code> 注解是 Seata 对业务代码的唯一侵入点，标注在发起全局事务的方法上。该注解支持以下核心属性：<code>timeoutMills</code> 控制全局事务超时（默认 60s，长事务建议适当放大）；<code>name</code> 为全局事务命名，便于在 Seata Dashboard 中追踪和排查；<code>rollbackFor</code> 和 <code>noRollbackFor</code> 控制哪些异常触发回滚，默认为任何未捕获异常都回滚。需要注意：<code>@GlobalTransactional</code> 标注的方法内部，每个远程 RPC 调用或跨数据库操作会开启一个分支事务，分支事务在本地数据库层面上各自提交，最终由 TC 协调全局决策。如果全局事务超时，TC 会向所有已注册的分支事务发送回滚指令。</p>
+<span class="hljs-attr">spring:</span>
+  <span class="hljs-attr">datasource:</span>
+    <span class="hljs-attr">url:</span> <span class="hljs-string">jdbc:postgresql://localhost:5432/order_db</span>
+    <span class="hljs-attr">username:</span> <span class="hljs-string">postgres</span>
+    <span class="hljs-attr">password:</span> <span class="hljs-string">${DB_PASSWORD}</span>
+    <span class="hljs-attr">driver-class-name:</span> <span class="hljs-string">org.postgresql.Driver</span>
+</code></pre></div><p><code>@GlobalTransactional</code> 注解是 Seata 对业务代码的唯一侵入点，标注在发起全局事务的方法上。该注解支持以下核心属性：<code>timeoutMills</code> 控制全局事务超时（默认 60s，长事务建议适当放大）；<code>name</code> 为全局事务命名，便于在 Seata Dashboard 中追踪和排查；<code>rollbackFor</code> 和 <code>noRollbackFor</code> 控制哪些异常触发回滚，默认为任何未捕获异常都回滚。需要注意：<code>@GlobalTransactional</code> 标注的方法内部，每个远程 RPC 调用或跨数据库操作会开启一个分支事务，分支事务在本地数据库层面上各自提交，最终由 TC 协调全局决策。如果全局事务超时，TC 会向所有已注册的分支事务发送回滚指令。</p>
 <p>全局锁冲突是 AT 模式在生产中最常见的问题。当两个全局事务同时修改同一行数据时，第二个事务的分支提交阶段会发现全局锁已被第一个事务持有，此时 Seata 会进入锁等待模式。默认锁等待时间是 10 秒（可通过 <code>seata.client.rm.lock.lock-retry-interval</code> 和 <code>lock-retry-times</code> 调整），超时后抛出 <code>LockConflictException</code>。处理全局锁冲突的最佳实践包括：（1）尽量减少全局事务持有锁的时间，将被锁操作放在分支事务末尾；（2）在设计层面通过业务分区避免热点行竞争，比如按用户 ID 或订单 ID 分片；（3）对于无法避免的热点场景，使用 TCC 模式替代 AT 模式，因为 TCC 的 Try 阶段就可以通过资源冻结判断冲突并快速失败，避免长期等待。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 全局事务入口 + 锁冲突处理
-@Service
-public class OrderGlobalTxService {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 全局事务入口 + 锁冲突处理</span>
+<span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">OrderGlobalTxService</span> {
 
-    private final OrderRepo orderRepo;
-    private final InventoryClient inventoryClient;
-    private final AccountClient accountClient;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> OrderRepo orderRepo;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> InventoryClient inventoryClient;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> AccountClient accountClient;
 
-    @GlobalTransactional(
+    <span class="hljs-meta">@GlobalTransactional(
             timeoutMills = 120_000,
-            name = &quot;order-create-global-tx&quot;,
+            name = "order-create-global-tx",
             rollbackFor = {Exception.class},
-            noRollbackFor = {IllegalArgumentException.class})
-    public OrderResult createOrder(OrderRequest request) {
-        // 分支事务 1：写入订单表（本地数据库）
-        var order = orderRepo.save(request.toOrder());
+            noRollbackFor = {IllegalArgumentException.class})</span>
+    <span class="hljs-keyword">public</span> OrderResult <span class="hljs-title function_">createOrder</span><span class="hljs-params">(OrderRequest request)</span> {
+        <span class="hljs-comment">// 分支事务 1：写入订单表（本地数据库）</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">order</span> <span class="hljs-operator">=</span> orderRepo.save(request.toOrder());
 
-        try {
-            // 分支事务 2：远程调用库存服务扣减库存
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-comment">// 分支事务 2：远程调用库存服务扣减库存</span>
             inventoryClient.deduct(
                     request.productId(), request.quantity(), order.getId());
-        } catch (LockConflictException e) {
-            // 全局锁冲突：库存热点行被占用
-            // 策略：重试或降级提示用户
-            throw new RetryableException(&quot;库存暂时繁忙，请稍后重试&quot;, e);
+        } <span class="hljs-keyword">catch</span> (LockConflictException e) {
+            <span class="hljs-comment">// 全局锁冲突：库存热点行被占用</span>
+            <span class="hljs-comment">// 策略：重试或降级提示用户</span>
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RetryableException</span>(<span class="hljs-string">"库存暂时繁忙，请稍后重试"</span>, e);
         }
 
-        try {
-            // 分支事务 3：远程调用账户服务扣款
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-comment">// 分支事务 3：远程调用账户服务扣款</span>
             accountClient.debit(
                     request.userId(), request.totalAmount(), order.getId());
-        } catch (Exception e) {
-            // 账户扣款失败 → Seata 自动回滚分支 1 和 2
-            // 无需手动补偿，AT 模式自动执行 undo_log 回滚
-            throw e;
+        } <span class="hljs-keyword">catch</span> (Exception e) {
+            <span class="hljs-comment">// 账户扣款失败 → Seata 自动回滚分支 1 和 2</span>
+            <span class="hljs-comment">// 无需手动补偿，AT 模式自动执行 undo_log 回滚</span>
+            <span class="hljs-keyword">throw</span> e;
         }
 
-        return new OrderResult(order.getId(), &quot;SUCCESS&quot;);
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">OrderResult</span>(order.getId(), <span class="hljs-string">"SUCCESS"</span>);
     }
 }
-</code></pre></div>
-<h3>5.3 实际案例：订单-库存-账户 Saga 编排</h3>
+</code></pre></div><h3>5.3 实际案例：订单-库存-账户 Saga 编排</h3>
 <p>以下是一个完整的电商下单案例，展示如何使用 Seata 的 Saga 模式编排订单服务、库存服务和账户服务，每个步骤都定义了正向操作和补偿操作。在 JDK 25 + Spring Boot 4.x 技术栈下，利用 Seata Saga 的状态机 DSL（基于 JSON 或 YAML 定义流程）或 Java 注解式 <code>@Compensable</code> 均可实现，本案例采用注解式实现以保持代码在单文件内可读。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// ==================== 订单服务 ====================
-@Service
-public class OrderSagaService {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// ==================== 订单服务 ====================</span>
+<span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">OrderSagaService</span> {
 
-    // 步骤1 正向：创建订单（状态 PENDING）
-    @Compensable(compensateMethod = &quot;cancelOrder&quot;)
-    public Order createOrder(OrderRequest request) {
-        var order = new Order();
+    <span class="hljs-comment">// 步骤1 正向：创建订单（状态 PENDING）</span>
+    <span class="hljs-meta">@Compensable(compensateMethod = "cancelOrder")</span>
+    <span class="hljs-keyword">public</span> Order <span class="hljs-title function_">createOrder</span><span class="hljs-params">(OrderRequest request)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">order</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Order</span>();
         order.setUserId(request.userId());
         order.setProductId(request.productId());
         order.setQuantity(request.quantity());
         order.setAmount(request.amount());
-        order.setStatus(&quot;PENDING&quot;);
-        return orderRepo.save(order);
+        order.setStatus(<span class="hljs-string">"PENDING"</span>);
+        <span class="hljs-keyword">return</span> orderRepo.save(order);
     }
 
-    // 步骤1 补偿：取消订单
-    public void cancelOrder(OrderRequest request) {
-        var order = orderRepo.findByRequestId(request.requestId());
-        if (order == null) return;                                    // 空回滚防护
-        if (&quot;CANCELLED&quot;.equals(order.getStatus())) return;            // 幂等防护
-        order.setStatus(&quot;CANCELLED&quot;);
+    <span class="hljs-comment">// 步骤1 补偿：取消订单</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">cancelOrder</span><span class="hljs-params">(OrderRequest request)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">order</span> <span class="hljs-operator">=</span> orderRepo.findByRequestId(request.requestId());
+        <span class="hljs-keyword">if</span> (order == <span class="hljs-literal">null</span>) <span class="hljs-keyword">return</span>;                                    <span class="hljs-comment">// 空回滚防护</span>
+        <span class="hljs-keyword">if</span> (<span class="hljs-string">"CANCELLED"</span>.equals(order.getStatus())) <span class="hljs-keyword">return</span>;            <span class="hljs-comment">// 幂等防护</span>
+        order.setStatus(<span class="hljs-string">"CANCELLED"</span>);
         orderRepo.save(order);
     }
 }
 
-// ==================== 库存服务 ====================
-@Service
-public class InventorySagaService {
+<span class="hljs-comment">// ==================== 库存服务 ====================</span>
+<span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">InventorySagaService</span> {
 
-    // 步骤2 正向：冻结库存
-    @Compensable(compensateMethod = &quot;releaseInventory&quot;)
-    public void freezeInventory(Long productId, Integer quantity, String sagaId) {
-        var rows = inventoryRepo.freeze(productId, quantity, sagaId);
-        if (rows == 0) {
-            throw new InsufficientInventoryException(&quot;库存不足: productId=&quot; + productId);
+    <span class="hljs-comment">// 步骤2 正向：冻结库存</span>
+    <span class="hljs-meta">@Compensable(compensateMethod = "releaseInventory")</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">freezeInventory</span><span class="hljs-params">(Long productId, Integer quantity, String sagaId)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">rows</span> <span class="hljs-operator">=</span> inventoryRepo.freeze(productId, quantity, sagaId);
+        <span class="hljs-keyword">if</span> (rows == <span class="hljs-number">0</span>) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">InsufficientInventoryException</span>(<span class="hljs-string">"库存不足: productId="</span> + productId);
         }
     }
 
-    // 步骤2 补偿：释放冻结库存
-    public void releaseInventory(Long productId, Integer quantity, String sagaId) {
+    <span class="hljs-comment">// 步骤2 补偿：释放冻结库存</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">releaseInventory</span><span class="hljs-params">(Long productId, Integer quantity, String sagaId)</span> {
         inventoryRepo.unfreeze(productId, quantity, sagaId);
     }
 }
 
-// ==================== 账户服务 ====================
-@Service
-public class AccountSagaService {
+<span class="hljs-comment">// ==================== 账户服务 ====================</span>
+<span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">AccountSagaService</span> {
 
-    // 步骤3 正向：扣减余额
-    @Compensable(compensateMethod = &quot;refundAccount&quot;)
-    public void debitAccount(Long userId, BigDecimal amount, String sagaId) {
-        var rows = accountRepo.debit(userId, amount, sagaId);
-        if (rows == 0) {
-            throw new InsufficientBalanceException(&quot;余额不足: userId=&quot; + userId);
+    <span class="hljs-comment">// 步骤3 正向：扣减余额</span>
+    <span class="hljs-meta">@Compensable(compensateMethod = "refundAccount")</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">debitAccount</span><span class="hljs-params">(Long userId, BigDecimal amount, String sagaId)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">rows</span> <span class="hljs-operator">=</span> accountRepo.debit(userId, amount, sagaId);
+        <span class="hljs-keyword">if</span> (rows == <span class="hljs-number">0</span>) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">InsufficientBalanceException</span>(<span class="hljs-string">"余额不足: userId="</span> + userId);
         }
     }
 
-    // 步骤3 补偿：退回金额
-    public void refundAccount(Long userId, BigDecimal amount, String sagaId) {
+    <span class="hljs-comment">// 步骤3 补偿：退回金额</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">refundAccount</span><span class="hljs-params">(Long userId, BigDecimal amount, String sagaId)</span> {
         accountRepo.credit(userId, amount, sagaId);
     }
 
-    // 防悬挂检查：如果 Cancel 先于 Try 到达（网络延迟等极端情况）
-    public boolean isCompensationAhead(String sagaId) {
-        return sagaLogRepo.existsBySagaIdAndStatus(sagaId, &quot;COMPENSATED&quot;);
+    <span class="hljs-comment">// 防悬挂检查：如果 Cancel 先于 Try 到达（网络延迟等极端情况）</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">isCompensationAhead</span><span class="hljs-params">(String sagaId)</span> {
+        <span class="hljs-keyword">return</span> sagaLogRepo.existsBySagaIdAndStatus(sagaId, <span class="hljs-string">"COMPENSATED"</span>);
     }
 }
 
-// ==================== Saga 编排入口 ====================
-@Service
-public class CreateOrderSagaOrchestrator {
+<span class="hljs-comment">// ==================== Saga 编排入口 ====================</span>
+<span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">CreateOrderSagaOrchestrator</span> {
 
-    private final OrderSagaService orderSagaService;
-    private final InventorySagaService inventorySagaService;
-    private final AccountSagaService accountSagaService;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> OrderSagaService orderSagaService;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> InventorySagaService inventorySagaService;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> AccountSagaService accountSagaService;
 
-    @GlobalTransactional(timeoutMills = 300_000, name = &quot;create-order-saga&quot;)
-    public SagaResult execute(OrderRequest request) {
-        var sagaId = UUID.randomUUID().toString();
+    <span class="hljs-meta">@GlobalTransactional(timeoutMills = 300_000, name = "create-order-saga")</span>
+    <span class="hljs-keyword">public</span> SagaResult <span class="hljs-title function_">execute</span><span class="hljs-params">(OrderRequest request)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">sagaId</span> <span class="hljs-operator">=</span> UUID.randomUUID().toString();
 
-        // Step 1: 创建订单
-        var order = orderSagaService.createOrder(request);
+        <span class="hljs-comment">// Step 1: 创建订单</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">order</span> <span class="hljs-operator">=</span> orderSagaService.createOrder(request);
 
-        // Step 2: 冻结库存（失败 → Seata 自动补偿 Step 1）
+        <span class="hljs-comment">// Step 2: 冻结库存（失败 → Seata 自动补偿 Step 1）</span>
         inventorySagaService.freezeInventory(
                 request.productId(), request.quantity(), sagaId);
 
-        // Step 3: 扣减账户余额（失败 → Seata 自动补偿 Step 2 → Step 1）
+        <span class="hljs-comment">// Step 3: 扣减账户余额（失败 → Seata 自动补偿 Step 2 → Step 1）</span>
         accountSagaService.debitAccount(
                 request.userId(), request.amount(), sagaId);
 
-        // 全部分支成功 → TC 驱动全局提交
-        log.info(&quot;Saga completed successfully: sagaId={}, orderId={}&quot;, sagaId, order.getId());
-        return new SagaResult(sagaId, order.getId(), &quot;SUCCESS&quot;);
+        <span class="hljs-comment">// 全部分支成功 → TC 驱动全局提交</span>
+        log.info(<span class="hljs-string">"Saga completed successfully: sagaId={}, orderId={}"</span>, sagaId, order.getId());
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">SagaResult</span>(sagaId, order.getId(), <span class="hljs-string">"SUCCESS"</span>);
     }
 }
-</code></pre></div>
-<p>该案例的关键设计点包括：（1）每个 <code>@Compensable</code> 注解标注的方法都有对应的 <code>compensateMethod</code>，Seata 在全局回滚时会按逆序调用这些补偿方法；（2）补偿方法内部需要实现<strong>空回滚</strong>（对未执行的正向步骤，补偿方法直接返回）和<strong>幂等防护</strong>（重复的补偿请求不会重复操作）——这是 Seata Saga 模式的硬性要求；（3）<code>sagaId</code> 贯穿所有步骤，每个步骤的数据库操作使用 <code>sagaId</code> 作为业务幂等键，防止极端网络延迟导致的正向/补偿乱序问题（防悬挂）；（4）异常抛出即触发全局回滚，开发者无需在业务代码中手动编排补偿链，Seata TC 统一调度。在生产环境中，建议配合 Seata Dashboard 监控全局事务的执行链路，并设置告警规则：全局回滚率超过 5%、全局事务平均耗时超过阈值等指标需要及时响应。</p>
+</code></pre></div><p>该案例的关键设计点包括：（1）每个 <code>@Compensable</code> 注解标注的方法都有对应的 <code>compensateMethod</code>，Seata 在全局回滚时会按逆序调用这些补偿方法；（2）补偿方法内部需要实现<strong>空回滚</strong>（对未执行的正向步骤，补偿方法直接返回）和<strong>幂等防护</strong>（重复的补偿请求不会重复操作）——这是 Seata Saga 模式的硬性要求；（3）<code>sagaId</code> 贯穿所有步骤，每个步骤的数据库操作使用 <code>sagaId</code> 作为业务幂等键，防止极端网络延迟导致的正向/补偿乱序问题（防悬挂）；（4）异常抛出即触发全局回滚，开发者无需在业务代码中手动编排补偿链，Seata TC 统一调度。在生产环境中，建议配合 Seata Dashboard 监控全局事务的执行链路，并设置告警规则：全局回滚率超过 5%、全局事务平均耗时超过阈值等指标需要及时响应。</p>
 <hr>
 <h2>六、选型决策实战</h2>
 <h3>6.1 实战决策矩阵</h3>
-<p>在企业级 Java 微服务架构中，分布式事务方案的选择是一个多维决策问题，不能仅凭&quot;强一致&quot;或&quot;最终一致&quot;的单一维度做判断。以下决策矩阵覆盖了实际项目中最常见的五种场景，结合业务特性、基础设施现状和团队能力给出推荐方案及理由。</p>
+<p>在企业级 Java 微服务架构中，分布式事务方案的选择是一个多维决策问题，不能仅凭"强一致"或"最终一致"的单一维度做判断。以下决策矩阵覆盖了实际项目中最常见的五种场景，结合业务特性、基础设施现状和团队能力给出推荐方案及理由。</p>
 <table>
 <thead>
 <tr>
@@ -878,7 +860,7 @@ public class CreateOrderSagaOrchestrator {
 <tr>
 <td>高性能+弱依赖</td>
 <td>TCC</td>
-<td>当全局事务的性能是最高优先级的考量维度、且各个服务之间的依赖相对独立时，TCC 模式通过资源预留（Try 阶段）实现了细粒度的并发控制。与 AT 模式的全局锁等待不同，TCC 在 Try 阶段就能快速判断资源是否可满足——比如冻结库存、冻结资金——如果资源不足则立即失败，不会持有数据库行锁等待。这种&quot;先检查、再操作&quot;的模式大幅降低了锁冲突概率，适用于高并发秒杀、抢购等场景。代价是每个服务需实现 Try/Confirm/Cancel 三个接口，开发成本显著高于 AT 模式。</td>
+<td>当全局事务的性能是最高优先级的考量维度、且各个服务之间的依赖相对独立时，TCC 模式通过资源预留（Try 阶段）实现了细粒度的并发控制。与 AT 模式的全局锁等待不同，TCC 在 Try 阶段就能快速判断资源是否可满足——比如冻结库存、冻结资金——如果资源不足则立即失败，不会持有数据库行锁等待。这种"先检查、再操作"的模式大幅降低了锁冲突概率，适用于高并发秒杀、抢购等场景。代价是每个服务需实现 Try/Confirm/Cancel 三个接口，开发成本显著高于 AT 模式。</td>
 </tr>
 <tr>
 <td>已有Kafka基础设施</td>
@@ -886,18 +868,18 @@ public class CreateOrderSagaOrchestrator {
 <td>如果团队已有成熟的 Kafka 集群和完善的 CDC 基础设施（如 Debezium + Kafka Connect），那么 Outbox + Debezium 是运维成本最低的扩展方案。不需要引入新的中间件（如 Seata Server），不需要修改业务服务的部署架构，只需在现有数据库中添加 Outbox 表并在业务代码中原子写入、然后配置 Debezium Connector 监听该表的变更——即可获得可靠的跨服务事件驱动能力。该方案的局限在于只适用于最终一致性场景，且要求所有参与服务都能消费 Kafka 事件。</td>
 </tr>
 </tbody></table>
-<p>补充一个决策速记口诀，帮助在技术评审时快速对齐团队认知：<strong>&quot;能本地不分布，能异步不同步，能 AT 不 TCC，能 Outbox 不手写消息。&quot;</strong> 这四句话分别对应：优先审视是否能通过业务重构消除分布式事务需求；如果可以接受最终一致就不要用同步阻塞方案；在需要同步分布式事务时优先用 AT 而非手写 TCC 接口；在需要异步可靠投递时优先用 CDC 驱动的 Outbox 而非自行实现消息表轮询。</p>
+<p>补充一个决策速记口诀，帮助在技术评审时快速对齐团队认知：<strong>"能本地不分布，能异步不同步，能 AT 不 TCC，能 Outbox 不手写消息。"</strong> 这四句话分别对应：优先审视是否能通过业务重构消除分布式事务需求；如果可以接受最终一致就不要用同步阻塞方案；在需要同步分布式事务时优先用 AT 而非手写 TCC 接口；在需要异步可靠投递时优先用 CDC 驱动的 Outbox 而非自行实现消息表轮询。</p>
 <h3>6.2 反模式警告</h3>
 <p>在分布式事务的实践中，以下三种反模式是导致线上事故和架构腐化的高频原因，开发者必须警惕。</p>
-<p><strong>反模式一：用分布式事务解决所有一致性问题。</strong> 分布式事务是一个&quot;重型武器&quot;，不应该成为默认选项。许多看似需要分布式事务的场景，实际上可以通过业务建模层面的优化来规避。例如：将原本分布在两个微服务中的&quot;扣库存&quot;和&quot;发积分&quot;合并到同一个服务中操作同一个数据库；或者通过幂等设计允许重复调用而非依赖全局事务的回滚。每引入一个分布式事务框架（Seata 或 Saga 编排器），都意味着增加一个新的故障域——TC 宕机、全局锁超时、补偿失败等都需要配套监控和应急预案。因此，在决定使用分布式事务之前，必须先回答一个问题：&quot;能否通过调整服务边界或数据库分片策略消除跨数据库的场景？&quot; 只有在确认无法规避时，才引入分布式事务。</p>
+<p><strong>反模式一：用分布式事务解决所有一致性问题。</strong> 分布式事务是一个"重型武器"，不应该成为默认选项。许多看似需要分布式事务的场景，实际上可以通过业务建模层面的优化来规避。例如：将原本分布在两个微服务中的"扣库存"和"发积分"合并到同一个服务中操作同一个数据库；或者通过幂等设计允许重复调用而非依赖全局事务的回滚。每引入一个分布式事务框架（Seata 或 Saga 编排器），都意味着增加一个新的故障域——TC 宕机、全局锁超时、补偿失败等都需要配套监控和应急预案。因此，在决定使用分布式事务之前，必须先回答一个问题："能否通过调整服务边界或数据库分片策略消除跨数据库的场景？" 只有在确认无法规避时，才引入分布式事务。</p>
 <p><strong>反模式二：在循环中开启全局事务。</strong> 这是一个性能杀手，常见于批量操作场景——比如批量导入订单、批量发放优惠券时，开发者在 <code>for</code> 循环内部为每一行数据启动一个全局事务。每个全局事务至少涉及：TM 向 TC 注册全局事务 → 各 RM 注册分支事务 → 各 RM 执行本地事务并申请全局锁 → TM 通知 TC 提交 → TC 通知所有 RM 提交并释放全局锁。这个过程涉及多次网络往返，在循环中执行会导致数据库连接池耗尽、TC 压力过大、整体吞吐量骤降。正确的做法是将循环中的操作聚合为一个全局事务（如果业务允许批量提交），或者使用 TCC 模式在 Try 阶段完成批量资源冻结后统一 Confirm。</p>
 <p><strong>反模式三：让补偿操作依赖外部不可靠服务。</strong> Saga 和 TCC 的补偿操作是事务一致性的最后一道防线，必须保证高可靠性。常见的错误是将补偿操作设计为依赖外部不可靠的 HTTP API（如通知第三方支付网关退款），一旦该外部服务不可用，补偿失败直接导致数据不一致。补偿操作的依赖链应遵循以下原则：（1）补偿操作只操作本地数据库，尽最大可能消除外部依赖；（2）如果必须调用外部服务进行补偿（如退款），应采用异步重试 + 死信队列机制，确保补偿最终成功而不是一次调用失败即放弃；（3）补偿操作必须有完整的可观测性：记录补偿日志、发出告警、支持人工介入。生产环境的经验法则是：补偿操作的可用性要求必须大于等于正向操作的可用性要求，否则 Saga 的整体一致性底线就会由补偿操作的可用性决定。如果团队无法保证补偿操作的高可用，那么该场景不适合使用 Saga 或 TCC 模式，应回归到 Outbox + 异步重试的最终一致性方案。</p>
 <hr>
 <h2>相关条目</h2>
 <ul>
-<li><a href="#/05-分布式架构/弹性设计/05-幂等设计与分布式锁" class="cross-ref" data-ref="05-幂等设计与分布式锁">05-幂等设计与分布式锁</a> — 幂等与分布式锁</li>
-<li><a href="#/05-分布式架构/弹性设计/05-熔断限流与弹性设计" class="cross-ref" data-ref="05-熔断限流与弹性设计">05-熔断限流与弹性设计</a> — 熔断降级保障</li>
-<li><a href="#/04-数据与中间件/消息与搜索/04-Kafka深度解析" class="cross-ref" data-ref="04-Kafka深度解析">04-Kafka深度解析</a> — Kafka 消息可靠性传递</li>
+<li><a href="#/05-分布式架构/弹性设计/05-幂等设计与分布式锁" class="cross-ref">05-幂等设计与分布式锁</a> — 幂等与分布式锁</li>
+<li><a href="#/05-分布式架构/弹性设计/05-熔断限流与弹性设计" class="cross-ref">05-熔断限流与弹性设计</a> — 熔断降级保障</li>
+<li><a href="#/04-数据与中间件/消息与搜索/04-Kafka深度解析" class="cross-ref">04-Kafka深度解析</a> — Kafka 消息可靠性传递</li>
 </ul>
-</div>
+</body></html></div>
 </article>

@@ -1,12 +1,12 @@
 
-<article class="kb-entry" data-path="/05-分布式架构/弹性设计/05-熔断限流与弹性设计">
+<article class="kb-entry" data-path="/05-分布式架构">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=05">05-分布式架构</a></div>
     <h1>熔断、限流与弹性设计</h1>
-    <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#circuit-breaker</span><span class="badge badge-tag">#rate-limiter</span><span class="badge badge-tag">#resilience4j</span><span class="badge badge-tag">#sentinel</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#circuit-breaker</span><span class="badge badge-tag">#rate-limiter</span><span class="badge badge-tag">#resilience4j</span><span class="badge badge-tag">#sentinel</span><span class="badge badge-tag">#retry</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://resilience4j.readme.io/docs" target="_blank" rel="noopener" class="source-link" title="Resilience4j 官方文档 — CircuitBreaker/Retry/RateLimiter/Bulkhead/TimeLimiter">Resilience4j 官方文档 — CircuitBreaker/Retry/RateLimiter/Bulkhead/TimeLimiter</a><a href="https://docs.spring.io/spring-cloud-circuitbreaker/docs/current/reference/htmlsingle/" target="_blank" rel="noopener" class="source-link" title="Spring Cloud Circuit Breaker 官方文档">Spring Cloud Circuit Breaker 官方文档</a><a href="https://github.com/resilience4j/resilience4j" target="_blank" rel="noopener" class="source-link" title="Resilience4j 源码（滑动窗口、令牌桶实现）">Resilience4j 源码（滑动窗口、令牌桶实现）</a><a href="https://martinfowler.com/bliki/CircuitBreaker.html" target="_blank" rel="noopener" class="source-link" title="Martin Fowler — Circuit Breaker Pattern">Martin Fowler — Circuit Breaker Pattern</a></small></div>
   </div>
-  <div class="entry-body"><h1>熔断、限流与弹性设计</h1>
+  <div class="entry-body"><html><head></head><body><h1>熔断、限流与弹性设计</h1>
 <h2>概述</h2>
 <p>弹性设计是分布式系统可靠性的最后防线。熔断器防止级联故障，重试机制处理瞬时错误，限流保护系统不被流量压垮，隔离舱防止单点资源耗尽。</p>
 <p>在 AI 应用中，模型 API 调用是典型的不可靠外部依赖——限流（Token 配额）、超时（长推理）、熔断（模型服务不可用）和重试（瞬时错误）缺一不可。</p>
@@ -18,7 +18,7 @@
             │                                  │
             ▼                                  │
     ┌──────────────┐    失败率超阈值     ┌─────┴────────┐
-    │   CLOSED     │ ─────────────────▶  │    OPEN      │
+    │   <span class="hljs-keyword">CLOSED</span>     │ ─────────────────▶  │    <span class="hljs-keyword">OPEN</span>      │
     │  (正常调用)   │                     │  (快速失败)   │
     └──────────────┘                     └──────┬───────┘
             ▲                                   │
@@ -31,9 +31,8 @@
     └────────────────┘
     │               │
     成功            失败
-    → CLOSED       → OPEN
-</code></pre></div>
-<table>
+    → <span class="hljs-keyword">CLOSED</span>       → <span class="hljs-keyword">OPEN</span>
+</code></pre></div><table>
 <thead>
 <tr>
 <th>状态</th>
@@ -60,175 +59,167 @@
 <h3>1.2 滑动窗口统计</h3>
 <p><strong>基于计数的滑动窗口（Count-based）：</strong></p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>窗口大小 N=10 次调用：
-[1][2][3][4][5][6][7][8][9][10]
+<span class="hljs-comment">[1]</span><span class="hljs-comment">[2]</span><span class="hljs-comment">[3]</span><span class="hljs-comment">[4]</span><span class="hljs-comment">[5]</span><span class="hljs-comment">[6]</span><span class="hljs-comment">[7]</span><span class="hljs-comment">[8]</span><span class="hljs-comment">[9]</span><span class="hljs-comment">[10]</span>
                   └─ 最新10次 ─┘
 
 失败率 = 失败次数 / 10
-当失败率 &gt;= failureRateThreshold(50%) → OPEN
-</code></pre></div>
-<p><strong>基于时间的滑动窗口（Time-based）：</strong></p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>窗口大小 = 60 秒，分 10 个桶（每个 6 秒）：
-Bucket 0     Bucket 1     ...  Bucket 9
+当失败率 &gt;= failureRateThreshold(50%) → <span class="hljs-keyword">OPEN</span>
+</code></pre></div><p><strong>基于时间的滑动窗口（Time-based）：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>窗口大小 =<span class="hljs-number"> 60 </span>秒，分<span class="hljs-number"> 10 </span>个桶（每个<span class="hljs-number"> 6 </span>秒）：
+Bucket<span class="hljs-number"> 0 </span>    Bucket<span class="hljs-number"> 1 </span>    ...  Bucket 9
 [0-6s]       [6-12s]            [54-60s]
 
 失败率 = 所有桶的失败总数 / 所有桶的调用总数
-</code></pre></div>
-<h3>1.3 慢调用比例（Slow Call）</h3>
+</code></pre></div><h3>1.3 慢调用比例（Slow Call）</h3>
 <p>独立于失败率的熔断触发条件：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">resilience4j:
-  circuitbreaker:
-    instances:
-      llmService:
-        sliding-window-type: TIME_BASED
-        sliding-window-size: 60
-        slow-call-rate-threshold: 50    # 慢调用超过50% → OPEN
-        slow-call-duration-threshold: 5s # 超过5秒视为慢调用
-        failure-rate-threshold: 30      # 失败率超过30% → OPEN
-        minimum-number-of-calls: 10     # 至少10次调用才开始统计
-        wait-duration-in-open-state: 30s
-</code></pre></div>
-<hr>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-attr">resilience4j:</span>
+  <span class="hljs-attr">circuitbreaker:</span>
+    <span class="hljs-attr">instances:</span>
+      <span class="hljs-attr">llmService:</span>
+        <span class="hljs-attr">sliding-window-type:</span> <span class="hljs-string">TIME_BASED</span>
+        <span class="hljs-attr">sliding-window-size:</span> <span class="hljs-number">60</span>
+        <span class="hljs-attr">slow-call-rate-threshold:</span> <span class="hljs-number">50</span>    <span class="hljs-comment"># 慢调用超过50% → OPEN</span>
+        <span class="hljs-attr">slow-call-duration-threshold:</span> <span class="hljs-string">5s</span> <span class="hljs-comment"># 超过5秒视为慢调用</span>
+        <span class="hljs-attr">failure-rate-threshold:</span> <span class="hljs-number">30</span>      <span class="hljs-comment"># 失败率超过30% → OPEN</span>
+        <span class="hljs-attr">minimum-number-of-calls:</span> <span class="hljs-number">10</span>     <span class="hljs-comment"># 至少10次调用才开始统计</span>
+        <span class="hljs-attr">wait-duration-in-open-state:</span> <span class="hljs-string">30s</span>
+</code></pre></div><hr>
 <h2>二、Resilience4j 深入</h2>
 <h3>2.1 CircuitBreaker 配置</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Configuration
-public class ResilienceConfig {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Configuration</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ResilienceConfig</span> {
 
-    @Bean
-    public CircuitBreakerRegistry circuitBreakerRegistry() {
-        var config = CircuitBreakerConfig.custom()
-                .failureRateThreshold(50)         // 失败率阈值 50%
-                .slowCallRateThreshold(50)        // 慢调用率阈值
-                .slowCallDurationThreshold(Duration.ofSeconds(5))
-                .minimumNumberOfCalls(10)          // 最少调用次数
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-keyword">public</span> CircuitBreakerRegistry <span class="hljs-title function_">circuitBreakerRegistry</span><span class="hljs-params">()</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">config</span> <span class="hljs-operator">=</span> CircuitBreakerConfig.custom()
+                .failureRateThreshold(<span class="hljs-number">50</span>)         <span class="hljs-comment">// 失败率阈值 50%</span>
+                .slowCallRateThreshold(<span class="hljs-number">50</span>)        <span class="hljs-comment">// 慢调用率阈值</span>
+                .slowCallDurationThreshold(Duration.ofSeconds(<span class="hljs-number">5</span>))
+                .minimumNumberOfCalls(<span class="hljs-number">10</span>)          <span class="hljs-comment">// 最少调用次数</span>
                 .slidingWindowType(SlidingWindowType.COUNT_BASED)
-                .slidingWindowSize(20)             // 窗口大小
-                .waitDurationInOpenState(Duration.ofSeconds(30)) // OPEN 持续 30s
-                .permittedNumberOfCallsInHalfOpenState(5) // HALF_OPEN 允许5次探测
-                .automaticTransitionFromOpenToHalfOpenEnabled(true)
+                .slidingWindowSize(<span class="hljs-number">20</span>)             <span class="hljs-comment">// 窗口大小</span>
+                .waitDurationInOpenState(Duration.ofSeconds(<span class="hljs-number">30</span>)) <span class="hljs-comment">// OPEN 持续 30s</span>
+                .permittedNumberOfCallsInHalfOpenState(<span class="hljs-number">5</span>) <span class="hljs-comment">// HALF_OPEN 允许5次探测</span>
+                .automaticTransitionFromOpenToHalfOpenEnabled(<span class="hljs-literal">true</span>)
                 .recordExceptions(IOException.class, TimeoutException.class)
-                .ignoreExceptions(BusinessException.class) // 业务异常不计入失败
+                .ignoreExceptions(BusinessException.class) <span class="hljs-comment">// 业务异常不计入失败</span>
                 .build();
 
-        return CircuitBreakerRegistry.of(config);
+        <span class="hljs-keyword">return</span> CircuitBreakerRegistry.of(config);
     }
 
-    @Bean
-    public CircuitBreaker llmCircuitBreaker(CircuitBreakerRegistry registry) {
-        return registry.circuitBreaker(&quot;llm-service&quot;);
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-keyword">public</span> CircuitBreaker <span class="hljs-title function_">llmCircuitBreaker</span><span class="hljs-params">(CircuitBreakerRegistry registry)</span> {
+        <span class="hljs-keyword">return</span> registry.circuitBreaker(<span class="hljs-string">"llm-service"</span>);
     }
 }
 
-@Service
-public class LlmService {
+<span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">LlmService</span> {
 
-    private final CircuitBreaker llmCircuitBreaker;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> CircuitBreaker llmCircuitBreaker;
 
-    // 方式一：装饰器模式
-    public String callLlm(String prompt) {
-        var decorated = CircuitBreaker.decorateSupplier(llmCircuitBreaker,
+    <span class="hljs-comment">// 方式一：装饰器模式</span>
+    <span class="hljs-keyword">public</span> String <span class="hljs-title function_">callLlm</span><span class="hljs-params">(String prompt)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">decorated</span> <span class="hljs-operator">=</span> CircuitBreaker.decorateSupplier(llmCircuitBreaker,
                 () -&gt; openAiClient.chat(prompt));
-        return decorated.get(); // 触发熔断时抛出 CallNotPermittedException
+        <span class="hljs-keyword">return</span> decorated.get(); <span class="hljs-comment">// 触发熔断时抛出 CallNotPermittedException</span>
     }
 
-    // 方式二：注解模式
-    @CircuitBreaker(name = &quot;llm-service&quot;, fallbackMethod = &quot;llmFallback&quot;)
-    public String callLlmWithAnnotation(String prompt) {
-        return openAiClient.chat(prompt);
+    <span class="hljs-comment">// 方式二：注解模式</span>
+    <span class="hljs-meta">@CircuitBreaker(name = "llm-service", fallbackMethod = "llmFallback")</span>
+    <span class="hljs-keyword">public</span> String <span class="hljs-title function_">callLlmWithAnnotation</span><span class="hljs-params">(String prompt)</span> {
+        <span class="hljs-keyword">return</span> openAiClient.chat(prompt);
     }
 
-    public String llmFallback(String prompt, CallNotPermittedException e) {
-        return &quot;AI 服务暂时不可用，请稍后重试&quot;;
+    <span class="hljs-keyword">public</span> String <span class="hljs-title function_">llmFallback</span><span class="hljs-params">(String prompt, CallNotPermittedException e)</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-string">"AI 服务暂时不可用，请稍后重试"</span>;
     }
 
-    public String llmFallback(String prompt, TimeoutException e) {
-        return &quot;AI 服务响应超时，已简化处理&quot;;
+    <span class="hljs-keyword">public</span> String <span class="hljs-title function_">llmFallback</span><span class="hljs-params">(String prompt, TimeoutException e)</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-string">"AI 服务响应超时，已简化处理"</span>;
     }
 }
-</code></pre></div>
-<h3>2.2 Retry 配置</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Bean
-public RetryRegistry retryRegistry() {
-    var config = RetryConfig.&lt;String&gt;custom()
-            .maxAttempts(3)
-            .waitDuration(Duration.ofMillis(500))
+</code></pre></div><h3>2.2 Retry 配置</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Bean</span>
+<span class="hljs-keyword">public</span> RetryRegistry <span class="hljs-title function_">retryRegistry</span><span class="hljs-params">()</span> {
+    <span class="hljs-type">var</span> <span class="hljs-variable">config</span> <span class="hljs-operator">=</span> RetryConfig.&lt;String&gt;custom()
+            .maxAttempts(<span class="hljs-number">3</span>)
+            .waitDuration(Duration.ofMillis(<span class="hljs-number">500</span>))
             .intervalFunction(IntervalFunction.ofExponentialBackoff(
-                    Duration.ofMillis(500), 2.0)) // 500ms, 1000ms, 2000ms
-            .retryOnResult(result -&gt; result == null || result.contains(&quot;rate_limit&quot;))
-            .retryOnException(e -&gt; e instanceof TimeoutException)
+                    Duration.ofMillis(<span class="hljs-number">500</span>), <span class="hljs-number">2.0</span>)) <span class="hljs-comment">// 500ms, 1000ms, 2000ms</span>
+            .retryOnResult(result -&gt; result == <span class="hljs-literal">null</span> || result.contains(<span class="hljs-string">"rate_limit"</span>))
+            .retryOnException(e -&gt; e <span class="hljs-keyword">instanceof</span> TimeoutException)
             .ignoreExceptions(IllegalArgumentException.class)
-            .failAfterMaxAttempts(true)
+            .failAfterMaxAttempts(<span class="hljs-literal">true</span>)
             .build();
 
-    return RetryRegistry.of(config);
+    <span class="hljs-keyword">return</span> RetryRegistry.of(config);
 }
 
-// Retry 链式使用
-var decorated = Retry.decorateSupplier(retry,
+<span class="hljs-comment">// Retry 链式使用</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">decorated</span> <span class="hljs-operator">=</span> Retry.decorateSupplier(retry,
         () -&gt; callExternalApi());
-</code></pre></div>
-<h3>2.3 RateLimiter 配置</h3>
+</code></pre></div><h3>2.3 RateLimiter 配置</h3>
 <p><strong>令牌桶算法：</strong></p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>令牌桶容量 = limitForPeriod
-令牌补充速率 = limitForPeriod / limitRefreshPeriod
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>令牌桶容量 = <span class="hljs-keyword">limit</span>ForPeriod
+令牌补充速率 = <span class="hljs-keyword">limit</span>ForPeriod / <span class="hljs-keyword">limit</span>RefreshPeriod
 
-每次请求消耗 1 个令牌
+每次请求消耗 <span class="hljs-number">1</span> 个令牌
 桶空时请求被拒绝（RequestNotPermitted）
 
-示例：limitForPeriod=100, limitRefreshPeriod=50ms
-→ 每 50ms 补充 100 个令牌 → 2000 QPS
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Bean
-public RateLimiterRegistry rateLimiterRegistry() {
-    var config = RateLimiterConfig.custom()
-            .limitForPeriod(100)                    // 每个周期 100 个请求
-            .limitRefreshPeriod(Duration.ofSeconds(1)) // 1 秒刷新
-            .timeoutDuration(Duration.ofMillis(500))   // 等待令牌超时
+示例：<span class="hljs-keyword">limit</span>ForPeriod=<span class="hljs-number">100</span>, <span class="hljs-keyword">limit</span>RefreshPeriod=<span class="hljs-number">50</span>ms
+→ 每 <span class="hljs-number">50</span>ms 补充 <span class="hljs-number">100</span> 个令牌 → <span class="hljs-number">2000</span> QPS
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Bean</span>
+<span class="hljs-keyword">public</span> RateLimiterRegistry <span class="hljs-title function_">rateLimiterRegistry</span><span class="hljs-params">()</span> {
+    <span class="hljs-type">var</span> <span class="hljs-variable">config</span> <span class="hljs-operator">=</span> RateLimiterConfig.custom()
+            .limitForPeriod(<span class="hljs-number">100</span>)                    <span class="hljs-comment">// 每个周期 100 个请求</span>
+            .limitRefreshPeriod(Duration.ofSeconds(<span class="hljs-number">1</span>)) <span class="hljs-comment">// 1 秒刷新</span>
+            .timeoutDuration(Duration.ofMillis(<span class="hljs-number">500</span>))   <span class="hljs-comment">// 等待令牌超时</span>
             .build();
 
-    return RateLimiterRegistry.of(config);
+    <span class="hljs-keyword">return</span> RateLimiterRegistry.of(config);
 }
 
-// 使用示例
-@RateLimiter(name = &quot;openai-api&quot;, fallbackMethod = &quot;rateLimitFallback&quot;)
-public String callOpenAi(String prompt) {
-    return openAiClient.chat(prompt);
+<span class="hljs-comment">// 使用示例</span>
+<span class="hljs-meta">@RateLimiter(name = "openai-api", fallbackMethod = "rateLimitFallback")</span>
+<span class="hljs-keyword">public</span> String <span class="hljs-title function_">callOpenAi</span><span class="hljs-params">(String prompt)</span> {
+    <span class="hljs-keyword">return</span> openAiClient.chat(prompt);
 }
 
-public String rateLimitFallback(String prompt, RequestNotPermitted e) {
-    throw new RateLimitExceededException(&quot;请求超过限流阈值，请稍后重试&quot;);
+<span class="hljs-keyword">public</span> String <span class="hljs-title function_">rateLimitFallback</span><span class="hljs-params">(String prompt, RequestNotPermitted e)</span> {
+    <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RateLimitExceededException</span>(<span class="hljs-string">"请求超过限流阈值，请稍后重试"</span>);
 }
-</code></pre></div>
-<h3>2.4 Bulkhead 隔离</h3>
+</code></pre></div><h3>2.4 Bulkhead 隔离</h3>
 <p><strong>信号量隔离（Semaphore）：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Bean
-public BulkheadRegistry bulkheadRegistry() {
-    var config = BulkheadConfig.custom()
-            .maxConcurrentCalls(10)        // 最大并发 10
-            .maxWaitDuration(Duration.ofMillis(100)) // 等待超时
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Bean</span>
+<span class="hljs-keyword">public</span> BulkheadRegistry <span class="hljs-title function_">bulkheadRegistry</span><span class="hljs-params">()</span> {
+    <span class="hljs-type">var</span> <span class="hljs-variable">config</span> <span class="hljs-operator">=</span> BulkheadConfig.custom()
+            .maxConcurrentCalls(<span class="hljs-number">10</span>)        <span class="hljs-comment">// 最大并发 10</span>
+            .maxWaitDuration(Duration.ofMillis(<span class="hljs-number">100</span>)) <span class="hljs-comment">// 等待超时</span>
             .build();
 
-    return BulkheadRegistry.of(config);
+    <span class="hljs-keyword">return</span> BulkheadRegistry.of(config);
 }
 
-// 线程池隔离（ThreadPoolBulkhead）
-@Bean
-public ThreadPoolBulkheadRegistry threadPoolBulkheadRegistry() {
-    var config = ThreadPoolBulkheadConfig.custom()
-            .maxThreadPoolSize(10)
-            .coreThreadPoolSize(5)
-            .queueCapacity(50)
-            .keepAliveDuration(Duration.ofMinutes(1))
+<span class="hljs-comment">// 线程池隔离（ThreadPoolBulkhead）</span>
+<span class="hljs-meta">@Bean</span>
+<span class="hljs-keyword">public</span> ThreadPoolBulkheadRegistry <span class="hljs-title function_">threadPoolBulkheadRegistry</span><span class="hljs-params">()</span> {
+    <span class="hljs-type">var</span> <span class="hljs-variable">config</span> <span class="hljs-operator">=</span> ThreadPoolBulkheadConfig.custom()
+            .maxThreadPoolSize(<span class="hljs-number">10</span>)
+            .coreThreadPoolSize(<span class="hljs-number">5</span>)
+            .queueCapacity(<span class="hljs-number">50</span>)
+            .keepAliveDuration(Duration.ofMinutes(<span class="hljs-number">1</span>))
             .build();
 
-    return ThreadPoolBulkheadRegistry.of(config);
+    <span class="hljs-keyword">return</span> ThreadPoolBulkheadRegistry.of(config);
 }
 
-@Bulkhead(name = &quot;llm-service&quot;, type = Bulkhead.Type.THREADPOOL)
-public CompletableFuture&lt;String&gt; callLlmAsync(String prompt) {
-    return CompletableFuture.supplyAsync(() -&gt; openAiClient.chat(prompt));
+<span class="hljs-meta">@Bulkhead(name = "llm-service", type = Bulkhead.Type.THREADPOOL)</span>
+<span class="hljs-keyword">public</span> CompletableFuture&lt;String&gt; <span class="hljs-title function_">callLlmAsync</span><span class="hljs-params">(String prompt)</span> {
+    <span class="hljs-keyword">return</span> CompletableFuture.supplyAsync(() -&gt; openAiClient.chat(prompt));
 }
-</code></pre></div>
-<table>
+</code></pre></div><table>
 <thead>
 <tr>
 <th>隔离类型</th>
@@ -251,96 +242,92 @@ public CompletableFuture&lt;String&gt; callLlmAsync(String prompt) {
 </tr>
 </tbody></table>
 <h3>2.5 TimeLimiter 配置</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Bean
-public TimeLimiterRegistry timeLimiterRegistry() {
-    var config = TimeLimiterConfig.custom()
-            .timeoutDuration(Duration.ofSeconds(30))
-            .cancelRunningFuture(true) // 超时后取消执行
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Bean</span>
+<span class="hljs-keyword">public</span> TimeLimiterRegistry <span class="hljs-title function_">timeLimiterRegistry</span><span class="hljs-params">()</span> {
+    <span class="hljs-type">var</span> <span class="hljs-variable">config</span> <span class="hljs-operator">=</span> TimeLimiterConfig.custom()
+            .timeoutDuration(Duration.ofSeconds(<span class="hljs-number">30</span>))
+            .cancelRunningFuture(<span class="hljs-literal">true</span>) <span class="hljs-comment">// 超时后取消执行</span>
             .build();
 
-    return TimeLimiterRegistry.of(config);
+    <span class="hljs-keyword">return</span> TimeLimiterRegistry.of(config);
 }
 
-// 配合 CompletableFuture
-@TimeLimiter(name = &quot;llm-service&quot;, fallbackMethod = &quot;timeoutFallback&quot;)
-public CompletableFuture&lt;String&gt; callLlmWithTimeout(String prompt) {
-    return CompletableFuture.supplyAsync(() -&gt; openAiClient.chat(prompt));
+<span class="hljs-comment">// 配合 CompletableFuture</span>
+<span class="hljs-meta">@TimeLimiter(name = "llm-service", fallbackMethod = "timeoutFallback")</span>
+<span class="hljs-keyword">public</span> CompletableFuture&lt;String&gt; <span class="hljs-title function_">callLlmWithTimeout</span><span class="hljs-params">(String prompt)</span> {
+    <span class="hljs-keyword">return</span> CompletableFuture.supplyAsync(() -&gt; openAiClient.chat(prompt));
 }
-</code></pre></div>
-<h3>2.6 组合模式：正确的装饰顺序</h3>
+</code></pre></div><h3>2.6 组合模式：正确的装饰顺序</h3>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>组合顺序（从外到内）：
 CircuitBreaker → Retry → Bulkhead → TimeLimiter → 业务调用
 
 原因分析：
-- CircuitBreaker 在最外层：避免向已熔断的服务重试
-- Retry 在 CircuitBreaker 内：重试应在熔断开启时被拦截
-- Bulkhead 限制并发：先检查并发容量，再执行调用
-- TimeLimiter 最内层：仅限单次调用超时
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
-public class ResilientLlmService {
+<span class="hljs-bullet">- </span>CircuitBreaker 在最外层：避免向已熔断的服务重试
+<span class="hljs-bullet">- </span>Retry 在 CircuitBreaker 内：重试应在熔断开启时被拦截
+<span class="hljs-bullet">- </span>Bulkhead 限制并发：先检查并发容量，再执行调用
+<span class="hljs-bullet">- </span>TimeLimiter 最内层：仅限单次调用超时
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ResilientLlmService</span> {
 
-    private final CircuitBreaker circuitBreaker;
-    private final Retry retry;
-    private final Bulkhead bulkhead;
-    private final TimeLimiter timeLimiter;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> CircuitBreaker circuitBreaker;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Retry retry;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Bulkhead bulkhead;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> TimeLimiter timeLimiter;
 
-    public String callLlmWithFullResilience(String prompt) {
-        // 手动组合装饰器
-        var decorated = Decorators.ofSupplier(() -&gt; callApi(prompt))
+    <span class="hljs-keyword">public</span> String <span class="hljs-title function_">callLlmWithFullResilience</span><span class="hljs-params">(String prompt)</span> {
+        <span class="hljs-comment">// 手动组合装饰器</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">decorated</span> <span class="hljs-operator">=</span> Decorators.ofSupplier(() -&gt; callApi(prompt))
                 .withCircuitBreaker(circuitBreaker)
                 .withRetry(retry)
                 .withBulkhead(bulkhead)
                 .withTimeLimiter(timeLimiter, Executors.newVirtualThreadPerTaskExecutor())
                 .withFallback(List.of(
-                        CallNotPermittedException.class, e -&gt; &quot;熔断中&quot;,
-                        RequestNotPermitted.class, e -&gt; &quot;限流中&quot;,
-                        TimeoutException.class, e -&gt; &quot;超时&quot;
+                        CallNotPermittedException.class, e -&gt; <span class="hljs-string">"熔断中"</span>,
+                        RequestNotPermitted.class, e -&gt; <span class="hljs-string">"限流中"</span>,
+                        TimeoutException.class, e -&gt; <span class="hljs-string">"超时"</span>
                 ))
                 .decorate();
 
-        return Try.ofSupplier(decorated)
-                .recover(throwable -&gt; &quot;弹性降级响应&quot;)
+        <span class="hljs-keyword">return</span> Try.ofSupplier(decorated)
+                .recover(throwable -&gt; <span class="hljs-string">"弹性降级响应"</span>)
                 .get();
     }
 
-    private String callApi(String prompt) {
-        return openAiClient.chat(prompt);
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">callApi</span><span class="hljs-params">(String prompt)</span> {
+        <span class="hljs-keyword">return</span> openAiClient.chat(prompt);
     }
 }
-</code></pre></div>
-<h3>2.7 配置中心化</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">resilience4j:
-  circuitbreaker:
-    configs:
-      default:
-        sliding-window-type: COUNT_BASED
-        sliding-window-size: 20
-        failure-rate-threshold: 50
-        wait-duration-in-open-state: 30s
-    instances:
-      llm-service:
-        base-config: default
-        failure-rate-threshold: 30
-      embedding-service:
-        base-config: default
-        sliding-window-size: 100
+</code></pre></div><h3>2.7 配置中心化</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-attr">resilience4j:</span>
+  <span class="hljs-attr">circuitbreaker:</span>
+    <span class="hljs-attr">configs:</span>
+      <span class="hljs-attr">default:</span>
+        <span class="hljs-attr">sliding-window-type:</span> <span class="hljs-string">COUNT_BASED</span>
+        <span class="hljs-attr">sliding-window-size:</span> <span class="hljs-number">20</span>
+        <span class="hljs-attr">failure-rate-threshold:</span> <span class="hljs-number">50</span>
+        <span class="hljs-attr">wait-duration-in-open-state:</span> <span class="hljs-string">30s</span>
+    <span class="hljs-attr">instances:</span>
+      <span class="hljs-attr">llm-service:</span>
+        <span class="hljs-attr">base-config:</span> <span class="hljs-string">default</span>
+        <span class="hljs-attr">failure-rate-threshold:</span> <span class="hljs-number">30</span>
+      <span class="hljs-attr">embedding-service:</span>
+        <span class="hljs-attr">base-config:</span> <span class="hljs-string">default</span>
+        <span class="hljs-attr">sliding-window-size:</span> <span class="hljs-number">100</span>
 
-  retry:
-    configs:
-      default:
-        max-attempts: 3
-        wait-duration: 500ms
-        exponential-backoff-multiplier: 2
+  <span class="hljs-attr">retry:</span>
+    <span class="hljs-attr">configs:</span>
+      <span class="hljs-attr">default:</span>
+        <span class="hljs-attr">max-attempts:</span> <span class="hljs-number">3</span>
+        <span class="hljs-attr">wait-duration:</span> <span class="hljs-string">500ms</span>
+        <span class="hljs-attr">exponential-backoff-multiplier:</span> <span class="hljs-number">2</span>
 
-  ratelimiter:
-    instances:
-      openai-api:
-        limit-for-period: 100
-        limit-refresh-period: 1s
-        timeout-duration: 500ms
-</code></pre></div>
-<hr>
+  <span class="hljs-attr">ratelimiter:</span>
+    <span class="hljs-attr">instances:</span>
+      <span class="hljs-attr">openai-api:</span>
+        <span class="hljs-attr">limit-for-period:</span> <span class="hljs-number">100</span>
+        <span class="hljs-attr">limit-refresh-period:</span> <span class="hljs-string">1s</span>
+        <span class="hljs-attr">timeout-duration:</span> <span class="hljs-string">500ms</span>
+</code></pre></div><hr>
 <h2>三、限流算法对比</h2>
 <h3>3.1 四大算法</h3>
 <table>
@@ -384,151 +371,147 @@ public class ResilientLlmService {
 </tr>
 </tbody></table>
 <h3>3.2 令牌桶算法实现（Guava RateLimiter 源码分析）</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Guava SmoothRateLimiter 核心逻辑
-public abstract class SmoothRateLimiter extends RateLimiter {
-    double storedPermits;           // 当前存储的令牌
-    double maxPermits;              // 最大存储令牌数（允许的突发量）
-    double stableIntervalMicros;    // 两个令牌间的时间间隔（微秒）
-    long nextFreeTicketMicros;      // 下次可获取令牌的时间
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// Guava SmoothRateLimiter 核心逻辑</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">abstract</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">SmoothRateLimiter</span> <span class="hljs-keyword">extends</span> <span class="hljs-title class_">RateLimiter</span> {
+    <span class="hljs-type">double</span> storedPermits;           <span class="hljs-comment">// 当前存储的令牌</span>
+    <span class="hljs-type">double</span> maxPermits;              <span class="hljs-comment">// 最大存储令牌数（允许的突发量）</span>
+    <span class="hljs-type">double</span> stableIntervalMicros;    <span class="hljs-comment">// 两个令牌间的时间间隔（微秒）</span>
+    <span class="hljs-type">long</span> nextFreeTicketMicros;      <span class="hljs-comment">// 下次可获取令牌的时间</span>
 
-    // 获取令牌
-    final long reserveEarliestAvailable(int requiredPermits, long nowMicros) {
-        resync(nowMicros); // 根据流逝时间补充令牌
-        long returnValue = nextFreeTicketMicros;
-        double storedPermitsToSpend = min(requiredPermits, this.storedPermits);
-        double freshPermits = requiredPermits - storedPermitsToSpend;
-        long waitMicros = (long) (freshPermits * stableIntervalMicros);
+    <span class="hljs-comment">// 获取令牌</span>
+    <span class="hljs-keyword">final</span> <span class="hljs-type">long</span> <span class="hljs-title function_">reserveEarliestAvailable</span><span class="hljs-params">(<span class="hljs-type">int</span> requiredPermits, <span class="hljs-type">long</span> nowMicros)</span> {
+        resync(nowMicros); <span class="hljs-comment">// 根据流逝时间补充令牌</span>
+        <span class="hljs-type">long</span> <span class="hljs-variable">returnValue</span> <span class="hljs-operator">=</span> nextFreeTicketMicros;
+        <span class="hljs-type">double</span> <span class="hljs-variable">storedPermitsToSpend</span> <span class="hljs-operator">=</span> min(requiredPermits, <span class="hljs-built_in">this</span>.storedPermits);
+        <span class="hljs-type">double</span> <span class="hljs-variable">freshPermits</span> <span class="hljs-operator">=</span> requiredPermits - storedPermitsToSpend;
+        <span class="hljs-type">long</span> <span class="hljs-variable">waitMicros</span> <span class="hljs-operator">=</span> (<span class="hljs-type">long</span>) (freshPermits * stableIntervalMicros);
 
-        // 计算等待时间
-        this.nextFreeTicketMicros = saturatedAdd(nextFreeTicketMicros, waitMicros);
-        this.storedPermits -= storedPermitsToSpend;
-        return returnValue;
+        <span class="hljs-comment">// 计算等待时间</span>
+        <span class="hljs-built_in">this</span>.nextFreeTicketMicros = saturatedAdd(nextFreeTicketMicros, waitMicros);
+        <span class="hljs-built_in">this</span>.storedPermits -= storedPermitsToSpend;
+        <span class="hljs-keyword">return</span> returnValue;
     }
 
-    // 同步：根据流逝时间补充令牌
-    void resync(long nowMicros) {
-        if (nowMicros &gt; nextFreeTicketMicros) {
-            double newPermits = (nowMicros - nextFreeTicketMicros) / stableIntervalMicros;
+    <span class="hljs-comment">// 同步：根据流逝时间补充令牌</span>
+    <span class="hljs-keyword">void</span> <span class="hljs-title function_">resync</span><span class="hljs-params">(<span class="hljs-type">long</span> nowMicros)</span> {
+        <span class="hljs-keyword">if</span> (nowMicros &gt; nextFreeTicketMicros) {
+            <span class="hljs-type">double</span> <span class="hljs-variable">newPermits</span> <span class="hljs-operator">=</span> (nowMicros - nextFreeTicketMicros) / stableIntervalMicros;
             storedPermits = min(maxPermits, storedPermits + newPermits);
             nextFreeTicketMicros = nowMicros;
         }
     }
 }
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 使用 Guava RateLimiter
-var limiter = RateLimiter.create(100.0); // 100 QPS
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 使用 Guava RateLimiter</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">limiter</span> <span class="hljs-operator">=</span> RateLimiter.create(<span class="hljs-number">100.0</span>); <span class="hljs-comment">// 100 QPS</span>
 
-// 阻塞获取
-limiter.acquire(); // 阻塞直到获取令牌
+<span class="hljs-comment">// 阻塞获取</span>
+limiter.acquire(); <span class="hljs-comment">// 阻塞直到获取令牌</span>
 
-// 非阻塞
-if (limiter.tryAcquire(100, TimeUnit.MILLISECONDS)) {
+<span class="hljs-comment">// 非阻塞</span>
+<span class="hljs-keyword">if</span> (limiter.tryAcquire(<span class="hljs-number">100</span>, TimeUnit.MILLISECONDS)) {
     doRequest();
-} else {
-    throw new RateLimitExceededException();
+} <span class="hljs-keyword">else</span> {
+    <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RateLimitExceededException</span>();
 }
 
-// 预热模式（WarmupRateLimiter）
-var warmupLimiter = RateLimiter.create(100.0, Duration.ofSeconds(10));
-// 前10秒缓慢提升到 100 QPS
-</code></pre></div>
-<h3>3.3 滑动窗口实现思路</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class SlidingWindowRateLimiter {
+<span class="hljs-comment">// 预热模式（WarmupRateLimiter）</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">warmupLimiter</span> <span class="hljs-operator">=</span> RateLimiter.create(<span class="hljs-number">100.0</span>, Duration.ofSeconds(<span class="hljs-number">10</span>));
+<span class="hljs-comment">// 前10秒缓慢提升到 100 QPS</span>
+</code></pre></div><h3>3.3 滑动窗口实现思路</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">SlidingWindowRateLimiter</span> {
 
-    private final int maxRequests;
-    private final long windowSizeMs;
-    private final int buckets;
-    private final long[] bucketTimestamps;
-    private final AtomicLongArray bucketCounters;
-    private final AtomicLong currentBucket = new AtomicLong(0);
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">int</span> maxRequests;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">long</span> windowSizeMs;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">int</span> buckets;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">long</span>[] bucketTimestamps;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> AtomicLongArray bucketCounters;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">AtomicLong</span> <span class="hljs-variable">currentBucket</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">AtomicLong</span>(<span class="hljs-number">0</span>);
 
-    public SlidingWindowRateLimiter(int maxRequests, Duration window, int buckets) {
-        this.maxRequests = maxRequests;
-        this.windowSizeMs = window.toMillis();
-        this.buckets = buckets;
-        this.bucketTimestamps = new long[buckets];
-        this.bucketCounters = new AtomicLongArray(buckets);
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">SlidingWindowRateLimiter</span><span class="hljs-params">(<span class="hljs-type">int</span> maxRequests, Duration window, <span class="hljs-type">int</span> buckets)</span> {
+        <span class="hljs-built_in">this</span>.maxRequests = maxRequests;
+        <span class="hljs-built_in">this</span>.windowSizeMs = window.toMillis();
+        <span class="hljs-built_in">this</span>.buckets = buckets;
+        <span class="hljs-built_in">this</span>.bucketTimestamps = <span class="hljs-keyword">new</span> <span class="hljs-title class_">long</span>[buckets];
+        <span class="hljs-built_in">this</span>.bucketCounters = <span class="hljs-keyword">new</span> <span class="hljs-title class_">AtomicLongArray</span>(buckets);
     }
 
-    public boolean tryAcquire() {
-        var now = System.currentTimeMillis();
+    <span class="hljs-keyword">public</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">tryAcquire</span><span class="hljs-params">()</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">now</span> <span class="hljs-operator">=</span> System.currentTimeMillis();
         advanceBuckets(now);
 
-        // 统计当前窗口内的总请求数
-        long total = 0;
-        long windowStart = now - windowSizeMs;
-        for (int i = 0; i &lt; buckets; i++) {
-            if (bucketTimestamps[i] &gt; windowStart) {
+        <span class="hljs-comment">// 统计当前窗口内的总请求数</span>
+        <span class="hljs-type">long</span> <span class="hljs-variable">total</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+        <span class="hljs-type">long</span> <span class="hljs-variable">windowStart</span> <span class="hljs-operator">=</span> now - windowSizeMs;
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; buckets; i++) {
+            <span class="hljs-keyword">if</span> (bucketTimestamps[i] &gt; windowStart) {
                 total += bucketCounters.get(i);
             }
         }
 
-        if (total &lt; maxRequests) {
-            var bucket = (int) (currentBucket.get() % buckets);
+        <span class="hljs-keyword">if</span> (total &lt; maxRequests) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">bucket</span> <span class="hljs-operator">=</span> (<span class="hljs-type">int</span>) (currentBucket.get() % buckets);
             bucketCounters.incrementAndGet(bucket);
-            return true;
+            <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
         }
-        return false;
+        <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
     }
 
-    private void advanceBuckets(long now) {
-        // 计算当前时间对应的桶下标并清理过期桶
-        // ...
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">advanceBuckets</span><span class="hljs-params">(<span class="hljs-type">long</span> now)</span> {
+        <span class="hljs-comment">// 计算当前时间对应的桶下标并清理过期桶</span>
+        <span class="hljs-comment">// ...</span>
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>四、Spring Cloud Gateway + Redis 分布式限流</h2>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml">spring:
-  cloud:
-    gateway:
-      routes:
-        - id: llm-service
-          uri: lb://llm-service
-          predicates:
-            - Path=/api/v1/llm/**
-          filters:
-            - name: RequestRateLimiter
-              args:
-                redis-rate-limiter:
-                  replenishRate: 100         # 每秒令牌数
-                  burstCapacity: 200          # 突发容量
-                  requestedTokens: 1          # 每次请求消耗令牌数
-                key-resolver: &quot;#{@apiKeyResolver}&quot;
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Configuration
-public class GatewayRateLimitConfig {
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-attr">spring:</span>
+  <span class="hljs-attr">cloud:</span>
+    <span class="hljs-attr">gateway:</span>
+      <span class="hljs-attr">routes:</span>
+        <span class="hljs-bullet">-</span> <span class="hljs-attr">id:</span> <span class="hljs-string">llm-service</span>
+          <span class="hljs-attr">uri:</span> <span class="hljs-string">lb://llm-service</span>
+          <span class="hljs-attr">predicates:</span>
+            <span class="hljs-bullet">-</span> <span class="hljs-string">Path=/api/v1/llm/**</span>
+          <span class="hljs-attr">filters:</span>
+            <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">RequestRateLimiter</span>
+              <span class="hljs-attr">args:</span>
+                <span class="hljs-attr">redis-rate-limiter:</span>
+                  <span class="hljs-attr">replenishRate:</span> <span class="hljs-number">100</span>         <span class="hljs-comment"># 每秒令牌数</span>
+                  <span class="hljs-attr">burstCapacity:</span> <span class="hljs-number">200</span>          <span class="hljs-comment"># 突发容量</span>
+                  <span class="hljs-attr">requestedTokens:</span> <span class="hljs-number">1</span>          <span class="hljs-comment"># 每次请求消耗令牌数</span>
+                <span class="hljs-attr">key-resolver:</span> <span class="hljs-string">"#{@apiKeyResolver}"</span>
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Configuration</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">GatewayRateLimitConfig</span> {
 
-    // 按用户限流
-    @Bean
-    public KeyResolver userKeyResolver() {
-        return exchange -&gt; Mono.just(
+    <span class="hljs-comment">// 按用户限流</span>
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-keyword">public</span> KeyResolver <span class="hljs-title function_">userKeyResolver</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">return</span> exchange -&gt; Mono.just(
                 exchange.getRequest().getHeaders()
-                        .getFirst(&quot;X-User-Id&quot;));
+                        .getFirst(<span class="hljs-string">"X-User-Id"</span>));
     }
 
-    // 按 IP 限流
-    @Bean
-    public KeyResolver ipKeyResolver() {
-        return exchange -&gt; Mono.just(
+    <span class="hljs-comment">// 按 IP 限流</span>
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-keyword">public</span> KeyResolver <span class="hljs-title function_">ipKeyResolver</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">return</span> exchange -&gt; Mono.just(
                 Objects.requireNonNull(exchange.getRequest().getRemoteAddress())
                         .getAddress().getHostAddress());
     }
 
-    // 组合限流（用户 + API）
-    @Bean
-    public KeyResolver compositeKeyResolver() {
-        return exchange -&gt; {
-            var userId = exchange.getRequest().getHeaders().getFirst(&quot;X-User-Id&quot;);
-            var path = exchange.getRequest().getPath().value();
-            return Mono.just(userId + &quot;:&quot; + path);
+    <span class="hljs-comment">// 组合限流（用户 + API）</span>
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-keyword">public</span> KeyResolver <span class="hljs-title function_">compositeKeyResolver</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">return</span> exchange -&gt; {
+            <span class="hljs-type">var</span> <span class="hljs-variable">userId</span> <span class="hljs-operator">=</span> exchange.getRequest().getHeaders().getFirst(<span class="hljs-string">"X-User-Id"</span>);
+            <span class="hljs-type">var</span> <span class="hljs-variable">path</span> <span class="hljs-operator">=</span> exchange.getRequest().getPath().value();
+            <span class="hljs-keyword">return</span> Mono.just(userId + <span class="hljs-string">":"</span> + path);
         };
     }
 }
 
-// Redis Lua 脚本实现分布式令牌桶
-// Spring Cloud Gateway 内置的 Redis Rate Limiter 实现
-/*
+<span class="hljs-comment">// Redis Lua 脚本实现分布式令牌桶</span>
+<span class="hljs-comment">// Spring Cloud Gateway 内置的 Redis Rate Limiter 实现</span>
+<span class="hljs-comment">/*
 -- request_rate_limiter.lua
 local tokens_key = KEYS[1]
 local timestamp_key = KEYS[2]
@@ -540,12 +523,12 @@ local requested = tonumber(ARGV[4])
 local fill_time = capacity / rate
 local ttl = math.floor(fill_time * 2)
 
-local last_tokens = tonumber(redis.call(&quot;get&quot;, tokens_key))
+local last_tokens = tonumber(redis.call("get", tokens_key))
 if last_tokens == nil then
     last_tokens = capacity
 end
 
-local last_refreshed = tonumber(redis.call(&quot;get&quot;, timestamp_key))
+local last_refreshed = tonumber(redis.call("get", timestamp_key))
 if last_refreshed == nil then
     last_refreshed = 0
 end
@@ -559,13 +542,12 @@ if allowed then
     new_tokens = filled_tokens - requested
 end
 
-redis.call(&quot;setex&quot;, tokens_key, ttl, new_tokens)
-redis.call(&quot;setex&quot;, timestamp_key, ttl, now)
+redis.call("setex", tokens_key, ttl, new_tokens)
+redis.call("setex", timestamp_key, ttl, now)
 
 return { allowed, new_tokens }
-*/
-</code></pre></div>
-<hr>
+*/</span>
+</code></pre></div><hr>
 <h2>五、Sentinel vs Resilience4j 选型</h2>
 <table>
 <thead>
@@ -635,9 +617,9 @@ A: Retry 处理模型 API 瞬时错误；CircuitBreaker 处理模型服务整体
 <hr>
 <h2>相关条目</h2>
 <ul>
-<li><a href="#/05-分布式架构/事务与一致性/05-缓存策略与多级缓存架构" class="cross-ref" data-ref="05-缓存策略与多级缓存架构">05-缓存策略与多级缓存架构</a> — 缓存降级策略</li>
-<li><a href="#/05-分布式架构/事务与一致性/05-分布式一致性与事务方案" class="cross-ref" data-ref="05-分布式一致性与事务方案">05-分布式一致性与事务方案</a> — 分布式事务重试与补偿</li>
-<li><a href="#/04-数据与中间件/数据库与缓存/04-Redis深度解析" class="cross-ref" data-ref="04-Redis深度解析">04-Redis深度解析</a> — Redis 分布式限流实现</li>
+<li><a href="#/05-分布式架构/事务与一致性/05-缓存策略与多级缓存架构" class="cross-ref">05-缓存策略与多级缓存架构</a> — 缓存降级策略</li>
+<li><a href="#/05-分布式架构/事务与一致性/05-分布式一致性与事务方案" class="cross-ref">05-分布式一致性与事务方案</a> — 分布式事务重试与补偿</li>
+<li><a href="#/04-数据与中间件/数据库与缓存/04-Redis深度解析" class="cross-ref">04-Redis深度解析</a> — Redis 分布式限流实现</li>
 </ul>
-</div>
+</body></html></div>
 </article>

@@ -1,12 +1,12 @@
 
-<article class="kb-entry" data-path="/11-检索与RAG/RAG实现/11-高级RAG模式">
+<article class="kb-entry" data-path="/11-检索与RAG">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=11">11-检索与RAG</a></div>
     <h1>高级RAG模式：从Multi-Query到GraphRAG</h1>
-    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#advanced-rag</span><span class="badge badge-tag">#multi-query</span><span class="badge badge-tag">#hyde</span><span class="badge badge-tag">#crag</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#advanced-rag</span><span class="badge badge-tag">#multi-query</span><span class="badge badge-tag">#hyde</span><span class="badge badge-tag">#crag</span><span class="badge badge-tag">#adaptive-rag</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://arxiv.org/abs/2212.10496" target="_blank" rel="noopener" class="source-link" title="HyDE论文 — Precise Zero-Shot Dense Retrieval without Relevance Labels">HyDE论文 — Precise Zero-Shot Dense Retrieval without Relevance Labels</a><a href="https://arxiv.org/abs/2305.06983" target="_blank" rel="noopener" class="source-link" title="Multi-Query RAG — 多角度查询增强检索">Multi-Query RAG — 多角度查询增强检索</a><a href="https://arxiv.org/abs/2401.15884" target="_blank" rel="noopener" class="source-link" title="Corrective RAG (CRAG) — 检索质量自校正">Corrective RAG (CRAG) — 检索质量自校正</a><a href="https://arxiv.org/abs/2404.16130" target="_blank" rel="noopener" class="source-link" title="GraphRAG (Microsoft) — 图增强检索生成">GraphRAG (Microsoft) — 图增强检索生成</a><a href="https://arxiv.org/abs/2310.11511" target="_blank" rel="noopener" class="source-link" title="Self-RAG — 自适应检索增强生成">Self-RAG — 自适应检索增强生成</a></small></div>
   </div>
-  <div class="entry-body"><h1>高级RAG模式：从Multi-Query到GraphRAG</h1>
+  <div class="entry-body"><html><head></head><body><h1>高级RAG模式：从Multi-Query到GraphRAG</h1>
 <h2>概述</h2>
 <p>基础RAG（单次检索-生成）在复杂场景下有明显的局限性：单一检索策略无法应对多样的查询类型、检索结果质量无法验证、缺乏自适应能力。本文系统性地剖析10种高级RAG模式，从温和的Query扩写（Multi-Query）到激进的Agent自主决策（Agentic RAG），再到知识图谱增强的GraphRAG，每种模式都给出适用场景和Java实现思路。</p>
 <hr>
@@ -54,52 +54,51 @@
 <h2>二、Parent-Child Retrieval（父子检索）</h2>
 <h3>2.1 原理</h3>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>索引阶段：
-  大Chunk (Parent, 1024 tokens) ← 不做Embedding，但存储完整内容
+  大Chunk (Parent, <span class="hljs-number">1024</span> tokens) ← 不做Embedding，但存储完整内容
        │
-       └── 小Chunk (Child, 256 tokens) ← 做Embedding用于精准检索
+       └── 小Chunk (Child, <span class="hljs-number">256</span> tokens) ← 做Embedding用于精准检索
 
 检索阶段：
-  Query → 在小Chunk上检索 (精准) → 找到Top-K小Chunk
+  Query → 在小Chunk上检索 (精准) → 找到<span class="hljs-attribute">Top</span>-K小Chunk
        → 返回这些小Chunk对应的Parent大Chunk (完整上下文)
-</code></pre></div>
-<p><strong>核心思想</strong>：用小Chunk做精准匹配（小的语义单元更适合向量匹配），用大Chunk做上下文补充（大chunk保留完整的段落/章节信息）。</p>
+</code></pre></div><p><strong>核心思想</strong>：用小Chunk做精准匹配（小的语义单元更适合向量匹配），用大Chunk做上下文补充（大chunk保留完整的段落/章节信息）。</p>
 <h3>2.2 Java实现</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import javax.sql.DataSource;
-import java.sql.*;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> java.util.List;
+<span class="hljs-keyword">import</span> java.util.Map;
+<span class="hljs-keyword">import</span> java.util.UUID;
+<span class="hljs-keyword">import</span> java.util.concurrent.ConcurrentHashMap;
+<span class="hljs-keyword">import</span> javax.sql.DataSource;
+<span class="hljs-keyword">import</span> java.sql.*;
 
-public class ParentChildRetriever {
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ParentChildRetriever</span> {
 
-    private final DataSource dataSource;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> DataSource dataSource;
 
-    public ParentChildRetriever(DataSource dataSource) {
-        this.dataSource = dataSource;
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">ParentChildRetriever</span><span class="hljs-params">(DataSource dataSource)</span> {
+        <span class="hljs-built_in">this</span>.dataSource = dataSource;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 小Chunk检索 + 大Chunk返回
-     */
-    public record ParentResult(
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">ParentResult</span><span class="hljs-params">(
         String parentChunkId,
         String fullContent,          // Parent的完整内容
         List&lt;ChildHit&gt; childHits,    // 命中的小Chunk详情
-        double maxChildSimilarity    // 最高的小Chunk相似度
-    ) {}
+        <span class="hljs-type">double</span> maxChildSimilarity    // 最高的小Chunk相似度
+    )</span> {}
 
-    public record ChildHit(
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">ChildHit</span><span class="hljs-params">(
         String childChunkId,
         String childContent,
-        double similarity,
-        int offsetInParent           // 在Parent中的字符偏移
-    ) {}
+        <span class="hljs-type">double</span> similarity,
+        <span class="hljs-type">int</span> offsetInParent           // 在Parent中的字符偏移
+    )</span> {}
 
-    public List&lt;ParentResult&gt; searchWithParentChild(
-            float[] queryEmbedding, int numParents, int childrenPerParent) {
+    <span class="hljs-keyword">public</span> List&lt;ParentResult&gt; <span class="hljs-title function_">searchWithParentChild</span><span class="hljs-params">(
+            <span class="hljs-type">float</span>[] queryEmbedding, <span class="hljs-type">int</span> numParents, <span class="hljs-type">int</span> childrenPerParent)</span> {
 
-        var sql = &quot;&quot;&quot;
+        <span class="hljs-type">var</span> <span class="hljs-variable">sql</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
             WITH child_matches AS (
                 -- 在小Chunk向量中检索
                 SELECT e.chunk_id AS child_chunk_id,
@@ -108,8 +107,8 @@ public class ParentChildRetriever {
                        1 - (e.embedding &lt;=&gt; ?::vector) AS similarity
                 FROM chunk_embeddings e
                 JOIN chunks c ON e.chunk_id = c.chunk_id
-                WHERE c.chunk_type = &#39;child&#39;
-                  AND c.status = &#39;active&#39;
+                WHERE c.chunk_type = 'child'
+                  AND c.status = 'active'
                 ORDER BY e.embedding &lt;=&gt; ?::vector
                 LIMIT ?
             ),
@@ -131,81 +130,79 @@ public class ParentChildRetriever {
             JOIN chunks pc ON pr.parent_chunk_id = pc.chunk_id
             LEFT JOIN child_matches cm ON pr.parent_chunk_id = cm.parent_chunk_id
             ORDER BY pr.max_sim DESC, cm.similarity DESC
-            &quot;&quot;&quot;;
+            """</span>;
 
-        var results = new java.util.LinkedHashMap&lt;String, ParentResult&gt;();
+        <span class="hljs-type">var</span> <span class="hljs-variable">results</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">java</span>.util.LinkedHashMap&lt;String, ParentResult&gt;();
 
-        try (var conn = dataSource.getConnection();
-             var stmt = conn.prepareStatement(sql)) {
+        <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">conn</span> <span class="hljs-operator">=</span> dataSource.getConnection();
+             <span class="hljs-type">var</span> <span class="hljs-variable">stmt</span> <span class="hljs-operator">=</span> conn.prepareStatement(sql)) {
 
-            var vectorStr = vectorToString(queryEmbedding);
-            stmt.setString(1, vectorStr);
-            stmt.setString(2, vectorStr);
-            stmt.setInt(3, numParents * childrenPerParent * 2);
-            stmt.setInt(4, numParents);
+            <span class="hljs-type">var</span> <span class="hljs-variable">vectorStr</span> <span class="hljs-operator">=</span> vectorToString(queryEmbedding);
+            stmt.setString(<span class="hljs-number">1</span>, vectorStr);
+            stmt.setString(<span class="hljs-number">2</span>, vectorStr);
+            stmt.setInt(<span class="hljs-number">3</span>, numParents * childrenPerParent * <span class="hljs-number">2</span>);
+            stmt.setInt(<span class="hljs-number">4</span>, numParents);
 
-            try (var rs = stmt.executeQuery()) {
-                while (rs.next()) {
-                    var parentId = rs.getString(&quot;parent_chunk_id&quot;);
-                    results.computeIfAbsent(parentId, id -&gt; new ParentResult(
+            <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">rs</span> <span class="hljs-operator">=</span> stmt.executeQuery()) {
+                <span class="hljs-keyword">while</span> (rs.next()) {
+                    <span class="hljs-type">var</span> <span class="hljs-variable">parentId</span> <span class="hljs-operator">=</span> rs.getString(<span class="hljs-string">"parent_chunk_id"</span>);
+                    results.computeIfAbsent(parentId, id -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">ParentResult</span>(
                         id,
-                        rs.getString(&quot;parent_content&quot;),
-                        new java.util.ArrayList&lt;&gt;(),
-                        0
+                        rs.getString(<span class="hljs-string">"parent_content"</span>),
+                        <span class="hljs-keyword">new</span> <span class="hljs-title class_">java</span>.util.ArrayList&lt;&gt;(),
+                        <span class="hljs-number">0</span>
                     ));
 
-                    var parent = results.get(parentId);
-                    parent.childHits().add(new ChildHit(
-                        rs.getString(&quot;child_chunk_id&quot;),
-                        rs.getString(&quot;child_content&quot;),
-                        rs.getDouble(&quot;similarity&quot;),
-                        0  // offset简化处理
+                    <span class="hljs-type">var</span> <span class="hljs-variable">parent</span> <span class="hljs-operator">=</span> results.get(parentId);
+                    parent.childHits().add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">ChildHit</span>(
+                        rs.getString(<span class="hljs-string">"child_chunk_id"</span>),
+                        rs.getString(<span class="hljs-string">"child_content"</span>),
+                        rs.getDouble(<span class="hljs-string">"similarity"</span>),
+                        <span class="hljs-number">0</span>  <span class="hljs-comment">// offset简化处理</span>
                     ));
                 }
             }
-        } catch (SQLException e) {
-            throw new RuntimeException(e);
+        } <span class="hljs-keyword">catch</span> (SQLException e) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RuntimeException</span>(e);
         }
 
-        return List.copyOf(results.values());
+        <span class="hljs-keyword">return</span> List.copyOf(results.values());
     }
 
-    private String vectorToString(float[] vector) {
-        return java.util.Arrays.stream(vector)
-            .mapToObj(f -&gt; String.format(&quot;%.6f&quot;, f))
-            .collect(java.util.stream.Collectors.joining(&quot;,&quot;, &quot;[&quot;, &quot;]&quot;));
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">vectorToString</span><span class="hljs-params">(<span class="hljs-type">float</span>[] vector)</span> {
+        <span class="hljs-keyword">return</span> java.util.Arrays.stream(vector)
+            .mapToObj(f -&gt; String.format(<span class="hljs-string">"%.6f"</span>, f))
+            .collect(java.util.stream.Collectors.joining(<span class="hljs-string">","</span>, <span class="hljs-string">"["</span>, <span class="hljs-string">"]"</span>));
     }
 }
-</code></pre></div>
-<p><strong>适用场景</strong>：技术文档、长篇报告、API文档——需要完整上下文但又需要精准检索的场景。</p>
+</code></pre></div><p><strong>适用场景</strong>：技术文档、长篇报告、API文档——需要完整上下文但又需要精准检索的场景。</p>
 <hr>
 <h2>三、Multi-Query Retrieval（多查询检索）</h2>
 <h3>3.1 原理</h3>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>原始Query: &quot;如何优化PostgreSQL查询性能？&quot;
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>原始<span class="hljs-built_in">Query</span><span class="hljs-operator">:</span> <span class="hljs-string">"如何优化PostgreSQL查询性能？"</span>
     │
-    ├─→ LLM生成变体Query 1: &quot;PostgreSQL慢查询优化技巧&quot;
-    ├─→ LLM生成变体Query 2: &quot;PG索引策略与查询计划分析&quot;
-    ├─→ LLM生成变体Query 3: &quot;postgres performance tuning best practices&quot;
+    ├─→ <span class="hljs-variable">LLM</span>生成变体<span class="hljs-built_in">Query</span> <span class="hljs-number">1</span><span class="hljs-operator">:</span> <span class="hljs-string">"PostgreSQL慢查询优化技巧"</span>
+    ├─→ <span class="hljs-variable">LLM</span>生成变体<span class="hljs-built_in">Query</span> <span class="hljs-number">2</span><span class="hljs-operator">:</span> <span class="hljs-string">"PG索引策略与查询计划分析"</span>
+    ├─→ <span class="hljs-variable">LLM</span>生成变体<span class="hljs-built_in">Query</span> <span class="hljs-number">3</span><span class="hljs-operator">:</span> <span class="hljs-string">"postgres performance tuning best practices"</span>
     │
-    └─→ 并行检索所有变体Query → 结果融合(Deduplication + RRF) → 最终结果
-</code></pre></div>
-<p><strong>核心思想</strong>：同一个意图用不同的语言表达，覆盖不同的检索角度，提高召回率。</p>
+    └─→ 并行检索所有变体<span class="hljs-built_in">Query</span> → 结果融合<span class="hljs-punctuation">(</span><span class="hljs-variable">Deduplication</span> <span class="hljs-operator">+</span> <span class="hljs-variable">RRF</span><span class="hljs-punctuation">)</span> → 最终结果
+</code></pre></div><p><strong>核心思想</strong>：同一个意图用不同的语言表达，覆盖不同的检索角度，提高召回率。</p>
 <h3>3.2 Java实现</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.util.ArrayList;
-import java.util.List;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> java.util.ArrayList;
+<span class="hljs-keyword">import</span> java.util.List;
+<span class="hljs-keyword">import</span> java.util.concurrent.ConcurrentHashMap;
+<span class="hljs-keyword">import</span> java.util.concurrent.Executors;
 
-public class MultiQueryRetriever {
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">MultiQueryRetriever</span> {
 
-    private final ChatClient chatClient;           // 用于生成变体Query
-    private final HybridSearchService searchService;  // 混合检索服务
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> ChatClient chatClient;           <span class="hljs-comment">// 用于生成变体Query</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> HybridSearchService searchService;  <span class="hljs-comment">// 混合检索服务</span>
 
-    /**
+    <span class="hljs-comment">/**
      * 生成多个查询变体
-     */
-    public List&lt;String&gt; generateQueryVariations(String originalQuery, int numVariations) {
-        var prompt = &quot;&quot;&quot;
+     */</span>
+    <span class="hljs-keyword">public</span> List&lt;String&gt; <span class="hljs-title function_">generateQueryVariations</span><span class="hljs-params">(String originalQuery, <span class="hljs-type">int</span> numVariations)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">prompt</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
             你是一个查询改写助手。请为以下查询生成 %d 个不同角度/不同措辞的变体查询，
             以帮助从不同维度检索相关信息。
 
@@ -218,135 +215,132 @@ public class MultiQueryRetriever {
             - 每行一个变体，不要编号
 
             变体查询：
-            &quot;&quot;&quot;.formatted(numVariations, originalQuery);
+            """</span>.formatted(numVariations, originalQuery);
 
-        var response = chatClient.prompt().user(prompt).call().content();
-        return response.lines()
+        <span class="hljs-type">var</span> <span class="hljs-variable">response</span> <span class="hljs-operator">=</span> chatClient.prompt().user(prompt).call().content();
+        <span class="hljs-keyword">return</span> response.lines()
             .map(String::trim)
             .filter(line -&gt; !line.isEmpty())
             .limit(numVariations)
             .toList();
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 多查询并行检索 + 结果融合
-     */
-    public List&lt;HybridSearchService.HybridSearchResult&gt; multiQuerySearch(
-            String originalQuery, float[] originalEmbedding,
-            int numVariations, int finalTopK) {
+     */</span>
+    <span class="hljs-keyword">public</span> List&lt;HybridSearchService.HybridSearchResult&gt; multiQuerySearch(
+            String originalQuery, <span class="hljs-type">float</span>[] originalEmbedding,
+            <span class="hljs-type">int</span> numVariations, <span class="hljs-type">int</span> finalTopK) {
 
-        // 1. 生成变体查询
-        var queries = generateQueryVariations(originalQuery, numVariations);
-        // 原始查询也加入
-        var allQueries = new ArrayList&lt;String&gt;();
+        <span class="hljs-comment">// 1. 生成变体查询</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">queries</span> <span class="hljs-operator">=</span> generateQueryVariations(originalQuery, numVariations);
+        <span class="hljs-comment">// 原始查询也加入</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">allQueries</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;String&gt;();
         allQueries.add(originalQuery);
         allQueries.addAll(queries);
 
-        // 2. 并行为每个查询执行检索
-        var allResults = new ConcurrentHashMap&lt;String,
+        <span class="hljs-comment">// 2. 并行为每个查询执行检索</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">allResults</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ConcurrentHashMap</span>&lt;String,
             HybridSearchService.HybridSearchResult&gt;();
 
-        try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
-            var futures = allQueries.stream()
+        <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">executor</span> <span class="hljs-operator">=</span> Executors.newVirtualThreadPerTaskExecutor()) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">futures</span> <span class="hljs-operator">=</span> allQueries.stream()
                 .map(q -&gt; executor.submit(() -&gt; {
-                    // 对变体查询生成Embedding
-                    var embedding = embed(q);
-                    // 执行混合检索
-                    return searchService.hybridSearch(
-                        q, embedding, &quot;default&quot;, List.of(&quot;internal&quot;), finalTopK * 2
+                    <span class="hljs-comment">// 对变体查询生成Embedding</span>
+                    <span class="hljs-type">var</span> <span class="hljs-variable">embedding</span> <span class="hljs-operator">=</span> embed(q);
+                    <span class="hljs-comment">// 执行混合检索</span>
+                    <span class="hljs-keyword">return</span> searchService.hybridSearch(
+                        q, embedding, <span class="hljs-string">"default"</span>, List.of(<span class="hljs-string">"internal"</span>), finalTopK * <span class="hljs-number">2</span>
                     );
                 }))
                 .toList();
 
-            for (var future : futures) {
-                try {
-                    var results = future.get(30, java.util.concurrent.TimeUnit.SECONDS);
-                    for (var r : results) {
-                        // chunkId相同的结果只保留分数最高的
+            <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> future : futures) {
+                <span class="hljs-keyword">try</span> {
+                    <span class="hljs-type">var</span> <span class="hljs-variable">results</span> <span class="hljs-operator">=</span> future.get(<span class="hljs-number">30</span>, java.util.concurrent.TimeUnit.SECONDS);
+                    <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> r : results) {
+                        <span class="hljs-comment">// chunkId相同的结果只保留分数最高的</span>
                         allResults.merge(r.chunkId(), r,
                             (existing, incoming) -&gt;
                                 existing.rrfScore() &gt;= incoming.rrfScore()
                                     ? existing : incoming);
                     }
-                } catch (Exception e) {
-                    // 单个查询失败不影响其他
+                } <span class="hljs-keyword">catch</span> (Exception e) {
+                    <span class="hljs-comment">// 单个查询失败不影响其他</span>
                 }
             }
         }
 
-        // 3. 按RRF分数排序返回
-        return allResults.values().stream()
+        <span class="hljs-comment">// 3. 按RRF分数排序返回</span>
+        <span class="hljs-keyword">return</span> allResults.values().stream()
             .sorted((a, b) -&gt; Double.compare(b.rrfScore(), a.rrfScore()))
             .limit(finalTopK)
             .toList();
     }
 
-    private float[] embed(String text) {
-        // 调用Embedding API
-        return new float[1024];
+    <span class="hljs-keyword">private</span> <span class="hljs-type">float</span>[] embed(String text) {
+        <span class="hljs-comment">// 调用Embedding API</span>
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">float</span>[<span class="hljs-number">1024</span>];
     }
 }
-</code></pre></div>
-<p><strong>优点</strong>：提高召回率20-30%，尤其是对模糊查询。
+</code></pre></div><p><strong>优点</strong>：提高召回率20-30%，尤其是对模糊查询。
 <strong>缺点</strong>：增加延迟（并行的最大延迟）和LLM调用成本。</p>
 <hr>
 <h2>四、HyDE（假设文档嵌入）</h2>
 <h3>4.1 原理</h3>
-<p>查询和文档之间存在&quot;语义鸿沟&quot;：查询是问题，文档是答案，两者的Embedding不在同一个语义空间。</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>传统: Query Embedding → 检索 → Document Embedding
+<p>查询和文档之间存在"语义鸿沟"：查询是问题，文档是答案，两者的Embedding不在同一个语义空间。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>传统<span class="hljs-punctuation">:</span> <span class="hljs-keyword">Query</span> Embedding → 检索 → Document Embedding
                 ↑ 语义鸿沟 ↓
 
-HyDE: Query → LLM生成假设答案 → 假设答案的Embedding → 检索 → Document Embedding
-                ↑ 都在&quot;答案&quot;的语义空间 → 相似度更高
-</code></pre></div>
-<p><strong>核心思想</strong>：用LLM先&quot;猜测&quot;答案长什么样，用这个猜测去检索——因为答案和文档在同一语义空间。</p>
+<span class="hljs-symbol">HyDE</span><span class="hljs-punctuation">:</span> <span class="hljs-keyword">Query</span> → LLM生成假设答案 → 假设答案的Embedding → 检索 → Document Embedding
+                ↑ 都在<span class="hljs-string">"答案"</span>的语义空间 → 相似度更高
+</code></pre></div><p><strong>核心思想</strong>：用LLM先"猜测"答案长什么样，用这个猜测去检索——因为答案和文档在同一语义空间。</p>
 <h3>4.2 Java实现</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class HydeRetriever {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">HydeRetriever</span> {
 
-    private final ChatClient chatClient;
-    private final HybridSearchService searchService;
-    private final EmbeddingClient embeddingClient;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> ChatClient chatClient;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> HybridSearchService searchService;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> EmbeddingClient embeddingClient;
 
-    /**
+    <span class="hljs-comment">/**
      * HyDE检索
-     */
-    public List&lt;HybridSearchService.HybridSearchResult&gt; hydeSearch(
-            String query, int topK) {
+     */</span>
+    <span class="hljs-keyword">public</span> List&lt;HybridSearchService.HybridSearchResult&gt; hydeSearch(
+            String query, <span class="hljs-type">int</span> topK) {
 
-        // 1. LLM生成假设答案
-        var hypotheticalDoc = generateHypotheticalDocument(query);
+        <span class="hljs-comment">// 1. LLM生成假设答案</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">hypotheticalDoc</span> <span class="hljs-operator">=</span> generateHypotheticalDocument(query);
 
-        // 2. 用假设答案的Embedding检索（而非原始Query的Embedding）
-        var hydeEmbedding = embeddingClient.embed(hypotheticalDoc);
+        <span class="hljs-comment">// 2. 用假设答案的Embedding检索（而非原始Query的Embedding）</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">hydeEmbedding</span> <span class="hljs-operator">=</span> embeddingClient.embed(hypotheticalDoc);
 
-        // 3. 执行检索
-        var results = searchService.hybridSearch(
-            query, hydeEmbedding, &quot;default&quot;, List.of(&quot;internal&quot;), topK
+        <span class="hljs-comment">// 3. 执行检索</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">results</span> <span class="hljs-operator">=</span> searchService.hybridSearch(
+            query, hydeEmbedding, <span class="hljs-string">"default"</span>, List.of(<span class="hljs-string">"internal"</span>), topK
         );
 
-        return results;
+        <span class="hljs-keyword">return</span> results;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 生成假设文档（答案）
-     */
-    private String generateHypotheticalDocument(String query) {
-        var prompt = &quot;&quot;&quot;
+     */</span>
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">generateHypotheticalDocument</span><span class="hljs-params">(String query)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">prompt</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
             请根据以下问题，写一段假设性的回答段落。不需要真实准确，
             只需生成一段看起来像是在回答这个问题的文本（约200字）。
 
             问题: %s
 
             假设回答:
-            &quot;&quot;&quot;.formatted(query);
+            """</span>.formatted(query);
 
-        return chatClient.prompt().user(prompt).call().content();
+        <span class="hljs-keyword">return</span> chatClient.prompt().user(prompt).call().content();
     }
 }
-</code></pre></div>
-<p><strong>实际效果</strong>：在Q&amp;A类数据集上，HyDE将MRR提升8-15%。</p>
+</code></pre></div><p><strong>实际效果</strong>：在Q&amp;A类数据集上，HyDE将MRR提升8-15%。</p>
 <p><strong>适用场景</strong>：问答型查询、知识密集型查询。</p>
-<p><strong>不适用场景</strong>：事实查询（&quot;找到关于XX的文档&quot;）——这时Query本身就是事实描述。</p>
+<p><strong>不适用场景</strong>：事实查询（"找到关于XX的文档"）——这时Query本身就是事实描述。</p>
 <hr>
 <h2>五、Self-Query Retrieval（自查询检索）</h2>
 <h3>5.1 原理</h3>
@@ -355,39 +349,38 @@ HyDE: Query → LLM生成假设答案 → 假设答案的Embedding → 检索 �
 <li>语义查询（用于向量检索）</li>
 <li>结构化过滤条件（用于元数据过滤）</li>
 </ol>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Query: &quot;请找出去年张三写的关于微服务的文档&quot;
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-symbol">Query:</span> <span class="hljs-string">"请找出去年张三写的关于微服务的文档"</span>
     │
     └─→ LLM拆解:
         {
-          &quot;semantic_query&quot;: &quot;微服务架构&quot;,
-          &quot;filters&quot;: {
-            &quot;author&quot;: &quot;张三&quot;,
-            &quot;created_after&quot;: &quot;2025-01-01&quot;,
-            &quot;created_before&quot;: &quot;2025-12-31&quot;
+          <span class="hljs-string">"semantic_query"</span>: <span class="hljs-string">"微服务架构"</span>,
+          <span class="hljs-string">"filters"</span>: {
+            <span class="hljs-string">"author"</span>: <span class="hljs-string">"张三"</span>,
+            <span class="hljs-string">"created_after"</span>: <span class="hljs-string">"2025-01-01"</span>,
+            <span class="hljs-string">"created_before"</span>: <span class="hljs-string">"2025-12-31"</span>
           }
         }
-</code></pre></div>
-<h3>5.2 Java实现</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.util.Map;
+</code></pre></div><h3>5.2 Java实现</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> java.util.Map;
 
-public class SelfQueryRetriever {
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">SelfQueryRetriever</span> {
 
-    private final ChatClient chatClient;
-    private final FilteredSearchService filteredSearch;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> ChatClient chatClient;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> FilteredSearchService filteredSearch;
 
-    /**
+    <span class="hljs-comment">/**
      * 自查询检索
-     */
-    public record SelfQueryResult(
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">SelfQueryResult</span><span class="hljs-params">(
         String semanticQuery,
         Map&lt;String, Object&gt; filters
-    ) {}
+    )</span> {}
 
-    /**
+    <span class="hljs-comment">/**
      * 用LLM拆解Query为语义+过滤条件
-     */
-    public SelfQueryResult decomposeQuery(String query) {
-        var prompt = &quot;&quot;&quot;
+     */</span>
+    <span class="hljs-keyword">public</span> SelfQueryResult <span class="hljs-title function_">decomposeQuery</span><span class="hljs-params">(String query)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">prompt</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
             请将以下查询拆解为两部分：
             1. semantic_query: 纯语义的搜索用查询文本
             2. filters: 结构化过滤条件
@@ -396,288 +389,284 @@ public class SelfQueryRetriever {
 
             请以JSON格式返回（不要代码块标记）：
             {
-              &quot;semantic_query&quot;: &quot;...&quot;,
-              &quot;filters&quot;: {
-                &quot;author&quot;: &quot;值&quot;,
-                &quot;category&quot;: &quot;值&quot;
+              "semantic_query": "...",
+              "filters": {
+                "author": "值",
+                "category": "值"
               }
             }
 
             查询: %s
-            &quot;&quot;&quot;.formatted(query);
+            """</span>.formatted(query);
 
-        var response = chatClient.prompt().user(prompt).call().content();
+        <span class="hljs-type">var</span> <span class="hljs-variable">response</span> <span class="hljs-operator">=</span> chatClient.prompt().user(prompt).call().content();
 
-        // 如果LLM返回了 ```json ... ``` 包裹的内容，去除包裹
-        response = response.replaceAll(&quot;```json\\s*&quot;, &quot;&quot;).replaceAll(&quot;```\\s*&quot;, &quot;&quot;).trim();
+        <span class="hljs-comment">// 如果LLM返回了 ```json ... ``` 包裹的内容，去除包裹</span>
+        response = response.replaceAll(<span class="hljs-string">"```json\\s*"</span>, <span class="hljs-string">""</span>).replaceAll(<span class="hljs-string">"```\\s*"</span>, <span class="hljs-string">""</span>).trim();
 
-        try {
-            var mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            var root = mapper.readTree(response);
-            var filters = new java.util.HashMap&lt;String, Object&gt;();
-            var filtersNode = root.get(&quot;filters&quot;);
-            if (filtersNode != null &amp;&amp; filtersNode.isObject()) {
-                var fieldNames = filtersNode.fieldNames();
-                while (fieldNames.hasNext()) {
-                    var field = fieldNames.next();
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-type">var</span> <span class="hljs-variable">mapper</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">com</span>.fasterxml.jackson.databind.ObjectMapper();
+            <span class="hljs-type">var</span> <span class="hljs-variable">root</span> <span class="hljs-operator">=</span> mapper.readTree(response);
+            <span class="hljs-type">var</span> <span class="hljs-variable">filters</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">java</span>.util.HashMap&lt;String, Object&gt;();
+            <span class="hljs-type">var</span> <span class="hljs-variable">filtersNode</span> <span class="hljs-operator">=</span> root.get(<span class="hljs-string">"filters"</span>);
+            <span class="hljs-keyword">if</span> (filtersNode != <span class="hljs-literal">null</span> &amp;&amp; filtersNode.isObject()) {
+                <span class="hljs-type">var</span> <span class="hljs-variable">fieldNames</span> <span class="hljs-operator">=</span> filtersNode.fieldNames();
+                <span class="hljs-keyword">while</span> (fieldNames.hasNext()) {
+                    <span class="hljs-type">var</span> <span class="hljs-variable">field</span> <span class="hljs-operator">=</span> fieldNames.next();
                     filters.put(field, filtersNode.get(field).asText());
                 }
             }
-            return new SelfQueryResult(
-                root.get(&quot;semantic_query&quot;).asText(),
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">SelfQueryResult</span>(
+                root.get(<span class="hljs-string">"semantic_query"</span>).asText(),
                 filters
             );
-        } catch (Exception e) {
-            // 解析失败，降级为纯语义搜索
-            return new SelfQueryResult(query, Map.of());
+        } <span class="hljs-keyword">catch</span> (Exception e) {
+            <span class="hljs-comment">// 解析失败，降级为纯语义搜索</span>
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">SelfQueryResult</span>(query, Map.of());
         }
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 执行自查询检索
-     */
-    public List&lt;FilteredSearchService.HybridSearchResult&gt; selfQuerySearch(String query,int topK) {
-        var decomposed = decomposeQuery(query);
-        var embedding = embed(decomposed.semanticQuery());
+     */</span>
+    <span class="hljs-keyword">public</span> List&lt;FilteredSearchService.HybridSearchResult&gt; selfQuerySearch(String query,<span class="hljs-type">int</span> topK) {
+        <span class="hljs-type">var</span> <span class="hljs-variable">decomposed</span> <span class="hljs-operator">=</span> decomposeQuery(query);
+        <span class="hljs-type">var</span> <span class="hljs-variable">embedding</span> <span class="hljs-operator">=</span> embed(decomposed.semanticQuery());
 
-        var criteria = new FilteredSearchService.FilterCriteria(
-            &quot;default&quot;,
-            List.of(&quot;internal&quot;),
-            (String) decomposed.filters().getOrDefault(&quot;category&quot;, null),
+        <span class="hljs-type">var</span> <span class="hljs-variable">criteria</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">FilteredSearchService</span>.FilterCriteria(
+            <span class="hljs-string">"default"</span>,
+            List.of(<span class="hljs-string">"internal"</span>),
+            (String) decomposed.filters().getOrDefault(<span class="hljs-string">"category"</span>, <span class="hljs-literal">null</span>),
             List.of(),
-            null, null
+            <span class="hljs-literal">null</span>, <span class="hljs-literal">null</span>
         );
 
-        return filteredSearch.searchWithFilters(embedding, decomposed.semanticQuery(), criteria, topK);
+        <span class="hljs-keyword">return</span> filteredSearch.searchWithFilters(embedding, decomposed.semanticQuery(), criteria, topK);
     }
 
-    private float[] embed(String text) { return new float[1024]; }
+    <span class="hljs-keyword">private</span> <span class="hljs-type">float</span>[] embed(String text) { <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">float</span>[<span class="hljs-number">1024</span>]; }
 }
-</code></pre></div>
-<p><strong>适用场景</strong>：有丰富元数据的知识库（如企业文档管理系统）。</p>
+</code></pre></div><p><strong>适用场景</strong>：有丰富元数据的知识库（如企业文档管理系统）。</p>
 <hr>
 <h2>六、Corrective RAG (CRAG)</h2>
 <h3>6.1 原理</h3>
 <p>CRAG在执行检索后增加一个质量评估步骤：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Query → 检索 → 评估检索质量
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-keyword">Query</span> → 检索 → 评估检索质量
                   ├── 高质量 → 直接生成答案
                   ├── 中质量 → 知识精炼 → 生成答案
                   └── 低质量 → Web搜索补充 → 融合 → 生成答案
-</code></pre></div>
-<h3>6.2 Java实现</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class CorrectiveRagService {
+</code></pre></div><h3>6.2 Java实现</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">CorrectiveRagService</span> {
 
-    private final ChatClient chatClient;
-    private final RerankerService reranker;
-    private final WebSearchService webSearch;  // Web搜索API
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> ChatClient chatClient;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> RerankerService reranker;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> WebSearchService webSearch;  <span class="hljs-comment">// Web搜索API</span>
 
-    public enum RetrievalQuality { HIGH, MEDIUM, LOW }
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">enum</span> <span class="hljs-title class_">RetrievalQuality</span> { HIGH, MEDIUM, LOW }
 
-    public record CragResult(
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">CragResult</span><span class="hljs-params">(
         String answer,
         RetrievalQuality quality,
-        boolean usedWebSearch,
+        <span class="hljs-type">boolean</span> usedWebSearch,
         List&lt;RerankerService.RerankedChunk&gt; sources
-    ) {}
+    )</span> {}
 
-    /**
+    <span class="hljs-comment">/**
      * CRAG主流程
-     */
-    public CragResult cragSearch(String query, List&lt;HybridSearchService.RankedResult&gt; retrievalResults) {
+     */</span>
+    <span class="hljs-keyword">public</span> CragResult <span class="hljs-title function_">cragSearch</span><span class="hljs-params">(String query, List&lt;HybridSearchService.RankedResult&gt; retrievalResults)</span> {
 
-        // 1. 评估检索质量
-        var quality = assessRetrievalQuality(query, retrievalResults);
+        <span class="hljs-comment">// 1. 评估检索质量</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">quality</span> <span class="hljs-operator">=</span> assessRetrievalQuality(query, retrievalResults);
 
         List&lt;RerankerService.RerankedChunk&gt; finalSources;
 
-        switch (quality) {
-            case HIGH -&gt; {
-                // 直接使用检索结果
+        <span class="hljs-keyword">switch</span> (quality) {
+            <span class="hljs-keyword">case</span> HIGH -&gt; {
+                <span class="hljs-comment">// 直接使用检索结果</span>
                 finalSources = reranker.processRetrievalResults(query, retrievalResults);
             }
-            case MEDIUM -&gt; {
-                // 知识精炼：重排+过滤+去噪
+            <span class="hljs-keyword">case</span> MEDIUM -&gt; {
+                <span class="hljs-comment">// 知识精炼：重排+过滤+去噪</span>
                 finalSources = reranker.processRetrievalResults(query, retrievalResults);
-                // 只保留高相关性的
+                <span class="hljs-comment">// 只保留高相关性的</span>
                 finalSources = finalSources.stream()
-                    .filter(r -&gt; r.relevanceScore() &gt; 0.3)
-                    .limit(5)
+                    .filter(r -&gt; r.relevanceScore() &gt; <span class="hljs-number">0.3</span>)
+                    .limit(<span class="hljs-number">5</span>)
                     .toList();
             }
-            case LOW -&gt; {
-                // 触发Web搜索补充
-                var webResults = webSearch.search(query, 5);
+            <span class="hljs-keyword">case</span> LOW -&gt; {
+                <span class="hljs-comment">// 触发Web搜索补充</span>
+                <span class="hljs-type">var</span> <span class="hljs-variable">webResults</span> <span class="hljs-operator">=</span> webSearch.search(query, <span class="hljs-number">5</span>);
                 finalSources = mergeWithWebResults(retrievalResults, webResults);
             }
-            default -&gt; {
+            <span class="hljs-keyword">default</span> -&gt; {
                 finalSources = List.of();
             }
         }
 
-        // 2. 生成答案
-        var answer = generateAnswer(query, finalSources);
+        <span class="hljs-comment">// 2. 生成答案</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">answer</span> <span class="hljs-operator">=</span> generateAnswer(query, finalSources);
 
-        return new CragResult(
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">CragResult</span>(
             answer, quality,
             quality == RetrievalQuality.LOW,
             finalSources
         );
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 评估检索质量
      * 策略：计算Top-5结果的平均Reranker分数
-     */
-    private RetrievalQuality assessRetrievalQuality(
-            String query, List&lt;HybridSearchService.RankedResult&gt; results) {
+     */</span>
+    <span class="hljs-keyword">private</span> RetrievalQuality <span class="hljs-title function_">assessRetrievalQuality</span><span class="hljs-params">(
+            String query, List&lt;HybridSearchService.RankedResult&gt; results)</span> {
 
-        if (results.isEmpty()) return RetrievalQuality.LOW;
+        <span class="hljs-keyword">if</span> (results.isEmpty()) <span class="hljs-keyword">return</span> RetrievalQuality.LOW;
 
-        // 对Top-5进行重排打分
-        var top5 = results.stream().limit(5)
+        <span class="hljs-comment">// 对Top-5进行重排打分</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">top5</span> <span class="hljs-operator">=</span> results.stream().limit(<span class="hljs-number">5</span>)
             .map(r -&gt; Map.entry(r.chunkId(), r.content()))
             .toList();
 
-        if (top5.isEmpty()) return RetrievalQuality.LOW;
+        <span class="hljs-keyword">if</span> (top5.isEmpty()) <span class="hljs-keyword">return</span> RetrievalQuality.LOW;
 
-        // 计算平均相关性分数
-        var avgScore = 0.0; // 实际应调用Reranker计算
-        // 简化：用原始检索分数代替
-        avgScore = results.stream().limit(5)
+        <span class="hljs-comment">// 计算平均相关性分数</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">avgScore</span> <span class="hljs-operator">=</span> <span class="hljs-number">0.0</span>; <span class="hljs-comment">// 实际应调用Reranker计算</span>
+        <span class="hljs-comment">// 简化：用原始检索分数代替</span>
+        avgScore = results.stream().limit(<span class="hljs-number">5</span>)
             .mapToDouble(HybridSearchService.RankedResult::score)
-            .average().orElse(0.0);
+            .average().orElse(<span class="hljs-number">0.0</span>);
 
-        if (avgScore &gt; 0.8) return RetrievalQuality.HIGH;
-        if (avgScore &gt; 0.5) return RetrievalQuality.MEDIUM;
-        return RetrievalQuality.LOW;
+        <span class="hljs-keyword">if</span> (avgScore &gt; <span class="hljs-number">0.8</span>) <span class="hljs-keyword">return</span> RetrievalQuality.HIGH;
+        <span class="hljs-keyword">if</span> (avgScore &gt; <span class="hljs-number">0.5</span>) <span class="hljs-keyword">return</span> RetrievalQuality.MEDIUM;
+        <span class="hljs-keyword">return</span> RetrievalQuality.LOW;
     }
 
-    private List&lt;RerankerService.RerankedChunk&gt; mergeWithWebResults(
+    <span class="hljs-keyword">private</span> List&lt;RerankerService.RerankedChunk&gt; mergeWithWebResults(
             List&lt;HybridSearchService.RankedResult&gt; retrievalResults,
             List&lt;WebSearchService.WebResult&gt; webResults) {
-        // 将Web搜索结果作为补充chunk加入
-        var merged = new ArrayList&lt;&gt;(retrievalResults.stream()
-            .map(r -&gt; new RerankerService.RerankedChunk(
-                r.chunkId(), r.content(), r.score(), 0, 0, r.score(), Map.of()
+        <span class="hljs-comment">// 将Web搜索结果作为补充chunk加入</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">merged</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;&gt;(retrievalResults.stream()
+            .map(r -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">RerankerService</span>.RerankedChunk(
+                r.chunkId(), r.content(), r.score(), <span class="hljs-number">0</span>, <span class="hljs-number">0</span>, r.score(), Map.of()
             ))
             .toList());
 
-        // Web结果追加在后面
-        for (int i = 0; i &lt; webResults.size(); i++) {
-            var wr = webResults.get(i);
-            // 简化：用固定分数表示Web结果
+        <span class="hljs-comment">// Web结果追加在后面</span>
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; webResults.size(); i++) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">wr</span> <span class="hljs-operator">=</span> webResults.get(i);
+            <span class="hljs-comment">// 简化：用固定分数表示Web结果</span>
         }
 
-        return List.of();
+        <span class="hljs-keyword">return</span> List.of();
     }
 
-    private String generateAnswer(String query,
-                                   List&lt;RerankerService.RerankedChunk&gt; sources) {
-        // 调用LLM生成带引用的答案
-        return &quot;&quot;;
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">generateAnswer</span><span class="hljs-params">(String query,
+                                   List&lt;RerankerService.RerankedChunk&gt; sources)</span> {
+        <span class="hljs-comment">// 调用LLM生成带引用的答案</span>
+        <span class="hljs-keyword">return</span> <span class="hljs-string">""</span>;
     }
 }
 
-// Web搜索服务接口
-interface WebSearchService {
-    record WebResult(String title, String url, String snippet) {}
-    List&lt;WebResult&gt; search(String query, int numResults);
+<span class="hljs-comment">// Web搜索服务接口</span>
+<span class="hljs-keyword">interface</span> <span class="hljs-title class_">WebSearchService</span> {
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">WebResult</span><span class="hljs-params">(String title, String url, String snippet)</span> {}
+    List&lt;WebResult&gt; <span class="hljs-title function_">search</span><span class="hljs-params">(String query, <span class="hljs-type">int</span> numResults)</span>;
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>七、Adaptive RAG</h2>
 <h3>7.1 原理</h3>
 <p>根据查询的复杂度自动选择检索策略：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Query → 复杂度分类器
-    ├── 简单 (Simple)  → 直接LLM回答（无需检索）
-    ├── 中等 (Moderate) → 标准RAG（向量+BM25混合检索）
-    ├── 复杂 (Complex)  → Multi-Query + Web搜索 + 多步推理
-    └── 结构化 (Structured) → Self-Query（元数据过滤）
-</code></pre></div>
-<h3>7.2 Java实现</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class AdaptiveRagService {
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-built_in">Query</span> → 复杂度分类器
+    ├── 简单 <span class="hljs-punctuation">(</span><span class="hljs-variable">Simple</span><span class="hljs-punctuation">)</span>  → 直接<span class="hljs-variable">LLM</span>回答（无需检索）
+    ├── 中等 <span class="hljs-punctuation">(</span><span class="hljs-variable">Moderate</span><span class="hljs-punctuation">)</span> → 标准<span class="hljs-variable">RAG</span>（向量<span class="hljs-operator">+</span><span class="hljs-variable">BM25</span>混合检索）
+    ├── 复杂 <span class="hljs-punctuation">(</span><span class="hljs-built_in">Complex</span><span class="hljs-punctuation">)</span>  → <span class="hljs-variable">Multi</span><span class="hljs-operator">-</span><span class="hljs-built_in">Query</span> <span class="hljs-operator">+</span> <span class="hljs-variable">Web</span>搜索 <span class="hljs-operator">+</span> 多步推理
+    └── 结构化 <span class="hljs-punctuation">(</span><span class="hljs-variable">Structured</span><span class="hljs-punctuation">)</span> → <span class="hljs-variable">Self</span><span class="hljs-operator">-</span><span class="hljs-built_in">Query</span>（元数据过滤）
+</code></pre></div><h3>7.2 Java实现</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">AdaptiveRagService</span> {
 
-    private final ChatClient chatClient;
-    private final HybridSearchService searchService;
-    private final MultiQueryRetriever multiQueryRetriever;
-    private final SelfQueryRetriever selfQueryRetriever;
-    private final CorrectiveRagService cragService;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> ChatClient chatClient;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> HybridSearchService searchService;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> MultiQueryRetriever multiQueryRetriever;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> SelfQueryRetriever selfQueryRetriever;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> CorrectiveRagService cragService;
 
-    public enum QueryComplexity {
-        SIMPLE,      // &quot;什么是Java？&quot;
-        MODERATE,    // &quot;Java Virtual Thread和OS Thread有什么区别？&quot;
-        COMPLEX,     // &quot;在一个微服务架构中，如何使用Virtual Thread优化数据库连接池？&quot;
-        STRUCTURED   // &quot;张三去年写的包含性能优化的文档&quot;
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">enum</span> <span class="hljs-title class_">QueryComplexity</span> {
+        SIMPLE,      <span class="hljs-comment">// "什么是Java？"</span>
+        MODERATE,    <span class="hljs-comment">// "Java Virtual Thread和OS Thread有什么区别？"</span>
+        COMPLEX,     <span class="hljs-comment">// "在一个微服务架构中，如何使用Virtual Thread优化数据库连接池？"</span>
+        STRUCTURED   <span class="hljs-comment">// "张三去年写的包含性能优化的文档"</span>
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 自适应RAG主入口
-     */
-    public record AdaptiveResult(
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">AdaptiveResult</span><span class="hljs-params">(
         String answer,
         QueryComplexity complexity,
         String strategyUsed,     // 实际使用的策略
-        long processingTimeMs
-    ) {}
+        <span class="hljs-type">long</span> processingTimeMs
+    )</span> {}
 
-    public AdaptiveResult adaptAndSearch(String query) {
-        var startTime = System.currentTimeMillis();
+    <span class="hljs-keyword">public</span> AdaptiveResult <span class="hljs-title function_">adaptAndSearch</span><span class="hljs-params">(String query)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">startTime</span> <span class="hljs-operator">=</span> System.currentTimeMillis();
 
-        // 1. 分类查询复杂度
-        var complexity = classifyComplexity(query);
+        <span class="hljs-comment">// 1. 分类查询复杂度</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">complexity</span> <span class="hljs-operator">=</span> classifyComplexity(query);
 
-        // 2. 根据复杂度选择策略
+        <span class="hljs-comment">// 2. 根据复杂度选择策略</span>
         List&lt;HybridSearchService.HybridSearchResult&gt; results;
 
-        switch (complexity) {
-            case SIMPLE -&gt; {
-                // 无需检索，直接LLM回答
-                var answer = chatClient.prompt()
-                    .user(&quot;请简要回答: &quot; + query)
+        <span class="hljs-keyword">switch</span> (complexity) {
+            <span class="hljs-keyword">case</span> SIMPLE -&gt; {
+                <span class="hljs-comment">// 无需检索，直接LLM回答</span>
+                <span class="hljs-type">var</span> <span class="hljs-variable">answer</span> <span class="hljs-operator">=</span> chatClient.prompt()
+                    .user(<span class="hljs-string">"请简要回答: "</span> + query)
                     .call().content();
-                return new AdaptiveResult(
-                    answer, QueryComplexity.SIMPLE, &quot;direct_llm&quot;,
+                <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">AdaptiveResult</span>(
+                    answer, QueryComplexity.SIMPLE, <span class="hljs-string">"direct_llm"</span>,
                     System.currentTimeMillis() - startTime
                 );
             }
-            case MODERATE -&gt; {
-                // 标准混合检索
-                var embedding = embed(query);
+            <span class="hljs-keyword">case</span> MODERATE -&gt; {
+                <span class="hljs-comment">// 标准混合检索</span>
+                <span class="hljs-type">var</span> <span class="hljs-variable">embedding</span> <span class="hljs-operator">=</span> embed(query);
                 results = searchService.hybridSearch(
-                    query, embedding, &quot;default&quot;, List.of(&quot;internal&quot;), 10
+                    query, embedding, <span class="hljs-string">"default"</span>, List.of(<span class="hljs-string">"internal"</span>), <span class="hljs-number">10</span>
                 );
             }
-            case COMPLEX -&gt; {
-                // Multi-Query + Web搜索
+            <span class="hljs-keyword">case</span> COMPLEX -&gt; {
+                <span class="hljs-comment">// Multi-Query + Web搜索</span>
                 results = multiQueryRetriever.multiQuerySearch(
-                    query, embed(query), 3, 10
+                    query, embed(query), <span class="hljs-number">3</span>, <span class="hljs-number">10</span>
                 );
             }
-            case STRUCTURED -&gt; {
-                results = selfQueryRetriever.selfQuerySearch(query, 10);
+            <span class="hljs-keyword">case</span> STRUCTURED -&gt; {
+                results = selfQueryRetriever.selfQuerySearch(query, <span class="hljs-number">10</span>);
             }
-            default -&gt; {
+            <span class="hljs-keyword">default</span> -&gt; {
                 results = List.of();
             }
         }
 
-        // 3. 生成答案
-        var answer = generateAnswer(query, results);
+        <span class="hljs-comment">// 3. 生成答案</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">answer</span> <span class="hljs-operator">=</span> generateAnswer(query, results);
 
-        return new AdaptiveResult(
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">AdaptiveResult</span>(
             answer, complexity,
-            switch (complexity) {
-                case SIMPLE -&gt; &quot;direct_llm&quot;;
-                case MODERATE -&gt; &quot;hybrid_search&quot;;
-                case COMPLEX -&gt; &quot;multi_query+web&quot;;
-                case STRUCTURED -&gt; &quot;self_query&quot;;
+            <span class="hljs-keyword">switch</span> (complexity) {
+                <span class="hljs-keyword">case</span> SIMPLE -&gt; <span class="hljs-string">"direct_llm"</span>;
+                <span class="hljs-keyword">case</span> MODERATE -&gt; <span class="hljs-string">"hybrid_search"</span>;
+                <span class="hljs-keyword">case</span> COMPLEX -&gt; <span class="hljs-string">"multi_query+web"</span>;
+                <span class="hljs-keyword">case</span> STRUCTURED -&gt; <span class="hljs-string">"self_query"</span>;
             },
             System.currentTimeMillis() - startTime
         );
     }
 
-    private QueryComplexity classifyComplexity(String query) {
-        var prompt = &quot;&quot;&quot;
+    <span class="hljs-keyword">private</span> QueryComplexity <span class="hljs-title function_">classifyComplexity</span><span class="hljs-params">(String query)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">prompt</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
             请将以下查询分类为四类之一：
 
             - SIMPLE: 常识性问题，不需要检索文档即可回答
@@ -688,88 +677,86 @@ interface WebSearchService {
             只返回一个词：SIMPLE, MODERATE, COMPLEX, 或 STRUCTURED。
 
             查询: %s
-            &quot;&quot;&quot;.formatted(query);
+            """</span>.formatted(query);
 
-        var response = chatClient.prompt().user(prompt).call().content().trim().toUpperCase();
-        try {
-            return QueryComplexity.valueOf(response);
-        } catch (IllegalArgumentException e) {
-            return QueryComplexity.MODERATE; // 默认中等复杂度
+        <span class="hljs-type">var</span> <span class="hljs-variable">response</span> <span class="hljs-operator">=</span> chatClient.prompt().user(prompt).call().content().trim().toUpperCase();
+        <span class="hljs-keyword">try</span> {
+            <span class="hljs-keyword">return</span> QueryComplexity.valueOf(response);
+        } <span class="hljs-keyword">catch</span> (IllegalArgumentException e) {
+            <span class="hljs-keyword">return</span> QueryComplexity.MODERATE; <span class="hljs-comment">// 默认中等复杂度</span>
         }
     }
 
-    private float[] embed(String text) { return new float[1024]; }
-    private String generateAnswer(String q, List&lt;?&gt; results) { return &quot;&quot;; }
+    <span class="hljs-keyword">private</span> <span class="hljs-type">float</span>[] embed(String text) { <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">float</span>[<span class="hljs-number">1024</span>]; }
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">generateAnswer</span><span class="hljs-params">(String q, List&lt;?&gt; results)</span> { <span class="hljs-keyword">return</span> <span class="hljs-string">""</span>; }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>八、Agentic RAG</h2>
 <h3>8.1 原理</h3>
 <p>Agent自主决策检索策略的每一步：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Agent循环:
-    ├── 分析Query → 决定需要什么信息
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Agent循环<span class="hljs-punctuation">:</span>
+    ├── 分析<span class="hljs-keyword">Query</span> → 决定需要什么信息
     ├── 选择Tool（向量检索/BM25/Web搜索/数据库查询）
     ├── 执行Tool → 获取结果
     ├── 评估结果 → 信息充分？→ 生成答案
-    │             → 信息不足？→ 改写Query → 重新检索
+    │             → 信息不足？→ 改写<span class="hljs-keyword">Query</span> → 重新检索
     └── 达到最大迭代次数 → 用已有信息生成答案
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class AgenticRagService {
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">AgenticRagService</span> {
 
-    private final ChatClient chatClient;
-    private final java.util.Map&lt;String, java.util.function.Function&lt;String, String&gt;&gt; tools;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> ChatClient chatClient;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> java.util.Map&lt;String, java.util.function.Function&lt;String, String&gt;&gt; tools;
 
-    public AgenticRagService() {
-        this.tools = Map.of(
-            &quot;vector_search&quot;, this::vectorSearchTool,
-            &quot;bm25_search&quot;, this::bm25SearchTool,
-            &quot;web_search&quot;, this::webSearchTool
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">AgenticRagService</span><span class="hljs-params">()</span> {
+        <span class="hljs-built_in">this</span>.tools = Map.of(
+            <span class="hljs-string">"vector_search"</span>, <span class="hljs-built_in">this</span>::vectorSearchTool,
+            <span class="hljs-string">"bm25_search"</span>, <span class="hljs-built_in">this</span>::bm25SearchTool,
+            <span class="hljs-string">"web_search"</span>, <span class="hljs-built_in">this</span>::webSearchTool
         );
     }
 
-    /**
+    <span class="hljs-comment">/**
      * Agentic RAG — Agent自主决定如何检索
-     */
-    public String agenticRag(String query, int maxIterations) {
-        var context = new StringBuilder();
-        var iterationHistory = new ArrayList&lt;String&gt;();
+     */</span>
+    <span class="hljs-keyword">public</span> String <span class="hljs-title function_">agenticRag</span><span class="hljs-params">(String query, <span class="hljs-type">int</span> maxIterations)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">context</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>();
+        <span class="hljs-type">var</span> <span class="hljs-variable">iterationHistory</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;String&gt;();
 
-        for (int i = 0; i &lt; maxIterations; i++) {
-            // 1. Agent分析当前状态并决定下一步
-            var decision = decideNextAction(query, context.toString(), iterationHistory);
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; maxIterations; i++) {
+            <span class="hljs-comment">// 1. Agent分析当前状态并决定下一步</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">decision</span> <span class="hljs-operator">=</span> decideNextAction(query, context.toString(), iterationHistory);
 
-            if (&quot;GENERATE_ANSWER&quot;.equals(decision.action())) {
-                // Agent认为信息足够，生成最终答案
-                return generateFinalAnswer(query, context.toString());
+            <span class="hljs-keyword">if</span> (<span class="hljs-string">"GENERATE_ANSWER"</span>.equals(decision.action())) {
+                <span class="hljs-comment">// Agent认为信息足够，生成最终答案</span>
+                <span class="hljs-keyword">return</span> generateFinalAnswer(query, context.toString());
             }
 
-            // 2. 执行Agent选择的Tool
-            var toolResult = tools.getOrDefault(decision.action(),
-                q -&gt; &quot;Tool not found: &quot; + decision.action()
+            <span class="hljs-comment">// 2. 执行Agent选择的Tool</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">toolResult</span> <span class="hljs-operator">=</span> tools.getOrDefault(decision.action(),
+                q -&gt; <span class="hljs-string">"Tool not found: "</span> + decision.action()
             ).apply(decision.query());
 
-            // 3. 追加结果到上下文
-            context.append(&quot;[来源: %s]\n%s\n\n&quot;.formatted(decision.action(), toolResult));
-            iterationHistory.add(&quot;Step %d: %s → %d chars&quot;
-                .formatted(i + 1, decision.action(), toolResult.length()));
+            <span class="hljs-comment">// 3. 追加结果到上下文</span>
+            context.append(<span class="hljs-string">"[来源: %s]\n%s\n\n"</span>.formatted(decision.action(), toolResult));
+            iterationHistory.add(<span class="hljs-string">"Step %d: %s → %d chars"</span>
+                .formatted(i + <span class="hljs-number">1</span>, decision.action(), toolResult.length()));
         }
 
-        // 达到最大迭代次数，强制生成答案
-        return generateFinalAnswer(query, context.toString());
+        <span class="hljs-comment">// 达到最大迭代次数，强制生成答案</span>
+        <span class="hljs-keyword">return</span> generateFinalAnswer(query, context.toString());
     }
 
-    public record AgentDecision(String action, String query, String reasoning) {}
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">AgentDecision</span><span class="hljs-params">(String action, String query, String reasoning)</span> {}
 
-    private AgentDecision decideNextAction(String originalQuery, String currentContext,
-                                             List&lt;String&gt; history) {
-        var toolsDesc = &quot;&quot;&quot;
+    <span class="hljs-keyword">private</span> AgentDecision <span class="hljs-title function_">decideNextAction</span><span class="hljs-params">(String originalQuery, String currentContext,
+                                             List&lt;String&gt; history)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">toolsDesc</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
             - vector_search: 基于语义相似度检索文档
             - bm25_search: 基于关键词精确匹配检索
             - web_search: 搜索互联网
             - GENERATE_ANSWER: 信息充分，可以生成答案
-            &quot;&quot;&quot;;
+            """</span>;
 
-        var prompt = &quot;&quot;&quot;
+        <span class="hljs-type">var</span> <span class="hljs-variable">prompt</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
             你是一个检索Agent。你需要决定下一步操作。
 
             原始问题: %s
@@ -785,31 +772,30 @@ interface WebSearchService {
 
             请以JSON格式返回你的决策：
             {
-              &quot;action&quot;: &quot;工具名或GENERATE_ANSWER&quot;,
-              &quot;query&quot;: &quot;搜索查询文本&quot;,
-              &quot;reasoning&quot;: &quot;决策原因&quot;
+              "action": "工具名或GENERATE_ANSWER",
+              "query": "搜索查询文本",
+              "reasoning": "决策原因"
             }
-            &quot;&quot;&quot;.formatted(originalQuery,
-                currentContext.isEmpty() ? &quot;(无)&quot; : currentContext,
-                String.join(&quot;\n&quot;, history),
+            """</span>.formatted(originalQuery,
+                currentContext.isEmpty() ? <span class="hljs-string">"(无)"</span> : currentContext,
+                String.join(<span class="hljs-string">"\n"</span>, history),
                 toolsDesc);
 
-        var response = chatClient.prompt().user(prompt).call().content();
-        // 解析JSON返回决策（简化）
-        return new AgentDecision(&quot;GENERATE_ANSWER&quot;, &quot;&quot;, &quot;Context sufficient&quot;);
+        <span class="hljs-type">var</span> <span class="hljs-variable">response</span> <span class="hljs-operator">=</span> chatClient.prompt().user(prompt).call().content();
+        <span class="hljs-comment">// 解析JSON返回决策（简化）</span>
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">AgentDecision</span>(<span class="hljs-string">"GENERATE_ANSWER"</span>, <span class="hljs-string">""</span>, <span class="hljs-string">"Context sufficient"</span>);
     }
 
-    private String vectorSearchTool(String query) { return &quot;&quot;; }
-    private String bm25SearchTool(String query) { return &quot;&quot;; }
-    private String webSearchTool(String query) { return &quot;&quot;; }
-    private String generateFinalAnswer(String query, String context) {
-        return chatClient.prompt()
-            .user(&quot;根据以下信息回答问题：\n\n问题: %s\n\n参考资料:\n%s&quot;.formatted(query, context))
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">vectorSearchTool</span><span class="hljs-params">(String query)</span> { <span class="hljs-keyword">return</span> <span class="hljs-string">""</span>; }
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">bm25SearchTool</span><span class="hljs-params">(String query)</span> { <span class="hljs-keyword">return</span> <span class="hljs-string">""</span>; }
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">webSearchTool</span><span class="hljs-params">(String query)</span> { <span class="hljs-keyword">return</span> <span class="hljs-string">""</span>; }
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">generateFinalAnswer</span><span class="hljs-params">(String query, String context)</span> {
+        <span class="hljs-keyword">return</span> chatClient.prompt()
+            .user(<span class="hljs-string">"根据以下信息回答问题：\n\n问题: %s\n\n参考资料:\n%s"</span>.formatted(query, context))
             .call().content();
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>九、GraphRAG (Microsoft)</h2>
 <h3>9.1 原理</h3>
 <p>GraphRAG分为构建和查询两个阶段：</p>
@@ -817,169 +803,167 @@ interface WebSearchService {
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>文档集合
   → LLM提取实体（人物、组织、概念、事件...）
   → LLM提取关系（属于、导致、位于、引用...）
-  → 构建知识图谱（节点 = 实体，边 = 关系）
+  → 构建知识图谱（节点 <span class="hljs-operator">=</span> 实体，边 <span class="hljs-operator">=</span> 关系）
   → Leiden社区检测算法 → 将图谱分为社区
   → LLM为每个社区生成摘要
-</code></pre></div>
-<p><strong>查询阶段</strong>：</p>
+</code></pre></div><p><strong>查询阶段</strong>：</p>
 <ul>
 <li><strong>全局搜索（Global Search）</strong>：使用社区摘要回答总结性问题<ul>
-<li>&quot;这些文档主要讨论了哪些主题？&quot;</li>
+<li>"这些文档主要讨论了哪些主题？"</li>
 </ul>
 </li>
 <li><strong>局部搜索（Local Search）</strong>：从种子实体出发遍历邻居<ul>
-<li>&quot;XX技术由谁提出的？在哪些论文中被验证？&quot;</li>
+<li>"XX技术由谁提出的？在哪些论文中被验证？"</li>
 </ul>
 </li>
 </ul>
 <h3>9.2 Neo4j + LLM方案</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.neo4j.driver.*;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> org.neo4j.driver.*;
+<span class="hljs-keyword">import</span> java.util.ArrayList;
+<span class="hljs-keyword">import</span> java.util.List;
+<span class="hljs-keyword">import</span> java.util.Map;
 
-public class GraphRagService {
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">GraphRagService</span> {
 
-    private final Driver neo4jDriver;
-    private final ChatClient chatClient;
-    private final HybridSearchService vectorSearch;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Driver neo4jDriver;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> ChatClient chatClient;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> HybridSearchService vectorSearch;
 
-    public GraphRagService(String neo4jUri, String user, String password) {
-        this.neo4jDriver = GraphDatabase.driver(neo4jUri, AuthTokens.basic(user, password));
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">GraphRagService</span><span class="hljs-params">(String neo4jUri, String user, String password)</span> {
+        <span class="hljs-built_in">this</span>.neo4jDriver = GraphDatabase.driver(neo4jUri, AuthTokens.basic(user, password));
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 全局搜索：使用社区摘要
-     */
-    public String globalSearch(String query) {
-        // 找到与query最相关的社区摘要
-        var queryEmbedding = embed(query);
-        var relevantCommunities = findRelevantCommunities(queryEmbedding, 5);
+     */</span>
+    <span class="hljs-keyword">public</span> String <span class="hljs-title function_">globalSearch</span><span class="hljs-params">(String query)</span> {
+        <span class="hljs-comment">// 找到与query最相关的社区摘要</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">queryEmbedding</span> <span class="hljs-operator">=</span> embed(query);
+        <span class="hljs-type">var</span> <span class="hljs-variable">relevantCommunities</span> <span class="hljs-operator">=</span> findRelevantCommunities(queryEmbedding, <span class="hljs-number">5</span>);
 
-        // 用社区摘要构建Prompt
-        var contextBuilder = new StringBuilder();
-        for (var comm : relevantCommunities) {
-            contextBuilder.append(&quot;主题: %s\n摘要: %s\n\n&quot;
-                .formatted(comm.get(&quot;title&quot;), comm.get(&quot;summary&quot;)));
+        <span class="hljs-comment">// 用社区摘要构建Prompt</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">contextBuilder</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>();
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> comm : relevantCommunities) {
+            contextBuilder.append(<span class="hljs-string">"主题: %s\n摘要: %s\n\n"</span>
+                .formatted(comm.get(<span class="hljs-string">"title"</span>), comm.get(<span class="hljs-string">"summary"</span>)));
         }
 
-        return chatClient.prompt()
-            .user(&quot;根据以下知识总结回答问题：\n\n%s\n\n问题: %s&quot;
+        <span class="hljs-keyword">return</span> chatClient.prompt()
+            .user(<span class="hljs-string">"根据以下知识总结回答问题：\n\n%s\n\n问题: %s"</span>
                 .formatted(contextBuilder.toString(), query))
             .call().content();
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 局部搜索：从种子实体出发，遍历关系获取上下文
-     */
-    public String localSearch(String query) {
-        // 1. 从向量检索找到相关的种子实体
-        var queryEmbedding = embed(query);
-        var seedEntities = findSeedEntities(queryEmbedding, 3);
+     */</span>
+    <span class="hljs-keyword">public</span> String <span class="hljs-title function_">localSearch</span><span class="hljs-params">(String query)</span> {
+        <span class="hljs-comment">// 1. 从向量检索找到相关的种子实体</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">queryEmbedding</span> <span class="hljs-operator">=</span> embed(query);
+        <span class="hljs-type">var</span> <span class="hljs-variable">seedEntities</span> <span class="hljs-operator">=</span> findSeedEntities(queryEmbedding, <span class="hljs-number">3</span>);
 
-        // 2. 遍历种子实体的邻居（1-2跳）
-        var contextBuilder = new StringBuilder();
-        try (var session = neo4jDriver.session()) {
-            for (var entity : seedEntities) {
-                var result = session.run(&quot;&quot;&quot;
+        <span class="hljs-comment">// 2. 遍历种子实体的邻居（1-2跳）</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">contextBuilder</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>();
+        <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">session</span> <span class="hljs-operator">=</span> neo4jDriver.session()) {
+            <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> entity : seedEntities) {
+                <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> session.run(<span class="hljs-string">"""
                     MATCH (e:Entity {id: $entityId})-[r:RELATES_TO*1..2]-(neighbor:Entity)
                     RETURN e.name AS source, type(r[0]) AS relation,
                            neighbor.name AS target, neighbor.description AS description
                     LIMIT 20
-                    &quot;&quot;&quot;, Map.of(&quot;entityId&quot;, entity.get(&quot;entity_id&quot;)));
+                    """</span>, Map.of(<span class="hljs-string">"entityId"</span>, entity.get(<span class="hljs-string">"entity_id"</span>)));
 
-                while (result.hasNext()) {
-                    var row = result.next();
-                    contextBuilder.append(&quot;%s --[%s]--&gt; %s: %s\n&quot;.formatted(
-                        row.get(&quot;source&quot;).asString(),
-                        row.get(&quot;relation&quot;).asString(),
-                        row.get(&quot;target&quot;).asString(),
-                        row.get(&quot;description&quot;).asString(&quot;&quot;)
+                <span class="hljs-keyword">while</span> (result.hasNext()) {
+                    <span class="hljs-type">var</span> <span class="hljs-variable">row</span> <span class="hljs-operator">=</span> result.next();
+                    contextBuilder.append(<span class="hljs-string">"%s --[%s]--&gt; %s: %s\n"</span>.formatted(
+                        row.get(<span class="hljs-string">"source"</span>).asString(),
+                        row.get(<span class="hljs-string">"relation"</span>).asString(),
+                        row.get(<span class="hljs-string">"target"</span>).asString(),
+                        row.get(<span class="hljs-string">"description"</span>).asString(<span class="hljs-string">""</span>)
                     ));
                 }
             }
         }
 
-        return chatClient.prompt()
-            .user(&quot;根据以下知识图谱关系回答问题：\n\n%s\n\n问题: %s&quot;
+        <span class="hljs-keyword">return</span> chatClient.prompt()
+            .user(<span class="hljs-string">"根据以下知识图谱关系回答问题：\n\n%s\n\n问题: %s"</span>
                 .formatted(contextBuilder.toString(), query))
             .call().content();
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 实体和关系提取（构建知识图谱）
-     */
-    public void buildGraph(List&lt;String&gt; documentChunks) {
-        for (var chunk : documentChunks) {
-            var extraction = extractEntitiesAndRelations(chunk);
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">buildGraph</span><span class="hljs-params">(List&lt;String&gt; documentChunks)</span> {
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> chunk : documentChunks) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">extraction</span> <span class="hljs-operator">=</span> extractEntitiesAndRelations(chunk);
             storeToNeo4j(extraction);
         }
     }
 
-    private record ExtractionResult(
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">ExtractionResult</span><span class="hljs-params">(
         List&lt;Map&lt;String, String&gt;&gt; entities,
         List&lt;Map&lt;String, String&gt;&gt; relations
-    ) {}
+    )</span> {}
 
-    private ExtractionResult extractEntitiesAndRelations(String text) {
-        var prompt = &quot;&quot;&quot;
+    <span class="hljs-keyword">private</span> ExtractionResult <span class="hljs-title function_">extractEntitiesAndRelations</span><span class="hljs-params">(String text)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">prompt</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
             请从以下文本中提取实体和关系，以JSON格式返回。
 
-            实体格式: {&quot;name&quot;: &quot;实体名&quot;, &quot;type&quot;: &quot;类型(PERSON/ORG/CONCEPT/EVENT/LOCATION)&quot;, &quot;description&quot;: &quot;描述&quot;}
-            关系格式: {&quot;source&quot;: &quot;源实体名&quot;, &quot;target&quot;: &quot;目标实体名&quot;, &quot;type&quot;: &quot;关系类型&quot;, &quot;description&quot;: &quot;关系描述&quot;}
+            实体格式: {"name": "实体名", "type": "类型(PERSON/ORG/CONCEPT/EVENT/LOCATION)", "description": "描述"}
+            关系格式: {"source": "源实体名", "target": "目标实体名", "type": "关系类型", "description": "关系描述"}
 
             文本:
             %s
 
             返回JSON（不要代码块标记）:
             {
-              &quot;entities&quot;: [...],
-              &quot;relations&quot;: [...]
+              "entities": [...],
+              "relations": [...]
             }
-            &quot;&quot;&quot;.formatted(text);
+            """</span>.formatted(text);
 
-        var response = chatClient.prompt().user(prompt).call().content();
-        response = response.replaceAll(&quot;```json\\s*&quot;, &quot;&quot;).replaceAll(&quot;```\\s*&quot;, &quot;&quot;).trim();
+        <span class="hljs-type">var</span> <span class="hljs-variable">response</span> <span class="hljs-operator">=</span> chatClient.prompt().user(prompt).call().content();
+        response = response.replaceAll(<span class="hljs-string">"```json\\s*"</span>, <span class="hljs-string">""</span>).replaceAll(<span class="hljs-string">"```\\s*"</span>, <span class="hljs-string">""</span>).trim();
 
-        // 解析JSON...
-        return new ExtractionResult(List.of(), List.of());
+        <span class="hljs-comment">// 解析JSON...</span>
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ExtractionResult</span>(List.of(), List.of());
     }
 
-    private void storeToNeo4j(ExtractionResult extraction) {
-        try (var session = neo4jDriver.session()) {
-            // 存储实体
-            for (var entity : extraction.entities()) {
-                session.run(&quot;&quot;&quot;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">storeToNeo4j</span><span class="hljs-params">(ExtractionResult extraction)</span> {
+        <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">session</span> <span class="hljs-operator">=</span> neo4jDriver.session()) {
+            <span class="hljs-comment">// 存储实体</span>
+            <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> entity : extraction.entities()) {
+                session.run(<span class="hljs-string">"""
                     MERGE (e:Entity {name: $name})
                     SET e.type = $type, e.description = $description
-                    &quot;&quot;&quot;, entity);
+                    """</span>, entity);
             }
-            // 存储关系
-            for (var rel : extraction.relations()) {
-                session.run(&quot;&quot;&quot;
+            <span class="hljs-comment">// 存储关系</span>
+            <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> rel : extraction.relations()) {
+                session.run(<span class="hljs-string">"""
                     MATCH (src:Entity {name: $source})
                     MATCH (tgt:Entity {name: $target})
                     MERGE (src)-[r:RELATES_TO {type: $type}]-&gt;(tgt)
                     SET r.description = $description
-                    &quot;&quot;&quot;, rel);
+                    """</span>, rel);
             }
         }
     }
 
-    // 辅助方法
-    private List&lt;Map&lt;String, String&gt;&gt; findRelevantCommunities(float[] embedding, int limit) {
-        // 在Neo4j中查找相关的社区摘要（可对社区摘要做Embedding后检索）
-        return List.of(Map.of(&quot;title&quot;, &quot;示例主题&quot;, &quot;summary&quot;, &quot;示例摘要&quot;));
+    <span class="hljs-comment">// 辅助方法</span>
+    <span class="hljs-keyword">private</span> List&lt;Map&lt;String, String&gt;&gt; <span class="hljs-title function_">findRelevantCommunities</span><span class="hljs-params">(<span class="hljs-type">float</span>[] embedding, <span class="hljs-type">int</span> limit)</span> {
+        <span class="hljs-comment">// 在Neo4j中查找相关的社区摘要（可对社区摘要做Embedding后检索）</span>
+        <span class="hljs-keyword">return</span> List.of(Map.of(<span class="hljs-string">"title"</span>, <span class="hljs-string">"示例主题"</span>, <span class="hljs-string">"summary"</span>, <span class="hljs-string">"示例摘要"</span>));
     }
 
-    private List&lt;Map&lt;String, String&gt;&gt; findSeedEntities(float[] embedding, int limit) {
-        return List.of(Map.of(&quot;entity_id&quot;, &quot;123&quot;, &quot;name&quot;, &quot;示例实体&quot;));
+    <span class="hljs-keyword">private</span> List&lt;Map&lt;String, String&gt;&gt; <span class="hljs-title function_">findSeedEntities</span><span class="hljs-params">(<span class="hljs-type">float</span>[] embedding, <span class="hljs-type">int</span> limit)</span> {
+        <span class="hljs-keyword">return</span> List.of(Map.of(<span class="hljs-string">"entity_id"</span>, <span class="hljs-string">"123"</span>, <span class="hljs-string">"name"</span>, <span class="hljs-string">"示例实体"</span>));
     }
 
-    private float[] embed(String text) { return new float[1024]; }
+    <span class="hljs-keyword">private</span> <span class="hljs-type">float</span>[] embed(String text) { <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">float</span>[<span class="hljs-number">1024</span>]; }
 }
-</code></pre></div>
-<h3>9.3 GraphRAG与传统RAG的互补</h3>
+</code></pre></div><h3>9.3 GraphRAG与传统RAG的互补</h3>
 <table>
 <thead>
 <tr>
@@ -1011,71 +995,69 @@ public class GraphRagService {
 </tbody></table>
 <hr>
 <h2>十、RAG评估</h2>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class RagEvaluator {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">RagEvaluator</span> {
 
-    public record EvalMetrics(
-        double retrievalRecall,     // 检索召回率@K
-        double retrievalPrecision,  // 检索精确率@K
-        double mrr,                 // Mean Reciprocal Rank
-        double ndcg,                // Normalized DCG
-        double answerFaithfulness,  // 答案忠实度（LLM-as-Judge）
-        double citationAccuracy,    // 引用准确性
-        double relevanceScore       // 综合相关性分数
-    ) {}
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">EvalMetrics</span><span class="hljs-params">(
+        <span class="hljs-type">double</span> retrievalRecall,     // 检索召回率@K
+        <span class="hljs-type">double</span> retrievalPrecision,  // 检索精确率@K
+        <span class="hljs-type">double</span> mrr,                 // Mean Reciprocal Rank
+        <span class="hljs-type">double</span> ndcg,                // Normalized DCG
+        <span class="hljs-type">double</span> answerFaithfulness,  // 答案忠实度（LLM-as-Judge）
+        <span class="hljs-type">double</span> citationAccuracy,    // 引用准确性
+        <span class="hljs-type">double</span> relevanceScore       // 综合相关性分数
+    )</span> {}
 
-    /**
+    <span class="hljs-comment">/**
      * 检索评估
-     */
-    public EvalMetrics evaluateRetrieval(
+     */</span>
+    <span class="hljs-keyword">public</span> EvalMetrics <span class="hljs-title function_">evaluateRetrieval</span><span class="hljs-params">(
             List&lt;String&gt; retrievedIds,
             List&lt;String&gt; relevantIds,
-            int k) {
+            <span class="hljs-type">int</span> k)</span> {
 
-        var topK = retrievedIds.stream().limit(k).toList();
-        var relevantSet = new java.util.HashSet&lt;&gt;(relevantIds);
+        <span class="hljs-type">var</span> <span class="hljs-variable">topK</span> <span class="hljs-operator">=</span> retrievedIds.stream().limit(k).toList();
+        <span class="hljs-type">var</span> <span class="hljs-variable">relevantSet</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">java</span>.util.HashSet&lt;&gt;(relevantIds);
 
-        // 召回率 = |相关且被检索| / |所有相关|
-        var hits = topK.stream().filter(relevantSet::contains).count();
-        var recall = relevantSet.isEmpty() ? 0 : (double) hits / relevantSet.size();
+        <span class="hljs-comment">// 召回率 = |相关且被检索| / |所有相关|</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">hits</span> <span class="hljs-operator">=</span> topK.stream().filter(relevantSet::contains).count();
+        <span class="hljs-type">var</span> <span class="hljs-variable">recall</span> <span class="hljs-operator">=</span> relevantSet.isEmpty() ? <span class="hljs-number">0</span> : (<span class="hljs-type">double</span>) hits / relevantSet.size();
 
-        // 精确率 = |相关且被检索| / |检索到的|
-        var precision = topK.isEmpty() ? 0 : (double) hits / topK.size();
+        <span class="hljs-comment">// 精确率 = |相关且被检索| / |检索到的|</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">precision</span> <span class="hljs-operator">=</span> topK.isEmpty() ? <span class="hljs-number">0</span> : (<span class="hljs-type">double</span>) hits / topK.size();
 
-        // MRR = 1/第一个相关结果的排名
-        double mrr = 0;
-        for (int i = 0; i &lt; retrievedIds.size(); i++) {
-            if (relevantSet.contains(retrievedIds.get(i))) {
-                mrr = 1.0 / (i + 1);
-                break;
+        <span class="hljs-comment">// MRR = 1/第一个相关结果的排名</span>
+        <span class="hljs-type">double</span> <span class="hljs-variable">mrr</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; retrievedIds.size(); i++) {
+            <span class="hljs-keyword">if</span> (relevantSet.contains(retrievedIds.get(i))) {
+                mrr = <span class="hljs-number">1.0</span> / (i + <span class="hljs-number">1</span>);
+                <span class="hljs-keyword">break</span>;
             }
         }
 
-        // NDCG = DCG / IDCG
-        double dcg = 0, idcg = 0;
-        for (int i = 0; i &lt; Math.min(k, retrievedIds.size()); i++) {
-            var relevance = relevantSet.contains(retrievedIds.get(i)) ? 1.0 : 0.0;
-            dcg += relevance / Math.log(i + 2); // log2(i+1+1)
-            idcg += 1.0 / Math.log(i + 2);       // 理想情况全部相关
+        <span class="hljs-comment">// NDCG = DCG / IDCG</span>
+        <span class="hljs-type">double</span> <span class="hljs-variable">dcg</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>, idcg = <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; Math.min(k, retrievedIds.size()); i++) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">relevance</span> <span class="hljs-operator">=</span> relevantSet.contains(retrievedIds.get(i)) ? <span class="hljs-number">1.0</span> : <span class="hljs-number">0.0</span>;
+            dcg += relevance / Math.log(i + <span class="hljs-number">2</span>); <span class="hljs-comment">// log2(i+1+1)</span>
+            idcg += <span class="hljs-number">1.0</span> / Math.log(i + <span class="hljs-number">2</span>);       <span class="hljs-comment">// 理想情况全部相关</span>
         }
-        var ndcg = idcg == 0 ? 0 : dcg / idcg;
+        <span class="hljs-type">var</span> <span class="hljs-variable">ndcg</span> <span class="hljs-operator">=</span> idcg == <span class="hljs-number">0</span> ? <span class="hljs-number">0</span> : dcg / idcg;
 
-        return new EvalMetrics(recall, precision, mrr, ndcg, 0, 0, 0);
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">EvalMetrics</span>(recall, precision, mrr, ndcg, <span class="hljs-number">0</span>, <span class="hljs-number">0</span>, <span class="hljs-number">0</span>);
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>十一、模式选择决策树</h2>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>问题类型？
 ├── 简单事实查询 → 标准RAG（向量+BM25+重排）
 ├── 需要完整上下文 → Parent-Child Retrieval
 ├── 模糊/开放性问题 → HyDE
-├── 多角度分析 → Multi-Query
-├── 带过滤条件 → Self-Query
+├── 多角度分析 → Multi-<span class="hljs-keyword">Query</span>
+├── 带过滤条件 → Self-<span class="hljs-keyword">Query</span>
 ├── 需要自主决策 → Agentic RAG
 ├── 总结/概念性问题 → GraphRAG
 └── 不确定 → Adaptive RAG（自动选择）
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>十二、最佳实践</h2>
 <ol>
 <li><strong>从简单开始</strong>：先实现标准RAG，再逐步叠加高级模式</li>
@@ -1088,93 +1070,92 @@ public class GraphRagService {
 <ul>
 <li><strong>对简单问题用复杂模式</strong>：额外的LLM调用浪费成本</li>
 <li><strong>GraphRAG处理所有查询</strong>：事实查找用GraphRAG不如传统RAG</li>
-<li><strong>不停Agentic RAG的迭代次数</strong>：可能导致Agent在&quot;检索-不满意-再检索&quot;的死循环</li>
+<li><strong>不停Agentic RAG的迭代次数</strong>：可能导致Agent在"检索-不满意-再检索"的死循环</li>
 <li><strong>忽略评估</strong>: 没有评估就无法知道哪个模式真正有效</li>
 </ul>
 <h2>十四、拼写纠正与同义词扩展</h2>
 <p>用户查询中常见的拼写错误和近义词差异会严重影响向量检索的召回率。在查询 Embedding 之前进行预处理，可显著提升检索质量。</p>
 <p>拼写纠正（Spell Correction）使用编辑距离（Levenshtein Distance）衡量两个字符串的差异。BK-tree（Burkhard-Keller Tree）是一种基于度量空间的数据结构，能高效查找编辑距离小于阈值 s 的所有单词，查询复杂度约 O(log n)。对于中文场景，可以使用拼音相似度或形近字混淆矩阵辅助纠正。</p>
-<p>同义词扩展（Synonym Expansion）通过查询扩展提升语义覆盖。学术场景可用 WordNet 同步词集，企业场景应维护领域专用同义词词典（如&quot;保费&quot;↔&quot;保险费用&quot;↔&quot;premium&quot;）。扩展时需控制权重：原始词保持权重 1.0，扩展词权重降为 0.3-0.5，避免噪声干扰。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// JDK 25 + Spring Boot 4.x: 拼写纠正 + BK-tree
-import java.util.*;
+<p>同义词扩展（Synonym Expansion）通过查询扩展提升语义覆盖。学术场景可用 WordNet 同步词集，企业场景应维护领域专用同义词词典（如"保费"↔"保险费用"↔"premium"）。扩展时需控制权重：原始词保持权重 1.0，扩展词权重降为 0.3-0.5，避免噪声干扰。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// JDK 25 + Spring Boot 4.x: 拼写纠正 + BK-tree</span>
+<span class="hljs-keyword">import</span> java.util.*;
 
-public class SpellCorrectionService {
-    // BK-tree 节点
-    record BKNode(String word, Map&lt;Integer, BKNode&gt; children) {}
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">SpellCorrectionService</span> {
+    <span class="hljs-comment">// BK-tree 节点</span>
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">BKNode</span><span class="hljs-params">(String word, Map&lt;Integer, BKNode&gt; children)</span> {}
 
-    private BKNode root;
-    private final Set&lt;String&gt; dictionary = new HashSet&lt;&gt;();
+    <span class="hljs-keyword">private</span> BKNode root;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Set&lt;String&gt; dictionary = <span class="hljs-keyword">new</span> <span class="hljs-title class_">HashSet</span>&lt;&gt;();
 
-    public SpellCorrectionService(Collection&lt;String&gt; words) {
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">SpellCorrectionService</span><span class="hljs-params">(Collection&lt;String&gt; words)</span> {
         dictionary.addAll(words);
         root = buildBKTree(words);
     }
 
-    private BKNode buildBKTree(Collection&lt;String&gt; words) {
-        var iter = words.iterator();
-        if (!iter.hasNext()) return null;
-        var r = new BKNode(iter.next(), new HashMap&lt;&gt;());
-        while (iter.hasNext()) insertBKTree(r, iter.next());
-        return r;
+    <span class="hljs-keyword">private</span> BKNode <span class="hljs-title function_">buildBKTree</span><span class="hljs-params">(Collection&lt;String&gt; words)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">iter</span> <span class="hljs-operator">=</span> words.iterator();
+        <span class="hljs-keyword">if</span> (!iter.hasNext()) <span class="hljs-keyword">return</span> <span class="hljs-literal">null</span>;
+        <span class="hljs-type">var</span> <span class="hljs-variable">r</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">BKNode</span>(iter.next(), <span class="hljs-keyword">new</span> <span class="hljs-title class_">HashMap</span>&lt;&gt;());
+        <span class="hljs-keyword">while</span> (iter.hasNext()) insertBKTree(r, iter.next());
+        <span class="hljs-keyword">return</span> r;
     }
 
-    private void insertBKTree(BKNode node, String word) {
-        int d = levenshtein(node.word, word);
-        if (d == 0) return; // 已存在
-        var child = node.children.get(d);
-        if (child == null) {
-            node.children.put(d, new BKNode(word, new HashMap&lt;&gt;()));
-        } else {
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">insertBKTree</span><span class="hljs-params">(BKNode node, String word)</span> {
+        <span class="hljs-type">int</span> <span class="hljs-variable">d</span> <span class="hljs-operator">=</span> levenshtein(node.word, word);
+        <span class="hljs-keyword">if</span> (d == <span class="hljs-number">0</span>) <span class="hljs-keyword">return</span>; <span class="hljs-comment">// 已存在</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">child</span> <span class="hljs-operator">=</span> node.children.get(d);
+        <span class="hljs-keyword">if</span> (child == <span class="hljs-literal">null</span>) {
+            node.children.put(d, <span class="hljs-keyword">new</span> <span class="hljs-title class_">BKNode</span>(word, <span class="hljs-keyword">new</span> <span class="hljs-title class_">HashMap</span>&lt;&gt;()));
+        } <span class="hljs-keyword">else</span> {
             insertBKTree(child, word);
         }
     }
 
-    // BK-tree 搜索：找到编辑距离 ≤ maxDist 的所有词
-    public List&lt;String&gt; search(String query, int maxDist) {
-        var results = new ArrayList&lt;String&gt;();
-        if (root == null) return results;
+    <span class="hljs-comment">// BK-tree 搜索：找到编辑距离 ≤ maxDist 的所有词</span>
+    <span class="hljs-keyword">public</span> List&lt;String&gt; <span class="hljs-title function_">search</span><span class="hljs-params">(String query, <span class="hljs-type">int</span> maxDist)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">results</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;String&gt;();
+        <span class="hljs-keyword">if</span> (root == <span class="hljs-literal">null</span>) <span class="hljs-keyword">return</span> results;
         searchBKTree(root, query, maxDist, results);
-        return results;
+        <span class="hljs-keyword">return</span> results;
     }
 
-    private void searchBKTree(BKNode node, String query, int maxDist, List&lt;String&gt; results) {
-        int d = levenshtein(node.word, query);
-        if (d &lt;= maxDist) results.add(node.word);
-        // 三角不等式剪枝：仅在 [d-maxDist, d+maxDist] 范围内的边搜索
-        for (int i = Math.max(1, d - maxDist); i &lt;= d + maxDist; i++) {
-            var child = node.children.get(i);
-            if (child != null) searchBKTree(child, query, maxDist, results);
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">searchBKTree</span><span class="hljs-params">(BKNode node, String query, <span class="hljs-type">int</span> maxDist, List&lt;String&gt; results)</span> {
+        <span class="hljs-type">int</span> <span class="hljs-variable">d</span> <span class="hljs-operator">=</span> levenshtein(node.word, query);
+        <span class="hljs-keyword">if</span> (d &lt;= maxDist) results.add(node.word);
+        <span class="hljs-comment">// 三角不等式剪枝：仅在 [d-maxDist, d+maxDist] 范围内的边搜索</span>
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> Math.max(<span class="hljs-number">1</span>, d - maxDist); i &lt;= d + maxDist; i++) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">child</span> <span class="hljs-operator">=</span> node.children.get(i);
+            <span class="hljs-keyword">if</span> (child != <span class="hljs-literal">null</span>) searchBKTree(child, query, maxDist, results);
         }
     }
 
-    private int levenshtein(String a, String b) {
-        int m = a.length(), n = b.length();
-        var dp = new int[m + 1][n + 1];
-        for (int i = 0; i &lt;= m; i++) dp[i][0] = i;
-        for (int j = 0; j &lt;= n; j++) dp[0][j] = j;
-        for (int i = 1; i &lt;= m; i++)
-            for (int j = 1; j &lt;= n; j++)
-                dp[i][j] = a.charAt(i - 1) == b.charAt(j - 1) ? dp[i - 1][j - 1]
-                    : 1 + Math.min(dp[i - 1][j - 1], Math.min(dp[i - 1][j], dp[i][j - 1]));
-        return dp[m][n];
+    <span class="hljs-keyword">private</span> <span class="hljs-type">int</span> <span class="hljs-title function_">levenshtein</span><span class="hljs-params">(String a, String b)</span> {
+        <span class="hljs-type">int</span> <span class="hljs-variable">m</span> <span class="hljs-operator">=</span> a.length(), n = b.length();
+        <span class="hljs-type">var</span> <span class="hljs-variable">dp</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">int</span>[m + <span class="hljs-number">1</span>][n + <span class="hljs-number">1</span>];
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt;= m; i++) dp[i][<span class="hljs-number">0</span>] = i;
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">j</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; j &lt;= n; j++) dp[<span class="hljs-number">0</span>][j] = j;
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">1</span>; i &lt;= m; i++)
+            <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">j</span> <span class="hljs-operator">=</span> <span class="hljs-number">1</span>; j &lt;= n; j++)
+                dp[i][j] = a.charAt(i - <span class="hljs-number">1</span>) == b.charAt(j - <span class="hljs-number">1</span>) ? dp[i - <span class="hljs-number">1</span>][j - <span class="hljs-number">1</span>]
+                    : <span class="hljs-number">1</span> + Math.min(dp[i - <span class="hljs-number">1</span>][j - <span class="hljs-number">1</span>], Math.min(dp[i - <span class="hljs-number">1</span>][j], dp[i][j - <span class="hljs-number">1</span>]));
+        <span class="hljs-keyword">return</span> dp[m][n];
     }
 
-    // 同义词扩展查询
-    public String expandQuery(String query, Map&lt;String, List&lt;String&gt;&gt; synonymDict) {
-        var expanded = new StringBuilder(query);
-        for (var entry : synonymDict.entrySet()) {
-            if (query.contains(entry.getKey())) {
-                for (var syn : entry.getValue()) {
-                    expanded.append(&quot; &quot;).append(syn);
+    <span class="hljs-comment">// 同义词扩展查询</span>
+    <span class="hljs-keyword">public</span> String <span class="hljs-title function_">expandQuery</span><span class="hljs-params">(String query, Map&lt;String, List&lt;String&gt;&gt; synonymDict)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">expanded</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>(query);
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> entry : synonymDict.entrySet()) {
+            <span class="hljs-keyword">if</span> (query.contains(entry.getKey())) {
+                <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> syn : entry.getValue()) {
+                    expanded.append(<span class="hljs-string">" "</span>).append(syn);
                 }
             }
         }
-        return expanded.toString();
+        <span class="hljs-keyword">return</span> expanded.toString();
     }
 }
-</code></pre></div>
-<h2>十五、ColBERT Late Interaction重排</h2>
-<p>ColBERT（Contextualized Late Interaction over BERT）是斯坦福大学提出的检索模型，其核心创新在于&quot;延迟交互&quot;（Late Interaction）：将查询和文档分别编码为多 Token Embeddings 的矩阵，在检索阶段通过 MaxSim（Maximum Similarity）计算相关性，而非早期将整个文本压缩为单一向量。</p>
+</code></pre></div><h2>十五、ColBERT Late Interaction重排</h2>
+<p>ColBERT（Contextualized Late Interaction over BERT）是斯坦福大学提出的检索模型，其核心创新在于"延迟交互"（Late Interaction）：将查询和文档分别编码为多 Token Embeddings 的矩阵，在检索阶段通过 MaxSim（Maximum Similarity）计算相关性，而非早期将整个文本压缩为单一向量。</p>
 <p>与 Cross-Encoder 重排的对比：</p>
 <table>
 <thead>
@@ -1212,202 +1193,199 @@ public class SpellCorrectionService {
 </tbody></table>
 <p>ColBERT 的 MaxSim 公式：对于查询的每个 Token 向量 q_i，在文档所有 Token 向量 d_j 中找到最大余弦相似度，然后对查询所有 Token 求和。这使得 ColBERT 能捕捉细粒度的词级匹配，同时保留上下文语义。</p>
 <p>ColBERT 特别适合以下场景：文档 Embedding 可离线预计算并存储在向量数据库中；需要比 Bi-Encoder 更高的精度但无法承受 Cross-Encoder 的实时计算成本；对 Token 级别的精确匹配有需求。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// JDK 25 + Spring Boot 4.x: ColBERT MaxSim 计算器
-public class ColBERTMaxSim {
-    // 计算查询和文档的 MaxSim 分数
-    // queryEmbeddings: [num_query_tokens x dim]
-    // docEmbeddings: [num_doc_tokens x dim]
-    public static double maxSim(float[][] queryEmbeddings, float[][] docEmbeddings) {
-        double totalSim = 0.0;
-        for (var qVec : queryEmbeddings) {
-            double maxTokenSim = Double.NEGATIVE_INFINITY;
-            for (var dVec : docEmbeddings) {
-                double sim = cosineSimilarity(qVec, dVec);
-                if (sim &gt; maxTokenSim) maxTokenSim = sim;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// JDK 25 + Spring Boot 4.x: ColBERT MaxSim 计算器</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ColBERTMaxSim</span> {
+    <span class="hljs-comment">// 计算查询和文档的 MaxSim 分数</span>
+    <span class="hljs-comment">// queryEmbeddings: [num_query_tokens x dim]</span>
+    <span class="hljs-comment">// docEmbeddings: [num_doc_tokens x dim]</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-type">double</span> <span class="hljs-title function_">maxSim</span><span class="hljs-params">(<span class="hljs-type">float</span>[][] queryEmbeddings, <span class="hljs-type">float</span>[][] docEmbeddings)</span> {
+        <span class="hljs-type">double</span> <span class="hljs-variable">totalSim</span> <span class="hljs-operator">=</span> <span class="hljs-number">0.0</span>;
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> qVec : queryEmbeddings) {
+            <span class="hljs-type">double</span> <span class="hljs-variable">maxTokenSim</span> <span class="hljs-operator">=</span> Double.NEGATIVE_INFINITY;
+            <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> dVec : docEmbeddings) {
+                <span class="hljs-type">double</span> <span class="hljs-variable">sim</span> <span class="hljs-operator">=</span> cosineSimilarity(qVec, dVec);
+                <span class="hljs-keyword">if</span> (sim &gt; maxTokenSim) maxTokenSim = sim;
             }
             totalSim += maxTokenSim;
         }
-        return totalSim;
+        <span class="hljs-keyword">return</span> totalSim;
     }
 
-    // 批处理版本：一个查询对多个预计算文档打分
-    public static List&lt;ScoredDoc&gt; rerank(
-            float[][] queryEmbeddings,
-            Map&lt;String, float[][]&gt; precomputedDocEmbeddings) {
-        return precomputedDocEmbeddings.entrySet().stream()
-            .map(e -&gt; new ScoredDoc(e.getKey(), maxSim(queryEmbeddings, e.getValue())))
+    <span class="hljs-comment">// 批处理版本：一个查询对多个预计算文档打分</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> List&lt;ScoredDoc&gt; <span class="hljs-title function_">rerank</span><span class="hljs-params">(
+            <span class="hljs-type">float</span>[][] queryEmbeddings,
+            Map&lt;String, <span class="hljs-type">float</span>[][]&gt; precomputedDocEmbeddings)</span> {
+        <span class="hljs-keyword">return</span> precomputedDocEmbeddings.entrySet().stream()
+            .map(e -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">ScoredDoc</span>(e.getKey(), maxSim(queryEmbeddings, e.getValue())))
             .sorted((a, b) -&gt; Double.compare(b.score, a.score))
             .toList();
     }
 
-    private static double cosineSimilarity(float[] a, float[] b) {
-        double dot = 0.0, normA = 0.0, normB = 0.0;
-        for (int i = 0; i &lt; a.length; i++) {
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-type">double</span> <span class="hljs-title function_">cosineSimilarity</span><span class="hljs-params">(<span class="hljs-type">float</span>[] a, <span class="hljs-type">float</span>[] b)</span> {
+        <span class="hljs-type">double</span> <span class="hljs-variable">dot</span> <span class="hljs-operator">=</span> <span class="hljs-number">0.0</span>, normA = <span class="hljs-number">0.0</span>, normB = <span class="hljs-number">0.0</span>;
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; a.length; i++) {
             dot += a[i] * b[i];
             normA += a[i] * a[i];
             normB += b[i] * b[i];
         }
-        return dot / (Math.sqrt(normA) * Math.sqrt(normB) + 1e-8);
+        <span class="hljs-keyword">return</span> dot / (Math.sqrt(normA) * Math.sqrt(normB) + <span class="hljs-number">1e-8</span>);
     }
 
-    record ScoredDoc(String docId, double score) {}
+    <span class="hljs-keyword">record</span> <span class="hljs-title class_">ScoredDoc</span><span class="hljs-params">(String docId, <span class="hljs-type">double</span> score)</span> {}
 }
-</code></pre></div>
-<h2>十六、Multimodal RAG图文混合检索</h2>
+</code></pre></div><h2>十六、Multimodal RAG图文混合检索</h2>
 <p>多模态 RAG（Multimodal RAG）扩展了传统纯文本检索，同时索引和检索图像内容。典型场景包括：用户上传一张产品图片查询相似款式、在技术文档中搜索架构图、或医学影像的相似病例检索。</p>
 <p>核心架构采用双向量存储：</p>
 <ul>
-<li><strong>图像向量存储</strong>：使用 CLIP（Contrastive Language-Image Pre-training）或 SigLIP（Sigmoid Loss for Language-Image Pre-training）将图像编码为 Embedding。CLIP/SigLIP 的关键特性是图文向量在同一语义空间对齐——&quot;一只猫&quot;的文本 Embedding 和一张猫的图片 Embedding 距离很近。</li>
+<li><strong>图像向量存储</strong>：使用 CLIP（Contrastive Language-Image Pre-training）或 SigLIP（Sigmoid Loss for Language-Image Pre-training）将图像编码为 Embedding。CLIP/SigLIP 的关键特性是图文向量在同一语义空间对齐——"一只猫"的文本 Embedding 和一张猫的图片 Embedding 距离很近。</li>
 <li><strong>文本向量存储</strong>：使用 BGE 或 text-embedding-3 编码文本 Chunk。</li>
 </ul>
 <p>检索时，用户查询同时作为文本查询和图像查询。文本向量存储返回相关的文本 Chunk，图像向量存储返回语义匹配的图像。如果用户上传了图片，CLIP 将其编码为向量，与图像向量存储中的候选进行相似度匹配。最后将文本和图像结果合并，按分数排序后交给多模态 LLM（如 GPT-4o、Gemini）生成最终回答。</p>
 <p>关键实现细节：图像 Chunk 需要关联其来源文档的上下文文本（Caption），因为 CLIP Embedding 虽然图文对齐，但仍缺乏细粒度语义。Caption 可由 Vision Language Model（VLM）自动生成。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// JDK 25 + Spring Boot 4.x: 多模态 RAG 服务
-import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// JDK 25 + Spring Boot 4.x: 多模态 RAG 服务</span>
+<span class="hljs-keyword">import</span> java.util.*;
+<span class="hljs-keyword">import</span> java.util.concurrent.ConcurrentHashMap;
 
-@Service
-public class MultimodalRagService {
-    private final VectorStore textVectorStore;    // BGE 文本向量存储
-    private final VectorStore imageVectorStore;   // CLIP 图像向量存储
-    private final ClipEncoder clipEncoder;
+<span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">MultimodalRagService</span> {
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> VectorStore textVectorStore;    <span class="hljs-comment">// BGE 文本向量存储</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> VectorStore imageVectorStore;   <span class="hljs-comment">// CLIP 图像向量存储</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> ClipEncoder clipEncoder;
 
-    public MultimodalRagService(VectorStore textVectorStore,
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">MultimodalRagService</span><span class="hljs-params">(VectorStore textVectorStore,
                                 VectorStore imageVectorStore,
-                                ClipEncoder clipEncoder) {
-        this.textVectorStore = textVectorStore;
-        this.imageVectorStore = imageVectorStore;
-        this.clipEncoder = clipEncoder;
+                                ClipEncoder clipEncoder)</span> {
+        <span class="hljs-built_in">this</span>.textVectorStore = textVectorStore;
+        <span class="hljs-built_in">this</span>.imageVectorStore = imageVectorStore;
+        <span class="hljs-built_in">this</span>.clipEncoder = clipEncoder;
     }
 
-    // 混合检索：文本查询 + 可选图像查询
-    public record MultimodalResult(List&lt;String&gt; textChunks, List&lt;String&gt; imageUrls) {}
+    <span class="hljs-comment">// 混合检索：文本查询 + 可选图像查询</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">MultimodalResult</span><span class="hljs-params">(List&lt;String&gt; textChunks, List&lt;String&gt; imageUrls)</span> {}
 
-    public MultimodalResult search(String textQuery, byte[] imageBytes, int topK) {
-        // 1. 文本检索
-        var textResults = textVectorStore.similaritySearch(textQuery, topK);
+    <span class="hljs-keyword">public</span> MultimodalResult <span class="hljs-title function_">search</span><span class="hljs-params">(String textQuery, <span class="hljs-type">byte</span>[] imageBytes, <span class="hljs-type">int</span> topK)</span> {
+        <span class="hljs-comment">// 1. 文本检索</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">textResults</span> <span class="hljs-operator">=</span> textVectorStore.similaritySearch(textQuery, topK);
 
-        // 2. 图像检索：用文本 Embedding 在 CLIP 空间查找相似图像
-        var textEmbedding = clipEncoder.encodeText(textQuery);
-        var imageResults = imageVectorStore.similaritySearch(textEmbedding, topK);
+        <span class="hljs-comment">// 2. 图像检索：用文本 Embedding 在 CLIP 空间查找相似图像</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">textEmbedding</span> <span class="hljs-operator">=</span> clipEncoder.encodeText(textQuery);
+        <span class="hljs-type">var</span> <span class="hljs-variable">imageResults</span> <span class="hljs-operator">=</span> imageVectorStore.similaritySearch(textEmbedding, topK);
 
-        // 3. 如果用户上传了图片，将图片 Embedding 也加入检索
+        <span class="hljs-comment">// 3. 如果用户上传了图片，将图片 Embedding 也加入检索</span>
         List&lt;String&gt; additionalImages = List.of();
-        if (imageBytes != null &amp;&amp; imageBytes.length &gt; 0) {
-            var imgEmbedding = clipEncoder.encodeImage(imageBytes);
+        <span class="hljs-keyword">if</span> (imageBytes != <span class="hljs-literal">null</span> &amp;&amp; imageBytes.length &gt; <span class="hljs-number">0</span>) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">imgEmbedding</span> <span class="hljs-operator">=</span> clipEncoder.encodeImage(imageBytes);
             additionalImages = imageVectorStore.similaritySearch(imgEmbedding, topK);
         }
 
-        // 4. 合并去重
-        var allImages = new ArrayList&lt;&gt;(imageResults);
+        <span class="hljs-comment">// 4. 合并去重</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">allImages</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;&gt;(imageResults);
         allImages.addAll(additionalImages);
-        return new MultimodalResult(textResults, allImages.stream().distinct().toList());
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">MultimodalResult</span>(textResults, allImages.stream().distinct().toList());
     }
 
-    // 接口抽象（实际实现依赖具体的向量数据库）
-    interface VectorStore {
-        List&lt;String&gt; similaritySearch(float[] queryVector, int topK);
-        List&lt;String&gt; similaritySearch(String textQuery, int topK);
+    <span class="hljs-comment">// 接口抽象（实际实现依赖具体的向量数据库）</span>
+    <span class="hljs-keyword">interface</span> <span class="hljs-title class_">VectorStore</span> {
+        List&lt;String&gt; <span class="hljs-title function_">similaritySearch</span><span class="hljs-params">(<span class="hljs-type">float</span>[] queryVector, <span class="hljs-type">int</span> topK)</span>;
+        List&lt;String&gt; <span class="hljs-title function_">similaritySearch</span><span class="hljs-params">(String textQuery, <span class="hljs-type">int</span> topK)</span>;
     }
 
-    interface ClipEncoder {
-        float[] encodeText(String text);
-        float[] encodeImage(byte[] imageBytes);
+    <span class="hljs-keyword">interface</span> <span class="hljs-title class_">ClipEncoder</span> {
+        <span class="hljs-type">float</span>[] encodeText(String text);
+        <span class="hljs-type">float</span>[] encodeImage(<span class="hljs-type">byte</span>[] imageBytes);
     }
 }
-</code></pre></div>
-<h2>十七、答案忠实度评估</h2>
-<p>答案忠实度（Faithfulness）是 RAG 系统评估的核心指标之一，衡量生成的答案是否忠实于提供的上下文文档，避免&quot;幻觉&quot;（Hallucination）——即答案中包含文档未覆盖的信息。</p>
+</code></pre></div><h2>十七、答案忠实度评估</h2>
+<p>答案忠实度（Faithfulness）是 RAG 系统评估的核心指标之一，衡量生成的答案是否忠实于提供的上下文文档，避免"幻觉"（Hallucination）——即答案中包含文档未覆盖的信息。</p>
 <p>LLM-as-Judge 是目前最主流的自动评估方法。流程分为两步：</p>
 <ol>
 <li><strong>声明分解（Claim Decomposition）</strong>：将 LLM 生成的答案拆分为原子声明（Atomic Claims），每个声明是一个独立的、可验证的事实断言。</li>
-<li><strong>声明验证（Claim Verification）</strong>：对每个原子声明，判断它是否能从提供的上下文文档中推断出来。如果能，标记为&quot;受支持&quot;（Supported）；如果不能，标记为&quot;无支撑&quot;（Unsupported）或&quot;矛盾&quot;（Contradicted）。</li>
+<li><strong>声明验证（Claim Verification）</strong>：对每个原子声明，判断它是否能从提供的上下文文档中推断出来。如果能，标记为"受支持"（Supported）；如果不能，标记为"无支撑"（Unsupported）或"矛盾"（Contradicted）。</li>
 </ol>
 <p>最终忠实度分数 = 受支持的声明数 / 总声明数。分数 1.0 表示所有声明都有文档支撑；分数 0 表示生成的答案与文档完全无关。</p>
 <p>评估流程建议：使用比生成模型更强的模型作为 Judge（如用 GPT-4 评估 GPT-3.5 生成的内容）。也可以使用专门微调的 NLI（Natural Language Inference）模型如 DeBERTa-v3-NLI 来提速。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// JDK 25 + Spring Boot 4.x: 答案忠实度评估器
-import java.util.*;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// JDK 25 + Spring Boot 4.x: 答案忠实度评估器</span>
+<span class="hljs-keyword">import</span> java.util.*;
 
-@Service
-public class FaithfulnessEvaluator {
-    private final LlmService judgeLlm; // 用作 Judge 的 LLM
+<span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">FaithfulnessEvaluator</span> {
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> LlmService judgeLlm; <span class="hljs-comment">// 用作 Judge 的 LLM</span>
 
-    public FaithfulnessEvaluator(LlmService judgeLlm) {
-        this.judgeLlm = judgeLlm;
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">FaithfulnessEvaluator</span><span class="hljs-params">(LlmService judgeLlm)</span> {
+        <span class="hljs-built_in">this</span>.judgeLlm = judgeLlm;
     }
 
-    public record FaithfulnessResult(
-        double score,                    // 0.0 ~ 1.0
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">FaithfulnessResult</span><span class="hljs-params">(
+        <span class="hljs-type">double</span> score,                    // 0.0 ~ 1.0
         List&lt;ClaimVerification&gt; claims,  // 每个声明的验证结果
         String summary
-    ) {}
+    )</span> {}
 
-    public record ClaimVerification(
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">ClaimVerification</span><span class="hljs-params">(
         String claimText,
-        String verdict,  // &quot;SUPPORTED&quot; | &quot;UNSUPPORTED&quot; | &quot;CONTRADICTED&quot;
+        String verdict,  // "SUPPORTED" | "UNSUPPORTED" | "CONTRADICTED"
         String evidence  // 支撑该结论的文档片段
-    ) {}
+    )</span> {}
 
-    public FaithfulnessResult evaluate(String answer, String contextDocuments) {
-        // Step 1: 分解答案为原子声明
-        var claims = decomposeClaims(answer);
+    <span class="hljs-keyword">public</span> FaithfulnessResult <span class="hljs-title function_">evaluate</span><span class="hljs-params">(String answer, String contextDocuments)</span> {
+        <span class="hljs-comment">// Step 1: 分解答案为原子声明</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">claims</span> <span class="hljs-operator">=</span> decomposeClaims(answer);
 
-        // Step 2: 逐条验证
-        int supported = 0;
-        var verifications = new ArrayList&lt;ClaimVerification&gt;();
-        for (var claim : claims) {
-            var result = verifyClaim(claim, contextDocuments);
+        <span class="hljs-comment">// Step 2: 逐条验证</span>
+        <span class="hljs-type">int</span> <span class="hljs-variable">supported</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+        <span class="hljs-type">var</span> <span class="hljs-variable">verifications</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;ClaimVerification&gt;();
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> claim : claims) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> verifyClaim(claim, contextDocuments);
             verifications.add(result);
-            if (&quot;SUPPORTED&quot;.equals(result.verdict)) supported++;
+            <span class="hljs-keyword">if</span> (<span class="hljs-string">"SUPPORTED"</span>.equals(result.verdict)) supported++;
         }
 
-        double score = claims.isEmpty() ? 1.0 : (double) supported / claims.size();
-        return new FaithfulnessResult(score, verifications,
-            &quot;Supported: %d/%d claims&quot;.formatted(supported, claims.size()));
+        <span class="hljs-type">double</span> <span class="hljs-variable">score</span> <span class="hljs-operator">=</span> claims.isEmpty() ? <span class="hljs-number">1.0</span> : (<span class="hljs-type">double</span>) supported / claims.size();
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">FaithfulnessResult</span>(score, verifications,
+            <span class="hljs-string">"Supported: %d/%d claims"</span>.formatted(supported, claims.size()));
     }
 
-    // 使用 LLM 将答案拆分为原子声明
-    private List&lt;String&gt; decomposeClaims(String answer) {
-        var prompt = &quot;&quot;&quot;
+    <span class="hljs-comment">// 使用 LLM 将答案拆分为原子声明</span>
+    <span class="hljs-keyword">private</span> List&lt;String&gt; <span class="hljs-title function_">decomposeClaims</span><span class="hljs-params">(String answer)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">prompt</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
             Decompose the following answer into atomic claims.
             Each claim should be a single, verifiable fact.
             Return claims as a JSON array of strings.
             Answer: %s
-            &quot;&quot;&quot;.formatted(answer);
-        var response = judgeLlm.generate(prompt);
-        return parseJsonArray(response); // 解析为 List&lt;String&gt;
+            """</span>.formatted(answer);
+        <span class="hljs-type">var</span> <span class="hljs-variable">response</span> <span class="hljs-operator">=</span> judgeLlm.generate(prompt);
+        <span class="hljs-keyword">return</span> parseJsonArray(response); <span class="hljs-comment">// 解析为 List&lt;String&gt;</span>
     }
 
-    // 使用 LLM 验证单个声明
-    private ClaimVerification verifyClaim(String claim, String context) {
-        var prompt = &quot;&quot;&quot;
+    <span class="hljs-comment">// 使用 LLM 验证单个声明</span>
+    <span class="hljs-keyword">private</span> ClaimVerification <span class="hljs-title function_">verifyClaim</span><span class="hljs-params">(String claim, String context)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">prompt</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
             Given the context below, determine if the claim is:
             - SUPPORTED: the context directly or implicitly supports it
             - UNSUPPORTED: the context does not provide enough information
             - CONTRADICTED: the context contradicts it
             Context: %s
             Claim: %s
-            Respond in JSON: {&quot;verdict&quot;: &quot;...&quot;, &quot;evidence&quot;: &quot;...&quot;}
-            &quot;&quot;&quot;.formatted(context, claim);
-        var response = judgeLlm.generate(prompt);
-        return parseVerdict(response);
+            Respond in JSON: {"verdict": "...", "evidence": "..."}
+            """</span>.formatted(context, claim);
+        <span class="hljs-type">var</span> <span class="hljs-variable">response</span> <span class="hljs-operator">=</span> judgeLlm.generate(prompt);
+        <span class="hljs-keyword">return</span> parseVerdict(response);
     }
 
-    private List&lt;String&gt; parseJsonArray(String json) { /* JSON 解析 */ return List.of(); }
-    private ClaimVerification parseVerdict(String json) { /* JSON 解析 */ return null; }
+    <span class="hljs-keyword">private</span> List&lt;String&gt; <span class="hljs-title function_">parseJsonArray</span><span class="hljs-params">(String json)</span> { <span class="hljs-comment">/* JSON 解析 */</span> <span class="hljs-keyword">return</span> List.of(); }
+    <span class="hljs-keyword">private</span> ClaimVerification <span class="hljs-title function_">parseVerdict</span><span class="hljs-params">(String json)</span> { <span class="hljs-comment">/* JSON 解析 */</span> <span class="hljs-keyword">return</span> <span class="hljs-literal">null</span>; }
 
-    interface LlmService {
-        String generate(String prompt);
+    <span class="hljs-keyword">interface</span> <span class="hljs-title class_">LlmService</span> {
+        String <span class="hljs-title function_">generate</span><span class="hljs-params">(String prompt)</span>;
     }
 }
-</code></pre></div>
-<h2>相关条目</h2>
+</code></pre></div><h2>相关条目</h2>
 <ul>
-<li><a href="#/11-检索与RAG/检索技术/11-向量检索与混合检索" class="cross-ref" data-ref="11-向量检索与混合检索">11-向量检索与混合检索</a> — 底层检索技术</li>
-<li><a href="#/11-检索与RAG/检索技术/11-重排与上下文处理" class="cross-ref" data-ref="11-重排与上下文处理">11-重排与上下文处理</a> — 检索后处理</li>
-<li><a href="#/11-检索与RAG/RAG实现/11-完整RAG流水线实现" class="cross-ref" data-ref="11-完整RAG流水线实现">11-完整RAG流水线实现</a> — 完整RAG流水线</li>
-<li><a href="#/?d=12" class="cross-ref domain-ref">12-Agent工程/README</a> — Agentic RAG的Agent基础</li>
-<li><a href="#/04-数据与中间件/对象存储/04-对象存储与中间件扩展" class="cross-ref" data-ref="04-对象存储与中间件扩展">04-对象存储与中间件扩展</a> — GraphRAG的图数据库</li>
+<li><a href="#/11-检索与RAG/检索技术/11-向量检索与混合检索" class="cross-ref">11-向量检索与混合检索</a> — 底层检索技术</li>
+<li><a href="#/11-检索与RAG/检索技术/11-重排与上下文处理" class="cross-ref">11-重排与上下文处理</a> — 检索后处理</li>
+<li><a href="#/11-检索与RAG/RAG实现/11-完整RAG流水线实现" class="cross-ref">11-完整RAG流水线实现</a> — 完整RAG流水线</li>
+<li><span class="broken-ref" title="未找到: 12-Agent工程/README">12-Agent工程/README</span> — Agentic RAG的Agent基础</li>
+<li><a href="#/04-数据与中间件/对象存储/04-对象存储与中间件扩展" class="cross-ref">04-对象存储与中间件扩展</a> — GraphRAG的图数据库</li>
 </ul>
-</div>
+</body></html></div>
 </article>

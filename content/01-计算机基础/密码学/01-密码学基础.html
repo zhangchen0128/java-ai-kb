@@ -1,12 +1,12 @@
 
-<article class="kb-entry" data-path="/01-计算机基础/密码学/01-密码学基础">
+<article class="kb-entry" data-path="/01-计算机基础">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=01">01-计算机基础</a></div>
     <h1>密码学基础</h1>
-    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#cryptography</span><span class="badge badge-tag">#aes</span><span class="badge badge-tag">#rsa</span><span class="badge badge-tag">#ecc</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#cryptography</span><span class="badge badge-tag">#aes</span><span class="badge badge-tag">#rsa</span><span class="badge badge-tag">#ecc</span><span class="badge badge-tag">#sha</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://docs.oracle.com/en/java/javase/25/security/java-cryptography-architecture-jca-reference-guide.html" target="_blank" rel="noopener" class="source-link" title="Java Cryptography Architecture (JCA) Reference Guide — JDK 25 official documentation">Java Cryptography Architecture (JCA) Reference Guide — JDK 25 official documentation</a><a href="https://docs.spring.io/spring-security/reference/features/authentication/password-storage.html" target="_blank" rel="noopener" class="source-link" title="Spring Security PasswordEncoder — bcrypt/argon2 integration">Spring Security PasswordEncoder — bcrypt/argon2 integration</a><a href="https://datatracker.ietf.org/doc/html/rfc8446" target="_blank" rel="noopener" class="source-link" title="TLS 1.3 (RFC 8446) — handshake protocol and cipher suites">TLS 1.3 (RFC 8446) — handshake protocol and cipher suites</a><a href="https://www.amazon.com/Cryptography-Engineering-Principles-Practical-Applications/dp/0470474246" target="_blank" rel="noopener" class="source-link" title="Cryptography Engineering (Ferguson, Schneier, Kohno)">Cryptography Engineering (Ferguson, Schneier, Kohno)</a></small></div>
   </div>
-  <div class="entry-body"><h1>密码学基础</h1>
+  <div class="entry-body"><html><head></head><body><h1>密码学基础</h1>
 <h2>概述</h2>
 <p>密码学是现代软件系统的安全基石。从网络通信的 TLS 加密，到用户密码的安全存储，再到 API 令牌的签名验证，密码学无处不在。在 AI 应用场景中，模型 API 密钥的管理、Agent 工具调用的授权令牌验证、知识库文档的加密存储，都需要扎实的密码学基础。</p>
 <p>本条目系统梳理密码学的五大核心领域：对称加密、非对称加密、哈希与消息认证、数字签名和 PKI 公钥基础设施，并给出 JDK 25 + Spring Boot 4.x 风格的可运行代码示例。<strong>核心原则：永远不要自己实现加密算法，使用经过安全审计的标准库和经过验证的最佳实践。</strong></p>
@@ -26,70 +26,69 @@
 <li><strong>关联数据（AAD）</strong>：可选的附加认证数据（如协议头、用户 ID），不加密但参与认证</li>
 </ul>
 <h3>1.2 Java 实现</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import javax.crypto.Cipher;
-import javax.crypto.KeyGenerator;
-import javax.crypto.SecretKey;
-import javax.crypto.spec.GCMParameterSpec;
-import javax.crypto.spec.SecretKeySpec;
-import java.security.SecureRandom;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> javax.crypto.Cipher;
+<span class="hljs-keyword">import</span> javax.crypto.KeyGenerator;
+<span class="hljs-keyword">import</span> javax.crypto.SecretKey;
+<span class="hljs-keyword">import</span> javax.crypto.spec.GCMParameterSpec;
+<span class="hljs-keyword">import</span> javax.crypto.spec.SecretKeySpec;
+<span class="hljs-keyword">import</span> java.security.SecureRandom;
 
-public class AesGcmExample {
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">AesGcmExample</span> {
 
-    private static final String ALGORITHM = &quot;AES/GCM/NoPadding&quot;;
-    private static final int GCM_TAG_LENGTH = 128; // bits
-    private static final int GCM_IV_LENGTH = 12;   // bytes (96 bits, recommended)
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">String</span> <span class="hljs-variable">ALGORITHM</span> <span class="hljs-operator">=</span> <span class="hljs-string">"AES/GCM/NoPadding"</span>;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">int</span> <span class="hljs-variable">GCM_TAG_LENGTH</span> <span class="hljs-operator">=</span> <span class="hljs-number">128</span>; <span class="hljs-comment">// bits</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">int</span> <span class="hljs-variable">GCM_IV_LENGTH</span> <span class="hljs-operator">=</span> <span class="hljs-number">12</span>;   <span class="hljs-comment">// bytes (96 bits, recommended)</span>
 
-    // 生成 AES-256 密钥
-    public static SecretKey generateKey() throws Exception {
-        var keyGen = KeyGenerator.getInstance(&quot;AES&quot;);
-        keyGen.init(256); // AES-256
-        return keyGen.generateKey();
+    <span class="hljs-comment">// 生成 AES-256 密钥</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> SecretKey <span class="hljs-title function_">generateKey</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-type">var</span> <span class="hljs-variable">keyGen</span> <span class="hljs-operator">=</span> KeyGenerator.getInstance(<span class="hljs-string">"AES"</span>);
+        keyGen.init(<span class="hljs-number">256</span>); <span class="hljs-comment">// AES-256</span>
+        <span class="hljs-keyword">return</span> keyGen.generateKey();
     }
 
-    // 加密：返回 IV + 密文（IV 不需要保密，但必须随机且唯一）
-    public static byte[] encrypt(byte[] plaintext, SecretKey key, byte[] aad) throws Exception {
-        var cipher = Cipher.getInstance(ALGORITHM);
-        var iv = new byte[GCM_IV_LENGTH];
-        SecureRandom.getInstanceStrong().nextBytes(iv); // 使用强随机源
+    <span class="hljs-comment">// 加密：返回 IV + 密文（IV 不需要保密，但必须随机且唯一）</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-type">byte</span>[] encrypt(<span class="hljs-type">byte</span>[] plaintext, SecretKey key, <span class="hljs-type">byte</span>[] aad) <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-type">var</span> <span class="hljs-variable">cipher</span> <span class="hljs-operator">=</span> Cipher.getInstance(ALGORITHM);
+        <span class="hljs-type">var</span> <span class="hljs-variable">iv</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">byte</span>[GCM_IV_LENGTH];
+        SecureRandom.getInstanceStrong().nextBytes(iv); <span class="hljs-comment">// 使用强随机源</span>
 
-        var spec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
+        <span class="hljs-type">var</span> <span class="hljs-variable">spec</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">GCMParameterSpec</span>(GCM_TAG_LENGTH, iv);
         cipher.init(Cipher.ENCRYPT_MODE, key, spec);
 
-        if (aad != null) {
-            cipher.updateAAD(aad); // 设置关联数据
+        <span class="hljs-keyword">if</span> (aad != <span class="hljs-literal">null</span>) {
+            cipher.updateAAD(aad); <span class="hljs-comment">// 设置关联数据</span>
         }
 
-        var ciphertext = cipher.doFinal(plaintext);
+        <span class="hljs-type">var</span> <span class="hljs-variable">ciphertext</span> <span class="hljs-operator">=</span> cipher.doFinal(plaintext);
 
-        // 返回 IV || 密文（密文末尾已包含认证标签）
-        var result = new byte[GCM_IV_LENGTH + ciphertext.length];
-        System.arraycopy(iv, 0, result, 0, GCM_IV_LENGTH);
-        System.arraycopy(ciphertext, 0, result, GCM_IV_LENGTH, ciphertext.length);
-        return result;
+        <span class="hljs-comment">// 返回 IV || 密文（密文末尾已包含认证标签）</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">byte</span>[GCM_IV_LENGTH + ciphertext.length];
+        System.arraycopy(iv, <span class="hljs-number">0</span>, result, <span class="hljs-number">0</span>, GCM_IV_LENGTH);
+        System.arraycopy(ciphertext, <span class="hljs-number">0</span>, result, GCM_IV_LENGTH, ciphertext.length);
+        <span class="hljs-keyword">return</span> result;
     }
 
-    // 解密：自动验证认证标签，失败抛出 AEADBadTagException
-    public static byte[] decrypt(byte[] encrypted, SecretKey key, byte[] aad) throws Exception {
-        var cipher = Cipher.getInstance(ALGORITHM);
+    <span class="hljs-comment">// 解密：自动验证认证标签，失败抛出 AEADBadTagException</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-type">byte</span>[] decrypt(<span class="hljs-type">byte</span>[] encrypted, SecretKey key, <span class="hljs-type">byte</span>[] aad) <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-type">var</span> <span class="hljs-variable">cipher</span> <span class="hljs-operator">=</span> Cipher.getInstance(ALGORITHM);
 
-        // 分离 IV 和密文
-        var iv = new byte[GCM_IV_LENGTH];
-        System.arraycopy(encrypted, 0, iv, 0, GCM_IV_LENGTH);
-        var ciphertext = new byte[encrypted.length - GCM_IV_LENGTH];
-        System.arraycopy(encrypted, GCM_IV_LENGTH, ciphertext, 0, ciphertext.length);
+        <span class="hljs-comment">// 分离 IV 和密文</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">iv</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">byte</span>[GCM_IV_LENGTH];
+        System.arraycopy(encrypted, <span class="hljs-number">0</span>, iv, <span class="hljs-number">0</span>, GCM_IV_LENGTH);
+        <span class="hljs-type">var</span> <span class="hljs-variable">ciphertext</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">byte</span>[encrypted.length - GCM_IV_LENGTH];
+        System.arraycopy(encrypted, GCM_IV_LENGTH, ciphertext, <span class="hljs-number">0</span>, ciphertext.length);
 
-        var spec = new GCMParameterSpec(GCM_TAG_LENGTH, iv);
+        <span class="hljs-type">var</span> <span class="hljs-variable">spec</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">GCMParameterSpec</span>(GCM_TAG_LENGTH, iv);
         cipher.init(Cipher.DECRYPT_MODE, key, spec);
 
-        if (aad != null) {
+        <span class="hljs-keyword">if</span> (aad != <span class="hljs-literal">null</span>) {
             cipher.updateAAD(aad);
         }
 
-        return cipher.doFinal(ciphertext); // 如果认证失败，抛出 AEADBadTagException
+        <span class="hljs-keyword">return</span> cipher.doFinal(ciphertext); <span class="hljs-comment">// 如果认证失败，抛出 AEADBadTagException</span>
     }
 }
-</code></pre></div>
-<p><strong>安全要点：</strong></p>
+</code></pre></div><p><strong>安全要点：</strong></p>
 <ul>
 <li>永远使用 <code>SecureRandom.getInstanceStrong()</code> 生成 IV</li>
 <li>GCM 的 IV 重复使用会导致灾难性安全漏洞（认证密钥泄露）</li>
@@ -104,20 +103,19 @@ public class AesGcmExample {
 <li>云服务：AWS KMS、Azure Key Vault、Google Cloud KMS</li>
 <li>自建方案：HashiCorp Vault（Spring Cloud Vault 集成）</li>
 </ul>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Spring Boot 集成 Vault 示例（application.yml）
-// spring:
-//   cloud:
-//     vault:
-//       host: localhost
-//       port: 8200
-//       authentication: TOKEN
-//       token: ${VAULT_TOKEN}
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// Spring Boot 集成 Vault 示例（application.yml）</span>
+<span class="hljs-comment">// spring:</span>
+<span class="hljs-comment">//   cloud:</span>
+<span class="hljs-comment">//     vault:</span>
+<span class="hljs-comment">//       host: localhost</span>
+<span class="hljs-comment">//       port: 8200</span>
+<span class="hljs-comment">//       authentication: TOKEN</span>
+<span class="hljs-comment">//       token: ${VAULT_TOKEN}</span>
 
-// 注入 Vault 中的 AES 密钥
-// @Value(&quot;${aes.encryption-key}&quot;)
-// private String encryptionKey;
-</code></pre></div>
-<hr>
+<span class="hljs-comment">// 注入 Vault 中的 AES 密钥</span>
+<span class="hljs-comment">// @Value("${aes.encryption-key}")</span>
+<span class="hljs-comment">// private String encryptionKey;</span>
+</code></pre></div><hr>
 <h2>二、非对称加密：RSA 与 ECC</h2>
 <h3>2.1 RSA 原理与应用</h3>
 <p>RSA 基于大整数分解难题。使用一对密钥：公钥加密，私钥解密；或私钥签名，公钥验签。</p>
@@ -126,66 +124,63 @@ public class AesGcmExample {
 <li>RSA 2048：最低安全标准，适用于 2030 年前</li>
 <li>RSA 4096：更高安全级别，但性能开销大</li>
 </ul>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.security.*;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> java.security.*;
 
-public class RsaExample {
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">RsaExample</span> {
 
-    public static KeyPair generateKeyPair() throws Exception {
-        var keyGen = KeyPairGenerator.getInstance(&quot;RSA&quot;);
-        keyGen.initialize(4096, SecureRandom.getInstanceStrong());
-        return keyGen.generateKeyPair();
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> KeyPair <span class="hljs-title function_">generateKeyPair</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-type">var</span> <span class="hljs-variable">keyGen</span> <span class="hljs-operator">=</span> KeyPairGenerator.getInstance(<span class="hljs-string">"RSA"</span>);
+        keyGen.initialize(<span class="hljs-number">4096</span>, SecureRandom.getInstanceStrong());
+        <span class="hljs-keyword">return</span> keyGen.generateKeyPair();
     }
 
-    public static byte[] encrypt(byte[] data, PublicKey publicKey) throws Exception {
-        var cipher = Cipher.getInstance(&quot;RSA/ECB/OAEPWithSHA-256AndMGF1Padding&quot;);
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-type">byte</span>[] encrypt(<span class="hljs-type">byte</span>[] data, PublicKey publicKey) <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-type">var</span> <span class="hljs-variable">cipher</span> <span class="hljs-operator">=</span> Cipher.getInstance(<span class="hljs-string">"RSA/ECB/OAEPWithSHA-256AndMGF1Padding"</span>);
         cipher.init(Cipher.ENCRYPT_MODE, publicKey);
-        return cipher.doFinal(data);
+        <span class="hljs-keyword">return</span> cipher.doFinal(data);
     }
 
-    public static byte[] decrypt(byte[] data, PrivateKey privateKey) throws Exception {
-        var cipher = Cipher.getInstance(&quot;RSA/ECB/OAEPWithSHA-256AndMGF1Padding&quot;);
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-type">byte</span>[] decrypt(<span class="hljs-type">byte</span>[] data, PrivateKey privateKey) <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-type">var</span> <span class="hljs-variable">cipher</span> <span class="hljs-operator">=</span> Cipher.getInstance(<span class="hljs-string">"RSA/ECB/OAEPWithSHA-256AndMGF1Padding"</span>);
         cipher.init(Cipher.DECRYPT_MODE, privateKey);
-        return cipher.doFinal(data);
+        <span class="hljs-keyword">return</span> cipher.doFinal(data);
     }
 }
-</code></pre></div>
-<p><strong>重要提示：RSA 不适合直接加密大量数据。</strong> 实际应用中，RSA 用于加密对称密钥（如 AES 密钥），然后使用对称密钥加密实际数据。这就是混合加密方案，也是 TLS 的核心工作原理。</p>
+</code></pre></div><p><strong>重要提示：RSA 不适合直接加密大量数据。</strong> 实际应用中，RSA 用于加密对称密钥（如 AES 密钥），然后使用对称密钥加密实际数据。这就是混合加密方案，也是 TLS 的核心工作原理。</p>
 <h3>2.2 ECC（椭圆曲线密码学）</h3>
 <p>ECC 提供与 RSA 同等的安全性，但密钥更短、计算更快。推荐曲线：P-256（secp256r1）用于常规场景，P-521 用于更高安全需求。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class EccExample {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">EccExample</span> {
 
-    public static KeyPair generateKeyPair() throws Exception {
-        var keyGen = KeyPairGenerator.getInstance(&quot;EC&quot;);
-        keyGen.initialize(256, SecureRandom.getInstanceStrong()); // P-256
-        return keyGen.generateKeyPair();
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> KeyPair <span class="hljs-title function_">generateKeyPair</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-type">var</span> <span class="hljs-variable">keyGen</span> <span class="hljs-operator">=</span> KeyPairGenerator.getInstance(<span class="hljs-string">"EC"</span>);
+        keyGen.initialize(<span class="hljs-number">256</span>, SecureRandom.getInstanceStrong()); <span class="hljs-comment">// P-256</span>
+        <span class="hljs-keyword">return</span> keyGen.generateKeyPair();
     }
 }
-</code></pre></div>
-<h3>2.3 ECDH 密钥交换</h3>
+</code></pre></div><h3>2.3 ECDH 密钥交换</h3>
 <p>ECDH（Elliptic Curve Diffie-Hellman）允许双方在不安全的信道上协商出共享密钥：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import javax.crypto.KeyAgreement;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> javax.crypto.KeyAgreement;
 
-public class EcdhExample {
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">EcdhExample</span> {
 
-    public static SecretKey deriveSharedSecret(PrivateKey myPrivateKey,
-                                                PublicKey peerPublicKey) throws Exception {
-        var keyAgreement = KeyAgreement.getInstance(&quot;ECDH&quot;);
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> SecretKey <span class="hljs-title function_">deriveSharedSecret</span><span class="hljs-params">(PrivateKey myPrivateKey,
+                                                PublicKey peerPublicKey)</span> <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-type">var</span> <span class="hljs-variable">keyAgreement</span> <span class="hljs-operator">=</span> KeyAgreement.getInstance(<span class="hljs-string">"ECDH"</span>);
         keyAgreement.init(myPrivateKey);
-        keyAgreement.doPhase(peerPublicKey, true);
-        var sharedSecret = keyAgreement.generateSecret(); // 原始共享密钥
-        // 使用 HKDF 派生实际使用的 AES 密钥（推荐）
-        return deriveKeyWithHkdf(sharedSecret);
+        keyAgreement.doPhase(peerPublicKey, <span class="hljs-literal">true</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">sharedSecret</span> <span class="hljs-operator">=</span> keyAgreement.generateSecret(); <span class="hljs-comment">// 原始共享密钥</span>
+        <span class="hljs-comment">// 使用 HKDF 派生实际使用的 AES 密钥（推荐）</span>
+        <span class="hljs-keyword">return</span> deriveKeyWithHkdf(sharedSecret);
     }
 
-    private static SecretKey deriveKeyWithHkdf(byte[] sharedSecret) {
-        // 实际项目中应使用 HKDF（如 BouncyCastle 的实现）
-        // 简化为直接 SHA-256 哈希（仅供演示）
-        var digest = MessageDigest.getInstance(&quot;SHA-256&quot;);
-        return new SecretKeySpec(digest.digest(sharedSecret), &quot;AES&quot;);
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> SecretKey <span class="hljs-title function_">deriveKeyWithHkdf</span><span class="hljs-params">(<span class="hljs-type">byte</span>[] sharedSecret)</span> {
+        <span class="hljs-comment">// 实际项目中应使用 HKDF（如 BouncyCastle 的实现）</span>
+        <span class="hljs-comment">// 简化为直接 SHA-256 哈希（仅供演示）</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">digest</span> <span class="hljs-operator">=</span> MessageDigest.getInstance(<span class="hljs-string">"SHA-256"</span>);
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">SecretKeySpec</span>(digest.digest(sharedSecret), <span class="hljs-string">"AES"</span>);
     }
 }
-</code></pre></div>
-<p><strong>RSA vs ECC 选型：</strong></p>
+</code></pre></div><p><strong>RSA vs ECC 选型：</strong></p>
 <table>
 <thead>
 <tr>
@@ -224,49 +219,47 @@ public class EcdhExample {
 <li>SHA-256：256 位输出，适合大多数场景</li>
 <li>SHA-512：512 位输出，用于更高安全需求</li>
 </ul>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.security.MessageDigest;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> java.security.MessageDigest;
 
-public class HashExample {
-    public static byte[] sha256(byte[] data) throws Exception {
-        var digest = MessageDigest.getInstance(&quot;SHA-256&quot;);
-        return digest.digest(data);
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">HashExample</span> {
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-type">byte</span>[] sha256(<span class="hljs-type">byte</span>[] data) <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-type">var</span> <span class="hljs-variable">digest</span> <span class="hljs-operator">=</span> MessageDigest.getInstance(<span class="hljs-string">"SHA-256"</span>);
+        <span class="hljs-keyword">return</span> digest.digest(data);
     }
 
-    public static String sha256Hex(String data) throws Exception {
-        var digest = MessageDigest.getInstance(&quot;SHA-256&quot;);
-        var hash = digest.digest(data.getBytes());
-        var hexString = new StringBuilder();
-        for (byte b : hash) {
-            hexString.append(String.format(&quot;%02x&quot;, b));
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> String <span class="hljs-title function_">sha256Hex</span><span class="hljs-params">(String data)</span> <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-type">var</span> <span class="hljs-variable">digest</span> <span class="hljs-operator">=</span> MessageDigest.getInstance(<span class="hljs-string">"SHA-256"</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">hash</span> <span class="hljs-operator">=</span> digest.digest(data.getBytes());
+        <span class="hljs-type">var</span> <span class="hljs-variable">hexString</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>();
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">byte</span> b : hash) {
+            hexString.append(String.format(<span class="hljs-string">"%02x"</span>, b));
         }
-        return hexString.toString();
+        <span class="hljs-keyword">return</span> hexString.toString();
     }
 }
-</code></pre></div>
-<p><strong>不推荐的算法：</strong> MD5 和 SHA-1 已被证明存在碰撞攻击风险，绝对不要在新系统中使用。</p>
+</code></pre></div><p><strong>不推荐的算法：</strong> MD5 和 SHA-1 已被证明存在碰撞攻击风险，绝对不要在新系统中使用。</p>
 <h3>3.2 HMAC：消息认证码</h3>
 <p>HMAC（Hash-based Message Authentication Code）结合哈希函数和密钥，同时提供数据完整性和消息来源认证。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import javax.crypto.Mac;
-import javax.crypto.spec.SecretKeySpec;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> javax.crypto.Mac;
+<span class="hljs-keyword">import</span> javax.crypto.spec.SecretKeySpec;
 
-public class HmacExample {
-    private static final String HMAC_SHA256 = &quot;HmacSHA256&quot;;
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">HmacExample</span> {
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">String</span> <span class="hljs-variable">HMAC_SHA256</span> <span class="hljs-operator">=</span> <span class="hljs-string">"HmacSHA256"</span>;
 
-    public static byte[] sign(byte[] message, byte[] key) throws Exception {
-        var mac = Mac.getInstance(HMAC_SHA256);
-        mac.init(new SecretKeySpec(key, HMAC_SHA256));
-        return mac.doFinal(message);
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-type">byte</span>[] sign(<span class="hljs-type">byte</span>[] message, <span class="hljs-type">byte</span>[] key) <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-type">var</span> <span class="hljs-variable">mac</span> <span class="hljs-operator">=</span> Mac.getInstance(HMAC_SHA256);
+        mac.init(<span class="hljs-keyword">new</span> <span class="hljs-title class_">SecretKeySpec</span>(key, HMAC_SHA256));
+        <span class="hljs-keyword">return</span> mac.doFinal(message);
     }
 
-    public static boolean verify(byte[] message, byte[] key, byte[] expectedSignature)
-            throws Exception {
-        var actualSignature = sign(message, key);
-        return MessageDigest.isEqual(actualSignature, expectedSignature);
-        // 注意：使用 MessageDigest.isEqual 进行常数时间比较，防止时序攻击
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">verify</span><span class="hljs-params">(<span class="hljs-type">byte</span>[] message, <span class="hljs-type">byte</span>[] key, <span class="hljs-type">byte</span>[] expectedSignature)</span>
+            <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-type">var</span> <span class="hljs-variable">actualSignature</span> <span class="hljs-operator">=</span> sign(message, key);
+        <span class="hljs-keyword">return</span> MessageDigest.isEqual(actualSignature, expectedSignature);
+        <span class="hljs-comment">// 注意：使用 MessageDigest.isEqual 进行常数时间比较，防止时序攻击</span>
     }
 }
-</code></pre></div>
-<p><strong>AI 场景应用：</strong> Webhook 回调验证（如 OpenAI/Anthropic 的 webhook 签名验证）、API 请求签名。</p>
+</code></pre></div><p><strong>AI 场景应用：</strong> Webhook 回调验证（如 OpenAI/Anthropic 的 webhook 签名验证）、API 请求签名。</p>
 <h3>3.3 密码哈希：bcrypt 与 Argon2</h3>
 <p>密码哈希与加密哈希有本质区别：密码哈希必须是缓慢的（计算密集型），以抵抗暴力破解和彩虹表攻击。</p>
 <p><strong>bcrypt</strong>：基于 Blowfish 算法，自适应（可调整轮数），自动处理盐值。</p>
@@ -276,49 +269,48 @@ public class HmacExample {
 <li>Argon2d：抵抗 GPU 攻击</li>
 <li>Argon2id：混合模式（推荐）</li>
 </ul>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Spring Security PasswordEncoder 集成
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
-import org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// Spring Security PasswordEncoder 集成</span>
+<span class="hljs-keyword">import</span> org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+<span class="hljs-keyword">import</span> org.springframework.security.crypto.argon2.Argon2PasswordEncoder;
 
-public class PasswordHashingConfig {
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">PasswordHashingConfig</span> {
 
-    // bcrypt — 成熟稳定，生态最广泛
-    public BCryptPasswordEncoder bcryptEncoder() {
-        return new BCryptPasswordEncoder(12); // 12 rounds（推荐生产环境）
+    <span class="hljs-comment">// bcrypt — 成熟稳定，生态最广泛</span>
+    <span class="hljs-keyword">public</span> BCryptPasswordEncoder <span class="hljs-title function_">bcryptEncoder</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">BCryptPasswordEncoder</span>(<span class="hljs-number">12</span>); <span class="hljs-comment">// 12 rounds（推荐生产环境）</span>
     }
 
-    // Argon2 — 更现代，抗 GPU/ASIC 攻击
-    public Argon2PasswordEncoder argon2Encoder() {
-        return new Argon2PasswordEncoder(
-                16,         // salt length: 16 bytes
-                32,         // hash length: 32 bytes
-                1,          // parallelism: single thread
-                65536,      // memory cost: 64MB
-                3           // iterations
+    <span class="hljs-comment">// Argon2 — 更现代，抗 GPU/ASIC 攻击</span>
+    <span class="hljs-keyword">public</span> Argon2PasswordEncoder <span class="hljs-title function_">argon2Encoder</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Argon2PasswordEncoder</span>(
+                <span class="hljs-number">16</span>,         <span class="hljs-comment">// salt length: 16 bytes</span>
+                <span class="hljs-number">32</span>,         <span class="hljs-comment">// hash length: 32 bytes</span>
+                <span class="hljs-number">1</span>,          <span class="hljs-comment">// parallelism: single thread</span>
+                <span class="hljs-number">65536</span>,      <span class="hljs-comment">// memory cost: 64MB</span>
+                <span class="hljs-number">3</span>           <span class="hljs-comment">// iterations</span>
         );
     }
 }
 
-// 使用示例
-@Service
-public class UserService {
-    private final PasswordEncoder encoder;
+<span class="hljs-comment">// 使用示例</span>
+<span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">UserService</span> {
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> PasswordEncoder encoder;
 
-    public UserService(PasswordEncoder encoder) {
-        this.encoder = encoder;
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">UserService</span><span class="hljs-params">(PasswordEncoder encoder)</span> {
+        <span class="hljs-built_in">this</span>.encoder = encoder;
     }
 
-    public void register(String rawPassword) {
-        var hashed = encoder.encode(rawPassword); // 自动生成盐值
-        // 存储 hashed 到数据库
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">register</span><span class="hljs-params">(String rawPassword)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">hashed</span> <span class="hljs-operator">=</span> encoder.encode(rawPassword); <span class="hljs-comment">// 自动生成盐值</span>
+        <span class="hljs-comment">// 存储 hashed 到数据库</span>
     }
 
-    public boolean login(String rawPassword, String storedHash) {
-        return encoder.matches(rawPassword, storedHash);
+    <span class="hljs-keyword">public</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">login</span><span class="hljs-params">(String rawPassword, String storedHash)</span> {
+        <span class="hljs-keyword">return</span> encoder.matches(rawPassword, storedHash);
     }
 }
-</code></pre></div>
-<p><strong>核心原则：</strong> 永远不要对密码使用 SHA-256 等快速哈希。始终使用 bcrypt 或 Argon2。</p>
+</code></pre></div><p><strong>核心原则：</strong> 永远不要对密码使用 SHA-256 等快速哈希。始终使用 bcrypt 或 Argon2。</p>
 <hr>
 <h2>四、数字签名：ECDSA 与 Ed25519</h2>
 <h3>4.1 签名原理</h3>
@@ -330,64 +322,62 @@ public class UserService {
 </ol>
 <h3>4.2 ECDSA 实现</h3>
 <p>ECDSA 是目前最广泛的椭圆曲线签名算法，广泛用于 JWT 签名和 TLS 证书。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.security.Signature;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> java.security.Signature;
 
-public class EcdsaExample {
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">EcdsaExample</span> {
 
-    public static KeyPair generateKeyPair() throws Exception {
-        var keyGen = KeyPairGenerator.getInstance(&quot;EC&quot;);
-        keyGen.initialize(256);
-        return keyGen.generateKeyPair();
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> KeyPair <span class="hljs-title function_">generateKeyPair</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-type">var</span> <span class="hljs-variable">keyGen</span> <span class="hljs-operator">=</span> KeyPairGenerator.getInstance(<span class="hljs-string">"EC"</span>);
+        keyGen.initialize(<span class="hljs-number">256</span>);
+        <span class="hljs-keyword">return</span> keyGen.generateKeyPair();
     }
 
-    public static byte[] sign(byte[] data, PrivateKey privateKey) throws Exception {
-        var sig = Signature.getInstance(&quot;SHA256withECDSA&quot;);
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-type">byte</span>[] sign(<span class="hljs-type">byte</span>[] data, PrivateKey privateKey) <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-type">var</span> <span class="hljs-variable">sig</span> <span class="hljs-operator">=</span> Signature.getInstance(<span class="hljs-string">"SHA256withECDSA"</span>);
         sig.initSign(privateKey);
         sig.update(data);
-        return sig.sign();
+        <span class="hljs-keyword">return</span> sig.sign();
     }
 
-    public static boolean verify(byte[] data, byte[] signature, PublicKey publicKey)
-            throws Exception {
-        var sig = Signature.getInstance(&quot;SHA256withECDSA&quot;);
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">verify</span><span class="hljs-params">(<span class="hljs-type">byte</span>[] data, <span class="hljs-type">byte</span>[] signature, PublicKey publicKey)</span>
+            <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-type">var</span> <span class="hljs-variable">sig</span> <span class="hljs-operator">=</span> Signature.getInstance(<span class="hljs-string">"SHA256withECDSA"</span>);
         sig.initVerify(publicKey);
         sig.update(data);
-        return sig.verify(signature);
+        <span class="hljs-keyword">return</span> sig.verify(signature);
     }
 }
-</code></pre></div>
-<h3>4.3 Ed25519 — 下一代签名算法</h3>
+</code></pre></div><h3>4.3 Ed25519 — 下一代签名算法</h3>
 <p>Ed25519 基于 Edwards 曲线，具有以下优势：</p>
 <ul>
 <li>比 ECDSA P-256 更快（签名生成和验证都快数倍）</li>
 <li>确定性签名（不依赖随机数质量，彻底避免 ECDSA 的 nonce 重用问题）</li>
 <li>密钥和签名更小（32 字节密钥，64 字节签名）</li>
 </ul>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class Ed25519Example {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">Ed25519Example</span> {
 
-    // JDK 15+ 原生支持 Ed25519
-    public static KeyPair generateKeyPair() throws Exception {
-        var keyGen = KeyPairGenerator.getInstance(&quot;Ed25519&quot;);
-        return keyGen.generateKeyPair();
+    <span class="hljs-comment">// JDK 15+ 原生支持 Ed25519</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> KeyPair <span class="hljs-title function_">generateKeyPair</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-type">var</span> <span class="hljs-variable">keyGen</span> <span class="hljs-operator">=</span> KeyPairGenerator.getInstance(<span class="hljs-string">"Ed25519"</span>);
+        <span class="hljs-keyword">return</span> keyGen.generateKeyPair();
     }
 
-    public static byte[] sign(byte[] data, PrivateKey privateKey) throws Exception {
-        var sig = Signature.getInstance(&quot;Ed25519&quot;);
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-type">byte</span>[] sign(<span class="hljs-type">byte</span>[] data, PrivateKey privateKey) <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-type">var</span> <span class="hljs-variable">sig</span> <span class="hljs-operator">=</span> Signature.getInstance(<span class="hljs-string">"Ed25519"</span>);
         sig.initSign(privateKey);
         sig.update(data);
-        return sig.sign();
+        <span class="hljs-keyword">return</span> sig.sign();
     }
 
-    public static boolean verify(byte[] data, byte[] signature, PublicKey publicKey)
-            throws Exception {
-        var sig = Signature.getInstance(&quot;Ed25519&quot;);
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">verify</span><span class="hljs-params">(<span class="hljs-type">byte</span>[] data, <span class="hljs-type">byte</span>[] signature, PublicKey publicKey)</span>
+            <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-type">var</span> <span class="hljs-variable">sig</span> <span class="hljs-operator">=</span> Signature.getInstance(<span class="hljs-string">"Ed25519"</span>);
         sig.initVerify(publicKey);
         sig.update(data);
-        return sig.verify(signature);
+        <span class="hljs-keyword">return</span> sig.verify(signature);
     }
 }
-</code></pre></div>
-<p><strong>选型推荐：</strong> 新系统中默认使用 Ed25519，除非需要兼容仅支持 ECDSA 的系统。</p>
+</code></pre></div><p><strong>选型推荐：</strong> 新系统中默认使用 Ed25519，除非需要兼容仅支持 ECDSA 的系统。</p>
 <hr>
 <h2>五、PKI：公钥基础设施</h2>
 <h3>5.1 X.509 证书</h3>
@@ -412,38 +402,35 @@ public class EcdsaExample {
 <td>验证对方的证书链</td>
 </tr>
 </tbody></table>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 加载 PKCS12 Keystore
-var keyStore = KeyStore.getInstance(&quot;PKCS12&quot;);
-try (var is = new FileInputStream(&quot;keystore.p12&quot;)) {
-    keyStore.load(is, &quot;keystore-password&quot;.toCharArray());
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 加载 PKCS12 Keystore</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">keyStore</span> <span class="hljs-operator">=</span> KeyStore.getInstance(<span class="hljs-string">"PKCS12"</span>);
+<span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">is</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">FileInputStream</span>(<span class="hljs-string">"keystore.p12"</span>)) {
+    keyStore.load(is, <span class="hljs-string">"keystore-password"</span>.toCharArray());
 }
 
-// 从 Keystore 中获取私钥
-var privateKey = (PrivateKey) keyStore.getKey(&quot;my-alias&quot;, &quot;key-password&quot;.toCharArray());
-var certificate = keyStore.getCertificate(&quot;my-alias&quot;);
-</code></pre></div>
-<h3>5.3 证书链验证</h3>
+<span class="hljs-comment">// 从 Keystore 中获取私钥</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">privateKey</span> <span class="hljs-operator">=</span> (PrivateKey) keyStore.getKey(<span class="hljs-string">"my-alias"</span>, <span class="hljs-string">"key-password"</span>.toCharArray());
+<span class="hljs-type">var</span> <span class="hljs-variable">certificate</span> <span class="hljs-operator">=</span> keyStore.getCertificate(<span class="hljs-string">"my-alias"</span>);
+</code></pre></div><h3>5.3 证书链验证</h3>
 <p>浏览器/客户端验证服务器证书的过程：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>1. 检查证书是否过期
-2. 检查证书是否被吊销（CRL/OCSP）
-3. 用签发者的公钥验证证书签名
-4. 递归验证签发者证书，直到根 CA
-5. 验证根 CA 是否在 Truststore 中
-</code></pre></div>
-<h3>5.4 TLS 1.3 握手与 PKI 的关系</h3>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-bullet">1.</span> 检查证书是否过期
+<span class="hljs-bullet">2.</span> 检查证书是否被吊销（CRL/OCSP）
+<span class="hljs-bullet">3.</span> 用签发者的公钥验证证书签名
+<span class="hljs-bullet">4.</span> 递归验证签发者证书，直到根 CA
+<span class="hljs-bullet">5.</span> 验证根 CA 是否在 Truststore 中
+</code></pre></div><h3>5.4 TLS 1.3 握手与 PKI 的关系</h3>
 <p>TLS 1.3 握手流程（简化版）：</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Client                          Server
-  |                                |
-  |--- ClientHello ---------------&gt;|  (支持的密码套件、密钥共享)
-  |&lt;-- ServerHello + EncryptedExt -|  (选定密码套件、服务器密钥共享、证书)
-  |   + Certificate + CertVerify   |
-  |   + Finished                   |
-  |                                |
-  |--- Finished ------------------&gt;|  (加密的)
-  |                                |
-  |&lt;===== 加密通道建立 ============&gt;|
-</code></pre></div>
-<p>关键点：</p>
+  |<span class="hljs-string">                                </span>|
+  |<span class="hljs-string">--- ClientHello ---------------&gt;</span>|<span class="hljs-string">  (支持的密码套件、密钥共享)
+  </span>|<span class="hljs-string">&lt;-- ServerHello + EncryptedExt -</span>|<span class="hljs-string">  (选定密码套件、服务器密钥共享、证书)
+  </span>|<span class="hljs-string">   + Certificate + CertVerify   </span>|
+  |<span class="hljs-string">   + Finished                   </span>|
+  |<span class="hljs-string">                                </span>|
+  |<span class="hljs-string">--- Finished ------------------&gt;</span>|<span class="hljs-string">  (加密的)
+  </span>|<span class="hljs-string">                                </span>|
+  |<span class="hljs-string">&lt;===== 加密通道建立 ============&gt;</span>|
+</code></pre></div><p>关键点：</p>
 <ul>
 <li>服务器发送 X.509 证书给客户端</li>
 <li>客户端用 Truststore 中的 CA 证书验证服务器证书</li>
@@ -462,19 +449,17 @@ var certificate = keyStore.getCertificate(&quot;my-alias&quot;);
 </ul>
 <h3>6.2 随机数生成</h3>
 <p>始终使用 <code>SecureRandom</code> 而不是 <code>java.util.Random</code>：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 正确：加密场景使用 SecureRandom
-var secureRandom = SecureRandom.getInstanceStrong();
-byte[] iv = new byte[12];
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 正确：加密场景使用 SecureRandom</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">secureRandom</span> <span class="hljs-operator">=</span> SecureRandom.getInstanceStrong();
+<span class="hljs-type">byte</span>[] iv = <span class="hljs-keyword">new</span> <span class="hljs-title class_">byte</span>[<span class="hljs-number">12</span>];
 secureRandom.nextBytes(iv);
 
-// 错误：永远不要在密码学中使用 java.util.Random
-// var random = new java.util.Random(); // 不安全！可预测！
-</code></pre></div>
-<h3>6.3 密钥管理战略</h3>
+<span class="hljs-comment">// 错误：永远不要在密码学中使用 java.util.Random</span>
+<span class="hljs-comment">// var random = new java.util.Random(); // 不安全！可预测！</span>
+</code></pre></div><h3>6.3 密钥管理战略</h3>
 <p>密钥的生命周期管理是整个密码学系统的核心：</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>密钥生成 → 安全存储 → 轮换 → 撤销 → 销毁
-</code></pre></div>
-<table>
+</code></pre></div><table>
 <thead>
 <tr>
 <th>存储方式</th>
@@ -543,5 +528,5 @@ A: 关注 NIST、BSI、ANSSI 等权威机构的算法推荐更新。当量子计
 <li>15-AI安全全面防护体系：AI 场景安全全貌</li>
 <li>03-任务调度Quartz与XXL-JOB：定时密钥轮换任务</li>
 </ul>
-</div>
+</body></html></div>
 </article>

@@ -1,12 +1,12 @@
 
-<article class="kb-entry" data-path="/04-数据与中间件/数据库与缓存/04-MySQL深度解析">
+<article class="kb-entry" data-path="/04-数据与中间件">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=04">04-数据与中间件</a></div>
     <h1>MySQL 深度解析</h1>
-    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#mysql</span><span class="badge badge-tag">#innodb</span><span class="badge badge-tag">#b+tree</span><span class="badge badge-tag">#mvcc</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#mysql</span><span class="badge badge-tag">#innodb</span><span class="badge badge-tag">#b+tree</span><span class="badge badge-tag">#mvcc</span><span class="badge badge-tag">#redo-log</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://dev.mysql.com/doc/refman/8.4/en/" target="_blank" rel="noopener" class="source-link" title="MySQL 8.4 官方参考手册 — InnoDB 架构、SQL 优化、复制与高可用">MySQL 8.4 官方参考手册 — InnoDB 架构、SQL 优化、复制与高可用</a><a href="https://github.com/mysql/mysql-server" target="_blank" rel="noopener" class="source-link" title="MySQL 8.0/8.4 源码 — InnoDB 缓冲池、B+Tree 索引、Redo/Undo Log 实现">MySQL 8.0/8.4 源码 — InnoDB 缓冲池、B+Tree 索引、Redo/Undo Log 实现</a><a href="https://www.oreilly.com/library/view/high-performance-mysql/9781492080503/" target="_blank" rel="noopener" class="source-link" title="《高性能MySQL（第4版）》— Baron Schwartz 等，MySQL 性能优化与架构设计权威指南">《高性能MySQL（第4版）》— Baron Schwartz 等，MySQL 性能优化与架构设计权威指南</a><a href="https://www.percona.com/blog/" target="_blank" rel="noopener" class="source-link" title="Percona Blog — MySQL 性能调优、死锁分析、复制延迟排查实战文章">Percona Blog — MySQL 性能调优、死锁分析、复制延迟排查实战文章</a></small></div>
   </div>
-  <div class="entry-body"><h1>MySQL 深度解析</h1>
+  <div class="entry-body"><html><head></head><body><h1>MySQL 深度解析</h1>
 <h2>概述</h2>
 <p>MySQL 是全球最流行的开源关系型数据库，在 Java 企业级应用中占据核心地位。根据 DB-Engines 排名，MySQL 长期位列关系型数据库前两名。在 AI 时代，PostgreSQL 凭借 pgvector 等扩展在向量检索领域获得关注，但 MySQL 凭借成熟的 InnoDB 存储引擎、完善的主从复制生态和海量的生产实践积累，仍然是绝大多数企业级 Java 应用的默认选择。</p>
 <p>InnoDB 是 MySQL 5.5 起的默认存储引擎，也是事实上的唯一推荐引擎。它提供了 ACID 事务、行级锁、MVCC、聚簇索引、自适应哈希索引、双写缓冲等关键特性，是理解 MySQL 的核心。</p>
@@ -15,91 +15,81 @@
 <h2>一、InnoDB 架构深度解析</h2>
 <h3>1.1 缓冲池（Buffer Pool）</h3>
 <p>缓冲池是 InnoDB 最重要的内存结构，缓存数据页和索引页，直接决定读写性能。默认大小约为物理内存的 50%-80%。</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>InnoDB Buffer Pool 内存布局：
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-variable">InnoDB</span> <span class="hljs-variable">Buffer</span> <span class="hljs-variable">Pool</span> 内存布局：
 ┌─────────────────────────────────────────────────────────────┐
-│                    Buffer Pool Instance × N                   │
+│                    <span class="hljs-variable">Buffer</span> <span class="hljs-variable">Pool</span> <span class="hljs-variable">Instance</span> × <span class="hljs-built_in">N</span>                   │
 │  ┌─────────────────────────────────────────────────────────┐ │
-│  │              LRU List（按访问频度排序）                    │ │
+│  │              <span class="hljs-variable">LRU</span> <span class="hljs-built_in">List</span>（按访问频度排序）                    │ │
 │  │  ┌──────────────────────┬──────────────────────────┐    │ │
-│  │  │    Young 区（5/8）    │    Old 区（3/8）          │    │ │
-│  │  │   热点数据页          │   新读入/即将淘汰页        │    │ │
-│  │  │   (多次访问晋升)      │   (midpoint insertion)    │    │ │
+│  │  │    <span class="hljs-variable">Young</span> 区（<span class="hljs-number">5</span><span class="hljs-operator">/</span><span class="hljs-number">8</span>）    │    <span class="hljs-variable">Old</span> 区（<span class="hljs-number">3</span><span class="hljs-operator">/</span><span class="hljs-number">8</span>）          │    │ │
+│  │  │   热点数据页          │   新读入<span class="hljs-operator">/</span>即将淘汰页        │    │ │
+│  │  │   <span class="hljs-punctuation">(</span>多次访问晋升<span class="hljs-punctuation">)</span>      │   <span class="hljs-punctuation">(</span><span class="hljs-variable">midpoint</span> <span class="hljs-variable">insertion</span><span class="hljs-punctuation">)</span>    │    │ │
 │  │  └──────────────────────┴──────────────────────────┘    │ │
 │  ├─────────────────────────────────────────────────────────┤ │
-│  │              Free List（空闲页链表）                       │ │
+│  │              <span class="hljs-variable">Free</span> <span class="hljs-built_in">List</span>（空闲页链表）                       │ │
 │  ├─────────────────────────────────────────────────────────┤ │
-│  │              Flush List（脏页链表，按 oldest_modification） │ │
+│  │              <span class="hljs-variable">Flush</span> <span class="hljs-built_in">List</span>（脏页链表，按 <span class="hljs-type">oldest_modification</span>） │ │
 │  └─────────────────────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────┘
-</code></pre></div>
-<p><strong>LRU 链表与 midpoint insertion：</strong></p>
-<p>新读入的页不直接插入 LRU 头部（避免一次全表扫描冲掉整个缓冲池），而是插入 Old 区头部（midpoint）。只有在 Old 区被再次访问（innodb_old_blocks_time 时间后），页才会晋升到 Young 区。这个机制防止了&quot;预读污染&quot;和&quot;全表扫描污染&quot;。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-ini"># Buffer Pool 核心参数
-innodb_buffer_pool_size = 24G        # 缓冲池总大小
-innodb_buffer_pool_instances = 8     # 多实例（建议 ≤ 8），减少并发竞争
-innodb_old_blocks_pct = 37           # Old 区占比（37% ≈ 3/8）
-innodb_old_blocks_time = 1000        # 在 Old 区驻留 1000ms 后才能晋升 Young
-</code></pre></div>
-<p><strong>预读机制（Read-Ahead）：</strong></p>
+</code></pre></div><p><strong>LRU 链表与 midpoint insertion：</strong></p>
+<p>新读入的页不直接插入 LRU 头部（避免一次全表扫描冲掉整个缓冲池），而是插入 Old 区头部（midpoint）。只有在 Old 区被再次访问（innodb_old_blocks_time 时间后），页才会晋升到 Young 区。这个机制防止了"预读污染"和"全表扫描污染"。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-ini"><span class="hljs-comment"># Buffer Pool 核心参数</span>
+<span class="hljs-attr">innodb_buffer_pool_size</span> = <span class="hljs-number">24</span>G        <span class="hljs-comment"># 缓冲池总大小</span>
+<span class="hljs-attr">innodb_buffer_pool_instances</span> = <span class="hljs-number">8</span>     <span class="hljs-comment"># 多实例（建议 ≤ 8），减少并发竞争</span>
+<span class="hljs-attr">innodb_old_blocks_pct</span> = <span class="hljs-number">37</span>           <span class="hljs-comment"># Old 区占比（37% ≈ 3/8）</span>
+<span class="hljs-attr">innodb_old_blocks_time</span> = <span class="hljs-number">1000</span>        <span class="hljs-comment"># 在 Old 区驻留 1000ms 后才能晋升 Young</span>
+</code></pre></div><p><strong>预读机制（Read-Ahead）：</strong></p>
 <p>InnoDB 支持两种预读：线性预读（检测顺序访问模式）和随机预读（检测同一 extent 内的连续访问）。预读页通过 <code>innodb_read_ahead_threshold</code> 控制触发阈值。在生产中，随机预读经常弊大于利（可能读入无用页），建议禁用：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-ini">innodb_random_read_ahead = OFF       # 禁用随机预读
-innodb_read_ahead_threshold = 56     # 线性预读阈值（extent 内连续访问页数）
-</code></pre></div>
-<h3>1.2 Change Buffer</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-ini"><span class="hljs-attr">innodb_random_read_ahead</span> = <span class="hljs-literal">OFF</span>       <span class="hljs-comment"># 禁用随机预读</span>
+<span class="hljs-attr">innodb_read_ahead_threshold</span> = <span class="hljs-number">56</span>     <span class="hljs-comment"># 线性预读阈值（extent 内连续访问页数）</span>
+</code></pre></div><h3>1.2 Change Buffer</h3>
 <p>Change Buffer 是 InnoDB 对非唯一二级索引的写缓存。当更新二级索引时，如果目标索引页不在缓冲池中，InnoDB 先将变更记录在 Change Buffer 中，等待后续 merge（读入该页时或后台定期 merge），避免随机读磁盘。</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>INSERT/UPDATE 二级索引列
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-keyword">INSERT</span>/<span class="hljs-keyword">UPDATE</span> 二级索引列
     │
-    ├── 目标索引页在 Buffer Pool？
+    ├── 目标索引页在 Buffer <span class="hljs-keyword">Pool</span>？
     │   ├── 是 → 直接修改索引页
     │   └── 否 → 写入 Change Buffer（内存 + 磁盘）
     │
-    └── Merge 时机：
-        1. 该索引页被读入 Buffer Pool
-        2. 后台 Master Thread 定期 merge
-        3. 数据库关闭时（慢速 shutdown）
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-ini">innodb_change_buffering = all        # all | none | inserts | deletes | changes | purges
-innodb_change_buffer_max_size = 25   # 占 Buffer Pool 的 25%
-</code></pre></div>
-<p>Change Buffer 对写密集型场景（如日志表、订单表的大量插入）有显著提升。对于 SSD 存储，收益相对较低（随机读延迟小），但仍建议默认开启。</p>
+    └── <span class="hljs-keyword">Merge</span> 时机：
+        <span class="hljs-number">1.</span> 该索引页被读入 Buffer <span class="hljs-keyword">Pool</span>
+        <span class="hljs-number">2.</span> 后台 Master Thread 定期 <span class="hljs-keyword">merge</span>
+        <span class="hljs-number">3.</span> 数据库关闭时（慢速 shutdown）
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-ini"><span class="hljs-attr">innodb_change_buffering</span> = all        <span class="hljs-comment"># all | none | inserts | deletes | changes | purges</span>
+<span class="hljs-attr">innodb_change_buffer_max_size</span> = <span class="hljs-number">25</span>   <span class="hljs-comment"># 占 Buffer Pool 的 25%</span>
+</code></pre></div><p>Change Buffer 对写密集型场景（如日志表、订单表的大量插入）有显著提升。对于 SSD 存储，收益相对较低（随机读延迟小），但仍建议默认开启。</p>
 <h3>1.3 自适应哈希索引（AHI）</h3>
 <p>InnoDB 自动检测被频繁访问的热点 B+Tree 页面，并在内存中为它们建立哈希索引，将 B+Tree 的 O(log N) 查找优化为 O(1)。</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>触发条件：
-- 连续访问同一索引页面（B+Tree 的某个&quot;内部节点&quot;）
-- 访问模式满足特定条件（等值查询模式）
-- 哈希表的大小受 innodb_adaptive_hash_index_parts 分区控制
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-ini">innodb_adaptive_hash_index = ON      # 默认开启
-innodb_adaptive_hash_index_parts = 8 # 哈希索引分区数，减少并发锁竞争
-</code></pre></div>
-<p><strong>注意事项：</strong> AHI 对等值查询密集的 OLTP 场景（如 <code>WHERE id = ?</code>）收益明显，但在范围查询密集的场景可能增加维护开销。如果发现 <code>sem_wait</code> 等待事件集中在 AHI 锁竞争上，可临时禁用。</p>
+<span class="hljs-bullet">- </span>连续访问同一索引页面（B+Tree 的某个"内部节点"）
+<span class="hljs-bullet">- </span>访问模式满足特定条件（等值查询模式）
+<span class="hljs-bullet">- </span>哈希表的大小受 innodb_adaptive_hash_index_parts 分区控制
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-ini"><span class="hljs-attr">innodb_adaptive_hash_index</span> = <span class="hljs-literal">ON</span>      <span class="hljs-comment"># 默认开启</span>
+<span class="hljs-attr">innodb_adaptive_hash_index_parts</span> = <span class="hljs-number">8</span> <span class="hljs-comment"># 哈希索引分区数，减少并发锁竞争</span>
+</code></pre></div><p><strong>注意事项：</strong> AHI 对等值查询密集的 OLTP 场景（如 <code>WHERE id = ?</code>）收益明显，但在范围查询密集的场景可能增加维护开销。如果发现 <code>sem_wait</code> 等待事件集中在 AHI 锁竞争上，可临时禁用。</p>
 <h3>1.4 双写缓冲（Doublewrite Buffer）</h3>
-<p>InnoDB 页大小 16KB，而操作系统/磁盘通常以 4KB 写入。如果在写一个 16KB 页的过程中发生崩溃，可能产生&quot;部分写失效&quot;（partial page write）——页的一部分是新数据，一部分是旧数据，导致数据损坏。</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Doublewrite Buffer 写入流程：
+<p>InnoDB 页大小 16KB，而操作系统/磁盘通常以 4KB 写入。如果在写一个 16KB 页的过程中发生崩溃，可能产生"部分写失效"（partial page write）——页的一部分是新数据，一部分是旧数据，导致数据损坏。</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Doublewrite <span class="hljs-built_in">Buffer</span> 写入流程：
 ┌──────────┐    ┌──────────────────────┐    ┌──────────────┐
-│ 脏页     │───▶│ Doublewrite Buffer    │───▶│ 数据文件      │
-│ (16KB)  │    │ (磁盘上连续 1MB 区域)  │    │ (.ibd)       │
+│ 脏页     │───▶│ Doublewrite <span class="hljs-built_in">Buffer</span>    │───▶│ 数据文件      │
+│ (<span class="hljs-number">16</span>KB)  │    │ (磁盘上连续 <span class="hljs-number">1</span>MB 区域)  │    │ (.ibd)       │
 └──────────┘    └──────────────────────┘    └──────────────┘
-                  ① 批量顺序写入（1MB）      ② 随机写入各页
+                  ① 批量顺序写入（<span class="hljs-number">1</span>MB）      ② 随机写入各页
                   完成后才执行第二步          利用 ① 恢复
 
 崩溃恢复时：
 - 检查数据文件的页 checksum
-- 如果校验失败 → 从 Doublewrite Buffer 还原该页的完整副本
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-ini">innodb_doublewrite = ON               # 强烈建议开启
-innodb_doublewrite_dir = /data/mysql  # 双写文件路径（MySQL 8.0.20+ 可独立配置）
-innodb_doublewrite_files = 2          # 双写文件数量
-</code></pre></div>
-<h3>1.5 Redo Log（WAL）</h3>
+- 如果校验失败 → 从 Doublewrite <span class="hljs-built_in">Buffer</span> 还原该页的完整副本
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-ini"><span class="hljs-attr">innodb_doublewrite</span> = <span class="hljs-literal">ON</span>               <span class="hljs-comment"># 强烈建议开启</span>
+<span class="hljs-attr">innodb_doublewrite_dir</span> = /data/mysql  <span class="hljs-comment"># 双写文件路径（MySQL 8.0.20+ 可独立配置）</span>
+<span class="hljs-attr">innodb_doublewrite_files</span> = <span class="hljs-number">2</span>          <span class="hljs-comment"># 双写文件数量</span>
+</code></pre></div><h3>1.5 Redo Log（WAL）</h3>
 <p>Write-Ahead Logging（WAL）是 InnoDB 保证持久性的核心机制：任何数据页修改前，必须先将对应的 Redo Log 写入磁盘。</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>事务修改流程：
-1. 修改 Buffer Pool 中的数据页（标记为脏页）
-2. 生成 Redo Log Record 写入 Log Buffer
-3. 事务提交时，Log Buffer 刷入 Redo Log File（按 innodb_flush_log_at_trx_commit 策略）
-4. 脏页由后台线程异步刷入数据文件（Checkpoint）
-</code></pre></div>
-<p><strong><code>innodb_flush_log_at_trx_commit</code> 策略对比：</strong></p>
+<span class="hljs-number">1.</span> 修改 Buffer Pool 中的数据页（标记为脏页）
+<span class="hljs-number">2.</span> 生成 Redo <span class="hljs-keyword">Log</span> <span class="hljs-type">Record</span> 写入 <span class="hljs-keyword">Log</span> Buffer
+<span class="hljs-number">3.</span> 事务提交时，<span class="hljs-keyword">Log</span> Buffer 刷入 Redo <span class="hljs-keyword">Log</span> File（按 innodb_flush_log_at_trx_commit 策略）
+<span class="hljs-number">4.</span> 脏页由后台线程异步刷入数据文件（<span class="hljs-keyword">Checkpoint</span>）
+</code></pre></div><p><strong><code>innodb_flush_log_at_trx_commit</code> 策略对比：</strong></p>
 <table>
 <thead>
 <tr>
@@ -134,63 +124,58 @@ innodb_doublewrite_files = 2          # 双写文件数量
 </tbody></table>
 <p><strong>组提交（Group Commit）：</strong></p>
 <p>当多个事务几乎同时提交时，InnoDB 将它们合并为一次 fsync 操作，显著提升写入吞吐：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>事务 T1 ──┐
-事务 T2 ──┤─── 同一批次刷盘 ──→ 一次 fsync
-事务 T3 ──┘
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-ini">innodb_log_file_size = 2G             # 单个 Redo Log 文件大小
-innodb_log_files_in_group = 2         # Redo Log 文件数量
-innodb_log_buffer_size = 64M          # Log Buffer 大小
-innodb_flush_log_at_trx_commit = 1   # 推荐值
-</code></pre></div>
-<h3>1.6 Undo Log</h3>
-<p>Undo Log 存储数据的&quot;修改前版本&quot;，服务于两个目的：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>事务 <span class="hljs-built_in">T1</span> ──┐
+事务 <span class="hljs-built_in">T2</span> ──┤─── 同一批次刷盘 ──→ 一次 fsync
+事务 <span class="hljs-built_in">T3</span> ──┘
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-ini"><span class="hljs-attr">innodb_log_file_size</span> = <span class="hljs-number">2</span>G             <span class="hljs-comment"># 单个 Redo Log 文件大小</span>
+<span class="hljs-attr">innodb_log_files_in_group</span> = <span class="hljs-number">2</span>         <span class="hljs-comment"># Redo Log 文件数量</span>
+<span class="hljs-attr">innodb_log_buffer_size</span> = <span class="hljs-number">64</span>M          <span class="hljs-comment"># Log Buffer 大小</span>
+<span class="hljs-attr">innodb_flush_log_at_trx_commit</span> = <span class="hljs-number">1</span>   <span class="hljs-comment"># 推荐值</span>
+</code></pre></div><h3>1.6 Undo Log</h3>
+<p>Undo Log 存储数据的"修改前版本"，服务于两个目的：</p>
 <ol>
 <li><strong>事务回滚：</strong> 将数据恢复到事务开始前的状态</li>
 <li><strong>MVCC：</strong> 为并发读提供多版本数据（一致性非锁定读）</li>
 </ol>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Undo Log 存储结构：
 ┌────────────────────┐
-│  Rollback Segment  │  ← 每个回滚段包含 1024 个 undo slot
-│  ├── undo slot 1   │
-│  ├── undo slot 2   │
+│  Rollback Segment  │  ← 每个回滚段包含 <span class="hljs-number">1024</span> 个 <span class="hljs-keyword">undo</span> slot
+│  ├── <span class="hljs-keyword">undo</span> slot <span class="hljs-number">1</span>   │
+│  ├── <span class="hljs-keyword">undo</span> slot <span class="hljs-number">2</span>   │
 │  └── ...           │
 └────────────────────┘
 
 事务对记录的每次修改产生一条 Undo Log Record：
-INSERT  → undo log 类型 TRX_UNDO_INSERT_REC（提交后可直接清理）
-UPDATE  → undo log 类型 TRX_UNDO_UPD_EXIST_REC（需保留给 MVCC）
-DELETE  → undo log 类型 TRX_UNDO_DEL_MARK_REC（标记删除，等待 purge）
-</code></pre></div>
-<p><strong>Purge 线程：</strong> 负责清理不再被任何 ReadView 需要的 Undo Log 和标记删除的记录。如果 Purge 速度跟不上更新速度，会导致 Undo 表空间无限膨胀和历史数据版本堆积，查询性能下降（需要遍历更长的版本链）。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-ini">innodb_purge_threads = 4              # Purge 线程数（默认 4）
-innodb_purge_batch_size = 300         # 每批 purge 的 undo log 页数
-innodb_max_purge_lag = 0              # purge 延迟阈值（0=不限制）
-innodb_undo_tablespaces = 2           # Undo 表空间数量
-</code></pre></div>
-<hr>
+INSERT  → <span class="hljs-keyword">undo</span> <span class="hljs-keyword">log</span> 类型 TRX_UNDO_INSERT_REC（提交后可直接清理）
+UPDATE  → <span class="hljs-keyword">undo</span> <span class="hljs-keyword">log</span> 类型 TRX_UNDO_UPD_EXIST_REC（需保留给 MVCC）
+DELETE  → <span class="hljs-keyword">undo</span> <span class="hljs-keyword">log</span> 类型 TRX_UNDO_DEL_MARK_REC（标记删除，等待 purge）
+</code></pre></div><p><strong>Purge 线程：</strong> 负责清理不再被任何 ReadView 需要的 Undo Log 和标记删除的记录。如果 Purge 速度跟不上更新速度，会导致 Undo 表空间无限膨胀和历史数据版本堆积，查询性能下降（需要遍历更长的版本链）。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-ini"><span class="hljs-attr">innodb_purge_threads</span> = <span class="hljs-number">4</span>              <span class="hljs-comment"># Purge 线程数（默认 4）</span>
+<span class="hljs-attr">innodb_purge_batch_size</span> = <span class="hljs-number">300</span>         <span class="hljs-comment"># 每批 purge 的 undo log 页数</span>
+<span class="hljs-attr">innodb_max_purge_lag</span> = <span class="hljs-number">0</span>              <span class="hljs-comment"># purge 延迟阈值（0=不限制）</span>
+<span class="hljs-attr">innodb_undo_tablespaces</span> = <span class="hljs-number">2</span>           <span class="hljs-comment"># Undo 表空间数量</span>
+</code></pre></div><hr>
 <h2>二、索引深入</h2>
 <h3>2.1 聚簇索引（Clustered Index）</h3>
 <p>InnoDB 使用聚簇索引组织数据，即 B+Tree 的叶子节点直接存储完整的数据行。每张表有且仅有一个聚簇索引：</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>InnoDB B+Tree 聚簇索引结构：
                     ┌─────────────────────┐
                     │  根节点（Root Page）  │
-                    │  id=50              │
+                    │  <span class="hljs-attribute">id</span>=50              │
                     └──────┬──────┬───────┘
                   ┌────────┘      └────────┐
           ┌──────▼──────┐          ┌──────▼──────┐
           │  内部节点     │          │  内部节点     │
-          │  id=20,35   │          │  id=65,80   │
+          │  <span class="hljs-attribute">id</span>=20,35   │          │  <span class="hljs-attribute">id</span>=65,80   │
           └──┬───┬───┬──┘          └──┬───┬───┬──┘
         ┌────┘   │   └────┐      ┌────┘   │   └────┐
    ┌────▼──┐ ┌───▼──┐ ┌───▼──┐ ┌▼───┐ ┌──▼──┐ ┌───▼──┐
    │叶子节点│ │叶子节点│ │叶子节点│ │叶子 │ │叶子 │ │叶子  │
-   │id=1..│ │id=21.│ │id=36.│ │id=51│ │id=66│ │id=81│
+   │<span class="hljs-attribute">id</span>=1..│ │<span class="hljs-attribute">id</span>=21.│ │<span class="hljs-attribute">id</span>=36.│ │<span class="hljs-attribute">id</span>=51│ │<span class="hljs-attribute">id</span>=66│ │<span class="hljs-attribute">id</span>=81│
    │ 完整  │ │ 完整  │ │ 完整  │ │完整 │ │完整 │ │完整  │
    │ 数据行│ │ 数据行│ │ 数据行│ │数据 │ │数据 │ │数据  │
    └───────┘ └──────┘ └──────┘ └─────┘ └─────┘ └──────┘
-</code></pre></div>
-<p><strong>主键选择原则：</strong></p>
+</code></pre></div><p><strong>主键选择原则：</strong></p>
 <table>
 <thead>
 <tr>
@@ -223,107 +208,96 @@ innodb_undo_tablespaces = 2           # Undo 表空间数量
 <p><strong>页分裂（Page Split）：</strong></p>
 <p>当数据页（16KB）已满，新插入的记录需要在该页内找到位置时：</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>INSERT 随机主键（如 UUID）导致的页分裂：
-原页：[1][5][8][12]      ← 已满，要插入 7
+原页：<span class="hljs-selector-attr">[1]</span><span class="hljs-selector-attr">[5]</span><span class="hljs-selector-attr">[8]</span><span class="hljs-selector-attr">[12]</span>      ← 已满，要插入 <span class="hljs-number">7</span>
 结果：
-    首页：[1][5]           ← 分裂
-    新页：[7][8][12]       ← 分配新页
-    B+Tree 内部节点需要插入新指针 → 可能级联分裂
-</code></pre></div>
-<p>页分裂不仅消耗 CPU 和 IO，还导致数据页利用率降低（页填充因子下降），形成空间碎片。这就是为什么推荐自增或有序主键。</p>
+    首页：<span class="hljs-selector-attr">[1]</span><span class="hljs-selector-attr">[5]</span>           ← 分裂
+    新页：<span class="hljs-selector-attr">[7]</span><span class="hljs-selector-attr">[8]</span><span class="hljs-selector-attr">[12]</span>       ← 分配新页
+    <span class="hljs-selector-tag">B</span>+Tree 内部节点需要插入新指针 → 可能级联分裂
+</code></pre></div><p>页分裂不仅消耗 CPU 和 IO，还导致数据页利用率降低（页填充因子下降），形成空间碎片。这就是为什么推荐自增或有序主键。</p>
 <h3>2.2 二级索引（Secondary Index）</h3>
-<p>二级索引的叶子节点存储的是<strong>聚簇索引键值（主键值）</strong>，而非完整数据行。查询通过二级索引找到主键值，再回到聚簇索引查找完整数据行——这就是&quot;回表&quot;：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>二级索引（idx_name）查找 &#39;zhang&#39;：
+<p>二级索引的叶子节点存储的是<strong>聚簇索引键值（主键值）</strong>，而非完整数据行。查询通过二级索引找到主键值，再回到聚簇索引查找完整数据行——这就是"回表"：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>二级索引（idx_name）查找 <span class="hljs-string">'zhang'</span>：
           二级索引 B+Tree                  聚簇索引 B+Tree
     ┌─────────────────────┐       ┌─────────────────────┐
-    │ idx_name=&#39;zhang&#39;    │       │ 主键 id=10001        │
-    │ → 主键 id = 10001   │──────▶│ → {name,age,email...}│
-    │ → 主键 id = 10042   │       └─────────────────────┘
-    └─────────────────────┘               一次&quot;回表&quot;
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- Cardinality 统计信息（索引中不重复值的数量）
-SHOW INDEX FROM orders;
--- cardinality 越接近总行数，索引区分度越高，优化器越倾向于使用
+    │ idx_name=<span class="hljs-string">'zhang'</span>    │       │ 主键<span class="hljs-built_in"> id</span>=<span class="hljs-number">10001</span>        │
+    │ → 主键<span class="hljs-built_in"> id</span> = <span class="hljs-number">10001</span>   │──────▶│ → <span class="hljs-built_in">{name</span>,age,email...}│
+    │ → 主键<span class="hljs-built_in"> id</span> = <span class="hljs-number">10042</span>   │       └─────────────────────┘
+    └─────────────────────┘               一次<span class="hljs-string">"回表"</span>
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-sql"><span class="hljs-comment">-- Cardinality 统计信息（索引中不重复值的数量）</span>
+<span class="hljs-keyword">SHOW</span> INDEX <span class="hljs-keyword">FROM</span> orders;
+<span class="hljs-comment">-- cardinality 越接近总行数，索引区分度越高，优化器越倾向于使用</span>
 
--- 强制更新统计信息
-ANALYZE TABLE orders;
-</code></pre></div>
-<h3>2.3 覆盖索引（Covering Index）</h3>
+<span class="hljs-comment">-- 强制更新统计信息</span>
+ANALYZE <span class="hljs-keyword">TABLE</span> orders;
+</code></pre></div><h3>2.3 覆盖索引（Covering Index）</h3>
 <p>如果查询需要的所有列都包含在二级索引中，则不需要回表：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- 表结构：orders(id PK, user_id, status, amount, created_at)
--- 索引：idx_user_status(user_id, status)
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-sql"><span class="hljs-comment">-- 表结构：orders(id PK, user_id, status, amount, created_at)</span>
+<span class="hljs-comment">-- 索引：idx_user_status(user_id, status)</span>
 
--- 需要回表（amount 不在索引中）
-SELECT amount FROM orders WHERE user_id = 1001 AND status = &#39;PAID&#39;;
+<span class="hljs-comment">-- 需要回表（amount 不在索引中）</span>
+<span class="hljs-keyword">SELECT</span> amount <span class="hljs-keyword">FROM</span> orders <span class="hljs-keyword">WHERE</span> user_id <span class="hljs-operator">=</span> <span class="hljs-number">1001</span> <span class="hljs-keyword">AND</span> status <span class="hljs-operator">=</span> <span class="hljs-string">'PAID'</span>;
 
--- 覆盖索引（查询列均在索引中）→ Extra: Using index
-SELECT user_id, status FROM orders WHERE user_id = 1001 AND status = &#39;PAID&#39;;
-</code></pre></div>
-<p><strong>覆盖索引的实战价值：</strong> 在分页查询中，先用覆盖索引定位主键范围，再回表取完整数据，可以显著减少随机 IO：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- 常规分页（OFFSET 很大时，需要扫描大量无用行）
-SELECT * FROM orders ORDER BY created_at LIMIT 100000, 20;
+<span class="hljs-comment">-- 覆盖索引（查询列均在索引中）→ Extra: Using index</span>
+<span class="hljs-keyword">SELECT</span> user_id, status <span class="hljs-keyword">FROM</span> orders <span class="hljs-keyword">WHERE</span> user_id <span class="hljs-operator">=</span> <span class="hljs-number">1001</span> <span class="hljs-keyword">AND</span> status <span class="hljs-operator">=</span> <span class="hljs-string">'PAID'</span>;
+</code></pre></div><p><strong>覆盖索引的实战价值：</strong> 在分页查询中，先用覆盖索引定位主键范围，再回表取完整数据，可以显著减少随机 IO：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-sql"><span class="hljs-comment">-- 常规分页（OFFSET 很大时，需要扫描大量无用行）</span>
+<span class="hljs-keyword">SELECT</span> <span class="hljs-operator">*</span> <span class="hljs-keyword">FROM</span> orders <span class="hljs-keyword">ORDER</span> <span class="hljs-keyword">BY</span> created_at LIMIT <span class="hljs-number">100000</span>, <span class="hljs-number">20</span>;
 
--- 优化：延迟关联（覆盖索引 + 子查询）
-SELECT o.* FROM orders o
-INNER JOIN (
-    SELECT id FROM orders ORDER BY created_at LIMIT 100000, 20
-) AS tmp ON o.id = tmp.id;
-</code></pre></div>
-<h3>2.4 索引下推（ICP — Index Condition Pushdown）</h3>
+<span class="hljs-comment">-- 优化：延迟关联（覆盖索引 + 子查询）</span>
+<span class="hljs-keyword">SELECT</span> o.<span class="hljs-operator">*</span> <span class="hljs-keyword">FROM</span> orders o
+<span class="hljs-keyword">INNER</span> <span class="hljs-keyword">JOIN</span> (
+    <span class="hljs-keyword">SELECT</span> id <span class="hljs-keyword">FROM</span> orders <span class="hljs-keyword">ORDER</span> <span class="hljs-keyword">BY</span> created_at LIMIT <span class="hljs-number">100000</span>, <span class="hljs-number">20</span>
+) <span class="hljs-keyword">AS</span> tmp <span class="hljs-keyword">ON</span> o.id <span class="hljs-operator">=</span> tmp.id;
+</code></pre></div><h3>2.4 索引下推（ICP — Index Condition Pushdown）</h3>
 <p>MySQL 5.6 引入的 ICP 将 WHERE 条件中可被索引覆盖的部分下推到存储引擎层过滤，减少回表次数：</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>无 ICP：
-存储引擎：按 idx_user_status 范围扫描 → 返回所有行给 Server 层
-Server 层：再过滤 WHERE 的其余条件
+存储引擎：按 idx_user_status 范围扫描 → 返回所有行给 <span class="hljs-keyword">Server</span> 层
+<span class="hljs-keyword">Server</span> 层：再过滤 <span class="hljs-keyword">WHERE</span> 的其余条件
 
 有 ICP：
 存储引擎：按 idx_user_status 范围扫描 → 在引擎层先过滤 → 返回过滤后行
-Server 层：处理已大幅减少的行
+<span class="hljs-keyword">Server</span> 层：处理已大幅减少的行
 
 适用条件：
 - 使用二级索引
-- WHERE 条件包含索引列（可以是索引中的列，不要求最左前缀匹配）
-- 查询类型为 range、ref、eq_ref、ref_or_null
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- 联合索引 idx(a, b, c)
--- ICP 可以将 c 的条件下推到引擎层
-SELECT * FROM t WHERE a &gt; 10 AND c = 5;
--- 无 ICP：引擎只按 a &gt; 10 扫描，所有行返回到 Server 层
--- 有 ICP：引擎按 a &gt; 10 扫描 + 同时检查 c = 5，减少返回行
-</code></pre></div>
-<h3>2.5 Multi-Range Read（MRR）与 Batched Key Access（BKA）</h3>
+- <span class="hljs-keyword">WHERE</span> 条件包含索引列（可以是索引中的列，不要求最左前缀匹配）
+- 查询类型为 range、<span class="hljs-keyword">ref</span>、eq_ref、ref_or_null
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-sql"><span class="hljs-comment">-- 联合索引 idx(a, b, c)</span>
+<span class="hljs-comment">-- ICP 可以将 c 的条件下推到引擎层</span>
+<span class="hljs-keyword">SELECT</span> <span class="hljs-operator">*</span> <span class="hljs-keyword">FROM</span> t <span class="hljs-keyword">WHERE</span> a <span class="hljs-operator">&gt;</span> <span class="hljs-number">10</span> <span class="hljs-keyword">AND</span> c <span class="hljs-operator">=</span> <span class="hljs-number">5</span>;
+<span class="hljs-comment">-- 无 ICP：引擎只按 a &gt; 10 扫描，所有行返回到 Server 层</span>
+<span class="hljs-comment">-- 有 ICP：引擎按 a &gt; 10 扫描 + 同时检查 c = 5，减少返回行</span>
+</code></pre></div><h3>2.5 Multi-Range Read（MRR）与 Batched Key Access（BKA）</h3>
 <p><strong>MRR：</strong> 将二级索引回表的随机 IO 转化为顺序 IO（按主键排序后批量回表）。</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>无 MRR：
-二级索引顺序扫描 → 随机的主键值 → 逐个随机 IO 读取数据行
+二级索引顺序扫描 → 随机的主键值 → 逐个随机 <span class="hljs-built_in">IO</span> 读取数据行
 
 有 MRR：
-二级索引顺序扫描 → 收集主键值到缓冲区 → 按主键排序 → 批量顺序 IO 读取
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-ini"># 开启 MRR（优化器自动选择）
-optimizer_switch = &#39;mrr=on,mrr_cost_based=off&#39;
-</code></pre></div>
-<p><strong>BKA：</strong> 在 JOIN 操作中结合 MRR。驱动表查出一批 ID 后，按被驱动表主键排序，批量回表查询。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-ini">optimizer_switch = &#39;batched_key_access=on&#39;
-</code></pre></div>
-<h3>2.6 B+Tree 页内结构</h3>
+二级索引顺序扫描 → 收集主键值到缓冲区 → 按主键排序 → 批量顺序 <span class="hljs-built_in">IO</span> 读取
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-ini"><span class="hljs-comment"># 开启 MRR（优化器自动选择）</span>
+<span class="hljs-attr">optimizer_switch</span> = <span class="hljs-string">'mrr=on,mrr_cost_based=off'</span>
+</code></pre></div><p><strong>BKA：</strong> 在 JOIN 操作中结合 MRR。驱动表查出一批 ID 后，按被驱动表主键排序，批量回表查询。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-ini"><span class="hljs-attr">optimizer_switch</span> = <span class="hljs-string">'batched_key_access=on'</span>
+</code></pre></div><h3>2.6 B+Tree 页内结构</h3>
 <p>每个 InnoDB 页（Page，默认 16KB）的内部组织：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>InnoDB Page 结构（16KB）：
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>InnoDB Page 结构（<span class="hljs-number">16</span>KB）：
 ┌──────────────────────────────────┐
-│  File Header（38 bytes）          │ ← 页类型、页号、checksum、LSN
+│  File <span class="hljs-keyword">Header</span>（<span class="hljs-number">38</span> <span class="hljs-built_in">bytes</span>）          │ ← 页类型、页号、checksum、LSN
 ├──────────────────────────────────┤
-│  Page Header（56 bytes）          │ ← 记录数、槽数、空闲空间指针等
+│  Page <span class="hljs-keyword">Header</span>（<span class="hljs-number">56</span> <span class="hljs-built_in">bytes</span>）          │ ← 记录数、槽数、空闲空间指针等
 ├──────────────────────────────────┤
-│  Infimum + Supremum（26 bytes）   │ ← 虚拟最小/最大记录（边界）
+│  Infimum + Supremum（<span class="hljs-number">26</span> <span class="hljs-built_in">bytes</span>）   │ ← 虚拟最小/最大记录（边界）
 ├──────────────────────────────────┤
-│  User Records（变长）             │ ← 实际数据行（按主键顺序紧凑排列）
+│  User <span class="hljs-keyword">Records</span>（变长）             │ ← 实际数据行（按主键顺序紧凑排列）
 ├──────────────────────────────────┤
 │  Free Space（变长）               │ ← 空闲空间（插入/更新时使用）
 ├──────────────────────────────────┤
-│  Page Directory（变长）           │ ← 槽数组（每 4-8 条记录一个槽，二分查找）
+│  Page Directory（变长）           │ ← 槽数组（每 <span class="hljs-number">4</span><span class="hljs-number">-8</span> 条记录一个槽，二分查找）
 ├──────────────────────────────────┤
-│  File Trailer（8 bytes）          │ ← checksum + LSN（校验页完整性）
+│  File Trailer（<span class="hljs-number">8</span> <span class="hljs-built_in">bytes</span>）          │ ← checksum + LSN（校验页完整性）
 └──────────────────────────────────┘
-</code></pre></div>
-<p><strong>Page Directory 与二分查找：</strong></p>
-<p>页内记录的查找通过 Page Directory 的槽（slot）实现。每个槽指向一组记录（4-8 条），在组内顺序扫描。这种&quot;槽二分定位 + 组内顺序扫描&quot;的方式在 16KB 页中非常高效。</p>
+</code></pre></div><p><strong>Page Directory 与二分查找：</strong></p>
+<p>页内记录的查找通过 Page Directory 的槽（slot）实现。每个槽指向一组记录（4-8 条），在组内顺序扫描。这种"槽二分定位 + 组内顺序扫描"的方式在 16KB 页中非常高效。</p>
 <hr>
 <h2>三、事务与锁</h2>
 <h3>3.1 MVCC（Multi-Version Concurrency Control）</h3>
@@ -335,25 +309,22 @@ optimizer_switch = &#39;mrr=on,mrr_cost_based=off&#39;
 └─────────────────────────────────────────────────────────┘
 
 行版本链示例（同一行被 3 个事务修改）：
-当前行（trx_id=300）──▶ Undo Log（trx_id=200）──▶ Undo Log（trx_id=100）
-                           旧值: name=&#39;B&#39;             旧值: name=&#39;A&#39;
-</code></pre></div>
-<p><strong>ReadView 可见性判断：</strong></p>
-<p>ReadView 是事务在执行快照读时创建的&quot;数据可见性快照&quot;，核心字段：</p>
+当前行（<span class="hljs-attribute">trx_id</span>=300）──▶ Undo Log（<span class="hljs-attribute">trx_id</span>=200）──▶ Undo Log（<span class="hljs-attribute">trx_id</span>=100）
+                           旧值: <span class="hljs-attribute">name</span>=<span class="hljs-string">'B'</span>             旧值: <span class="hljs-attribute">name</span>=<span class="hljs-string">'A'</span>
+</code></pre></div><p><strong>ReadView 可见性判断：</strong></p>
+<p>ReadView 是事务在执行快照读时创建的"数据可见性快照"，核心字段：</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>ReadView 结构：
-- m_ids：创建 ReadView 时，当前活跃（未提交）的事务 ID 列表
-- min_trx_id：m_ids 中的最小值
-- max_trx_id：创建 ReadView 时，系统下一个将要分配的事务 ID（= max(m_ids) + 1）
-- creator_trx_id：创建该 ReadView 的事务 ID
-</code></pre></div>
-<p>某行记录（trx_id）的可见性判断逻辑：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>if (trx_id == creator_trx_id)           → 可见（自己的修改）
-else if (trx_id &lt; min_trx_id)           → 可见（在 ReadView 创建前已提交）
-else if (trx_id &gt;= max_trx_id)          → 不可见（在 ReadView 创建后才开始）
-else if (trx_id in m_ids)              → 不可见（当时活跃，尚未提交）
-else                                    → 可见（当时活跃但已提交）
-</code></pre></div>
-<p><strong>READ COMMITTED vs REPEATABLE READ 的 ReadView 差异：</strong></p>
+<span class="hljs-deletion">- m_ids：创建 ReadView 时，当前活跃（未提交）的事务 ID 列表</span>
+<span class="hljs-deletion">- min_trx_id：m_ids 中的最小值</span>
+<span class="hljs-deletion">- max_trx_id：创建 ReadView 时，系统下一个将要分配的事务 ID（= max(m_ids) + 1）</span>
+<span class="hljs-deletion">- creator_trx_id：创建该 ReadView 的事务 ID</span>
+</code></pre></div><p>某行记录（trx_id）的可见性判断逻辑：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-keyword">if</span> (trx_id == creator_trx_id)           → 可见（自己的修改）
+<span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (trx_id &lt; min_trx_id)           → 可见（在 ReadView 创建前已提交）
+<span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (trx_id &gt;= max_trx_id)          → 不可见（在 ReadView 创建后才开始）
+<span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (trx_id <span class="hljs-keyword">in</span> m_ids)              → 不可见（当时活跃，尚未提交）
+<span class="hljs-keyword">else</span>                                    → 可见（当时活跃但已提交）
+</code></pre></div><p><strong>READ COMMITTED vs REPEATABLE READ 的 ReadView 差异：</strong></p>
 <table>
 <thead>
 <tr>
@@ -377,55 +348,51 @@ else                                    → 可见（当时活跃但已提交）
 <p>InnoDB 的行锁实现在<strong>索引记录</strong>上，而非物理行上。如果 WHERE 条件无法使用索引（全表扫描），行锁会退化为表锁。</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>InnoDB 行锁类型：
 ┌──────────────────────────────────────────────────────────┐
-│ Record Lock（记录锁）                                     │
+│ <span class="hljs-type">Record</span> <span class="hljs-keyword">Lock</span>（记录锁）                                     │
 │   锁定单个索引记录。例如：                               │
-│   SELECT * FROM t WHERE id = 5 FOR UPDATE;              │
-│   → 对 id=5 的索引记录加 X 锁                            │
+│   <span class="hljs-keyword">SELECT</span> * <span class="hljs-keyword">FROM</span> t <span class="hljs-keyword">WHERE</span> id = <span class="hljs-number">5</span> <span class="hljs-keyword">FOR</span> <span class="hljs-keyword">UPDATE</span>;              │
+│   → 对 id=<span class="hljs-number">5</span> 的索引记录加 X 锁                            │
 ├──────────────────────────────────────────────────────────┤
-│ Gap Lock（间隙锁）                                        │
+│ Gap <span class="hljs-keyword">Lock</span>（间隙锁）                                        │
 │   锁定索引记录之间的间隙（不含记录本身），防止幻读。       │
-│   例如：表中 id 有 1, 5, 10，间隙为 (-∞,1), (1,5),      │
-│   (5,10), (10,+∞)                                        │
-│   SELECT * FROM t WHERE id BETWEEN 5 AND 10 FOR UPDATE; │
-│   → 锁 (5,10] 的记录 + (5,10) 和 (10,+∞) 的间隙           │
+│   例如：表中 id 有 <span class="hljs-number">1</span>, <span class="hljs-number">5</span>, <span class="hljs-number">10</span>，间隙为 (-∞,<span class="hljs-number">1</span>), (<span class="hljs-number">1</span>,<span class="hljs-number">5</span>),      │
+│   (<span class="hljs-number">5</span>,<span class="hljs-number">10</span>), (<span class="hljs-number">10</span>,+∞)                                        │
+│   <span class="hljs-keyword">SELECT</span> * <span class="hljs-keyword">FROM</span> t <span class="hljs-keyword">WHERE</span> id <span class="hljs-keyword">BETWEEN</span> <span class="hljs-number">5</span> <span class="hljs-keyword">AND</span> <span class="hljs-number">10</span> <span class="hljs-keyword">FOR</span> <span class="hljs-keyword">UPDATE</span>; │
+│   → 锁 (<span class="hljs-number">5</span>,<span class="hljs-number">10</span>] 的记录 + (<span class="hljs-number">5</span>,<span class="hljs-number">10</span>) 和 (<span class="hljs-number">10</span>,+∞) 的间隙           │
 ├──────────────────────────────────────────────────────────┤
-│ Next-Key Lock（临键锁）                                   │
-│   = Record Lock + 它前面的 Gap Lock                      │
-│   InnoDB 默认的行锁形式（REPEATABLE READ 下）             │
-│   例如：id=5 的 Next-Key Lock = (1,5]                     │
+│ Next-Key <span class="hljs-keyword">Lock</span>（临键锁）                                   │
+│   = <span class="hljs-type">Record</span> <span class="hljs-keyword">Lock</span> + 它前面的 Gap <span class="hljs-keyword">Lock</span>                      │
+│   InnoDB 默认的行锁形式（<span class="hljs-keyword">REPEATABLE</span> <span class="hljs-keyword">READ</span> 下）             │
+│   例如：id=<span class="hljs-number">5</span> 的 Next-Key <span class="hljs-keyword">Lock</span> = (<span class="hljs-number">1</span>,<span class="hljs-number">5</span>]                     │
 ├──────────────────────────────────────────────────────────┤
-│ 插入意向锁（Insert Intention Lock）                       │
-│   INSERT 时在目标间隙上设置的轻量级锁。                    │
+│ 插入意向锁（<span class="hljs-keyword">Insert</span> Intention <span class="hljs-keyword">Lock</span>）                       │
+│   <span class="hljs-keyword">INSERT</span> 时在目标间隙上设置的轻量级锁。                    │
 │   多个事务可以在同一间隙设置插入意向锁（只要不冲突）       │
-│   但与 Gap Lock 互斥（所以 INSERT 会被 Gap Lock 阻塞）    │
+│   但与 Gap <span class="hljs-keyword">Lock</span> 互斥（所以 <span class="hljs-keyword">INSERT</span> 会被 Gap <span class="hljs-keyword">Lock</span> 阻塞）    │
 └──────────────────────────────────────────────────────────┘
-</code></pre></div>
-<h3>3.3 意向锁（Intention Lock）</h3>
-<p>意向锁是表级锁，表示事务计划对表中的某些行加行锁。它解决了&quot;行锁与表锁的共存&quot;问题：</p>
+</code></pre></div><h3>3.3 意向锁（Intention Lock）</h3>
+<p>意向锁是表级锁，表示事务计划对表中的某些行加行锁。它解决了"行锁与表锁的共存"问题：</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>意向锁兼容矩阵：
-         IS    IX    S     X
-IS       ✓     ✓     ✓     ✗
+         <span class="hljs-keyword">IS</span>    IX    S     X
+<span class="hljs-keyword">IS</span>       ✓     ✓     ✓     ✗
 IX       ✓     ✓     ✗     ✗
 S        ✓     ✗     ✓     ✗
 X        ✗     ✗     ✗     ✗
 
 流程：
-- 事务要加行级 S 锁 → 先加表级 IS 锁
+- 事务要加行级 S 锁 → 先加表级 <span class="hljs-keyword">IS</span> 锁
 - 事务要加行级 X 锁 → 先加表级 IX 锁
-- 另一个事务要加表级 X 锁（如 LOCK TABLES ... WRITE）
-  → 需要等待已有的 IS/IX 锁释放
-</code></pre></div>
-<h3>3.4 死锁检测</h3>
+- 另一个事务要加表级 X 锁（如 LOCK TABLES ... <span class="hljs-keyword">WRITE</span>）
+  → 需要等待已有的 <span class="hljs-keyword">IS</span>/IX 锁释放
+</code></pre></div><h3>3.4 死锁检测</h3>
 <p>InnoDB 自动检测死锁（通过等待图）。检测到死锁后，回滚持有最少行锁的事务（<code>SHOW ENGINE INNODB STATUS</code> 可查看详情）。</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>死锁等待图示例：
-事务 T1：锁定 id=1，等待 id=2
-事务 T2：锁定 id=2，等待 id=1
+事务 T1：锁定 <span class="hljs-attribute">id</span>=1，等待 <span class="hljs-attribute">id</span>=2
+事务 T2：锁定 <span class="hljs-attribute">id</span>=2，等待 <span class="hljs-attribute">id</span>=1
 → 等待图形成环路 → InnoDB 回滚 T2（undo log 量较小者）
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-ini">innodb_deadlock_detect = ON          # 死锁检测（高并发下可能成为瓶颈）
-innodb_lock_wait_timeout = 50        # 行锁等待超时（秒），超时后报错而非检测死锁
-</code></pre></div>
-<p><strong>死锁避免策略：</strong></p>
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-ini"><span class="hljs-attr">innodb_deadlock_detect</span> = <span class="hljs-literal">ON</span>          <span class="hljs-comment"># 死锁检测（高并发下可能成为瓶颈）</span>
+<span class="hljs-attr">innodb_lock_wait_timeout</span> = <span class="hljs-number">50</span>        <span class="hljs-comment"># 行锁等待超时（秒），超时后报错而非检测死锁</span>
+</code></pre></div><p><strong>死锁避免策略：</strong></p>
 <ol>
 <li>按相同顺序加锁（如始终先锁 id 小的行）</li>
 <li>缩短事务（将非数据库操作移出事务）</li>
@@ -436,23 +403,22 @@ innodb_lock_wait_timeout = 50        # 行锁等待超时（秒），超时后�
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>------------------------
 LATEST DETECTED DEADLOCK
 ------------------------
-2026-07-20 10:15:30 0x7f8b2c001700
-*** (1) TRANSACTION:                            ← 事务 T1
-UPDATE orders SET status = &#39;CANCELLED&#39; WHERE id = 1001
-*** (1) HOLDS THE LOCK(S):                      ← T1 持有的锁
-RECORD LOCKS ... index PRIMARY ... lock_mode X locks rec but not gap
-*** (1) WAITING FOR THIS LOCK TO BE GRANTED:   ← T1 等待的锁
-RECORD LOCKS ... index idx_user ... lock_mode X locks gap
+<span class="hljs-number">2026</span><span class="hljs-number">-07</span><span class="hljs-number">-20</span> <span class="hljs-number">10</span>:<span class="hljs-number">15</span>:<span class="hljs-number">30</span> <span class="hljs-number">0x7f8b2c001700</span>
+<span class="hljs-comment">*** (1) TRANSACTION:                            ← 事务 T1</span>
+UPDATE orders <span class="hljs-keyword">SET</span> status <span class="hljs-comment">=</span> <span class="hljs-comment">'CANCELLED'</span> <span class="hljs-comment">WHERE id = 1001</span>
+<span class="hljs-comment">*** (1) HOLDS THE LOCK(S):                      ← T1 持有的锁</span>
+RECORD <span class="hljs-comment">LOCKS ... index PRIMARY ... lock_mode X locks rec but not gap</span>
+<span class="hljs-comment">*** (1) WAITING FOR THIS LOCK TO BE GRANTED:   ← T1 等待的锁</span>
+RECORD <span class="hljs-comment">LOCKS ... index idx_user ... lock_mode X locks gap</span>
 
-*** (2) TRANSACTION:                            ← 事务 T2
-UPDATE orders SET status = &#39;SHIPPED&#39; WHERE user_id = 2001 AND id = 1002
-*** (2) HOLDS THE LOCK(S):
-RECORD LOCKS ... index idx_user ... lock_mode X locks gap
-*** (2) WAITING FOR THIS LOCK TO BE GRANTED:
-RECORD LOCKS ... index PRIMARY ... lock_mode X locks rec but not gap
-*** WE ROLL BACK TRANSACTION (2)               ← InnoDB 选择回滚 T2
-</code></pre></div>
-<h3>3.5 事务隔离级别</h3>
+<span class="hljs-comment">*** (2) TRANSACTION:                            ← 事务 T2</span>
+UPDATE <span class="hljs-comment">orders SET status =</span> <span class="hljs-comment">'SHIPPED'</span> <span class="hljs-comment">WHERE user_id = 2001 AND id = 1002</span>
+<span class="hljs-comment">*** (2) HOLDS THE LOCK(S):</span>
+RECORD <span class="hljs-comment">LOCKS ... index idx_user ... lock_mode X locks gap</span>
+<span class="hljs-comment">*** (2) WAITING FOR THIS LOCK TO BE GRANTED:</span>
+RECORD <span class="hljs-comment">LOCKS ... index PRIMARY ... lock_mode X locks rec but not gap</span>
+<span class="hljs-comment">*** WE ROLL BACK TRANSACTION (2)               ← InnoDB 选择回滚 T2</span>
+</code></pre></div><h3>3.5 事务隔离级别</h3>
 <table>
 <thead>
 <tr>
@@ -526,39 +492,37 @@ RECORD LOCKS ... index PRIMARY ... lock_mode X locks rec but not gap
 <td>不彻底，行为有时难以预测</td>
 </tr>
 </tbody></table>
-<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-ini">binlog_format = ROW                   # 推荐格式
-sync_binlog = 1                       # 每次提交 fsync binlog（最安全）
-binlog_cache_size = 4M                # 每个事务的 binlog 缓存
-max_binlog_size = 1G                  # 单个 binlog 文件大小
-expire_logs_days = 7                  # binlog 保留天数
-</code></pre></div>
-<h3>4.2 两阶段提交（2PC）</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-ini"><span class="hljs-attr">binlog_format</span> = ROW                   <span class="hljs-comment"># 推荐格式</span>
+<span class="hljs-attr">sync_binlog</span> = <span class="hljs-number">1</span>                       <span class="hljs-comment"># 每次提交 fsync binlog（最安全）</span>
+<span class="hljs-attr">binlog_cache_size</span> = <span class="hljs-number">4</span>M                <span class="hljs-comment"># 每个事务的 binlog 缓存</span>
+<span class="hljs-attr">max_binlog_size</span> = <span class="hljs-number">1</span>G                  <span class="hljs-comment"># 单个 binlog 文件大小</span>
+<span class="hljs-attr">expire_logs_days</span> = <span class="hljs-number">7</span>                  <span class="hljs-comment"># binlog 保留天数</span>
+</code></pre></div><h3>4.2 两阶段提交（2PC）</h3>
 <p>为了保证 InnoDB Redo Log 和 Server 层 Binlog 的一致性，MySQL 使用两阶段提交：</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>事务提交流程（两阶段提交）：
 ┌──────────────────────────────────────────────────────────────┐
-│ Phase 1: Prepare                                              │
-│   1. InnoDB 写 Redo Log，状态标记为 PREPARE                   │
-│   2. fsync Redo Log（按 innodb_flush_log_at_trx_commit 策略）  │
+│ Phase <span class="hljs-number">1</span>: <span class="hljs-keyword">Prepare</span>                                              │
+│   <span class="hljs-number">1.</span> InnoDB 写 Redo <span class="hljs-keyword">Log</span>，状态标记为 <span class="hljs-keyword">PREPARE</span>                   │
+│   <span class="hljs-number">2.</span> fsync Redo <span class="hljs-keyword">Log</span>（按 innodb_flush_log_at_trx_commit 策略）  │
 │                                                               │
-│ Phase 2: Commit                                               │
-│   3. 写 Binlog（写入 binlog cache → binlog file）              │
-│   4. fsync Binlog（按 sync_binlog 策略）                       │
-│   5. InnoDB 写 Redo Log，状态标记为 COMMIT                    │
+│ Phase <span class="hljs-number">2</span>: <span class="hljs-keyword">Commit</span>                                               │
+│   <span class="hljs-number">3.</span> 写 Binlog（写入 binlog <span class="hljs-keyword">cache</span> → binlog file）              │
+│   <span class="hljs-number">4.</span> fsync Binlog（按 sync_binlog 策略）                       │
+│   <span class="hljs-number">5.</span> InnoDB 写 Redo <span class="hljs-keyword">Log</span>，状态标记为 <span class="hljs-keyword">COMMIT</span>                    │
 │      （这一步的 fsync 通常与组提交合并）                       │
 └──────────────────────────────────────────────────────────────┘
 
 崩溃恢复逻辑：
-- 如果 Redo Log 中有 PREPARE 状态的事务
+- 如果 Redo <span class="hljs-keyword">Log</span> 中有 <span class="hljs-keyword">PREPARE</span> 状态的事务
     → 检查 Binlog 中是否有对应事务的完整记录
     → 有 → 提交事务（已经写入 binlog，需要保持一致性）
     → 无 → 回滚事务（主库崩溃，binlog 未写，从库不会收到）
-</code></pre></div>
-<p><strong>为什么需要两阶段提交？</strong> 如果先写 Redo Log 再写 Binlog，Redo Log 写入后崩溃，Binlog 丢失 → 主库通过 Redo Log 恢复了该事务，从库没有收到 → 主从不一致。反过来也一样。两阶段提交保证了两者在崩溃恢复时的一致性。</p>
+</code></pre></div><p><strong>为什么需要两阶段提交？</strong> 如果先写 Redo Log 再写 Binlog，Redo Log 写入后崩溃，Binlog 丢失 → 主库通过 Redo Log 恢复了该事务，从库没有收到 → 主从不一致。反过来也一样。两阶段提交保证了两者在崩溃恢复时的一致性。</p>
 <h3>4.3 Redo Log 循环写</h3>
 <p>Redo Log 是固定大小的环形文件，通过 LSN（Log Sequence Number）和 Checkpoint 管理空间：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Redo Log 循环写示意图：
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Redo <span class="hljs-keyword">Log</span> 循环写示意图：
 ┌────────────────────────────────────────────────────────────┐
-│  Redo Log File 1 (2G)     │  Redo Log File 2 (2G)         │
+│  Redo <span class="hljs-keyword">Log</span> File <span class="hljs-number">1</span> (<span class="hljs-number">2</span>G)     │  Redo <span class="hljs-keyword">Log</span> File <span class="hljs-number">2</span> (<span class="hljs-number">2</span>G)         │
 │  ┌──────────────────────┐ │ ┌──────────────────────────┐  │
 │  │··········████████████│ │ │███████··················│  │
 │  │  已刷盘       活跃区 │ │ │活跃区   已刷盘           │  │
@@ -566,42 +530,38 @@ expire_logs_days = 7                  # binlog 保留天数
 │       ▲ checkpoint_LSN    │     ▲ current_LSN              │
 │                            │                                │
 │  活跃区 = current_LSN - checkpoint_LSN                     │
-│  活跃区不能超过 Redo Log 总大小（否则需等待 checkpoint）      │
+│  活跃区不能超过 Redo <span class="hljs-keyword">Log</span> 总大小（否则需等待 <span class="hljs-keyword">checkpoint</span>）      │
 └────────────────────────────────────────────────────────────┘
-</code></pre></div>
-<p><strong>Checkpoint 触发时机：</strong></p>
+</code></pre></div><p><strong>Checkpoint 触发时机：</strong></p>
 <ul>
 <li>Sharp Checkpoint：数据库正常关闭时，刷所有脏页</li>
 <li>Fuzzy Checkpoint：后台持续刷新部分脏页（最常见）</li>
 <li>活跃区超过 75% 总大小：自适应刷新加速</li>
 </ul>
-<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-ini">innodb_flush_log_at_trx_commit = 1   # 每次提交 fsync Redo Log
-innodb_log_file_size = 2G             # 单文件大小（调大减少 checkpoint 频率）
-innodb_log_files_in_group = 2         # 文件数量
-innodb_log_buffer_size = 64M          # Log Buffer
-</code></pre></div>
-<p>设置建议：将 Redo Log 总大小设为 15-30 分钟的写入量（通过 <code>SHOW GLOBAL STATUS LIKE &#39;innodb_os_log_written&#39;</code> 估算），以减少 checkpoint 频率。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-ini"><span class="hljs-attr">innodb_flush_log_at_trx_commit</span> = <span class="hljs-number">1</span>   <span class="hljs-comment"># 每次提交 fsync Redo Log</span>
+<span class="hljs-attr">innodb_log_file_size</span> = <span class="hljs-number">2</span>G             <span class="hljs-comment"># 单文件大小（调大减少 checkpoint 频率）</span>
+<span class="hljs-attr">innodb_log_files_in_group</span> = <span class="hljs-number">2</span>         <span class="hljs-comment"># 文件数量</span>
+<span class="hljs-attr">innodb_log_buffer_size</span> = <span class="hljs-number">64</span>M          <span class="hljs-comment"># Log Buffer</span>
+</code></pre></div><p>设置建议：将 Redo Log 总大小设为 15-30 分钟的写入量（通过 <code>SHOW GLOBAL STATUS LIKE 'innodb_os_log_written'</code> 估算），以减少 checkpoint 频率。</p>
 <h3>4.4 Undo Log 与 Purge</h3>
 <p>Undo Log 的生命周期管理：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Undo Log 生命周期：
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Undo <span class="hljs-built_in">Log</span> 生命周期：
 创建（数据修改）→ 使用中（活跃事务/ReadView 引用）→ 可清理（Purge 线程）
                                                         │
                                                     ┌───▼────┐
                                                     │ Purge   │
                                                     │ 清理     │
-                                                    │ Undo Log│
+                                                    │ Undo <span class="hljs-built_in">Log</span>│
                                                     └─────────┘
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-ini">-- 查看 Undo 表空间大小和 Purge 延迟
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-ini">-- 查看 Undo 表空间大小和 Purge 延迟
 SELECT name, file_size / 1024 / 1024 AS size_mb
 FROM information_schema.INNODB_TABLESPACES
-WHERE name LIKE &#39;undo%&#39;;
+WHERE name LIKE 'undo%'<span class="hljs-comment">;</span>
 
 -- 查看 Purge 进度
 SHOW ENGINE INNODB STATUS\G
 -- 关注 History list length（Undo 待清理页数，值过大说明 Purge 跟不上）
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>五、复制</h2>
 <h3>5.1 主从复制架构</h3>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>主从复制基本流程：
@@ -611,36 +571,34 @@ SHOW ENGINE INNODB STATUS\G
 │  │ 事务提交          │ │
 │  │ → Binlog 写入     │─┼──────────────────────┐
 │  └──────────────────┘ │                      │
-│  ┌──────────────────┐ │              Binlog Dump Thread
+│  ┌──────────────────┐ │              Binlog Dump <span class="hljs-keyword">Thread</span>
 │  │ Binlog Dump      │◀├──────────┐           │
-│  │ Thread           │─┼──────┐   │           │
+│  │ <span class="hljs-keyword">Thread</span>           │─┼──────┐   │           │
 │  └──────────────────┘ │      │   │           │
 └──────────────────────┘      │   │   ┌───────▼──────────┐
                                │   │   │  Slave（从库）    │
                                │   │   │  ┌─────────────┐ │
-                               │   │   │  │ IO Thread   │ │
+                               │   │   │  │ IO <span class="hljs-keyword">Thread</span>   │ │
                                │   └───┼──▶ 接收 Binlog  │ │
-                               │       │  │ → Relay Log  │ │
+                               │       │  │ → Relay <span class="hljs-keyword">Log</span>  │ │
                                │       │  └─────────────┘ │
                                │       │  ┌─────────────┐ │
-                               │       │  │ SQL Thread  │ │
+                               │       │  │ SQL <span class="hljs-keyword">Thread</span>  │ │
                                │       └──▶ 回放 Relay  │ │
-                               │          │ Log         │ │
+                               │          │ <span class="hljs-keyword">Log</span>         │ │
                                │          └─────────────┘ │
                                │          └───────────────┘
-</code></pre></div>
-<p><strong>复制延迟监控：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- 主库查看当前 Binlog 位置
-SHOW MASTER STATUS;
+</code></pre></div><p><strong>复制延迟监控：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-sql"><span class="hljs-comment">-- 主库查看当前 Binlog 位置</span>
+<span class="hljs-keyword">SHOW</span> MASTER STATUS;
 
--- 从库查看复制状态
-SHOW SLAVE STATUS\G
--- 关键指标：
--- Seconds_Behind_Master: 从库 SQL 线程落后主库的秒数（粗略估计）
--- Relay_Log_Space: Relay Log 总大小
--- Slave_IO_Running / Slave_SQL_Running: IO 和 SQL 线程状态
-</code></pre></div>
-<p><strong>延迟原因与应对：</strong></p>
+<span class="hljs-comment">-- 从库查看复制状态</span>
+<span class="hljs-keyword">SHOW</span> SLAVE STATUS\G
+<span class="hljs-comment">-- 关键指标：</span>
+<span class="hljs-comment">-- Seconds_Behind_Master: 从库 SQL 线程落后主库的秒数（粗略估计）</span>
+<span class="hljs-comment">-- Relay_Log_Space: Relay Log 总大小</span>
+<span class="hljs-comment">-- Slave_IO_Running / Slave_SQL_Running: IO 和 SQL 线程状态</span>
+</code></pre></div><p><strong>延迟原因与应对：</strong></p>
 <ul>
 <li>主库大事务（一次修改百万行）→ 拆分事务</li>
 <li>从库性能不足（单线程回放历史遗留）→ 并行复制</li>
@@ -650,106 +608,98 @@ SHOW SLAVE STATUS\G
 <p>默认的异步复制存在丢数据风险（主库提交后崩溃，Binlog 未传到从库）。半同步复制在提交后等待至少一个从库确认收到 Binlog：</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>半同步复制（after_sync 模式）：
 Master 事务提交：
-1. 写 Redo Log（PREPARE）
-2. 写 Binlog
-3. 等待从库确认收到 Binlog（af-sync timeout 内）
-   ├── 收到 ACK → 写 Redo Log（COMMIT）→ 返回客户端
-   └── 超时 → 降级为异步复制 → 写 Redo Log（COMMIT）→ 返回客户端
-4. 从库收到 Binlog 后回复 ACK（此时不要求从库已回放）
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-ini"># 主库配置
-plugin-load = &quot;rpl_semi_sync_master=semisync_master.so&quot;
-rpl_semi_sync_master_enabled = ON
-rpl_semi_sync_master_timeout = 10000   # 等待 ACK 超时（10秒）
+<span class="hljs-number">1.</span> 写 Redo <span class="hljs-keyword">Log</span>（<span class="hljs-keyword">PREPARE</span>）
+<span class="hljs-number">2.</span> 写 Binlog
+<span class="hljs-number">3.</span> 等待从库确认收到 Binlog（af-sync timeout 内）
+   ├── 收到 ACK → 写 Redo <span class="hljs-keyword">Log</span>（<span class="hljs-keyword">COMMIT</span>）→ 返回客户端
+   └── 超时 → 降级为异步复制 → 写 Redo <span class="hljs-keyword">Log</span>（<span class="hljs-keyword">COMMIT</span>）→ 返回客户端
+<span class="hljs-number">4.</span> 从库收到 Binlog 后回复 ACK（此时不要求从库已回放）
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-ini"><span class="hljs-comment"># 主库配置</span>
+<span class="hljs-attr">plugin-load</span> = <span class="hljs-string">"rpl_semi_sync_master=semisync_master.so"</span>
+<span class="hljs-attr">rpl_semi_sync_master_enabled</span> = <span class="hljs-literal">ON</span>
+<span class="hljs-attr">rpl_semi_sync_master_timeout</span> = <span class="hljs-number">10000</span>   <span class="hljs-comment"># 等待 ACK 超时（10秒）</span>
 
-# 从库配置
-plugin-load = &quot;rpl_semi_sync_slave=semisync_slave.so&quot;
-rpl_semi_sync_slave_enabled = ON
-</code></pre></div>
-<h3>5.3 GTID 复制</h3>
+<span class="hljs-comment"># 从库配置</span>
+<span class="hljs-attr">plugin-load</span> = <span class="hljs-string">"rpl_semi_sync_slave=semisync_slave.so"</span>
+<span class="hljs-attr">rpl_semi_sync_slave_enabled</span> = <span class="hljs-literal">ON</span>
+</code></pre></div><h3>5.3 GTID 复制</h3>
 <p>GTID（Global Transaction Identifier）为每个事务分配全局唯一标识符，替代传统的 binlog 文件名 + 位点：</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>GTID 格式：server_uuid:transaction_id
-示例：3E11FA47-71CA-11E1-9E33-C80AA9429562:1-100
-</code></pre></div>
-<p><strong>GTID 优势：</strong></p>
+示例：3E11FA47<span class="hljs-string">-71</span>CA<span class="hljs-string">-11</span>E1<span class="hljs-string">-9</span>E33-C80AA9429562:1<span class="hljs-string">-100</span>
+</code></pre></div><p><strong>GTID 优势：</strong></p>
 <ul>
 <li>无需手动维护 binlog 位点（CHANGE MASTER 时指定 <code>MASTER_AUTO_POSITION = 1</code>）</li>
 <li>故障转移后自动定位（从库自动找到新主的 binlog 位点）</li>
 <li>跳过错误事务更安全：<code>SET GTID_NEXT</code> 注入空事务</li>
 </ul>
-<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- 开启 GTID
-SET GLOBAL gtid_mode = ON_PERMISSIVE;
-SET GLOBAL gtid_mode = ON;
-SET GLOBAL enforce_gtid_consistency = ON;
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-sql"><span class="hljs-comment">-- 开启 GTID</span>
+<span class="hljs-keyword">SET</span> <span class="hljs-keyword">GLOBAL</span> gtid_mode <span class="hljs-operator">=</span> ON_PERMISSIVE;
+<span class="hljs-keyword">SET</span> <span class="hljs-keyword">GLOBAL</span> gtid_mode <span class="hljs-operator">=</span> <span class="hljs-keyword">ON</span>;
+<span class="hljs-keyword">SET</span> <span class="hljs-keyword">GLOBAL</span> enforce_gtid_consistency <span class="hljs-operator">=</span> <span class="hljs-keyword">ON</span>;
 
--- 查看已执行的 GTID 集合
-SHOW MASTER STATUS;          -- 主库已执行
-SHOW SLAVE STATUS\G          -- 从库已接收和应用
-</code></pre></div>
-<h3>5.4 并行复制</h3>
+<span class="hljs-comment">-- 查看已执行的 GTID 集合</span>
+<span class="hljs-keyword">SHOW</span> MASTER STATUS;          <span class="hljs-comment">-- 主库已执行</span>
+<span class="hljs-keyword">SHOW</span> SLAVE STATUS\G          <span class="hljs-comment">-- 从库已接收和应用</span>
+</code></pre></div><h3>5.4 并行复制</h3>
 <p>MySQL 5.7 引入基于组提交的并行复制（LOGICAL_CLOCK），允许多个 Worker 线程并行回放不同事务：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>基于 Writeset 的并行复制（MySQL 8.0）：
-事务 T1: UPDATE orders SET ... WHERE id = 1001  → writeset: {orders.pk.1001}
-事务 T2: UPDATE orders SET ... WHERE id = 2001  → writeset: {orders.pk.2001}
-事务 T3: UPDATE orders SET ... WHERE id = 1001  → writeset: {orders.pk.1001}
-
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>基于 Writeset 的并行复制（MySQL <span class="hljs-number">8</span>.<span class="hljs-number">0</span>）：
+事务 <span class="hljs-built_in">T1</span>: UPDATE <span class="hljs-keyword">orders </span>SET ... WHERE id = <span class="hljs-number">1001</span>  → writeset: {<span class="hljs-keyword">orders.pk.1001}
+</span>事务 <span class="hljs-built_in">T2</span>: UPDATE <span class="hljs-keyword">orders </span>SET ... WHERE id = <span class="hljs-number">2001</span>  → writeset: {<span class="hljs-keyword">orders.pk.2001}
+</span>事务 <span class="hljs-built_in">T3</span>: UPDATE <span class="hljs-keyword">orders </span>SET ... WHERE id = <span class="hljs-number">1001</span>  → writeset: {<span class="hljs-keyword">orders.pk.1001}
+</span>
 并行判定：
-- T1 和 T2 的 writeset 无交集 → 可并行回放
-- T1 和 T3 的 writeset 有交集 → 必须串行回放（保持提交顺序）
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-ini"># 从库并行复制配置
-slave_parallel_type = LOGICAL_CLOCK          # 基于组提交的并行
-slave_parallel_workers = 4                   # Worker 线程数
-slave_preserve_commit_order = ON             # 保持主库提交顺序
-binlog_transaction_dependency_tracking = WRITESET  # 基于 writeset 依赖跟踪
-</code></pre></div>
-<h3>5.5 读写分离</h3>
+- <span class="hljs-built_in">T1</span> 和 <span class="hljs-built_in">T2</span> 的 writeset 无交集 → 可并行回放
+- <span class="hljs-built_in">T1</span> 和 <span class="hljs-built_in">T3</span> 的 writeset 有交集 → 必须串行回放（保持提交顺序）
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-ini"><span class="hljs-comment"># 从库并行复制配置</span>
+<span class="hljs-attr">slave_parallel_type</span> = LOGICAL_CLOCK          <span class="hljs-comment"># 基于组提交的并行</span>
+<span class="hljs-attr">slave_parallel_workers</span> = <span class="hljs-number">4</span>                   <span class="hljs-comment"># Worker 线程数</span>
+<span class="hljs-attr">slave_preserve_commit_order</span> = <span class="hljs-literal">ON</span>             <span class="hljs-comment"># 保持主库提交顺序</span>
+<span class="hljs-attr">binlog_transaction_dependency_tracking</span> = WRITESET  <span class="hljs-comment"># 基于 writeset 依赖跟踪</span>
+</code></pre></div><h3>5.5 读写分离</h3>
 <p>在 Java 应用中实现读写分离的几种方式：</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>读写分离架构：
 应用层
-  ├── 写请求（INSERT/UPDATE/DELETE）──▶ 主库（Master）
-  └── 读请求（SELECT）──────────────▶ 从库 1（Slave 1）
-                                    │ 从库 2（Slave 2）
-                                    └ 从库 3（Slave 3）
-</code></pre></div>
-<p><strong>ShardingSphere 读写分离配置示例：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># ShardingSphere 5.x 读写分离 + 负载均衡
-spring:
-  shardingsphere:
-    datasource:
-      names: master, slave0, slave1
-      master:
-        type: com.zaxxer.hikari.HikariDataSource
-        driver-class-name: com.mysql.cj.jdbc.Driver
-        jdbc-url: jdbc:mysql://master:3306/mydb
-        username: root
-        password: ${DB_PASSWORD}
-      slave0:
-        type: com.zaxxer.hikari.HikariDataSource
-        driver-class-name: com.mysql.cj.jdbc.Driver
-        jdbc-url: jdbc:mysql://slave0:3306/mydb
-        username: root
-        password: ${DB_PASSWORD}
-      slave1:
-        type: com.zaxxer.hikari.HikariDataSource
-        driver-class-name: com.mysql.cj.jdbc.Driver
-        jdbc-url: jdbc:mysql://slave1:3306/mydb
-        username: root
-        password: ${DB_PASSWORD}
-    rules:
-      readwrite-splitting:
-        data-sources:
-          myds:
-            type: Static
-            props:
-              write-data-source-name: master
-              read-data-source-names: slave0, slave1
-            load-balancer-name: round_robin
-        load-balancers:
-          round_robin:
-            type: ROUND_ROBIN
-</code></pre></div>
-<hr>
+  ├── 写请求（INSERT/UPDATE/DELETE）──▶ 主库（<span class="hljs-literal">Master</span>）
+  └── 读请求（SELECT）──────────────▶ 从库 <span class="hljs-number">1</span>（<span class="hljs-literal">Slave</span> <span class="hljs-number">1</span>）
+                                    │ 从库 <span class="hljs-number">2</span>（<span class="hljs-literal">Slave</span> <span class="hljs-number">2</span>）
+                                    └ 从库 <span class="hljs-number">3</span>（<span class="hljs-literal">Slave</span> <span class="hljs-number">3</span>）
+</code></pre></div><p><strong>ShardingSphere 读写分离配置示例：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-comment"># ShardingSphere 5.x 读写分离 + 负载均衡</span>
+<span class="hljs-attr">spring:</span>
+  <span class="hljs-attr">shardingsphere:</span>
+    <span class="hljs-attr">datasource:</span>
+      <span class="hljs-attr">names:</span> <span class="hljs-string">master,</span> <span class="hljs-string">slave0,</span> <span class="hljs-string">slave1</span>
+      <span class="hljs-attr">master:</span>
+        <span class="hljs-attr">type:</span> <span class="hljs-string">com.zaxxer.hikari.HikariDataSource</span>
+        <span class="hljs-attr">driver-class-name:</span> <span class="hljs-string">com.mysql.cj.jdbc.Driver</span>
+        <span class="hljs-attr">jdbc-url:</span> <span class="hljs-string">jdbc:mysql://master:3306/mydb</span>
+        <span class="hljs-attr">username:</span> <span class="hljs-string">root</span>
+        <span class="hljs-attr">password:</span> <span class="hljs-string">${DB_PASSWORD}</span>
+      <span class="hljs-attr">slave0:</span>
+        <span class="hljs-attr">type:</span> <span class="hljs-string">com.zaxxer.hikari.HikariDataSource</span>
+        <span class="hljs-attr">driver-class-name:</span> <span class="hljs-string">com.mysql.cj.jdbc.Driver</span>
+        <span class="hljs-attr">jdbc-url:</span> <span class="hljs-string">jdbc:mysql://slave0:3306/mydb</span>
+        <span class="hljs-attr">username:</span> <span class="hljs-string">root</span>
+        <span class="hljs-attr">password:</span> <span class="hljs-string">${DB_PASSWORD}</span>
+      <span class="hljs-attr">slave1:</span>
+        <span class="hljs-attr">type:</span> <span class="hljs-string">com.zaxxer.hikari.HikariDataSource</span>
+        <span class="hljs-attr">driver-class-name:</span> <span class="hljs-string">com.mysql.cj.jdbc.Driver</span>
+        <span class="hljs-attr">jdbc-url:</span> <span class="hljs-string">jdbc:mysql://slave1:3306/mydb</span>
+        <span class="hljs-attr">username:</span> <span class="hljs-string">root</span>
+        <span class="hljs-attr">password:</span> <span class="hljs-string">${DB_PASSWORD}</span>
+    <span class="hljs-attr">rules:</span>
+      <span class="hljs-attr">readwrite-splitting:</span>
+        <span class="hljs-attr">data-sources:</span>
+          <span class="hljs-attr">myds:</span>
+            <span class="hljs-attr">type:</span> <span class="hljs-string">Static</span>
+            <span class="hljs-attr">props:</span>
+              <span class="hljs-attr">write-data-source-name:</span> <span class="hljs-string">master</span>
+              <span class="hljs-attr">read-data-source-names:</span> <span class="hljs-string">slave0,</span> <span class="hljs-string">slave1</span>
+            <span class="hljs-attr">load-balancer-name:</span> <span class="hljs-string">round_robin</span>
+        <span class="hljs-attr">load-balancers:</span>
+          <span class="hljs-attr">round_robin:</span>
+            <span class="hljs-attr">type:</span> <span class="hljs-string">ROUND_ROBIN</span>
+</code></pre></div><hr>
 <h2>六、MySQL vs PostgreSQL 对比</h2>
 <h3>6.1 MVCC 实现差异</h3>
 <table>
@@ -839,17 +789,16 @@ spring:
 </tr>
 </tbody></table>
 <h3>6.3 JSON 支持</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- MySQL JSON：函数式操作
-SELECT JSON_EXTRACT(doc, &#39;$.name&#39;) FROM t;
-SELECT doc-&gt;&gt;&#39;$.name&#39; FROM t;  -- 简写
-CREATE INDEX idx_name ON t((CAST(doc-&gt;&gt;&#39;$.name&#39; AS CHAR(100))));  -- 虚拟列索引
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-sql"><span class="hljs-comment">-- MySQL JSON：函数式操作</span>
+<span class="hljs-keyword">SELECT</span> JSON_EXTRACT(doc, <span class="hljs-string">'$.name'</span>) <span class="hljs-keyword">FROM</span> t;
+<span class="hljs-keyword">SELECT</span> doc<span class="hljs-operator">-</span><span class="hljs-operator">&gt;&gt;</span><span class="hljs-string">'$.name'</span> <span class="hljs-keyword">FROM</span> t;  <span class="hljs-comment">-- 简写</span>
+<span class="hljs-keyword">CREATE</span> INDEX idx_name <span class="hljs-keyword">ON</span> t((<span class="hljs-built_in">CAST</span>(doc<span class="hljs-operator">-</span><span class="hljs-operator">&gt;&gt;</span><span class="hljs-string">'$.name'</span> <span class="hljs-keyword">AS</span> <span class="hljs-type">CHAR</span>(<span class="hljs-number">100</span>))));  <span class="hljs-comment">-- 虚拟列索引</span>
 
--- PostgreSQL JSONB：原生 GIN 索引 + 丰富的操作符
-SELECT doc-&gt;&gt;&#39;name&#39; FROM t;
-SELECT doc @&gt; &#39;{&quot;status&quot;: &quot;active&quot;}&#39;::jsonb;  -- 包含查询
-CREATE INDEX idx_doc ON t USING GIN (doc jsonb_path_ops);
-</code></pre></div>
-<h3>6.4 AI 向量检索能力</h3>
+<span class="hljs-comment">-- PostgreSQL JSONB：原生 GIN 索引 + 丰富的操作符</span>
+<span class="hljs-keyword">SELECT</span> doc<span class="hljs-operator">-</span><span class="hljs-operator">&gt;&gt;</span><span class="hljs-string">'name'</span> <span class="hljs-keyword">FROM</span> t;
+<span class="hljs-keyword">SELECT</span> doc @<span class="hljs-operator">&gt;</span> <span class="hljs-string">'{"status": "active"}'</span>::jsonb;  <span class="hljs-comment">-- 包含查询</span>
+<span class="hljs-keyword">CREATE</span> INDEX idx_doc <span class="hljs-keyword">ON</span> t <span class="hljs-keyword">USING</span> GIN (doc jsonb_path_ops);
+</code></pre></div><h3>6.4 AI 向量检索能力</h3>
 <p>这是 MySQL 在 AI 时代的最明显短板：</p>
 <table>
 <thead>
@@ -885,48 +834,46 @@ CREATE INDEX idx_doc ON t USING GIN (doc jsonb_path_ops);
 ├── 需要向量检索/AI 场景？
 │   ├── 是 → PostgreSQL + pgvector（默认选择）
 │   └── 否 → 团队 MySQL 经验丰富？
-│            ├── 是 → MySQL 8.4
+│            ├── 是 → MySQL <span class="hljs-number">8.4</span>
 │            └── 否 → PostgreSQL（更丰富的功能集）
 │
 ├── 遗留系统已在 MySQL？
 │   └── 继续 MySQL，AI 向量单独用 PostgreSQL/pgvector 或 Qdrant
 │
 ├── 需要多主写入/复杂复制拓扑？
-│   └── MySQL（MySQL Group Replication / InnoDB Cluster）
+│   └── MySQL（MySQL <span class="hljs-keyword">Group</span> <span class="hljs-keyword">Replication</span> / InnoDB <span class="hljs-keyword">Cluster</span>）
 │
-└── 需要最强 SQL 标准兼容和扩展能力？
+└── 需要最强 <span class="hljs-keyword">SQL</span> 标准兼容和扩展能力？
     └── PostgreSQL
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>七、Java 集成</h2>
 <h3>7.1 HikariCP MySQL 配置</h3>
 <p>HikariCP 是 Spring Boot 4.x 的默认连接池，针对 MySQL 的推荐配置：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># application.yml — MySQL + HikariCP 推荐配置
-spring:
-  datasource:
-    url: jdbc:mysql://localhost:3306/mydb?useUnicode=true&amp;characterEncoding=utf8mb4&amp;useSSL=true&amp;serverTimezone=Asia/Shanghai&amp;rewriteBatchedStatements=true&amp;cachePrepStmts=true&amp;useServerPrepStmts=true&amp;cacheResultSetMetadata=true&amp;maintainTimeStats=false
-    username: ${DB_USER}
-    password: ${DB_PASSWORD}
-    hikari:
-      # 连接池大小：通常 CPU 核数 * 2 + 有效磁盘数
-      maximum-pool-size: 20
-      minimum-idle: 10
-      # 超时配置
-      connection-timeout: 30000        # 等待连接的最大时间（30s）
-      idle-timeout: 600000             # 空闲连接最大存活时间（10min）
-      max-lifetime: 1800000            # 连接最大存活时间（30min，需小于 MySQL wait_timeout）
-      # 连接验证
-      connection-test-query: &quot;SELECT 1&quot;
-      validation-timeout: 5000
-      # 泄漏检测（开发/测试环境建议开启）
-      leak-detection-threshold: 60000  # 60 秒未归还视为泄漏（生产环境谨慎开启）
-      # 连接池名称（便于监控识别）
-      pool-name: &quot;MySQL-HikariPool&quot;
-      # 其他优化
-      auto-commit: true
-      read-only: false
-</code></pre></div>
-<p><strong>MySQL JDBC URL 关键参数说明：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-comment"># application.yml — MySQL + HikariCP 推荐配置</span>
+<span class="hljs-attr">spring:</span>
+  <span class="hljs-attr">datasource:</span>
+    <span class="hljs-attr">url:</span> <span class="hljs-string">jdbc:mysql://localhost:3306/mydb?useUnicode=true&amp;characterEncoding=utf8mb4&amp;useSSL=true&amp;serverTimezone=Asia/Shanghai&amp;rewriteBatchedStatements=true&amp;cachePrepStmts=true&amp;useServerPrepStmts=true&amp;cacheResultSetMetadata=true&amp;maintainTimeStats=false</span>
+    <span class="hljs-attr">username:</span> <span class="hljs-string">${DB_USER}</span>
+    <span class="hljs-attr">password:</span> <span class="hljs-string">${DB_PASSWORD}</span>
+    <span class="hljs-attr">hikari:</span>
+      <span class="hljs-comment"># 连接池大小：通常 CPU 核数 * 2 + 有效磁盘数</span>
+      <span class="hljs-attr">maximum-pool-size:</span> <span class="hljs-number">20</span>
+      <span class="hljs-attr">minimum-idle:</span> <span class="hljs-number">10</span>
+      <span class="hljs-comment"># 超时配置</span>
+      <span class="hljs-attr">connection-timeout:</span> <span class="hljs-number">30000</span>        <span class="hljs-comment"># 等待连接的最大时间（30s）</span>
+      <span class="hljs-attr">idle-timeout:</span> <span class="hljs-number">600000</span>             <span class="hljs-comment"># 空闲连接最大存活时间（10min）</span>
+      <span class="hljs-attr">max-lifetime:</span> <span class="hljs-number">1800000</span>            <span class="hljs-comment"># 连接最大存活时间（30min，需小于 MySQL wait_timeout）</span>
+      <span class="hljs-comment"># 连接验证</span>
+      <span class="hljs-attr">connection-test-query:</span> <span class="hljs-string">"SELECT 1"</span>
+      <span class="hljs-attr">validation-timeout:</span> <span class="hljs-number">5000</span>
+      <span class="hljs-comment"># 泄漏检测（开发/测试环境建议开启）</span>
+      <span class="hljs-attr">leak-detection-threshold:</span> <span class="hljs-number">60000</span>  <span class="hljs-comment"># 60 秒未归还视为泄漏（生产环境谨慎开启）</span>
+      <span class="hljs-comment"># 连接池名称（便于监控识别）</span>
+      <span class="hljs-attr">pool-name:</span> <span class="hljs-string">"MySQL-HikariPool"</span>
+      <span class="hljs-comment"># 其他优化</span>
+      <span class="hljs-attr">auto-commit:</span> <span class="hljs-literal">true</span>
+      <span class="hljs-attr">read-only:</span> <span class="hljs-literal">false</span>
+</code></pre></div><p><strong>MySQL JDBC URL 关键参数说明：</strong></p>
 <table>
 <thead>
 <tr>
@@ -956,314 +903,302 @@ spring:
 </tr>
 </tbody></table>
 <h3>7.2 慢查询日志分析</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-ini"># MySQL 服务端配置
-slow_query_log = ON
-slow_query_log_file = /var/log/mysql/slow.log
-long_query_time = 0.5                 # 超过 0.5 秒记录
-log_queries_not_using_indexes = ON    # 记录未使用索引的查询
-log_slow_admin_statements = ON        # 记录 DDL 等管理语句
-min_examined_row_limit = 1000         # 扫描行数 &gt; 1000 才记录
-</code></pre></div>
-<p><strong>pt-query-digest 分析示例：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-bash"># 分析慢查询日志
+<div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-ini"><span class="hljs-comment"># MySQL 服务端配置</span>
+<span class="hljs-attr">slow_query_log</span> = <span class="hljs-literal">ON</span>
+<span class="hljs-attr">slow_query_log_file</span> = /var/log/mysql/slow.log
+<span class="hljs-attr">long_query_time</span> = <span class="hljs-number">0.5</span>                 <span class="hljs-comment"># 超过 0.5 秒记录</span>
+<span class="hljs-attr">log_queries_not_using_indexes</span> = <span class="hljs-literal">ON</span>    <span class="hljs-comment"># 记录未使用索引的查询</span>
+<span class="hljs-attr">log_slow_admin_statements</span> = <span class="hljs-literal">ON</span>        <span class="hljs-comment"># 记录 DDL 等管理语句</span>
+<span class="hljs-attr">min_examined_row_limit</span> = <span class="hljs-number">1000</span>         <span class="hljs-comment"># 扫描行数 &gt; 1000 才记录</span>
+</code></pre></div><p><strong>pt-query-digest 分析示例：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-comment"># 分析慢查询日志</span>
 pt-query-digest /var/log/mysql/slow.log &gt; slow_report.txt
 
-# 实时分析（从 TCP dump）
+<span class="hljs-comment"># 实时分析（从 TCP dump）</span>
 tcpdump -i any port 3306 -s 65535 -x -w mysql.pcap
-pt-query-digest --type tcpdump mysql.pcap
-</code></pre></div>
-<h3>7.3 MyBatis 批量操作优化</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// MySQL 批量插入 — JDK 25 + MyBatis + Virtual Threads
-@Repository
-public interface OrderMapper {
+pt-query-digest --<span class="hljs-built_in">type</span> tcpdump mysql.pcap
+</code></pre></div><h3>7.3 MyBatis 批量操作优化</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// MySQL 批量插入 — JDK 25 + MyBatis + Virtual Threads</span>
+<span class="hljs-meta">@Repository</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">OrderMapper</span> {
 
-    // MyBatis 批量插入（配合 rewriteBatchedStatements=true）
-    int batchInsert(@Param(&quot;list&quot;) List&lt;Order&gt; orders);
+    <span class="hljs-comment">// MyBatis 批量插入（配合 rewriteBatchedStatements=true）</span>
+    <span class="hljs-type">int</span> <span class="hljs-title function_">batchInsert</span><span class="hljs-params">(<span class="hljs-meta">@Param("list")</span> List&lt;Order&gt; orders)</span>;
 }
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;!-- OrderMapper.xml --&gt;
-&lt;insert id=&quot;batchInsert&quot;&gt;
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-xml"><span class="hljs-comment">&lt;!-- OrderMapper.xml --&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">insert</span> <span class="hljs-attr">id</span>=<span class="hljs-string">"batchInsert"</span>&gt;</span>
     INSERT INTO orders (user_id, product_id, amount, status, created_at)
     VALUES
-    &lt;foreach collection=&quot;list&quot; item=&quot;item&quot; separator=&quot;,&quot;&gt;
+    <span class="hljs-tag">&lt;<span class="hljs-name">foreach</span> <span class="hljs-attr">collection</span>=<span class="hljs-string">"list"</span> <span class="hljs-attr">item</span>=<span class="hljs-string">"item"</span> <span class="hljs-attr">separator</span>=<span class="hljs-string">","</span>&gt;</span>
         (#{item.userId}, #{item.productId}, #{item.amount},
          #{item.status}, #{item.createdAt})
-    &lt;/foreach&gt;
-&lt;/insert&gt;
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
-public class OrderService {
+    <span class="hljs-tag">&lt;/<span class="hljs-name">foreach</span>&gt;</span>
+<span class="hljs-tag">&lt;/<span class="hljs-name">insert</span>&gt;</span>
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">OrderService</span> {
 
-    private final OrderMapper orderMapper;
-    private final SqlSessionTemplate sqlSession;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> OrderMapper orderMapper;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> SqlSessionTemplate sqlSession;
 
-    // 流式查询（游标模式）— 使用 Virtual Thread 处理大结果集
-    public void processLargeResultSet(OrderCriteria criteria,
-                                       Consumer&lt;Order&gt; processor) {
-        try (var sqlSession = sqlSession.getSqlSessionFactory()
+    <span class="hljs-comment">// 流式查询（游标模式）— 使用 Virtual Thread 处理大结果集</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">processLargeResultSet</span><span class="hljs-params">(OrderCriteria criteria,
+                                       Consumer&lt;Order&gt; processor)</span> {
+        <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">sqlSession</span> <span class="hljs-operator">=</span> sqlSession.getSqlSessionFactory()
                 .openSession(ExecutorType.SIMPLE)) {
-            var mapper = sqlSession.getMapper(OrderMapper.class);
+            <span class="hljs-type">var</span> <span class="hljs-variable">mapper</span> <span class="hljs-operator">=</span> sqlSession.getMapper(OrderMapper.class);
 
-            var cursor = mapper.streamByCriteria(criteria);
-            try (var stream = cursor.stream()) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">cursor</span> <span class="hljs-operator">=</span> mapper.streamByCriteria(criteria);
+            <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">stream</span> <span class="hljs-operator">=</span> cursor.stream()) {
                 stream.forEach(processor);
             }
         }
     }
 }
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// MyBatis 流式查询 Mapper 方法
-@Select(&quot;&quot;&quot;
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// MyBatis 流式查询 Mapper 方法</span>
+<span class="hljs-meta">@Select("""
     SELECT /*+ MAX_EXECUTION_TIME(60000) */ *
     FROM orders
     WHERE created_at &gt;= #{startTime}
       AND created_at &lt; #{endTime}
     ORDER BY id
-    &quot;&quot;&quot;)
-@Options(fetchSize = 1000, resultSetType = ResultSetType.FORWARD_ONLY)
-Cursor&lt;Order&gt; streamByCriteria(OrderCriteria criteria);
-</code></pre></div>
-<p><strong>Service 层使用 Virtual Threads：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Spring Boot 4.x 默认已启用 Virtual Threads（spring.threads.virtual.enabled=true）
-@Service
-public class BatchOrderProcessor {
+    """)</span>
+<span class="hljs-meta">@Options(fetchSize = 1000, resultSetType = ResultSetType.FORWARD_ONLY)</span>
+Cursor&lt;Order&gt; <span class="hljs-title function_">streamByCriteria</span><span class="hljs-params">(OrderCriteria criteria)</span>;
+</code></pre></div><p><strong>Service 层使用 Virtual Threads：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// Spring Boot 4.x 默认已启用 Virtual Threads（spring.threads.virtual.enabled=true）</span>
+<span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">BatchOrderProcessor</span> {
 
-    private final OrderService orderService;
-    private final ExecutorService vtExecutor;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> OrderService orderService;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> ExecutorService vtExecutor;
 
-    public BatchOrderProcessor() {
-        // Virtual Threads per Task Executor（每个任务一个虚拟线程）
-        this.vtExecutor = Executors.newVirtualThreadPerTaskExecutor();
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">BatchOrderProcessor</span><span class="hljs-params">()</span> {
+        <span class="hljs-comment">// Virtual Threads per Task Executor（每个任务一个虚拟线程）</span>
+        <span class="hljs-built_in">this</span>.vtExecutor = Executors.newVirtualThreadPerTaskExecutor();
     }
 
-    public void processShard(int shardId) {
-        try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
-            // 结构化并发：并行处理 3 个分片
-            var task1 = scope.fork(() -&gt; processOrders(shardId * 3));
-            var task2 = scope.fork(() -&gt; processOrders(shardId * 3 + 1));
-            var task3 = scope.fork(() -&gt; processOrders(shardId * 3 + 2));
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">processShard</span><span class="hljs-params">(<span class="hljs-type">int</span> shardId)</span> {
+        <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">scope</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StructuredTaskScope</span>.ShutdownOnFailure()) {
+            <span class="hljs-comment">// 结构化并发：并行处理 3 个分片</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">task1</span> <span class="hljs-operator">=</span> scope.fork(() -&gt; processOrders(shardId * <span class="hljs-number">3</span>));
+            <span class="hljs-type">var</span> <span class="hljs-variable">task2</span> <span class="hljs-operator">=</span> scope.fork(() -&gt; processOrders(shardId * <span class="hljs-number">3</span> + <span class="hljs-number">1</span>));
+            <span class="hljs-type">var</span> <span class="hljs-variable">task3</span> <span class="hljs-operator">=</span> scope.fork(() -&gt; processOrders(shardId * <span class="hljs-number">3</span> + <span class="hljs-number">2</span>));
 
-            scope.join();           // 等待全部完成
-            scope.throwIfFailed();  // 任一失败则抛出异常
-        } catch (Exception e) {
-            throw new RuntimeException(&quot;Batch processing failed&quot;, e);
+            scope.join();           <span class="hljs-comment">// 等待全部完成</span>
+            scope.throwIfFailed();  <span class="hljs-comment">// 任一失败则抛出异常</span>
+        } <span class="hljs-keyword">catch</span> (Exception e) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RuntimeException</span>(<span class="hljs-string">"Batch processing failed"</span>, e);
         }
     }
 
-    private List&lt;Order&gt; processOrders(int subShardId) {
-        // 业务处理逻辑
-        return List.of();
+    <span class="hljs-keyword">private</span> List&lt;Order&gt; <span class="hljs-title function_">processOrders</span><span class="hljs-params">(<span class="hljs-type">int</span> subShardId)</span> {
+        <span class="hljs-comment">// 业务处理逻辑</span>
+        <span class="hljs-keyword">return</span> List.of();
     }
 }
-</code></pre></div>
-<p><strong>HikariCP MySQL DataSource 完整 Java Config：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Configuration
-public class MySQLDataSourceConfig {
+</code></pre></div><p><strong>HikariCP MySQL DataSource 完整 Java Config：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Configuration</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">MySQLDataSourceConfig</span> {
 
-    @Bean
-    @ConfigurationProperties(prefix = &quot;spring.datasource&quot;)
-    public DataSource dataSource() {
-        var config = new HikariConfig();
-        config.setJdbcUrl(&quot;jdbc:mysql://localhost:3306/mydb&quot;
-                + &quot;?rewriteBatchedStatements=true&quot;
-                + &quot;&amp;cachePrepStmts=true&quot;
-                + &quot;&amp;useServerPrepStmts=true&quot;
-                + &quot;&amp;characterEncoding=utf8mb4&quot;
-                + &quot;&amp;useSSL=true&quot;);
-        config.setUsername(System.getenv(&quot;DB_USER&quot;));
-        config.setPassword(System.getenv(&quot;DB_PASSWORD&quot;));
-        config.setMaximumPoolSize(20);
-        config.setMinimumIdle(10);
-        config.setConnectionTimeout(30_000);
-        config.setIdleTimeout(600_000);
-        config.setMaxLifetime(1_800_000);
-        config.setConnectionTestQuery(&quot;SELECT 1&quot;);
-        config.setLeakDetectionThreshold(60_000);
-        config.setPoolName(&quot;MySQL-HikariPool&quot;);
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-meta">@ConfigurationProperties(prefix = "spring.datasource")</span>
+    <span class="hljs-keyword">public</span> DataSource <span class="hljs-title function_">dataSource</span><span class="hljs-params">()</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">config</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">HikariConfig</span>();
+        config.setJdbcUrl(<span class="hljs-string">"jdbc:mysql://localhost:3306/mydb"</span>
+                + <span class="hljs-string">"?rewriteBatchedStatements=true"</span>
+                + <span class="hljs-string">"&amp;cachePrepStmts=true"</span>
+                + <span class="hljs-string">"&amp;useServerPrepStmts=true"</span>
+                + <span class="hljs-string">"&amp;characterEncoding=utf8mb4"</span>
+                + <span class="hljs-string">"&amp;useSSL=true"</span>);
+        config.setUsername(System.getenv(<span class="hljs-string">"DB_USER"</span>));
+        config.setPassword(System.getenv(<span class="hljs-string">"DB_PASSWORD"</span>));
+        config.setMaximumPoolSize(<span class="hljs-number">20</span>);
+        config.setMinimumIdle(<span class="hljs-number">10</span>);
+        config.setConnectionTimeout(<span class="hljs-number">30_000</span>);
+        config.setIdleTimeout(<span class="hljs-number">600_000</span>);
+        config.setMaxLifetime(<span class="hljs-number">1_800_000</span>);
+        config.setConnectionTestQuery(<span class="hljs-string">"SELECT 1"</span>);
+        config.setLeakDetectionThreshold(<span class="hljs-number">60_000</span>);
+        config.setPoolName(<span class="hljs-string">"MySQL-HikariPool"</span>);
 
-        // 连接初始化 — 设置会话变量
-        config.setConnectionInitSql(&quot;SET NAMES utf8mb4, time_zone = &#39;+08:00&#39;&quot;);
+        <span class="hljs-comment">// 连接初始化 — 设置会话变量</span>
+        config.setConnectionInitSql(<span class="hljs-string">"SET NAMES utf8mb4, time_zone = '+08:00'"</span>);
 
-        return new HikariDataSource(config);
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">HikariDataSource</span>(config);
     }
 
-    @Bean
-    public TransactionTemplate transactionTemplate(
-            PlatformTransactionManager transactionManager) {
-        return new TransactionTemplate(transactionManager);
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-keyword">public</span> TransactionTemplate <span class="hljs-title function_">transactionTemplate</span><span class="hljs-params">(
+            PlatformTransactionManager transactionManager)</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">TransactionTemplate</span>(transactionManager);
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>八、代码示例</h2>
 <h3>8.1 HikariCP + MySQL DataSource 配置类（Spring Boot 4.x）</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// ===== application.yml =====
-// spring:
-//   datasource:
-//     url: jdbc:mysql://localhost:3306/mydb?rewriteBatchedStatements=true&amp;cachePrepStmts=true&amp;useServerPrepStmts=true&amp;characterEncoding=utf8mb4
-//     username: ${DB_USER}
-//     password: ${DB_PASSWORD}
-//     hikari:
-//       maximum-pool-size: 20
-//       minimum-idle: 10
-//       connection-timeout: 30000
-//       idle-timeout: 600000
-//       max-lifetime: 1800000
-//       leak-detection-threshold: 60000
-//       connection-test-query: &quot;SELECT 1&quot;
-//       pool-name: &quot;MySQL-HikariPool&quot;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// ===== application.yml =====</span>
+<span class="hljs-comment">// spring:</span>
+<span class="hljs-comment">//   datasource:</span>
+<span class="hljs-comment">//     url: jdbc:mysql://localhost:3306/mydb?rewriteBatchedStatements=true&amp;cachePrepStmts=true&amp;useServerPrepStmts=true&amp;characterEncoding=utf8mb4</span>
+<span class="hljs-comment">//     username: ${DB_USER}</span>
+<span class="hljs-comment">//     password: ${DB_PASSWORD}</span>
+<span class="hljs-comment">//     hikari:</span>
+<span class="hljs-comment">//       maximum-pool-size: 20</span>
+<span class="hljs-comment">//       minimum-idle: 10</span>
+<span class="hljs-comment">//       connection-timeout: 30000</span>
+<span class="hljs-comment">//       idle-timeout: 600000</span>
+<span class="hljs-comment">//       max-lifetime: 1800000</span>
+<span class="hljs-comment">//       leak-detection-threshold: 60000</span>
+<span class="hljs-comment">//       connection-test-query: "SELECT 1"</span>
+<span class="hljs-comment">//       pool-name: "MySQL-HikariPool"</span>
 
-@Configuration
-@EnableTransactionManagement
-public class DataSourceConfig {
+<span class="hljs-meta">@Configuration</span>
+<span class="hljs-meta">@EnableTransactionManagement</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">DataSourceConfig</span> {
 
-    @Bean
-    @Primary
-    @ConfigurationProperties(prefix = &quot;spring.datasource&quot;)
-    public DataSource dataSource() {
-        return DataSourceBuilder.create()
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-meta">@Primary</span>
+    <span class="hljs-meta">@ConfigurationProperties(prefix = "spring.datasource")</span>
+    <span class="hljs-keyword">public</span> DataSource <span class="hljs-title function_">dataSource</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">return</span> DataSourceBuilder.create()
                 .type(HikariDataSource.class)
                 .build();
     }
 
-    // NamedParameterJdbcTemplate — 推荐用于简单查询（避免 MyBatis 的开销）
-    @Bean
-    public NamedParameterJdbcTemplate namedJdbcTemplate(DataSource ds) {
-        return new NamedParameterJdbcTemplate(ds);
+    <span class="hljs-comment">// NamedParameterJdbcTemplate — 推荐用于简单查询（避免 MyBatis 的开销）</span>
+    <span class="hljs-meta">@Bean</span>
+    <span class="hljs-keyword">public</span> NamedParameterJdbcTemplate <span class="hljs-title function_">namedJdbcTemplate</span><span class="hljs-params">(DataSource ds)</span> {
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">NamedParameterJdbcTemplate</span>(ds);
     }
 }
-</code></pre></div>
-<h3>8.2 MyBatis 批量插入优化示例</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 批量插入 Service — 自动分批，避免单次插入过大
-@Service
-public class OrderBatchService {
+</code></pre></div><h3>8.2 MyBatis 批量插入优化示例</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 批量插入 Service — 自动分批，避免单次插入过大</span>
+<span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">OrderBatchService</span> {
 
-    private static final int BATCH_SIZE = 1000;
-    private final SqlSessionTemplate sqlSession;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">int</span> <span class="hljs-variable">BATCH_SIZE</span> <span class="hljs-operator">=</span> <span class="hljs-number">1000</span>;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> SqlSessionTemplate sqlSession;
 
-    public OrderBatchService(SqlSessionTemplate sqlSession) {
-        this.sqlSession = sqlSession;
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">OrderBatchService</span><span class="hljs-params">(SqlSessionTemplate sqlSession)</span> {
+        <span class="hljs-built_in">this</span>.sqlSession = sqlSession;
     }
 
-    public int batchInsertOrders(List&lt;Order&gt; orders) {
-        var mapper = sqlSession.getMapper(OrderMapper.class);
+    <span class="hljs-keyword">public</span> <span class="hljs-type">int</span> <span class="hljs-title function_">batchInsertOrders</span><span class="hljs-params">(List&lt;Order&gt; orders)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">mapper</span> <span class="hljs-operator">=</span> sqlSession.getMapper(OrderMapper.class);
 
-        return IntStream.range(0, (orders.size() + BATCH_SIZE - 1) / BATCH_SIZE)
+        <span class="hljs-keyword">return</span> IntStream.range(<span class="hljs-number">0</span>, (orders.size() + BATCH_SIZE - <span class="hljs-number">1</span>) / BATCH_SIZE)
                 .map(i -&gt; {
-                    var from = i * BATCH_SIZE;
-                    var to = Math.min(from + BATCH_SIZE, orders.size());
-                    return mapper.batchInsert(orders.subList(from, to));
+                    <span class="hljs-type">var</span> <span class="hljs-variable">from</span> <span class="hljs-operator">=</span> i * BATCH_SIZE;
+                    <span class="hljs-type">var</span> <span class="hljs-variable">to</span> <span class="hljs-operator">=</span> Math.min(from + BATCH_SIZE, orders.size());
+                    <span class="hljs-keyword">return</span> mapper.batchInsert(orders.subList(from, to));
                 })
                 .sum();
     }
 }
-</code></pre></div>
-<div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-xml">&lt;!-- OrderMapper.xml — 批量 INSERT（配合 rewriteBatchedStatements=true --&gt;
-&lt;insert id=&quot;batchInsert&quot; parameterType=&quot;list&quot;&gt;
+</code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-xml"><span class="hljs-comment">&lt;!-- OrderMapper.xml — 批量 INSERT（配合 rewriteBatchedStatements=true --&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">insert</span> <span class="hljs-attr">id</span>=<span class="hljs-string">"batchInsert"</span> <span class="hljs-attr">parameterType</span>=<span class="hljs-string">"list"</span>&gt;</span>
     INSERT INTO orders (order_no, user_id, product_id, amount, status, created_at)
     VALUES
-    &lt;foreach collection=&quot;list&quot; item=&quot;item&quot; separator=&quot;,&quot;&gt;
+    <span class="hljs-tag">&lt;<span class="hljs-name">foreach</span> <span class="hljs-attr">collection</span>=<span class="hljs-string">"list"</span> <span class="hljs-attr">item</span>=<span class="hljs-string">"item"</span> <span class="hljs-attr">separator</span>=<span class="hljs-string">","</span>&gt;</span>
         (#{item.orderNo}, #{item.userId}, #{item.productId},
          #{item.amount}, #{item.status}, #{item.createdAt})
-    &lt;/foreach&gt;
+    <span class="hljs-tag">&lt;/<span class="hljs-name">foreach</span>&gt;</span>
     ON DUPLICATE KEY UPDATE
         amount = VALUES(amount),
         status = VALUES(status)
-&lt;/insert&gt;
-</code></pre></div>
-<h3>8.3 慢查询分析工具类</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// MySQL 监控指标采集 — 通过 JMX + Micrometer
-@Component
-public class MySQLMetricsCollector {
+<span class="hljs-tag">&lt;/<span class="hljs-name">insert</span>&gt;</span>
+</code></pre></div><h3>8.3 慢查询分析工具类</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// MySQL 监控指标采集 — 通过 JMX + Micrometer</span>
+<span class="hljs-meta">@Component</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">MySQLMetricsCollector</span> {
 
-    private final MeterRegistry meterRegistry;
-    private final DataSource dataSource;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> MeterRegistry meterRegistry;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> DataSource dataSource;
 
-    public MySQLMetricsCollector(MeterRegistry meterRegistry,
-                                  DataSource dataSource) {
-        this.meterRegistry = meterRegistry;
-        this.dataSource = dataSource;
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">MySQLMetricsCollector</span><span class="hljs-params">(MeterRegistry meterRegistry,
+                                  DataSource dataSource)</span> {
+        <span class="hljs-built_in">this</span>.meterRegistry = meterRegistry;
+        <span class="hljs-built_in">this</span>.dataSource = dataSource;
     }
 
-    @Scheduled(fixedRate = 30_000)  // 每 30 秒采集
-    public void collectPoolMetrics() {
-        if (dataSource instanceof HikariDataSource hikari) {
-            var poolMetrics = hikari.getHikariPoolMXBean();
-            if (poolMetrics != null) {
-                gaugeValue(&quot;hikari.active&quot;, poolMetrics.getActiveConnections());
-                gaugeValue(&quot;hikari.idle&quot;, poolMetrics.getIdleConnections());
-                gaugeValue(&quot;hikari.pending&quot;, poolMetrics.getPendingConnections());
-                gaugeValue(&quot;hikari.total&quot;, poolMetrics.getTotalConnections());
+    <span class="hljs-meta">@Scheduled(fixedRate = 30_000)</span>  <span class="hljs-comment">// 每 30 秒采集</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">collectPoolMetrics</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">if</span> (dataSource <span class="hljs-keyword">instanceof</span> HikariDataSource hikari) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">poolMetrics</span> <span class="hljs-operator">=</span> hikari.getHikariPoolMXBean();
+            <span class="hljs-keyword">if</span> (poolMetrics != <span class="hljs-literal">null</span>) {
+                gaugeValue(<span class="hljs-string">"hikari.active"</span>, poolMetrics.getActiveConnections());
+                gaugeValue(<span class="hljs-string">"hikari.idle"</span>, poolMetrics.getIdleConnections());
+                gaugeValue(<span class="hljs-string">"hikari.pending"</span>, poolMetrics.getPendingConnections());
+                gaugeValue(<span class="hljs-string">"hikari.total"</span>, poolMetrics.getTotalConnections());
             }
         }
     }
 
-    @Scheduled(fixedRate = 60_000)  // 每 60 秒检查慢查询
-    public void checkSlowQueries() {
-        try (var conn = dataSource.getConnection();
-             var stmt = conn.createStatement()) {
+    <span class="hljs-meta">@Scheduled(fixedRate = 60_000)</span>  <span class="hljs-comment">// 每 60 秒检查慢查询</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">checkSlowQueries</span><span class="hljs-params">()</span> {
+        <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">conn</span> <span class="hljs-operator">=</span> dataSource.getConnection();
+             <span class="hljs-type">var</span> <span class="hljs-variable">stmt</span> <span class="hljs-operator">=</span> conn.createStatement()) {
 
-            // 查询 MySQL 当前慢查询状态
-            var rs = stmt.executeQuery(&quot;&quot;&quot;
+            <span class="hljs-comment">// 查询 MySQL 当前慢查询状态</span>
+            <span class="hljs-type">var</span> <span class="hljs-variable">rs</span> <span class="hljs-operator">=</span> stmt.executeQuery(<span class="hljs-string">"""
                 SHOW GLOBAL STATUS
                 WHERE Variable_name IN (
-                    &#39;Slow_queries&#39;, &#39;Questions&#39;, &#39;Innodb_rows_read&#39;,
-                    &#39;Innodb_buffer_pool_read_requests&#39;,
-                    &#39;Innodb_buffer_pool_reads&#39;
+                    'Slow_queries', 'Questions', 'Innodb_rows_read',
+                    'Innodb_buffer_pool_read_requests',
+                    'Innodb_buffer_pool_reads'
                 )
-                &quot;&quot;&quot;);
+                """</span>);
 
-            while (rs.next()) {
-                var name = rs.getString(&quot;Variable_name&quot;);
-                var value = rs.getLong(&quot;Value&quot;);
-                meterRegistry.counter(&quot;mysql.global_status&quot;,
-                        &quot;variable&quot;, name).increment(value - getPrevValue(name));
+            <span class="hljs-keyword">while</span> (rs.next()) {
+                <span class="hljs-type">var</span> <span class="hljs-variable">name</span> <span class="hljs-operator">=</span> rs.getString(<span class="hljs-string">"Variable_name"</span>);
+                <span class="hljs-type">var</span> <span class="hljs-variable">value</span> <span class="hljs-operator">=</span> rs.getLong(<span class="hljs-string">"Value"</span>);
+                meterRegistry.counter(<span class="hljs-string">"mysql.global_status"</span>,
+                        <span class="hljs-string">"variable"</span>, name).increment(value - getPrevValue(name));
             }
-        } catch (SQLException e) {
-            // 监控自身异常不影响业务
+        } <span class="hljs-keyword">catch</span> (SQLException e) {
+            <span class="hljs-comment">// 监控自身异常不影响业务</span>
         }
     }
 
-    private final Map&lt;String, Long&gt; prevValues = new ConcurrentHashMap&lt;&gt;();
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Map&lt;String, Long&gt; prevValues = <span class="hljs-keyword">new</span> <span class="hljs-title class_">ConcurrentHashMap</span>&lt;&gt;();
 
-    private void gaugeValue(String name, long value) {
-        Gauge.builder(&quot;hikari.&quot; + name, () -&gt; value)
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">gaugeValue</span><span class="hljs-params">(String name, <span class="hljs-type">long</span> value)</span> {
+        Gauge.builder(<span class="hljs-string">"hikari."</span> + name, () -&gt; value)
                 .register(meterRegistry);
     }
 
-    private long getPrevValue(String name) {
-        return prevValues.getOrDefault(name, 0L);
+    <span class="hljs-keyword">private</span> <span class="hljs-type">long</span> <span class="hljs-title function_">getPrevValue</span><span class="hljs-params">(String name)</span> {
+        <span class="hljs-keyword">return</span> prevValues.getOrDefault(name, <span class="hljs-number">0L</span>);
     }
 }
 
-// 慢查询日志分析封装 — 基于 pt-query-digest
-public class SlowQueryAnalyzer {
+<span class="hljs-comment">// 慢查询日志分析封装 — 基于 pt-query-digest</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">SlowQueryAnalyzer</span> {
 
-    public record QueryStats(String fingerprint, long count, double avgTime,
-                              double maxTime, long rowsExamined) {}
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">QueryStats</span><span class="hljs-params">(String fingerprint, <span class="hljs-type">long</span> count, <span class="hljs-type">double</span> avgTime,
+                              <span class="hljs-type">double</span> maxTime, <span class="hljs-type">long</span> rowsExamined)</span> {}
 
-    /**
+    <span class="hljs-comment">/**
      * 解析慢查询日志文件，提取统计信息。
      * 实际生产环境建议使用 percona-toolkit 的 pt-query-digest
      * 或集成 SkyWalking MySQL 插件进行分布式追踪。
-     */
-    public List&lt;QueryStats&gt; analyze(Path slowLogPath) throws IOException {
-        var stats = new HashMap&lt;String, QueryStats&gt;();
+     */</span>
+    <span class="hljs-keyword">public</span> List&lt;QueryStats&gt; <span class="hljs-title function_">analyze</span><span class="hljs-params">(Path slowLogPath)</span> <span class="hljs-keyword">throws</span> IOException {
+        <span class="hljs-type">var</span> <span class="hljs-variable">stats</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">HashMap</span>&lt;String, QueryStats&gt;();
 
-        try (var lines = Files.lines(slowLogPath)) {
-            // 简化示例：解析慢日志格式
-            // # Time: 2026-07-20T10:15:30.123456+08:00
-            // # Query_time: 2.500000  Lock_time: 0.000100
-            // # Rows_sent: 1000  Rows_examined: 100000
-            // SELECT ... FROM orders WHERE ...
-            // 实际项目中应使用成熟的解析库
+        <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">lines</span> <span class="hljs-operator">=</span> Files.lines(slowLogPath)) {
+            <span class="hljs-comment">// 简化示例：解析慢日志格式</span>
+            <span class="hljs-comment">// # Time: 2026-07-20T10:15:30.123456+08:00</span>
+            <span class="hljs-comment">// # Query_time: 2.500000  Lock_time: 0.000100</span>
+            <span class="hljs-comment">// # Rows_sent: 1000  Rows_examined: 100000</span>
+            <span class="hljs-comment">// SELECT ... FROM orders WHERE ...</span>
+            <span class="hljs-comment">// 实际项目中应使用成熟的解析库</span>
         }
 
-        return new ArrayList&lt;&gt;(stats.values());
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;&gt;(stats.values());
     }
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h2>九、常见问题</h2>
 <h3>9.1 死锁排查</h3>
 <p><strong>问题：</strong> 业务高峰期频繁出现 <code>Deadlock found when trying to get lock; try restarting transaction</code>。</p>
@@ -1291,7 +1226,7 @@ public class SlowQueryAnalyzer {
 </thead>
 <tbody><tr>
 <td>对索引列使用函数</td>
-<td><code>WHERE DATE(created_at) = &#39;2026-07-20&#39;</code></td>
+<td><code>WHERE DATE(created_at) = '2026-07-20'</code></td>
 <td>函数破坏了索引的有序性</td>
 </tr>
 <tr>
@@ -1301,12 +1236,12 @@ public class SlowQueryAnalyzer {
 </tr>
 <tr>
 <td>LIKE 以 % 开头</td>
-<td><code>WHERE name LIKE &#39;%zhang&#39;</code></td>
+<td><code>WHERE name LIKE '%zhang'</code></td>
 <td>前缀匹配无法使用 B+Tree 有序性</td>
 </tr>
 <tr>
 <td>OR 条件包含非索引列</td>
-<td><code>WHERE id = 1 OR status = &#39;PENDING&#39;</code>（status 无索引）</td>
+<td><code>WHERE id = 1 OR status = 'PENDING'</code>（status 无索引）</td>
 <td>优化器可能选择全表扫描</td>
 </tr>
 <tr>
@@ -1316,7 +1251,7 @@ public class SlowQueryAnalyzer {
 </tr>
 <tr>
 <td>NOT IN / != / &lt;&gt;</td>
-<td><code>WHERE status != &#39;CANCELLED&#39;</code></td>
+<td><code>WHERE status != 'CANCELLED'</code></td>
 <td>否定条件无法利用索引顺序</td>
 </tr>
 <tr>
@@ -1331,11 +1266,10 @@ public class SlowQueryAnalyzer {
 </tr>
 </tbody></table>
 <p><strong>验证索引使用：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">EXPLAIN SELECT * FROM orders WHERE user_id = 1001;
--- 关注 type 列: const &gt; eq_ref &gt; ref &gt; range &gt; index &gt; ALL
--- 关注 Extra 列: Using index（覆盖索引）&gt; Using index condition（ICP）&gt; Using where &gt; Using filesort
-</code></pre></div>
-<h3>9.3 主从延迟处理</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-sql">EXPLAIN <span class="hljs-keyword">SELECT</span> <span class="hljs-operator">*</span> <span class="hljs-keyword">FROM</span> orders <span class="hljs-keyword">WHERE</span> user_id <span class="hljs-operator">=</span> <span class="hljs-number">1001</span>;
+<span class="hljs-comment">-- 关注 type 列: const &gt; eq_ref &gt; ref &gt; range &gt; index &gt; ALL</span>
+<span class="hljs-comment">-- 关注 Extra 列: Using index（覆盖索引）&gt; Using index condition（ICP）&gt; Using where &gt; Using filesort</span>
+</code></pre></div><h3>9.3 主从延迟处理</h3>
 <p><strong>问题：</strong> 主从延迟过大（<code>Seconds_Behind_Master</code> 超过 10 秒），影响读写分离的正确性。</p>
 <p><strong>排查思路：</strong></p>
 <ol>
@@ -1359,72 +1293,69 @@ public class SlowQueryAnalyzer {
 <li><code>maxLifetime</code> 配置大于 MySQL <code>wait_timeout</code>，连接被 MySQL 回收但连接池不知情</li>
 </ol>
 <p><strong>排查与修复：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-yaml"># 1. 开启连接泄漏检测
-hikari:
-  leak-detection-threshold: 30000  # 超过 30s 未归还 → 日志打印堆栈
+<div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-comment"># 1. 开启连接泄漏检测</span>
+<span class="hljs-attr">hikari:</span>
+  <span class="hljs-attr">leak-detection-threshold:</span> <span class="hljs-number">30000</span>  <span class="hljs-comment"># 超过 30s 未归还 → 日志打印堆栈</span>
 
-# 2. 设置 max-lifetime 略小于 MySQL wait_timeout
-hikari:
-  max-lifetime: 870000  # 14.5min &lt; MySQL 默认 8h wait_timeout
+<span class="hljs-comment"># 2. 设置 max-lifetime 略小于 MySQL wait_timeout</span>
+<span class="hljs-attr">hikari:</span>
+  <span class="hljs-attr">max-lifetime:</span> <span class="hljs-number">870000</span>  <span class="hljs-comment"># 14.5min &lt; MySQL 默认 8h wait_timeout</span>
 
-# 3. 设置连接超时上限（MySQL 端）
-SET GLOBAL max_execution_time = 30000;  # 单查询最多 30 秒（MySQL 5.7.8+）
-</code></pre></div>
-<h3>9.5 慢查询优化思路</h3>
+<span class="hljs-comment"># 3. 设置连接超时上限（MySQL 端）</span>
+<span class="hljs-string">SET</span> <span class="hljs-string">GLOBAL</span> <span class="hljs-string">max_execution_time</span> <span class="hljs-string">=</span> <span class="hljs-number">30000</span><span class="hljs-string">;</span>  <span class="hljs-comment"># 单查询最多 30 秒（MySQL 5.7.8+）</span>
+</code></pre></div><h3>9.5 慢查询优化思路</h3>
 <p><strong>系统化排查：</strong></p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>慢查询优化流程：
-1. 定位慢查询
+<span class="hljs-number">1.</span> 定位慢查询
    ├── 慢查询日志 + pt-query-digest 统计 TOP N
    └── SkyWalking/Jaeger Trace 定位具体接口
 
-2. EXPLAIN 分析执行计划
-   ├── type = ALL？→ 缺失索引
-   ├── rows 过大？→ 索引区分度不够
-   ├── Extra = Using filesort？→ ORDER BY 列不在索引中
-   ├── Extra = Using temporary？→ GROUP BY 需要临时表
-   └── Extra = Using where + rows 小？
+<span class="hljs-number">2.</span> <span class="hljs-keyword">EXPLAIN</span> 分析执行计划
+   ├── <span class="hljs-keyword">type</span> = <span class="hljs-keyword">ALL</span>？→ 缺失索引
+   ├── <span class="hljs-keyword">rows</span> 过大？→ 索引区分度不够
+   ├── Extra = <span class="hljs-keyword">Using</span> filesort？→ <span class="hljs-keyword">ORDER</span> <span class="hljs-keyword">BY</span> 列不在索引中
+   ├── Extra = <span class="hljs-keyword">Using</span> <span class="hljs-keyword">temporary</span>？→ <span class="hljs-keyword">GROUP</span> <span class="hljs-keyword">BY</span> 需要临时表
+   └── Extra = <span class="hljs-keyword">Using</span> <span class="hljs-keyword">where</span> + <span class="hljs-keyword">rows</span> 小？
        → 索引选择正确，检查其他原因
 
-3. 优化方案
+<span class="hljs-number">3.</span> 优化方案
    ├── 创建合适的索引（最左前缀、覆盖索引）
-   ├── 改写 SQL（避免 SELECT *、子查询改 JOIN、
-   │   分页用延迟关联、IN 改 EXISTS）
+   ├── 改写 <span class="hljs-keyword">SQL</span>（避免 <span class="hljs-keyword">SELECT</span> *、子查询改 <span class="hljs-keyword">JOIN</span>、
+   │   分页用延迟关联、<span class="hljs-keyword">IN</span> 改 <span class="hljs-keyword">EXISTS</span>）
    ├── 表结构调整（分区、归档历史数据）
    ├── 应用层优化（缓存 Redis、ES 预处理）
    └── 架构调整（读写分离、分库分表）
 
-4. 验证效果
-   ├── EXPLAIN 确认执行计划变化
+<span class="hljs-number">4.</span> 验证效果
+   ├── <span class="hljs-keyword">EXPLAIN</span> 确认执行计划变化
    ├── 压测验证吞吐和延迟
    └── 灰度发布观察实际效果
-</code></pre></div>
-<p><strong>实战案例：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-sql">-- 原 SQL（慢查询 — 全表扫描 + filesort）
-SELECT id, user_id, amount, created_at
-FROM orders
-WHERE DATE(created_at) = &#39;2026-07-20&#39;
-ORDER BY amount DESC
-LIMIT 20;
+</code></pre></div><p><strong>实战案例：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-sql"><span class="hljs-comment">-- 原 SQL（慢查询 — 全表扫描 + filesort）</span>
+<span class="hljs-keyword">SELECT</span> id, user_id, amount, created_at
+<span class="hljs-keyword">FROM</span> orders
+<span class="hljs-keyword">WHERE</span> <span class="hljs-type">DATE</span>(created_at) <span class="hljs-operator">=</span> <span class="hljs-string">'2026-07-20'</span>
+<span class="hljs-keyword">ORDER</span> <span class="hljs-keyword">BY</span> amount <span class="hljs-keyword">DESC</span>
+LIMIT <span class="hljs-number">20</span>;
 
--- 优化 1：字段不套函数，用范围查询
-SELECT id, user_id, amount, created_at
-FROM orders
-WHERE created_at &gt;= &#39;2026-07-20 00:00:00&#39;
-  AND created_at &lt; &#39;2026-07-21 00:00:00&#39;
-ORDER BY amount DESC
-LIMIT 20;
+<span class="hljs-comment">-- 优化 1：字段不套函数，用范围查询</span>
+<span class="hljs-keyword">SELECT</span> id, user_id, amount, created_at
+<span class="hljs-keyword">FROM</span> orders
+<span class="hljs-keyword">WHERE</span> created_at <span class="hljs-operator">&gt;=</span> <span class="hljs-string">'2026-07-20 00:00:00'</span>
+  <span class="hljs-keyword">AND</span> created_at <span class="hljs-operator">&lt;</span> <span class="hljs-string">'2026-07-21 00:00:00'</span>
+<span class="hljs-keyword">ORDER</span> <span class="hljs-keyword">BY</span> amount <span class="hljs-keyword">DESC</span>
+LIMIT <span class="hljs-number">20</span>;
 
--- 优化 2：如果 created_at, amount 经常联合查询，建联合索引
-ALTER TABLE orders ADD INDEX idx_created_amount (created_at, amount DESC);
--- 注意：MySQL 8.0+ 支持降序索引
-</code></pre></div>
-<hr>
+<span class="hljs-comment">-- 优化 2：如果 created_at, amount 经常联合查询，建联合索引</span>
+<span class="hljs-keyword">ALTER TABLE</span> orders <span class="hljs-keyword">ADD</span> INDEX idx_created_amount (created_at, amount <span class="hljs-keyword">DESC</span>);
+<span class="hljs-comment">-- 注意：MySQL 8.0+ 支持降序索引</span>
+</code></pre></div><hr>
 <h2>相关条目</h2>
 <ul>
-<li><a href="#/04-数据与中间件/数据库与缓存/04-PostgreSQL与pgvector深度解析" class="cross-ref" data-ref="04-PostgreSQL与pgvector深度解析">04-PostgreSQL与pgvector深度解析</a> — PostgreSQL 深度解析与向量检索</li>
-<li><a href="#/05-分布式架构/事务与一致性/05-缓存策略与多级缓存架构" class="cross-ref" data-ref="05-缓存策略与多级缓存架构">05-缓存策略与多级缓存架构</a> — 缓存策略与多级缓存架构</li>
-<li><a href="#/05-分布式架构/弹性设计/05-幂等设计与分布式锁" class="cross-ref" data-ref="05-幂等设计与分布式锁">05-幂等设计与分布式锁</a> — 幂等性与分布式锁</li>
-<li><a href="#/?d=03" class="cross-ref domain-ref">03-MyBatis与SpringDataJPA深度解析</a> — MyBatis 与 Spring Data JPA</li>
+<li><a href="#/04-数据与中间件/数据库与缓存/04-PostgreSQL与pgvector深度解析" class="cross-ref">04-PostgreSQL与pgvector深度解析</a> — PostgreSQL 深度解析与向量检索</li>
+<li><a href="#/05-分布式架构/事务与一致性/05-缓存策略与多级缓存架构" class="cross-ref">05-缓存策略与多级缓存架构</a> — 缓存策略与多级缓存架构</li>
+<li><a href="#/05-分布式架构/弹性设计/05-幂等设计与分布式锁" class="cross-ref">05-幂等设计与分布式锁</a> — 幂等性与分布式锁</li>
+<li><span class="broken-ref" title="未找到: 03-MyBatis与SpringDataJPA深度解析">03-MyBatis与SpringDataJPA深度解析</span> — MyBatis 与 Spring Data JPA</li>
 </ul>
-</div>
+</body></html></div>
 </article>

@@ -1,12 +1,12 @@
 
-<article class="kb-entry" data-path="/01-计算机基础/数据结构与算法/01-数据结构与算法">
+<article class="kb-entry" data-path="/01-计算机基础">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=01">01-计算机基础</a></div>
     <h1>数据结构与算法 — Java 实现深度解析</h1>
-    <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#data-structures</span><span class="badge badge-tag">#algorithms</span><span class="badge badge-tag">#hashmap</span><span class="badge badge-tag">#b-tree</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#data-structures</span><span class="badge badge-tag">#algorithms</span><span class="badge badge-tag">#hashmap</span><span class="badge badge-tag">#b-tree</span><span class="badge badge-tag">#sorting</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://docs.oracle.com/javase/specs/jls/se25/html/index.html" target="_blank" rel="noopener" class="source-link" title="Java Language Specification 25 — 集合框架相关章节">Java Language Specification 25 — 集合框架相关章节</a><a href="https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/util/package-summary.html" target="_blank" rel="noopener" class="source-link" title="JDK 25 java.util API 文档">JDK 25 java.util API 文档</a><a href="https://github.com/openjdk/jdk/tree/jdk-25-ga/src/java.base/share/classes/java/util" target="_blank" rel="noopener" class="source-link" title="OpenJDK 25 源码 — HashMap、ArrayList、TreeMap、PriorityQueue、ConcurrentSkipListMap 实现">OpenJDK 25 源码 — HashMap、ArrayList、TreeMap、PriorityQueue、ConcurrentSkipListMap 实现</a></small></div>
   </div>
-  <div class="entry-body"><h1>数据结构与算法 — Java 实现深度解析</h1>
+  <div class="entry-body"><html><head></head><body><h1>数据结构与算法 — Java 实现深度解析</h1>
 <h2>概述</h2>
 <p>数据结构与算法是计算机科学的核心基础，也是 Java 后端工程师在系统设计、性能优化、技术面试中最重要的能力之一。本文聚焦于 Java 标准库中核心数据结构的源码实现和算法应用，从线性结构到树图结构，从排序算法到复杂度分析，系统性地梳理了日常开发中最常用的数据结构和算法知识。</p>
 <p>本文不是算法的纯理论介绍——每个数据结构的讲解都会深入到 JDK 25 源码的关键方法，揭示其设计决策和性能权衡。</p>
@@ -16,20 +16,19 @@
 <h4>1.1 ArrayList vs LinkedList — 源码级对比</h4>
 <p><strong>ArrayList</strong> 基于 <code>Object[] elementData</code> 动态数组。核心操作复杂度：随机访问 O(1)、尾部插入均摊 O(1)、中间插入/删除 O(n)。</p>
 <p>关键源码分析（JDK 25 <code>ArrayList.java</code>）：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 扩容机制：grow() 方法
-private Object[] grow(int minCapacity) {
-    int oldCapacity = elementData.length;
-    if (oldCapacity &gt; 0 || elementData != DEFAULTCAPACITY_EMPTY_ELEMENTDATA) {
-        int newCapacity = ArraysSupport.newLength(oldCapacity,
-                minCapacity - oldCapacity,    // 最小增长量
-                oldCapacity &gt;&gt; 1);            // 优先增长量 = 旧容量的 50%
-        return elementData = Arrays.copyOf(elementData, newCapacity);
-    } else {
-        return elementData = new Object[Math.max(DEFAULT_CAPACITY, minCapacity)];
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 扩容机制：grow() 方法</span>
+<span class="hljs-keyword">private</span> Object[] grow(<span class="hljs-type">int</span> minCapacity) {
+    <span class="hljs-type">int</span> <span class="hljs-variable">oldCapacity</span> <span class="hljs-operator">=</span> elementData.length;
+    <span class="hljs-keyword">if</span> (oldCapacity &gt; <span class="hljs-number">0</span> || elementData != DEFAULTCAPACITY_EMPTY_ELEMENTDATA) {
+        <span class="hljs-type">int</span> <span class="hljs-variable">newCapacity</span> <span class="hljs-operator">=</span> ArraysSupport.newLength(oldCapacity,
+                minCapacity - oldCapacity,    <span class="hljs-comment">// 最小增长量</span>
+                oldCapacity &gt;&gt; <span class="hljs-number">1</span>);            <span class="hljs-comment">// 优先增长量 = 旧容量的 50%</span>
+        <span class="hljs-type">return</span> <span class="hljs-variable">elementData</span> <span class="hljs-operator">=</span> Arrays.copyOf(elementData, newCapacity);
+    } <span class="hljs-keyword">else</span> {
+        <span class="hljs-type">return</span> <span class="hljs-variable">elementData</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Object</span>[Math.max(DEFAULT_CAPACITY, minCapacity)];
     }
 }
-</code></pre></div>
-<p>核心要点：<strong>扩容因子是 1.5 倍</strong>（<code>oldCapacity &gt;&gt; 1</code> 即 50%），不是 2 倍。<code>ArraysSupport.newLength</code> 确保新容量不小于 <code>minCapacity</code>，且不会超过 <code>Integer.MAX_VALUE - 8</code>。</p>
+</code></pre></div><p>核心要点：<strong>扩容因子是 1.5 倍</strong>（<code>oldCapacity &gt;&gt; 1</code> 即 50%），不是 2 倍。<code>ArraysSupport.newLength</code> 确保新容量不小于 <code>minCapacity</code>，且不会超过 <code>Integer.MAX_VALUE - 8</code>。</p>
 <p><strong>LinkedList</strong> 基于双向链表。每个节点 <code>Node&lt;E&gt;</code> 包含 <code>item</code>、<code>next</code>、<code>prev</code> 三个字段。随机访问 O(n)（需要遍历），但头尾操作 O(1)。实现 <code>Deque</code> 接口，可作为队列和栈使用。</p>
 <p><strong>选型决策树：</strong></p>
 <ul>
@@ -39,18 +38,17 @@ private Object[] grow(int minCapacity) {
 </ul>
 <p><strong>实测参考（JMH 基准）：</strong> 对于 100 万元素的列表，ArrayList 中间插入比 LinkedList 慢约 200 倍（因为 arraycopy 移动 50 万元素），但头部遍历 ArrayList 快约 10 倍（缓存友好）。</p>
 <h4>1.2 栈与队列</h4>
-<p><strong>ArrayDeque</strong> 是 JDK 推荐的栈和队列实现（JDK 文档明确说&quot;ArrayDeque 比 Stack 快，比 LinkedList 快&quot;）。基于循环数组，头尾插入/删除均为 O(1)。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 使用 ArrayDeque 作为栈
-var stack = new ArrayDeque&lt;String&gt;();
-stack.push(&quot;a&quot;);           // addFirst
-var top = stack.pop();     // removeFirst
+<p><strong>ArrayDeque</strong> 是 JDK 推荐的栈和队列实现（JDK 文档明确说"ArrayDeque 比 Stack 快，比 LinkedList 快"）。基于循环数组，头尾插入/删除均为 O(1)。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 使用 ArrayDeque 作为栈</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">stack</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayDeque</span>&lt;String&gt;();
+stack.push(<span class="hljs-string">"a"</span>);           <span class="hljs-comment">// addFirst</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">top</span> <span class="hljs-operator">=</span> stack.pop();     <span class="hljs-comment">// removeFirst</span>
 
-// 使用 ArrayDeque 作为队列
-var queue = new ArrayDeque&lt;String&gt;();
-queue.offer(&quot;a&quot;);          // addLast
-var head = queue.poll();   // removeFirst
-</code></pre></div>
-<p>内部实现：<code>elements</code> 数组长度始终是 2 的幂（通过 <code>calculateSize</code> 保证）。<code>head</code> 和 <code>tail</code> 指针在数组中循环移动，<code>tail == head</code> 时触发扩容（翻倍）。</p>
+<span class="hljs-comment">// 使用 ArrayDeque 作为队列</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">queue</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayDeque</span>&lt;String&gt;();
+queue.offer(<span class="hljs-string">"a"</span>);          <span class="hljs-comment">// addLast</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">head</span> <span class="hljs-operator">=</span> queue.poll();   <span class="hljs-comment">// removeFirst</span>
+</code></pre></div><p>内部实现：<code>elements</code> 数组长度始终是 2 的幂（通过 <code>calculateSize</code> 保证）。<code>head</code> 和 <code>tail</code> 指针在数组中循环移动，<code>tail == head</code> 时触发扩容（翻倍）。</p>
 <p><strong>PriorityQueue</strong> 基于二叉堆（最小堆），默认是小顶堆。<code>siftUp</code> 和 <code>siftDown</code> 维护堆性质。入队 O(log n)，出队 O(log n)，查看堆顶 O(1)。</p>
 <hr>
 <h3>二、树结构</h3>
@@ -65,21 +63,20 @@ var head = queue.poll();   // removeFirst
 <li>从任一节点到其每个叶子的所有路径都包含相同数目的黑色节点</li>
 </ol>
 <p>TreeMap 中 <code>put()</code> 的关键流程：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public V put(K key, V value) {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> V <span class="hljs-title function_">put</span><span class="hljs-params">(K key, V value)</span> {
     Entry&lt;K,V&gt; t = root;
-    if (t == null) {
-        root = new Entry&lt;&gt;(key, value, null);
-        size = 1;
-        return null;
+    <span class="hljs-keyword">if</span> (t == <span class="hljs-literal">null</span>) {
+        root = <span class="hljs-keyword">new</span> <span class="hljs-title class_">Entry</span>&lt;&gt;(key, value, <span class="hljs-literal">null</span>);
+        size = <span class="hljs-number">1</span>;
+        <span class="hljs-keyword">return</span> <span class="hljs-literal">null</span>;
     }
-    // 1. 二叉搜索树插入（按 key 比较走左或右）
-    // 2. fixAfterInsertion(e) → 修复红黑树性质
-    //    - Case 1: 叔叔是红色 → 重新着色，上溯
-    //    - Case 2: 叔叔是黑色，当前是右孩子 → 左旋
-    //    - Case 3: 叔叔是黑色，当前是左孩子 → 右旋
+    <span class="hljs-comment">// 1. 二叉搜索树插入（按 key 比较走左或右）</span>
+    <span class="hljs-comment">// 2. fixAfterInsertion(e) → 修复红黑树性质</span>
+    <span class="hljs-comment">//    - Case 1: 叔叔是红色 → 重新着色，上溯</span>
+    <span class="hljs-comment">//    - Case 2: 叔叔是黑色，当前是右孩子 → 左旋</span>
+    <span class="hljs-comment">//    - Case 3: 叔叔是黑色，当前是左孩子 → 右旋</span>
 }
-</code></pre></div>
-<p><code>fixAfterInsertion</code> 是红黑树最复杂的部分，涉及三种情况的旋转和着色。TreeMap 的红黑树实现不要求完美平衡（不像 AVL），但保证最长路径不超过最短路径的 2 倍。</p>
+</code></pre></div><p><code>fixAfterInsertion</code> 是红黑树最复杂的部分，涉及三种情况的旋转和着色。TreeMap 的红黑树实现不要求完美平衡（不像 AVL），但保证最长路径不超过最短路径的 2 倍。</p>
 <h4>2.2 B+Tree 与数据库索引原理</h4>
 <p>B+Tree 是大多数关系数据库（MySQL InnoDB、PostgreSQL）的默认索引结构。与红黑树不同，B+Tree 是为磁盘 I/O 优化的——每个节点大小通常设为操作系统页大小（4KB/8KB/16KB），一个节点可存储大量 key。</p>
 <p><strong>B+Tree 特性：</strong></p>
@@ -93,55 +90,52 @@ var head = queue.poll();   // removeFirst
 <h4>2.3 Trie（前缀树）</h4>
 <p>Trie 是一种用于高效字符串检索的树结构，每个节点代表一个字符。从根到某节点的路径构成该节点对应的前缀。</p>
 <p><strong>Java 实现（简化版）：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">class TrieNode {
-    Map&lt;Character, TrieNode&gt; children = new HashMap&lt;&gt;();
-    boolean isEndOfWord;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">class</span> <span class="hljs-title class_">TrieNode</span> {
+    Map&lt;Character, TrieNode&gt; children = <span class="hljs-keyword">new</span> <span class="hljs-title class_">HashMap</span>&lt;&gt;();
+    <span class="hljs-type">boolean</span> isEndOfWord;
 }
 
-class Trie {
-    TrieNode root = new TrieNode();
+<span class="hljs-keyword">class</span> <span class="hljs-title class_">Trie</span> {
+    <span class="hljs-type">TrieNode</span> <span class="hljs-variable">root</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">TrieNode</span>();
 
-    void insert(String word) {
-        var node = root;
-        for (char c : word.toCharArray()) {
-            node = node.children.computeIfAbsent(c, k -&gt; new TrieNode());
+    <span class="hljs-keyword">void</span> <span class="hljs-title function_">insert</span><span class="hljs-params">(String word)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">node</span> <span class="hljs-operator">=</span> root;
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">char</span> c : word.toCharArray()) {
+            node = node.children.computeIfAbsent(c, k -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">TrieNode</span>());
         }
-        node.isEndOfWord = true;
+        node.isEndOfWord = <span class="hljs-literal">true</span>;
     }
 
-    boolean search(String word) {
-        var node = root;
-        for (char c : word.toCharArray()) {
+    <span class="hljs-type">boolean</span> <span class="hljs-title function_">search</span><span class="hljs-params">(String word)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">node</span> <span class="hljs-operator">=</span> root;
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">char</span> c : word.toCharArray()) {
             node = node.children.get(c);
-            if (node == null) return false;
+            <span class="hljs-keyword">if</span> (node == <span class="hljs-literal">null</span>) <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
         }
-        return node.isEndOfWord;
+        <span class="hljs-keyword">return</span> node.isEndOfWord;
     }
 }
-</code></pre></div>
-<p><strong>应用场景：</strong> 自动补全、拼写检查、IP 路由最长前缀匹配、Elasticsearch 的 Completion Suggester。</p>
+</code></pre></div><p><strong>应用场景：</strong> 自动补全、拼写检查、IP 路由最长前缀匹配、Elasticsearch 的 Completion Suggester。</p>
 <hr>
 <h3>三、哈希：HashMap 源码分析</h3>
 <p>HashMap 是 Java 中最常用的数据结构之一，JDK 25 的实现基于 <strong>数组 + 链表/红黑树</strong>。</p>
 <h4>3.1 核心字段</h4>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 默认初始容量 16（必须是 2 的幂）
-static final int DEFAULT_INITIAL_CAPACITY = 1 &lt;&lt; 4;
-// 最大容量 2^30
-static final int MAXIMUM_CAPACITY = 1 &lt;&lt; 30;
-// 默认负载因子 0.75
-static final float DEFAULT_LOAD_FACTOR = 0.75f;
-// 链表转红黑树阈值：链表长度 &gt;= 8
-static final int TREEIFY_THRESHOLD = 8;
-// 红黑树退化为链表阈值：树节点数 &lt;= 6
-static final int UNTREEIFY_THRESHOLD = 6;
-</code></pre></div>
-<h4>3.2 哈希函数</h4>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">static final int hash(Object key) {
-    int h;
-    return (key == null) ? 0 : (h = key.hashCode()) ^ (h &gt;&gt;&gt; 16);
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 默认初始容量 16（必须是 2 的幂）</span>
+<span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">int</span> <span class="hljs-variable">DEFAULT_INITIAL_CAPACITY</span> <span class="hljs-operator">=</span> <span class="hljs-number">1</span> &lt;&lt; <span class="hljs-number">4</span>;
+<span class="hljs-comment">// 最大容量 2^30</span>
+<span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">int</span> <span class="hljs-variable">MAXIMUM_CAPACITY</span> <span class="hljs-operator">=</span> <span class="hljs-number">1</span> &lt;&lt; <span class="hljs-number">30</span>;
+<span class="hljs-comment">// 默认负载因子 0.75</span>
+<span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">float</span> <span class="hljs-variable">DEFAULT_LOAD_FACTOR</span> <span class="hljs-operator">=</span> <span class="hljs-number">0.75f</span>;
+<span class="hljs-comment">// 链表转红黑树阈值：链表长度 &gt;= 8</span>
+<span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">int</span> <span class="hljs-variable">TREEIFY_THRESHOLD</span> <span class="hljs-operator">=</span> <span class="hljs-number">8</span>;
+<span class="hljs-comment">// 红黑树退化为链表阈值：树节点数 &lt;= 6</span>
+<span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">int</span> <span class="hljs-variable">UNTREEIFY_THRESHOLD</span> <span class="hljs-operator">=</span> <span class="hljs-number">6</span>;
+</code></pre></div><h4>3.2 哈希函数</h4>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">int</span> <span class="hljs-title function_">hash</span><span class="hljs-params">(Object key)</span> {
+    <span class="hljs-type">int</span> h;
+    <span class="hljs-keyword">return</span> (key == <span class="hljs-literal">null</span>) ? <span class="hljs-number">0</span> : (h = key.hashCode()) ^ (h &gt;&gt;&gt; <span class="hljs-number">16</span>);
 }
-</code></pre></div>
-<p>设计要点：将 hashCode 的高 16 位与低 16 位做异或，让高位参与索引计算（<code>(n-1) &amp; hash</code>），减少低位相同时的碰撞。这称为&quot;扰动函数&quot;。</p>
+</code></pre></div><p>设计要点：将 hashCode 的高 16 位与低 16 位做异或，让高位参与索引计算（<code>(n-1) &amp; hash</code>），减少低位相同时的碰撞。这称为"扰动函数"。</p>
 <h4>3.3 哈希碰撞解决</h4>
 <p>JDK 使用 <strong>拉链法（Separate Chaining）</strong>：</p>
 <ol>
@@ -168,30 +162,28 @@ static final int UNTREEIFY_THRESHOLD = 6;
 <h3>四、堆与 PriorityQueue</h3>
 <p>PriorityQueue 默认是最小堆（可通过 <code>Comparator.reverseOrder()</code> 变为最大堆）。</p>
 <p><strong>堆排序与 Top-K 问题：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// Top-K 最大元素：使用大小为 K 的最小堆
-public int[] topKLargest(int[] nums, int k) {
-    var minHeap = new PriorityQueue&lt;Integer&gt;(k);
-    for (int num : nums) {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// Top-K 最大元素：使用大小为 K 的最小堆</span>
+<span class="hljs-keyword">public</span> <span class="hljs-type">int</span>[] topKLargest(<span class="hljs-type">int</span>[] nums, <span class="hljs-type">int</span> k) {
+    <span class="hljs-type">var</span> <span class="hljs-variable">minHeap</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">PriorityQueue</span>&lt;Integer&gt;(k);
+    <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> num : nums) {
         minHeap.offer(num);
-        if (minHeap.size() &gt; k) {
-            minHeap.poll();  // 弹出最小的，保留 K 个最大的
+        <span class="hljs-keyword">if</span> (minHeap.size() &gt; k) {
+            minHeap.poll();  <span class="hljs-comment">// 弹出最小的，保留 K 个最大的</span>
         }
     }
-    return minHeap.stream().mapToInt(Integer::intValue).toArray();
+    <span class="hljs-keyword">return</span> minHeap.stream().mapToInt(Integer::intValue).toArray();
 }
-// 时间复杂度：O(n log k)，空间复杂度：O(k)
-</code></pre></div>
-<p>对于 Top-K 频率问题（如 Top-K 高频词），组合 HashMap + PriorityQueue：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">var freq = new HashMap&lt;String, Integer&gt;();
-// ... 统计频率
-var heap = new PriorityQueue&lt;Map.Entry&lt;String, Integer&gt;&gt;(
+<span class="hljs-comment">// 时间复杂度：O(n log k)，空间复杂度：O(k)</span>
+</code></pre></div><p>对于 Top-K 频率问题（如 Top-K 高频词），组合 HashMap + PriorityQueue：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-type">var</span> <span class="hljs-variable">freq</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">HashMap</span>&lt;String, Integer&gt;();
+<span class="hljs-comment">// ... 统计频率</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">heap</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">PriorityQueue</span>&lt;Map.Entry&lt;String, Integer&gt;&gt;(
     Comparator.comparingInt(Map.Entry::getValue));
-for (var entry : freq.entrySet()) {
+<span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> entry : freq.entrySet()) {
     heap.offer(entry);
-    if (heap.size() &gt; k) heap.poll();
+    <span class="hljs-keyword">if</span> (heap.size() &gt; k) heap.poll();
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h3>五、图算法</h3>
 <h4>5.1 表示方法</h4>
 <ul>
@@ -199,86 +191,83 @@ for (var entry : freq.entrySet()) {
 <li><strong>邻接表：</strong> <code>List&lt;Integer&gt;[] adj</code> 或 <code>Map&lt;V, List&lt;V&gt;&gt;</code>，适合稀疏图，O(V+E) 空间</li>
 </ul>
 <h4>5.2 BFS 与 DFS</h4>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// BFS 模板（队列，最短路径、层序遍历）
-void bfs(Map&lt;Integer, List&lt;Integer&gt;&gt; graph, int start) {
-    var queue = new ArrayDeque&lt;Integer&gt;();
-    var visited = new HashSet&lt;Integer&gt;();
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// BFS 模板（队列，最短路径、层序遍历）</span>
+<span class="hljs-keyword">void</span> <span class="hljs-title function_">bfs</span><span class="hljs-params">(Map&lt;Integer, List&lt;Integer&gt;&gt; graph, <span class="hljs-type">int</span> start)</span> {
+    <span class="hljs-type">var</span> <span class="hljs-variable">queue</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayDeque</span>&lt;Integer&gt;();
+    <span class="hljs-type">var</span> <span class="hljs-variable">visited</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">HashSet</span>&lt;Integer&gt;();
     queue.offer(start);
     visited.add(start);
 
-    while (!queue.isEmpty()) {
-        int node = queue.poll();
-        // 处理 node
-        for (int neighbor : graph.getOrDefault(node, List.of())) {
-            if (visited.add(neighbor)) {
+    <span class="hljs-keyword">while</span> (!queue.isEmpty()) {
+        <span class="hljs-type">int</span> <span class="hljs-variable">node</span> <span class="hljs-operator">=</span> queue.poll();
+        <span class="hljs-comment">// 处理 node</span>
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> neighbor : graph.getOrDefault(node, List.of())) {
+            <span class="hljs-keyword">if</span> (visited.add(neighbor)) {
                 queue.offer(neighbor);
             }
         }
     }
 }
 
-// DFS 模板（栈或递归，路径搜索、环检测、拓扑排序）
-void dfs(Map&lt;Integer, List&lt;Integer&gt;&gt; graph, int node, Set&lt;Integer&gt; visited) {
+<span class="hljs-comment">// DFS 模板（栈或递归，路径搜索、环检测、拓扑排序）</span>
+<span class="hljs-keyword">void</span> <span class="hljs-title function_">dfs</span><span class="hljs-params">(Map&lt;Integer, List&lt;Integer&gt;&gt; graph, <span class="hljs-type">int</span> node, Set&lt;Integer&gt; visited)</span> {
     visited.add(node);
-    for (int neighbor : graph.getOrDefault(node, List.of())) {
-        if (!visited.contains(neighbor)) {
+    <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> neighbor : graph.getOrDefault(node, List.of())) {
+        <span class="hljs-keyword">if</span> (!visited.contains(neighbor)) {
             dfs(graph, neighbor, visited);
         }
     }
 }
-</code></pre></div>
-<h4>5.3 Dijkstra 最短路径</h4>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">int[] dijkstra(Map&lt;Integer, List&lt;int[]&gt;&gt; graph, int n, int start) {
-    int[] dist = new int[n];
+</code></pre></div><h4>5.3 Dijkstra 最短路径</h4>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-type">int</span>[] dijkstra(Map&lt;Integer, List&lt;<span class="hljs-type">int</span>[]&gt;&gt; graph, <span class="hljs-type">int</span> n, <span class="hljs-type">int</span> start) {
+    <span class="hljs-type">int</span>[] dist = <span class="hljs-keyword">new</span> <span class="hljs-title class_">int</span>[n];
     Arrays.fill(dist, Integer.MAX_VALUE);
-    dist[start] = 0;
+    dist[start] = <span class="hljs-number">0</span>;
 
-    var pq = new PriorityQueue&lt;int[]&gt;(Comparator.comparingInt(a -&gt; a[1]));
-    pq.offer(new int[]{start, 0});
+    <span class="hljs-type">var</span> <span class="hljs-variable">pq</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">PriorityQueue</span>&lt;<span class="hljs-type">int</span>[]&gt;(Comparator.comparingInt(a -&gt; a[<span class="hljs-number">1</span>]));
+    pq.offer(<span class="hljs-keyword">new</span> <span class="hljs-title class_">int</span>[]{start, <span class="hljs-number">0</span>});
 
-    while (!pq.isEmpty()) {
-        int[] cur = pq.poll();
-        int u = cur[0], d = cur[1];
-        if (d &gt; dist[u]) continue;  // 跳过过时的记录
+    <span class="hljs-keyword">while</span> (!pq.isEmpty()) {
+        <span class="hljs-type">int</span>[] cur = pq.poll();
+        <span class="hljs-type">int</span> <span class="hljs-variable">u</span> <span class="hljs-operator">=</span> cur[<span class="hljs-number">0</span>], d = cur[<span class="hljs-number">1</span>];
+        <span class="hljs-keyword">if</span> (d &gt; dist[u]) <span class="hljs-keyword">continue</span>;  <span class="hljs-comment">// 跳过过时的记录</span>
 
-        for (int[] edge : graph.getOrDefault(u, List.of())) {
-            int v = edge[0], w = edge[1];
-            if (dist[u] + w &lt; dist[v]) {
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span>[] edge : graph.getOrDefault(u, List.of())) {
+            <span class="hljs-type">int</span> <span class="hljs-variable">v</span> <span class="hljs-operator">=</span> edge[<span class="hljs-number">0</span>], w = edge[<span class="hljs-number">1</span>];
+            <span class="hljs-keyword">if</span> (dist[u] + w &lt; dist[v]) {
                 dist[v] = dist[u] + w;
-                pq.offer(new int[]{v, dist[v]});
+                pq.offer(<span class="hljs-keyword">new</span> <span class="hljs-title class_">int</span>[]{v, dist[v]});
             }
         }
     }
-    return dist;
+    <span class="hljs-keyword">return</span> dist;
 }
-</code></pre></div>
-<p>时间复杂度：O((V+E) log V)（使用二叉堆优化）。</p>
+</code></pre></div><p>时间复杂度：O((V+E) log V)（使用二叉堆优化）。</p>
 <h4>5.4 拓扑排序（Kahn 算法）</h4>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">List&lt;Integer&gt; topologicalSort(int n, List&lt;int[]&gt; edges) {
-    int[] indegree = new int[n];
-    var graph = new HashMap&lt;Integer, List&lt;Integer&gt;&gt;();
-    for (int[] e : edges) {
-        graph.computeIfAbsent(e[0], k -&gt; new ArrayList&lt;&gt;()).add(e[1]);
-        indegree[e[1]]++;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java">List&lt;Integer&gt; <span class="hljs-title function_">topologicalSort</span><span class="hljs-params">(<span class="hljs-type">int</span> n, List&lt;<span class="hljs-type">int</span>[]&gt; edges)</span> {
+    <span class="hljs-type">int</span>[] indegree = <span class="hljs-keyword">new</span> <span class="hljs-title class_">int</span>[n];
+    <span class="hljs-type">var</span> <span class="hljs-variable">graph</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">HashMap</span>&lt;Integer, List&lt;Integer&gt;&gt;();
+    <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span>[] e : edges) {
+        graph.computeIfAbsent(e[<span class="hljs-number">0</span>], k -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;&gt;()).add(e[<span class="hljs-number">1</span>]);
+        indegree[e[<span class="hljs-number">1</span>]]++;
     }
 
-    var queue = new ArrayDeque&lt;Integer&gt;();
-    for (int i = 0; i &lt; n; i++) {
-        if (indegree[i] == 0) queue.offer(i);
+    <span class="hljs-type">var</span> <span class="hljs-variable">queue</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayDeque</span>&lt;Integer&gt;();
+    <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; n; i++) {
+        <span class="hljs-keyword">if</span> (indegree[i] == <span class="hljs-number">0</span>) queue.offer(i);
     }
 
-    var result = new ArrayList&lt;Integer&gt;();
-    while (!queue.isEmpty()) {
-        int u = queue.poll();
+    <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;Integer&gt;();
+    <span class="hljs-keyword">while</span> (!queue.isEmpty()) {
+        <span class="hljs-type">int</span> <span class="hljs-variable">u</span> <span class="hljs-operator">=</span> queue.poll();
         result.add(u);
-        for (int v : graph.getOrDefault(u, List.of())) {
-            if (--indegree[v] == 0) queue.offer(v);
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> v : graph.getOrDefault(u, List.of())) {
+            <span class="hljs-keyword">if</span> (--indegree[v] == <span class="hljs-number">0</span>) queue.offer(v);
         }
     }
-    return result.size() == n ? result : List.of(); // 有环则返回空
+    <span class="hljs-keyword">return</span> result.size() == n ? result : List.of(); <span class="hljs-comment">// 有环则返回空</span>
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h3>六、算法复杂度分析</h3>
 <h4>6.1 时间复杂度</h4>
 <table>
@@ -378,37 +367,35 @@ void dfs(Map&lt;Integer, List&lt;Integer&gt;&gt; graph, int node, Set&lt;Integer
 <li>跳表的概率性平衡避免了全局重组</li>
 </ul>
 <p><strong>核心用法：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">var map = new ConcurrentSkipListMap&lt;String, Integer&gt;();
-map.put(&quot;b&quot;, 2);
-map.put(&quot;a&quot;, 1);
-// 自动按 key 排序：{a=1, b=2}
-// 范围查询（跳表相比 HashMap 的核心优势）
-var subMap = map.subMap(&quot;a&quot;, true, &quot;c&quot;, true);
-</code></pre></div>
-<hr>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-type">var</span> <span class="hljs-variable">map</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ConcurrentSkipListMap</span>&lt;String, Integer&gt;();
+map.put(<span class="hljs-string">"b"</span>, <span class="hljs-number">2</span>);
+map.put(<span class="hljs-string">"a"</span>, <span class="hljs-number">1</span>);
+<span class="hljs-comment">// 自动按 key 排序：{a=1, b=2}</span>
+<span class="hljs-comment">// 范围查询（跳表相比 HashMap 的核心优势）</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">subMap</span> <span class="hljs-operator">=</span> map.subMap(<span class="hljs-string">"a"</span>, <span class="hljs-literal">true</span>, <span class="hljs-string">"c"</span>, <span class="hljs-literal">true</span>);
+</code></pre></div><hr>
 <h3>九、布隆过滤器（Guava 实现）</h3>
-<p>布隆过滤器（Bloom Filter）是一种空间效率极高的概率性数据结构，用于判断&quot;一个元素是否可能存在于集合中&quot;。</p>
-<p><strong>原理：</strong> 使用一个位数组和 k 个独立哈希函数。插入时，对元素计算 k 个哈希值，将对应位置设为 1。查询时，检查 k 个位置是否都为 1——若是，则&quot;可能存在&quot;；若有一个为 0，则&quot;绝对不存在&quot;。</p>
+<p>布隆过滤器（Bloom Filter）是一种空间效率极高的概率性数据结构，用于判断"一个元素是否可能存在于集合中"。</p>
+<p><strong>原理：</strong> 使用一个位数组和 k 个独立哈希函数。插入时，对元素计算 k 个哈希值，将对应位置设为 1。查询时，检查 k 个位置是否都为 1——若是，则"可能存在"；若有一个为 0，则"绝对不存在"。</p>
 <p><strong>Guava 实现：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import com.google.common.hash.BloomFilter;
-import com.google.common.hash.Funnels;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> com.google.common.hash.BloomFilter;
+<span class="hljs-keyword">import</span> com.google.common.hash.Funnels;
 
-// 期望插入 100 万条记录，误报率 0.01%
-var bloomFilter = BloomFilter.create(
+<span class="hljs-comment">// 期望插入 100 万条记录，误报率 0.01%</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">bloomFilter</span> <span class="hljs-operator">=</span> BloomFilter.create(
     Funnels.integerFunnel(),
-    1_000_000,
-    0.0001
+    <span class="hljs-number">1_000_000</span>,
+    <span class="hljs-number">0.0001</span>
 );
 
-for (int i = 0; i &lt; 1_000_000; i++) {
+<span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; <span class="hljs-number">1_000_000</span>; i++) {
     bloomFilter.put(i);
 }
 
-bloomFilter.mightContain(999999);  // true
-bloomFilter.mightContain(2000000); // false（绝对不存在）
-// 注意：可能有极少数 false positive
-</code></pre></div>
-<p><strong>误报率公式：</strong> P ≈ (1 - e^(-kn/m))^k，其中 n 为元素数，m 为位数组大小，k 为哈希函数数。</p>
+bloomFilter.mightContain(<span class="hljs-number">999999</span>);  <span class="hljs-comment">// true</span>
+bloomFilter.mightContain(<span class="hljs-number">2000000</span>); <span class="hljs-comment">// false（绝对不存在）</span>
+<span class="hljs-comment">// 注意：可能有极少数 false positive</span>
+</code></pre></div><p><strong>误报率公式：</strong> P ≈ (1 - e^(-kn/m))^k，其中 n 为元素数，m 为位数组大小，k 为哈希函数数。</p>
 <p><strong>应用场景：</strong></p>
 <ul>
 <li>缓存穿透防护（Redis 缓存前加布隆过滤器过滤不存在 key）</li>
@@ -419,32 +406,31 @@ bloomFilter.mightContain(2000000); // false（绝对不存在）
 <p><strong>局限：</strong> 不支持删除（Counting Bloom Filter 可以但空间开销增大），不能列出所有元素，有误报率。</p>
 <hr>
 <h2>代码示例 — HashMap 性能对比</h2>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Test
-void hashMapVsTreeMap_performance() {
-    int n = 1_000_000;
-    var hashMap = new HashMap&lt;Integer, String&gt;();
-    var treeMap = new TreeMap&lt;Integer, String&gt;();
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Test</span>
+<span class="hljs-keyword">void</span> <span class="hljs-title function_">hashMapVsTreeMap_performance</span><span class="hljs-params">()</span> {
+    <span class="hljs-type">int</span> <span class="hljs-variable">n</span> <span class="hljs-operator">=</span> <span class="hljs-number">1_000_000</span>;
+    <span class="hljs-type">var</span> <span class="hljs-variable">hashMap</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">HashMap</span>&lt;Integer, String&gt;();
+    <span class="hljs-type">var</span> <span class="hljs-variable">treeMap</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">TreeMap</span>&lt;Integer, String&gt;();
 
-    // HashMap 插入
-    long start = System.nanoTime();
-    for (int i = 0; i &lt; n; i++) {
-        hashMap.put(i, &quot;value&quot; + i);
+    <span class="hljs-comment">// HashMap 插入</span>
+    <span class="hljs-type">long</span> <span class="hljs-variable">start</span> <span class="hljs-operator">=</span> System.nanoTime();
+    <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; n; i++) {
+        hashMap.put(i, <span class="hljs-string">"value"</span> + i);
     }
-    long hashInsertTime = System.nanoTime() - start;
+    <span class="hljs-type">long</span> <span class="hljs-variable">hashInsertTime</span> <span class="hljs-operator">=</span> System.nanoTime() - start;
 
-    // TreeMap 插入
+    <span class="hljs-comment">// TreeMap 插入</span>
     start = System.nanoTime();
-    for (int i = 0; i &lt; n; i++) {
-        treeMap.put(i, &quot;value&quot; + i);
+    <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; n; i++) {
+        treeMap.put(i, <span class="hljs-string">"value"</span> + i);
     }
-    long treeInsertTime = System.nanoTime() - start;
+    <span class="hljs-type">long</span> <span class="hljs-variable">treeInsertTime</span> <span class="hljs-operator">=</span> System.nanoTime() - start;
 
-    System.out.printf(&quot;HashMap insert: %dms%n&quot;, hashInsertTime / 1_000_000);
-    System.out.printf(&quot;TreeMap insert: %dms%n&quot;, treeInsertTime / 1_000_000);
-    // 预期：HashMap 约 200ms，TreeMap 约 600ms（约 3 倍差距）
+    System.out.printf(<span class="hljs-string">"HashMap insert: %dms%n"</span>, hashInsertTime / <span class="hljs-number">1_000_000</span>);
+    System.out.printf(<span class="hljs-string">"TreeMap insert: %dms%n"</span>, treeInsertTime / <span class="hljs-number">1_000_000</span>);
+    <span class="hljs-comment">// 预期：HashMap 约 200ms，TreeMap 约 600ms（约 3 倍差距）</span>
 }
-</code></pre></div>
-<hr>
+</code></pre></div><hr>
 <h3>十、动态规划 (Dynamic Programming)</h3>
 <p>动态规划（DP）将复杂问题分解为更小的子问题来求解，依赖两个关键性质：</p>
 <p><strong>最优子结构</strong>：问题的最优解包含其子问题的最优解。例如，从 A 到 C 的最短路径经过 B，则 A→B 和 B→C 也必定是各自的最短路径。</p>
@@ -453,35 +439,33 @@ void hashMapVsTreeMap_performance() {
 <p><strong>自底向上（填表法）</strong>：先求解最小子问题，逐步向上推导到原问题，通常用迭代 + 数组实现。优势是消除递归开销、通常更快，劣势是可能计算了一些不需要的子问题。</p>
 <p><strong>经典例题：0/1 背包问题</strong></p>
 <p>给定 n 件物品，每件重量 w[i]、价值 v[i]，背包容量为 W，每件物品只能选或不选，求能装入背包的最大总价值。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 0/1 背包 — 自底向上二维 DP
-public int knapsack(int[] w, int[] v, int W) {
-    int n = w.length;
-    int[][] dp = new int[n + 1][W + 1]; // dp[i][j]: 前 i 件物品, 容量 j 的最大价值
-    for (int i = 1; i &lt;= n; i++) {
-        for (int j = 0; j &lt;= W; j++) {
-            if (j &lt; w[i - 1]) {
-                dp[i][j] = dp[i - 1][j];               // 装不下，跳过
-            } else {
-                dp[i][j] = Math.max(dp[i - 1][j],      // 不选第 i 件
-                                    dp[i - 1][j - w[i - 1]] + v[i - 1]); // 选第 i 件
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 0/1 背包 — 自底向上二维 DP</span>
+<span class="hljs-keyword">public</span> <span class="hljs-type">int</span> <span class="hljs-title function_">knapsack</span><span class="hljs-params">(<span class="hljs-type">int</span>[] w, <span class="hljs-type">int</span>[] v, <span class="hljs-type">int</span> W)</span> {
+    <span class="hljs-type">int</span> <span class="hljs-variable">n</span> <span class="hljs-operator">=</span> w.length;
+    <span class="hljs-type">int</span>[][] dp = <span class="hljs-keyword">new</span> <span class="hljs-title class_">int</span>[n + <span class="hljs-number">1</span>][W + <span class="hljs-number">1</span>]; <span class="hljs-comment">// dp[i][j]: 前 i 件物品, 容量 j 的最大价值</span>
+    <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">1</span>; i &lt;= n; i++) {
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">j</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; j &lt;= W; j++) {
+            <span class="hljs-keyword">if</span> (j &lt; w[i - <span class="hljs-number">1</span>]) {
+                dp[i][j] = dp[i - <span class="hljs-number">1</span>][j];               <span class="hljs-comment">// 装不下，跳过</span>
+            } <span class="hljs-keyword">else</span> {
+                dp[i][j] = Math.max(dp[i - <span class="hljs-number">1</span>][j],      <span class="hljs-comment">// 不选第 i 件</span>
+                                    dp[i - <span class="hljs-number">1</span>][j - w[i - <span class="hljs-number">1</span>]] + v[i - <span class="hljs-number">1</span>]); <span class="hljs-comment">// 选第 i 件</span>
             }
         }
     }
-    return dp[n][W];
+    <span class="hljs-keyword">return</span> dp[n][W];
 }
-</code></pre></div>
-<p><strong>空间优化（一维 DP）</strong>：dp 行只依赖上一行，可将二维数组压缩为一维。关键点——内层循环必须逆序，防止同一物品被重复使用（0/1 背包要求每件物品只能选一次）：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public int knapsack1D(int[] w, int[] v, int W) {
-    int[] dp = new int[W + 1];
-    for (int i = 0; i &lt; w.length; i++) {
-        for (int j = W; j &gt;= w[i]; j--) {  // 逆序！防止物品重复使用
+</code></pre></div><p><strong>空间优化（一维 DP）</strong>：dp 行只依赖上一行，可将二维数组压缩为一维。关键点——内层循环必须逆序，防止同一物品被重复使用（0/1 背包要求每件物品只能选一次）：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-type">int</span> <span class="hljs-title function_">knapsack1D</span><span class="hljs-params">(<span class="hljs-type">int</span>[] w, <span class="hljs-type">int</span>[] v, <span class="hljs-type">int</span> W)</span> {
+    <span class="hljs-type">int</span>[] dp = <span class="hljs-keyword">new</span> <span class="hljs-title class_">int</span>[W + <span class="hljs-number">1</span>];
+    <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; w.length; i++) {
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">j</span> <span class="hljs-operator">=</span> W; j &gt;= w[i]; j--) {  <span class="hljs-comment">// 逆序！防止物品重复使用</span>
             dp[j] = Math.max(dp[j], dp[j - w[i]] + v[i]);
         }
     }
-    return dp[W];
+    <span class="hljs-keyword">return</span> dp[W];
 }
-</code></pre></div>
-<p>时间复杂度 O(nW)，空间复杂度 O(W)。注意这是伪多项式算法——复杂度依赖 W 的数值大小而非编码长度。</p>
+</code></pre></div><p>时间复杂度 O(nW)，空间复杂度 O(W)。注意这是伪多项式算法——复杂度依赖 W 的数值大小而非编码长度。</p>
 <p><strong>最长公共子序列（LCS）</strong>：<code>dp[i][j]</code> 表示 s1 前 i 字符与 s2 前 j 字符的 LCS 长度。若 s1[i-1]==s2[j-1]，则 <code>dp[i][j]=dp[i-1][j-1]+1</code>；否则取 <code>max(dp[i-1][j], dp[i][j-1])</code>。时间复杂度 O(mn)，空间可优化到 O(min(m,n))。</p>
 <p><strong>编辑距离（Levenshtein Distance）</strong>：将 word1 转换为 word2 所需的最少单字符操作数（插入、删除、替换）。递推式：<code>dp[i][j]=min(dp[i-1][j]+1, dp[i][j-1]+1, dp[i-1][j-1]+(word1[i-1]!=word2[j-1]?1:0))</code>。广泛应用于拼写检查、DNA 序列比对、模糊搜索。</p>
 <hr>
@@ -524,69 +508,67 @@ public int knapsack(int[] w, int[] v, int W) {
 </tbody></table>
 <p>判断一个问题应选 DP 还是贪心，关键是验证<strong>贪心选择性质</strong>——局部最优能否推导出全局最优。例如 0/1 背包不能用贪心（物品不可分割，贪心可能选错），但分数背包可以（按单位价值贪心即得最优解）。</p>
 <p><strong>活动选择问题（Activity Selection）</strong>：给定 n 个活动，每个有开始时间 s[i] 和结束时间 f[i]，求最大兼容活动子集（活动时间不重叠）。贪心策略：每次选择<strong>结束时间最早</strong>的活动。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 活动选择 — 贪心 O(n log n)
-public List&lt;int[]&gt; selectActivities(int[][] activities) {
-    Arrays.sort(activities, Comparator.comparingInt(a -&gt; a[1])); // 按结束时间排序
-    var result = new ArrayList&lt;int[]&gt;();
-    int lastEnd = Integer.MIN_VALUE;
-    for (int[] act : activities) {
-        if (act[0] &gt;= lastEnd) {   // 与上一个选中活动不冲突
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 活动选择 — 贪心 O(n log n)</span>
+<span class="hljs-keyword">public</span> List&lt;<span class="hljs-type">int</span>[]&gt; selectActivities(<span class="hljs-type">int</span>[][] activities) {
+    Arrays.sort(activities, Comparator.comparingInt(a -&gt; a[<span class="hljs-number">1</span>])); <span class="hljs-comment">// 按结束时间排序</span>
+    <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;<span class="hljs-type">int</span>[]&gt;();
+    <span class="hljs-type">int</span> <span class="hljs-variable">lastEnd</span> <span class="hljs-operator">=</span> Integer.MIN_VALUE;
+    <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span>[] act : activities) {
+        <span class="hljs-keyword">if</span> (act[<span class="hljs-number">0</span>] &gt;= lastEnd) {   <span class="hljs-comment">// 与上一个选中活动不冲突</span>
             result.add(act);
-            lastEnd = act[1];
+            lastEnd = act[<span class="hljs-number">1</span>];
         }
     }
-    return result;
+    <span class="hljs-keyword">return</span> result;
 }
-</code></pre></div>
-<p>贪心选择性质的证明思路：假设最优解不包含最早结束的活动 A，将最优解中第一个活动替换为 A，结束时间不会更晚，仍合法且活动数不变——因此存在包含 A 的最优解。归纳证明贪心策略正确。</p>
+</code></pre></div><p>贪心选择性质的证明思路：假设最优解不包含最早结束的活动 A，将最优解中第一个活动替换为 A，结束时间不会更晚，仍合法且活动数不变——因此存在包含 A 的最优解。归纳证明贪心策略正确。</p>
 <p><strong>哈夫曼编码（Huffman Coding）</strong>：无损数据压缩的最优前缀编码。贪心策略：每次从频率集合中取出两个频率最小的节点合并为新节点，重复至只剩一个根。Java 中用 <code>PriorityQueue</code> 维护最小堆，时间复杂度 O(n log n)。哈夫曼编码保证平均编码长度最短——贪心选择合并频率最低的两个节点不会影响最优性。</p>
-<p><strong>Dijkstra 算法的贪心本质</strong>：每次从优先队列中取出距离起点最近的&quot;未确定&quot;节点，声明其最短距离已知——这一操作是贪心的，且由于边权非负，该声明永远不会被后续结果推翻。Dijkstra 不能处理负权边的根源正在于此——一旦&quot;贪心选中&quot;就无法撤销。</p>
+<p><strong>Dijkstra 算法的贪心本质</strong>：每次从优先队列中取出距离起点最近的"未确定"节点，声明其最短距离已知——这一操作是贪心的，且由于边权非负，该声明永远不会被后续结果推翻。Dijkstra 不能处理负权边的根源正在于此——一旦"贪心选中"就无法撤销。</p>
 <hr>
 <h3>十二、回溯算法 (Backtracking)</h3>
 <p>回溯算法的核心思想是<strong>试探 + 回退 + 剪枝</strong>：在解空间树上尝试一种可能分支，若发现该分支不可能得到解（或不满足约束），则回退到上一步尝试其他选择。回溯本质是对穷举的智能优化——通过剪枝大幅缩减搜索空间。</p>
-<p><strong>回溯 vs DFS</strong>：DFS 是搜索策略（尽可能深地遍历树/图），回溯是算法范式。回溯使用 DFS 遍历解空间树，但额外包含两个关键步骤：(1) 在每次选择前做约束检查（剪枝），(2) 递归返回后恢复状态（撤销选择）。DFS 本身不包含&quot;回退&quot;和&quot;约束检查&quot;的概念。</p>
+<p><strong>回溯 vs DFS</strong>：DFS 是搜索策略（尽可能深地遍历树/图），回溯是算法范式。回溯使用 DFS 遍历解空间树，但额外包含两个关键步骤：(1) 在每次选择前做约束检查（剪枝），(2) 递归返回后恢复状态（撤销选择）。DFS 本身不包含"回退"和"约束检查"的概念。</p>
 <p><strong>回溯三要素</strong>：(1) 路径——已经做出的选择；(2) 选择列表——当前可做的选择；(3) 终止条件——到达决策树的底层，无法再做选择。</p>
 <p><strong>N 皇后问题</strong>：在 N×N 棋盘上放置 N 个皇后，使其互不攻击（不同行、列、正反对角线）。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public List&lt;List&lt;String&gt;&gt; solveNQueens(int n) {
-    var result = new ArrayList&lt;List&lt;String&gt;&gt;();
-    var board = new char[n][n];
-    for (char[] row : board) Arrays.fill(row, &#39;.&#39;);
-    backtrack(board, 0, result);
-    return result;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> List&lt;List&lt;String&gt;&gt; <span class="hljs-title function_">solveNQueens</span><span class="hljs-params">(<span class="hljs-type">int</span> n)</span> {
+    <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;List&lt;String&gt;&gt;();
+    <span class="hljs-type">var</span> <span class="hljs-variable">board</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">char</span>[n][n];
+    <span class="hljs-keyword">for</span> (<span class="hljs-type">char</span>[] row : board) Arrays.fill(row, <span class="hljs-string">'.'</span>);
+    backtrack(board, <span class="hljs-number">0</span>, result);
+    <span class="hljs-keyword">return</span> result;
 }
 
-void backtrack(char[][] board, int row, List&lt;List&lt;String&gt;&gt; result) {
-    int n = board.length;
-    if (row == n) {                               // 终止条件：所有行都放置了皇后
-        result.add(Arrays.stream(board).map(String::new).toList());
-        return;
+<span class="hljs-keyword">void</span> <span class="hljs-title function_">backtrack</span><span class="hljs-params">(<span class="hljs-type">char</span>[][] board, <span class="hljs-type">int</span> row, List&lt;List&lt;String&gt;&gt; result)</span> {
+    <span class="hljs-type">int</span> <span class="hljs-variable">n</span> <span class="hljs-operator">=</span> board.length;
+    <span class="hljs-keyword">if</span> (row == n) {                               <span class="hljs-comment">// 终止条件：所有行都放置了皇后</span>
+        result.add(Arrays.stream(board).map(String::<span class="hljs-keyword">new</span>).toList());
+        <span class="hljs-keyword">return</span>;
     }
-    for (int col = 0; col &lt; n; col++) {
-        if (!isValid(board, row, col)) continue;  // 剪枝：跳过不合法的列
-        board[row][col] = &#39;Q&#39;;                    // 做选择
-        backtrack(board, row + 1, result);        // 递归下一行
-        board[row][col] = &#39;.&#39;;                    // 回退：撤销选择
+    <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">col</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; col &lt; n; col++) {
+        <span class="hljs-keyword">if</span> (!isValid(board, row, col)) <span class="hljs-keyword">continue</span>;  <span class="hljs-comment">// 剪枝：跳过不合法的列</span>
+        board[row][col] = <span class="hljs-string">'Q'</span>;                    <span class="hljs-comment">// 做选择</span>
+        backtrack(board, row + <span class="hljs-number">1</span>, result);        <span class="hljs-comment">// 递归下一行</span>
+        board[row][col] = <span class="hljs-string">'.'</span>;                    <span class="hljs-comment">// 回退：撤销选择</span>
     }
 }
 
-boolean isValid(char[][] board, int row, int col) {
-    int n = board.length;
-    for (int i = 0; i &lt; row; i++) {            // 只需检查上方（下方尚未放置）
-        if (board[i][col] == &#39;Q&#39;) return false; // 同列
-        int diff = row - i;
-        if (col - diff &gt;= 0 &amp;&amp; board[i][col - diff] == &#39;Q&#39;) return false; // 左上对角线
-        if (col + diff &lt; n &amp;&amp; board[i][col + diff] == &#39;Q&#39;) return false;  // 右上对角线
+<span class="hljs-type">boolean</span> <span class="hljs-title function_">isValid</span><span class="hljs-params">(<span class="hljs-type">char</span>[][] board, <span class="hljs-type">int</span> row, <span class="hljs-type">int</span> col)</span> {
+    <span class="hljs-type">int</span> <span class="hljs-variable">n</span> <span class="hljs-operator">=</span> board.length;
+    <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; row; i++) {            <span class="hljs-comment">// 只需检查上方（下方尚未放置）</span>
+        <span class="hljs-keyword">if</span> (board[i][col] == <span class="hljs-string">'Q'</span>) <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>; <span class="hljs-comment">// 同列</span>
+        <span class="hljs-type">int</span> <span class="hljs-variable">diff</span> <span class="hljs-operator">=</span> row - i;
+        <span class="hljs-keyword">if</span> (col - diff &gt;= <span class="hljs-number">0</span> &amp;&amp; board[i][col - diff] == <span class="hljs-string">'Q'</span>) <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>; <span class="hljs-comment">// 左上对角线</span>
+        <span class="hljs-keyword">if</span> (col + diff &lt; n &amp;&amp; board[i][col + diff] == <span class="hljs-string">'Q'</span>) <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;  <span class="hljs-comment">// 右上对角线</span>
     }
-    return true;
+    <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
 }
-</code></pre></div>
-<p>时间复杂度 O(N!)（实际因剪枝远小于此），N=8 时解空间从 4,426,165,368 降至仅 20,736 次检查。</p>
-<p><strong>全排列与子集生成</strong>：全排列用 <code>used[]</code> 数组标记已选元素，子集问题在每一步做&quot;选/不选&quot;两个分支，两者均为回溯的经典模板题。</p>
+</code></pre></div><p>时间复杂度 O(N!)（实际因剪枝远小于此），N=8 时解空间从 4,426,165,368 降至仅 20,736 次检查。</p>
+<p><strong>全排列与子集生成</strong>：全排列用 <code>used[]</code> 数组标记已选元素，子集问题在每一步做"选/不选"两个分支，两者均为回溯的经典模板题。</p>
 <p><strong>剪枝优化策略</strong>：(1) 可行性剪枝——当前选择已违反约束，直接跳过（如 N 皇后的 <code>isValid</code> 检查）；(2) 最优性剪枝——当前部分解不可能优于已有最优解，直接 return；(3) 顺序剪枝——通过排序或限定搜索顺序让分支更早发现冲突（如组合总和问题先排序，让分支更快超限）。</p>
 <hr>
 <h3>十三、分治算法 (Divide and Conquer)</h3>
 <p>分治算法的核心步骤为三步：<strong>分（Divide）</strong>——将原问题分解为若干个规模较小的同类子问题；<strong>治（Conquer）</strong>——递归求解每个子问题；<strong>合（Combine）</strong>——将子问题的解合并为原问题的解。</p>
-<p><strong>与递归的关系</strong>：所有分治算法都是递归的（子问题与原问题结构相同），但并非所有递归都是分治。例如：斐波那契的递归没有&quot;合&quot;这一步骤（减治，Decrease and Conquer）；分治的典型特征是多个子问题 + 合并步骤。</p>
+<p><strong>与递归的关系</strong>：所有分治算法都是递归的（子问题与原问题结构相同），但并非所有递归都是分治。例如：斐波那契的递归没有"合"这一步骤（减治，Decrease and Conquer）；分治的典型特征是多个子问题 + 合并步骤。</p>
 <p><strong>Master Theorem（主定理）</strong>：用于求解递推式 T(n) = a·T(n/b) + f(n) 的渐进界，其中 a 个子问题、每个规模 n/b、f(n) 是分解和合并的开销。三种情况：</p>
 <ul>
 <li><strong>递归主导</strong>：若 f(n) = O(n^(log_b(a) - ε))，则 T(n) = Θ(n^(log_b(a)))。分解合并开销远小于递归，瓶颈在递归本身。</li>
@@ -594,56 +576,54 @@ boolean isValid(char[][] board, int row, int col) {
 <li><strong>合并主导</strong>：若 f(n) = Ω(n^(log_b(a) + ε))，则 T(n) = Θ(f(n))。分解合并开销远大于递归，瓶颈在合并。</li>
 </ul>
 <p><strong>归并排序的分治视角</strong>：分——数组从中间对半拆分（O(1)）；治——递归排序左右子数组（2 T(n/2)）；合——归并两个有序子数组（O(n)）。Master Theorem：a=b=2, f(n)=O(n)，属于第二种（均衡），T(n) = Θ(n log n)。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 归并排序 — 核心 merge 步骤（&quot;合&quot;）
-void merge(int[] arr, int l, int m, int r) {
-    int[] left = Arrays.copyOfRange(arr, l, m + 1);
-    int[] right = Arrays.copyOfRange(arr, m + 1, r + 1);
-    int i = 0, j = 0, k = l;
-    while (i &lt; left.length &amp;&amp; j &lt; right.length) {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 归并排序 — 核心 merge 步骤（"合"）</span>
+<span class="hljs-keyword">void</span> <span class="hljs-title function_">merge</span><span class="hljs-params">(<span class="hljs-type">int</span>[] arr, <span class="hljs-type">int</span> l, <span class="hljs-type">int</span> m, <span class="hljs-type">int</span> r)</span> {
+    <span class="hljs-type">int</span>[] left = Arrays.copyOfRange(arr, l, m + <span class="hljs-number">1</span>);
+    <span class="hljs-type">int</span>[] right = Arrays.copyOfRange(arr, m + <span class="hljs-number">1</span>, r + <span class="hljs-number">1</span>);
+    <span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>, j = <span class="hljs-number">0</span>, k = l;
+    <span class="hljs-keyword">while</span> (i &lt; left.length &amp;&amp; j &lt; right.length) {
         arr[k++] = left[i] &lt;= right[j] ? left[i++] : right[j++];
     }
-    while (i &lt; left.length) arr[k++] = left[i++];
-    while (j &lt; right.length) arr[k++] = right[j++];
+    <span class="hljs-keyword">while</span> (i &lt; left.length) arr[k++] = left[i++];
+    <span class="hljs-keyword">while</span> (j &lt; right.length) arr[k++] = right[j++];
 }
-</code></pre></div>
-<p><strong>快速排序的分治分析</strong>：分——选取 pivot 并分区（partition），使左侧元素 &lt;= pivot，右侧 &gt;= pivot；治——递归排序左右子数组；合——不需要显式合并（分区后 pivot 已在最终正确位置）。Master Theorem：平均情况下，a=b=2, f(n)=O(n)，Θ(n log n)；最坏情况下分区极不平衡，退化为 O(n^2)。</p>
+</code></pre></div><p><strong>快速排序的分治分析</strong>：分——选取 pivot 并分区（partition），使左侧元素 &lt;= pivot，右侧 &gt;= pivot；治——递归排序左右子数组；合——不需要显式合并（分区后 pivot 已在最终正确位置）。Master Theorem：平均情况下，a=b=2, f(n)=O(n)，Θ(n log n)；最坏情况下分区极不平衡，退化为 O(n^2)。</p>
 <p><strong>Strassen 矩阵乘法</strong>：将两个 n×n 矩阵乘法的 8 次子乘法巧妙减少为 7 次（通过 18 次矩阵加法），时间复杂度从 Θ(n^3) 降至 Θ(n^log₂7) ≈ Θ(n^2.807)。Coppersmith-Winograd 等后续算法进一步将指数压至约 2.371。</p>
 <p><strong>最近点对问题</strong>：在平面上 n 个点中找距离最近的一对。分治法：按 x 坐标排序并对半分治，递归求每侧最近距离 δ，合并时只需检查 x 坐标在 ±δ 范围内的 O(1) 个点。总时间复杂度 O(n log n)，优于暴力 O(n^2)。</p>
 <hr>
 <h3>十四、字符串匹配 (String Matching)</h3>
 <p>字符串匹配是计算机科学中最基础的问题之一：在文本串 T（长度 n）中查找模式串 P（长度 m）的所有出现位置。</p>
-<p><strong>暴力匹配（Brute Force）</strong>：从 T 的每个位置开始，逐字符与 P 比较。匹配失败则将模式串右移一位重新开始。最坏时间复杂度 O(nm)（例如 T=&quot;aaaaaab&quot;, P=&quot;aaab&quot;，每次比较到 P 的最后一位才失败），平均性能通常尚可。JDK 中 <code>String.indexOf</code> 在某些短模式串场景下直接使用暴力匹配。</p>
-<p><strong>KMP 算法（Knuth-Morris-Pratt）</strong>：充分利用已匹配部分的信息，避免文本串指针回退。核心是 <strong>next 数组</strong>（&quot;部分匹配表&quot;）——<code>next[i]</code> 表示 P[0..i-1] 的最长相等前后缀长度。匹配失败时，i（文本串指针）不回退，j（模式串指针）跳到 <code>next[j]</code> 继续比较。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// KMP 算法 — next 数组构建 + 匹配
-public int[] kmp(String text, String pattern) {
-    int n = text.length(), m = pattern.length();
-    if (m == 0) return new int[]{0};
-    // 1. 构建 next 数组（模式串自匹配）
-    int[] next = new int[m];
-    for (int i = 1, j = 0; i &lt; m; i++) {
-        while (j &gt; 0 &amp;&amp; pattern.charAt(i) != pattern.charAt(j)) {
-            j = next[j - 1];   // 回退到之前匹配的前缀位置
+<p><strong>暴力匹配（Brute Force）</strong>：从 T 的每个位置开始，逐字符与 P 比较。匹配失败则将模式串右移一位重新开始。最坏时间复杂度 O(nm)（例如 T="aaaaaab", P="aaab"，每次比较到 P 的最后一位才失败），平均性能通常尚可。JDK 中 <code>String.indexOf</code> 在某些短模式串场景下直接使用暴力匹配。</p>
+<p><strong>KMP 算法（Knuth-Morris-Pratt）</strong>：充分利用已匹配部分的信息，避免文本串指针回退。核心是 <strong>next 数组</strong>（"部分匹配表"）——<code>next[i]</code> 表示 P[0..i-1] 的最长相等前后缀长度。匹配失败时，i（文本串指针）不回退，j（模式串指针）跳到 <code>next[j]</code> 继续比较。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// KMP 算法 — next 数组构建 + 匹配</span>
+<span class="hljs-keyword">public</span> <span class="hljs-type">int</span>[] kmp(String text, String pattern) {
+    <span class="hljs-type">int</span> <span class="hljs-variable">n</span> <span class="hljs-operator">=</span> text.length(), m = pattern.length();
+    <span class="hljs-keyword">if</span> (m == <span class="hljs-number">0</span>) <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">int</span>[]{<span class="hljs-number">0</span>};
+    <span class="hljs-comment">// 1. 构建 next 数组（模式串自匹配）</span>
+    <span class="hljs-type">int</span>[] next = <span class="hljs-keyword">new</span> <span class="hljs-title class_">int</span>[m];
+    <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">1</span>, j = <span class="hljs-number">0</span>; i &lt; m; i++) {
+        <span class="hljs-keyword">while</span> (j &gt; <span class="hljs-number">0</span> &amp;&amp; pattern.charAt(i) != pattern.charAt(j)) {
+            j = next[j - <span class="hljs-number">1</span>];   <span class="hljs-comment">// 回退到之前匹配的前缀位置</span>
         }
-        if (pattern.charAt(i) == pattern.charAt(j)) j++;
+        <span class="hljs-keyword">if</span> (pattern.charAt(i) == pattern.charAt(j)) j++;
         next[i] = j;
     }
-    // 2. 匹配过程
-    var result = new ArrayList&lt;Integer&gt;();
-    for (int i = 0, j = 0; i &lt; n; i++) {
-        while (j &gt; 0 &amp;&amp; text.charAt(i) != pattern.charAt(j)) {
-            j = next[j - 1];
+    <span class="hljs-comment">// 2. 匹配过程</span>
+    <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;Integer&gt;();
+    <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>, j = <span class="hljs-number">0</span>; i &lt; n; i++) {
+        <span class="hljs-keyword">while</span> (j &gt; <span class="hljs-number">0</span> &amp;&amp; text.charAt(i) != pattern.charAt(j)) {
+            j = next[j - <span class="hljs-number">1</span>];
         }
-        if (text.charAt(i) == pattern.charAt(j)) j++;
-        if (j == m) {            // 完全匹配
-            result.add(i - m + 1);
-            j = next[j - 1];     // 继续找下一个匹配位置
+        <span class="hljs-keyword">if</span> (text.charAt(i) == pattern.charAt(j)) j++;
+        <span class="hljs-keyword">if</span> (j == m) {            <span class="hljs-comment">// 完全匹配</span>
+            result.add(i - m + <span class="hljs-number">1</span>);
+            j = next[j - <span class="hljs-number">1</span>];     <span class="hljs-comment">// 继续找下一个匹配位置</span>
         }
     }
-    return result.stream().mapToInt(Integer::intValue).toArray();
+    <span class="hljs-keyword">return</span> result.stream().mapToInt(Integer::intValue).toArray();
 }
-</code></pre></div>
-<p>next 数组构建时间复杂度 O(m)，匹配过程 O(n)，总复杂度 O(n+m)。KMP 的性能与字符集大小无关，在最坏情况下仍保持线性，这是相比暴力匹配的核心优势。</p>
-<p><strong>Boyer-Moore 算法</strong>：从模式串<strong>末尾</strong>向前匹配，利用&quot;坏字符规则&quot;（当前不匹配字符在模式串中最右出现位置）和&quot;好后缀规则&quot;（已匹配后缀在模式串中的前一次出现位置）计算最大安全滑动距离。实践中通常是最快的单模式匹配算法，尤其在长模式串和大字符集场景。</p>
+</code></pre></div><p>next 数组构建时间复杂度 O(m)，匹配过程 O(n)，总复杂度 O(n+m)。KMP 的性能与字符集大小无关，在最坏情况下仍保持线性，这是相比暴力匹配的核心优势。</p>
+<p><strong>Boyer-Moore 算法</strong>：从模式串<strong>末尾</strong>向前匹配，利用"坏字符规则"（当前不匹配字符在模式串中最右出现位置）和"好后缀规则"（已匹配后缀在模式串中的前一次出现位置）计算最大安全滑动距离。实践中通常是最快的单模式匹配算法，尤其在长模式串和大字符集场景。</p>
 <p><strong>Rabin-Karp 算法</strong>：基于哈希的匹配。计算模式串的哈希值，在文本串上滑动窗口，使用<strong>滚动哈希</strong>（Rolling Hash）在 O(1) 时间内从窗口哈希推导出下一窗口哈希。仅当哈希值匹配时才逐字符验证。平均时间 O(n+m)，最坏 O(nm)（哈希碰撞严重时需逐字符验证每个位置）。</p>
 <p><strong>在 AI 中的应用</strong>：(1) Tokenizer 子词匹配——BPE/WordPiece 分词需要高效地在文本中查找已知子词；(2) 敏感词过滤——多模式匹配使用 AC 自动机（Aho-Corasick，Trie + KMP 思想）；(3) RAG 检索——关键词提取和精确匹配阶段频繁使用字符串搜索；(4) Elasticsearch 倒排索引——底层依赖高效的字符串处理和匹配算法。</p>
 <hr>
@@ -657,13 +637,13 @@ AVL 树更严格平衡（高度差 &lt;= 1），查找更快但插入/删除旋�
 <p><strong>Q4: 如何实现 LRU 缓存？</strong>
 使用 <code>LinkedHashMap</code> 并重写 <code>removeEldestEntry</code>，或手动实现 <code>HashMap + 双向链表</code>。<code>LinkedHashMap</code> 的 <code>accessOrder=true</code> 模式自动维护访问顺序。</p>
 <p><strong>Q5: Bloom Filter 的 <code>mightContain</code> 返回 true，元素一定存在吗？</strong>
-不是。Bloom Filter 可能产生假阳性（false positive），但不会产生假阴性。返回 true 意味着&quot;可能存在&quot;，需要进一步验证（如查数据库）；返回 false 意味着&quot;绝对不存在&quot;。</p>
+不是。Bloom Filter 可能产生假阳性（false positive），但不会产生假阴性。返回 true 意味着"可能存在"，需要进一步验证（如查数据库）；返回 false 意味着"绝对不存在"。</p>
 <hr>
 <h2>相关条目</h2>
 <ul>
-<li><a href="#/01-计算机基础/操作系统/01-操作系统基础" class="cross-ref" data-ref="01-操作系统基础">01-操作系统基础</a> — 操作系统基础（与并发数据结构的选择相关）</li>
-<li><a href="#/01-计算机基础/数据库原理/01-数据库原理" class="cross-ref" data-ref="01-数据库原理">01-数据库原理</a> — 数据库原理（B+Tree 索引深入）</li>
-<li><a href="#/01-计算机基础/分布式理论/01-分布式系统理论" class="cross-ref" data-ref="01-分布式系统理论">01-分布式系统理论</a> — 分布式理论（一致性哈希）</li>
+<li><a href="#/01-计算机基础/操作系统/01-操作系统基础" class="cross-ref">01-操作系统基础</a> — 操作系统基础（与并发数据结构的选择相关）</li>
+<li><a href="#/01-计算机基础/数据库原理/01-数据库原理" class="cross-ref">01-数据库原理</a> — 数据库原理（B+Tree 索引深入）</li>
+<li><a href="#/01-计算机基础/分布式理论/01-分布式系统理论" class="cross-ref">01-分布式系统理论</a> — 分布式理论（一致性哈希）</li>
 </ul>
-</div>
+</body></html></div>
 </article>

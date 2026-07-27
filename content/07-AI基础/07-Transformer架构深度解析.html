@@ -1,12 +1,12 @@
 
-<article class="kb-entry" data-path="/07-AI基础/07-Transformer架构深度解析">
+<article class="kb-entry" data-path="/07-AI基础">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=07">07-AI基础</a></div>
     <h1>Transformer Architecture In Depth</h1>
-    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#transformer</span><span class="badge badge-tag">#self-attention</span><span class="badge badge-tag">#multi-head-attention</span><span class="badge badge-tag">#positional-encoding</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#transformer</span><span class="badge badge-tag">#self-attention</span><span class="badge badge-tag">#multi-head-attention</span><span class="badge badge-tag">#positional-encoding</span><span class="badge badge-tag">#decoder-only</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://arxiv.org/abs/1706.03762" target="_blank" rel="noopener" class="source-link" title="Attention Is All You Need (Vaswani et al., 2017)">Attention Is All You Need (Vaswani et al., 2017)</a><a href="https://arxiv.org/abs/1810.04805" target="_blank" rel="noopener" class="source-link" title="BERT: Pre-training of Deep Bidirectional Transformers">BERT: Pre-training of Deep Bidirectional Transformers</a><a href="https://arxiv.org/abs/2302.13971" target="_blank" rel="noopener" class="source-link" title="LLaMA: Open and Efficient Foundation Language Models">LLaMA: Open and Efficient Foundation Language Models</a><a href="https://arxiv.org/abs/2104.09864" target="_blank" rel="noopener" class="source-link" title="RoPE: Rotary Position Embedding (Su et al.)">RoPE: Rotary Position Embedding (Su et al.)</a><a href="https://jalammar.github.io/illustrated-transformer/" target="_blank" rel="noopener" class="source-link" title="The Illustrated Transformer — community reference">The Illustrated Transformer — community reference</a></small></div>
   </div>
-  <div class="entry-body"><h1>Transformer Architecture In Depth</h1>
+  <div class="entry-body"><html><head></head><body><h1>Transformer Architecture In Depth</h1>
 <h2>概述</h2>
 <p>Transformer 是当代大语言模型（LLM）的基石架构。从 2017 年 Vaswani 等人发表《Attention Is All You Need》至今，Transformer 已经完全重塑了 NLP 和 AI 的格局。本条目从数学原理、工程实现到现代变体，全面深入剖析 Transformer 架构。</p>
 <h2>背景：为什么需要 Transformer</h2>
@@ -14,18 +14,17 @@
 <p>在 Transformer 出现之前，序列到序列（Seq2Seq）任务（翻译、摘要）主要由 RNN/LSTM/GRU 加注意力机制完成。</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>传统 Seq2Seq 架构：
 ┌──────────────┐         ┌──────────────┐
-│   Encoder    │ context │   Decoder    │
+│   Encoder    │ <span class="hljs-built_in">context</span> │   Decoder    │
 │  (LSTM/GRU)  │────────►│  (LSTM/GRU)  │
-└──────────────┘ vector  └──────────────┘
+└──────────────┘ <span class="hljs-built_in">vector</span>  └──────────────┘
      ▲                        │
      │                        ▼
-  &quot;I love AI&quot;            &quot;我 爱 AI&quot;
-</code></pre></div>
-<p><strong>RNN 的根本缺陷：</strong></p>
+  <span class="hljs-string">"I love AI"</span>            <span class="hljs-string">"我 爱 AI"</span>
+</code></pre></div><p><strong>RNN 的根本缺陷：</strong></p>
 <ol>
 <li><strong>顺序计算瓶颈</strong>：RNN 必须逐步处理序列，t 时刻依赖 t-1 时刻的隐状态，无法并行。一个长度为 1000 的序列需要 1000 步才能完成前向传播。</li>
 <li><strong>长程依赖问题</strong>：尽管 LSTM/GRU 引入了门控机制，但梯度消失/爆炸依然限制了有效捕捉长距离依赖的能力。信息在第 1 个 token 要传播到第 500 个 token，路径极长。</li>
-<li><strong>注意力机制的早期形式受限</strong>：Bahdanau Attention（加性注意力）虽然缓解了部分问题，但仍是 RNN 的&quot;附加组件&quot;。</li>
+<li><strong>注意力机制的早期形式受限</strong>：Bahdanau Attention（加性注意力）虽然缓解了部分问题，但仍是 RNN 的"附加组件"。</li>
 </ol>
 <h3>Transformer 的突破</h3>
 <p>Transformer 的核心理念：<strong>完全抛弃循环结构，用 Self-Attention 机制处理序列中任意两个位置的关系。</strong></p>
@@ -36,173 +35,165 @@
 <li><strong>可扩展性</strong>：为 GPT-3/4、LLaMA 等千亿参数模型铺平道路</li>
 </ul>
 <h2>Self-Attention 机制详解</h2>
-<p>Self-Attention 是整个 Transformer 的心脏。它的核心直觉是：让序列中的每个 token &quot;看到&quot;所有其他 token，并根据它们之间的相关性（注意力权重）聚合信息。</p>
+<p>Self-Attention 是整个 Transformer 的心脏。它的核心直觉是：让序列中的每个 token "看到"所有其他 token，并根据它们之间的相关性（注意力权重）聚合信息。</p>
 <h3>Q(Query) / K(Key) / V(Value) 矩阵的物理含义</h3>
 <p>这三个矩阵来自信息检索的类比：</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌────────────────────────────────────────────────────────────┐
-│                    Self-Attention 直觉                      │
+│                    <span class="hljs-variable">Self</span><span class="hljs-operator">-</span><span class="hljs-variable">Attention</span> 直觉                      │
 │                                                            │
 │   数据库查询类比：                                          │
-│   Query (Q): &quot;我想找什么？&quot;    ← 当前 token 的&quot;搜索意图&quot;    │
-│   Key (K):   &quot;我有什么标签？&quot;  ← 每个 token 的&quot;索引标识&quot;    │
-│   Value (V): &quot;我的内容是什么？&quot; ← 每个 token 的&quot;实际信息&quot;   │
+│   <span class="hljs-built_in">Query</span> <span class="hljs-punctuation">(</span><span class="hljs-variable">Q</span><span class="hljs-punctuation">)</span><span class="hljs-operator">:</span> <span class="hljs-string">"我想找什么？"</span>    ← 当前 <span class="hljs-variable">token</span> 的<span class="hljs-string">"搜索意图"</span>    │
+│   <span class="hljs-built_in">Key</span> <span class="hljs-punctuation">(</span><span class="hljs-built_in">K</span><span class="hljs-punctuation">)</span><span class="hljs-operator">:</span>   <span class="hljs-string">"我有什么标签？"</span>  ← 每个 <span class="hljs-variable">token</span> 的<span class="hljs-string">"索引标识"</span>    │
+│   <span class="hljs-variable">Value</span> <span class="hljs-punctuation">(</span><span class="hljs-variable">V</span><span class="hljs-punctuation">)</span><span class="hljs-operator">:</span> <span class="hljs-string">"我的内容是什么？"</span> ← 每个 <span class="hljs-variable">token</span> 的<span class="hljs-string">"实际信息"</span>   │
 │                                                            │
 │   计算过程：                                                │
-│   1. Q 与每个 K 做点积 → 得到&quot;匹配度分数&quot;（注意力权重）      │
-│   2. Softmax 归一化 → 得到概率分布                          │
-│   3. 用概率分布加权求和 V → 得到&quot;这个位置应该关注什么&quot;       │
+│   <span class="hljs-number">1.</span> <span class="hljs-variable">Q</span> 与每个 <span class="hljs-built_in">K</span> 做点积 → 得到<span class="hljs-string">"匹配度分数"</span>（注意力权重）      │
+│   <span class="hljs-number">2.</span> <span class="hljs-variable">Softmax</span> 归一化 → 得到概率分布                          │
+│   <span class="hljs-number">3.</span> 用概率分布加权求和 <span class="hljs-variable">V</span> → 得到<span class="hljs-string">"这个位置应该关注什么"</span>       │
 └────────────────────────────────────────────────────────────┘
-</code></pre></div>
-<p><strong>数学形式</strong>：对于输入序列 X ∈ R^{n × d_model}（n 个 token，每个 d_model 维）：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Q = X · W_Q      W_Q ∈ R^{d_model × d_k}
-K = X · W_K      W_K ∈ R^{d_model × d_k}
-V = X · W_V      W_V ∈ R^{d_model × d_v}
-</code></pre></div>
-<p>其中 d_k 是每个注意力头的维度（通常 d_k = d_v = d_model / num_heads）。</p>
+</code></pre></div><p><strong>数学形式</strong>：对于输入序列 X ∈ R^{n × d_model}（n 个 token，每个 d_model 维）：</p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-attr">Q</span> = X · W_Q      W_Q ∈ R^{d_model × d_k}
+<span class="hljs-attr">K</span> = X · W_K      W_K ∈ R^{d_model × d_k}
+<span class="hljs-attr">V</span> = X · W_V      W_V ∈ R^{d_model × d_v}
+</code></pre></div><p>其中 d_k 是每个注意力头的维度（通常 d_k = d_v = d_model / num_heads）。</p>
 <h3>缩放点积注意力公式</h3>
 <p>$$\text{Attention}(Q, K, V) = \text{softmax}\left(\frac{QK^T}{\sqrt{d_k}}\right)V$$</p>
 <p><strong>逐步拆解：</strong></p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>输入: Q ∈ R^{n×d_k}, K ∈ R^{n×d_k}, V ∈ R^{n×d_v}
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>输入<span class="hljs-symbol">:</span> Q ∈ R^{<span class="hljs-built_in">n</span>×d_k}, K ∈ R^{<span class="hljs-built_in">n</span>×d_k}, V ∈ R^{<span class="hljs-built_in">n</span>×d_v}
 
-Step 1: 计算注意力分数
-    scores = Q @ K^T          ← 形状: (n, n)
-    scores[i][j] = Q_i · K_j  ← token i 对 token j 的&quot;原始注意力&quot;
+Step <span class="hljs-symbol">1:</span> 计算注意力分数
+    scores = Q @ K^<span class="hljs-built_in">T</span>          ← 形状<span class="hljs-symbol">:</span> (<span class="hljs-built_in">n</span>, <span class="hljs-built_in">n</span>)
+    scores[i][j] = Q_i · K_j  ← token i 对 token j 的<span class="hljs-string">"原始注意力"</span>
 
-Step 2: 缩放
-    scores = scores / sqrt(d_k)
-    原因: 防止点积过大导致 softmax 梯度消失
+Step <span class="hljs-symbol">2:</span> 缩放
+    scores = scores / <span class="hljs-built_in">sqrt</span>(d_k)
+    原因<span class="hljs-symbol">:</span> 防止点积过大导致 softmax 梯度消失
 
-Step 3: Softmax 归一化
-    weights = softmax(scores, dim=-1)  ← 形状: (n, n)
-    每一行权重和为 1
+Step <span class="hljs-symbol">3:</span> Softmax 归一化
+    weights = softmax(scores, dim=-<span class="hljs-number">1</span>)  ← 形状<span class="hljs-symbol">:</span> (<span class="hljs-built_in">n</span>, <span class="hljs-built_in">n</span>)
+    每一行权重和为 <span class="hljs-number">1</span>
 
-Step 4: 加权聚合
-    output = weights @ V       ← 形状: (n, d_v)
+Step <span class="hljs-symbol">4:</span> 加权聚合
+    output = weights @ V       ← 形状<span class="hljs-symbol">:</span> (<span class="hljs-built_in">n</span>, d_v)
     output[i] = Σ_j weights[i][j] · V[j]
-</code></pre></div>
-<h3>√d_k 缩放的原因</h3>
+</code></pre></div><h3>√d_k 缩放的原因</h3>
 <p>这是面试中最常被问到的问题之一。需要从方差分析入手：</p>
 <p>假设 Q 和 K 的每个分量独立，均值为 0，方差为 1。则点积 Q·K = Σ_{i=1}^{d_k} q_i · k_i。</p>
 <p>每个乘积项 q_i · k_i 的方差为 Var(q_i) × Var(k_i) = 1。
 所以 Q·K 的方差为 d_k（d_k 个无关项的方差求和）。</p>
 <p>因此点积的值为 N(0, d_k) 分布。随着 d_k 增大：</p>
 <ul>
-<li>点积的绝对值很大 → softmax 的输入进入&quot;饱和区&quot;</li>
+<li>点积的绝对值很大 → softmax 的输入进入"饱和区"</li>
 <li>softmax 输出极度尖锐（接近 one-hot）</li>
 <li>梯度 → 0，模型无法学习</li>
 </ul>
 <p>除以 √d_k 将方差从 d_k 拉回 1：
 $$Var\left(\frac{QK^T}{\sqrt{d_k}}\right) = \frac{d_k}{d_k} = 1$$</p>
 <p><strong>Java 代码演示：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.util.Random;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> java.util.Random;
 
-public class ScalingDemonstration {
-    public static void main(String[] args) {
-        var random = new Random(42);
-        int dk = 64;  // 典型值
-        int trials = 10000;
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ScalingDemonstration</span> {
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">main</span><span class="hljs-params">(String[] args)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">random</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Random</span>(<span class="hljs-number">42</span>);
+        <span class="hljs-type">int</span> <span class="hljs-variable">dk</span> <span class="hljs-operator">=</span> <span class="hljs-number">64</span>;  <span class="hljs-comment">// 典型值</span>
+        <span class="hljs-type">int</span> <span class="hljs-variable">trials</span> <span class="hljs-operator">=</span> <span class="hljs-number">10000</span>;
 
-        // 演示点积方差
-        double sumSquared = 0;
-        for (int t = 0; t &lt; trials; t++) {
-            double dotProduct = 0;
-            for (int i = 0; i &lt; dk; i++) {
-                double q = random.nextGaussian();
-                double k = random.nextGaussian();
+        <span class="hljs-comment">// 演示点积方差</span>
+        <span class="hljs-type">double</span> <span class="hljs-variable">sumSquared</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">t</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; t &lt; trials; t++) {
+            <span class="hljs-type">double</span> <span class="hljs-variable">dotProduct</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+            <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; dk; i++) {
+                <span class="hljs-type">double</span> <span class="hljs-variable">q</span> <span class="hljs-operator">=</span> random.nextGaussian();
+                <span class="hljs-type">double</span> <span class="hljs-variable">k</span> <span class="hljs-operator">=</span> random.nextGaussian();
                 dotProduct += q * k;
             }
             sumSquared += dotProduct * dotProduct;
         }
 
-        double variance = sumSquared / trials;
-        System.out.println(&quot;点积方差 (d_k=&quot; + dk + &quot;): &quot; + variance);
-        System.out.println(&quot;理论值 d_k: &quot; + dk);
-        // 输出：点积方差 ≈ 64 = d_k
+        <span class="hljs-type">double</span> <span class="hljs-variable">variance</span> <span class="hljs-operator">=</span> sumSquared / trials;
+        System.out.println(<span class="hljs-string">"点积方差 (d_k="</span> + dk + <span class="hljs-string">"): "</span> + variance);
+        System.out.println(<span class="hljs-string">"理论值 d_k: "</span> + dk);
+        <span class="hljs-comment">// 输出：点积方差 ≈ 64 = d_k</span>
 
-        // 缩放后方差
-        sumSquared = 0;
-        double scale = Math.sqrt(dk);
-        for (int t = 0; t &lt; trials; t++) {
-            double dotProduct = 0;
-            for (int i = 0; i &lt; dk; i++) {
+        <span class="hljs-comment">// 缩放后方差</span>
+        sumSquared = <span class="hljs-number">0</span>;
+        <span class="hljs-type">double</span> <span class="hljs-variable">scale</span> <span class="hljs-operator">=</span> Math.sqrt(dk);
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">t</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; t &lt; trials; t++) {
+            <span class="hljs-type">double</span> <span class="hljs-variable">dotProduct</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+            <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; dk; i++) {
                 dotProduct += random.nextGaussian() * random.nextGaussian();
             }
-            double scaled = dotProduct / scale;
+            <span class="hljs-type">double</span> <span class="hljs-variable">scaled</span> <span class="hljs-operator">=</span> dotProduct / scale;
             sumSquared += scaled * scaled;
         }
         variance = sumSquared / trials;
-        System.out.println(&quot;缩放后点积方差: &quot; + variance);
-        System.out.println(&quot;期望值 1.0: &quot; + (Math.abs(variance - 1.0) &lt; 0.1));
+        System.out.println(<span class="hljs-string">"缩放后点积方差: "</span> + variance);
+        System.out.println(<span class="hljs-string">"期望值 1.0: "</span> + (Math.abs(variance - <span class="hljs-number">1.0</span>) &lt; <span class="hljs-number">0.1</span>));
     }
 }
-</code></pre></div>
-<p><strong>Softmax 梯度分析：</strong></p>
+</code></pre></div><p><strong>Softmax 梯度分析：</strong></p>
 <p>当 d_k 很大且不缩放时：</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>原始分数: QK^T 的某些元素 &gt;&gt; 其他元素
-softmax([100, 1, 2]) ≈ [1.0, ~0, ~0]   ← 梯度几乎为零
+softmax(<span class="hljs-comment">[100, 1, 2]</span>) ≈ <span class="hljs-comment">[1.0, ~0, ~0]</span>   ← 梯度几乎为零
 softmax 的梯度 ∝ softmax(x_i) * (1 - softmax(x_i))
 
-缩放后分数落入合理范围（~[-3, 3]）：
-softmax([1.2, -0.5, 0.8]) ≈ [0.48, 0.09, 0.43]  ← 梯度健康
-</code></pre></div>
-<h3>注意力权重可视化</h3>
+缩放后分数落入合理范围（~<span class="hljs-comment">[-3, 3]</span>）：
+softmax(<span class="hljs-comment">[1.2, -0.5, 0.8]</span>) ≈ <span class="hljs-comment">[0.48, 0.09, 0.43]</span>  ← 梯度健康
+</code></pre></div><h3>注意力权重可视化</h3>
 <p>注意力权重矩阵是一个 n×n 的热力图。对因果语言模型（Decoder-only），使用<strong>因果注意力掩码（Causal Mask）</strong>：</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>因果掩码矩阵（下三角）：
-    t1  t2  t3  t4  t5
-t1  ✓   ✗   ✗   ✗   ✗      token 1 只能看到自己
-t2  ✓   ✓   ✗   ✗   ✗      token 2 能看到 1,2
-t3  ✓   ✓   ✓   ✗   ✗      token 3 能看到 1,2,3
-t4  ✓   ✓   ✓   ✓   ✗
-t5  ✓   ✓   ✓   ✓   ✓
-</code></pre></div>
-<p><strong>Java 实现因果掩码：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class CausalMask {
-    /**
+    <span class="hljs-built_in">t1</span>  <span class="hljs-built_in">t2</span>  <span class="hljs-built_in">t3</span>  <span class="hljs-built_in">t4</span>  <span class="hljs-built_in">t5</span>
+<span class="hljs-built_in">t1</span>  ✓   ✗   ✗   ✗   ✗      token <span class="hljs-number">1</span> 只能看到自己
+<span class="hljs-built_in">t2</span>  ✓   ✓   ✗   ✗   ✗      token <span class="hljs-number">2</span> 能看到 <span class="hljs-number">1</span>,<span class="hljs-number">2</span>
+<span class="hljs-built_in">t3</span>  ✓   ✓   ✓   ✗   ✗      token <span class="hljs-number">3</span> 能看到 <span class="hljs-number">1</span>,<span class="hljs-number">2</span>,<span class="hljs-number">3</span>
+<span class="hljs-built_in">t4</span>  ✓   ✓   ✓   ✓   ✗
+<span class="hljs-built_in">t5</span>  ✓   ✓   ✓   ✓   ✓
+</code></pre></div><p><strong>Java 实现因果掩码：</strong></p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">CausalMask</span> {
+    <span class="hljs-comment">/**
      * 创建因果注意力掩码
-     * @param seqLen 序列长度
-     * @return 掩码矩阵，true 表示允许关注，false 表示屏蔽
-     */
-    public static boolean[][] createCausalMask(int seqLen) {
-        var mask = new boolean[seqLen][seqLen];
-        for (int i = 0; i &lt; seqLen; i++) {
-            for (int j = 0; j &lt; seqLen; j++) {
-                mask[i][j] = j &lt;= i;  // 下三角为 true
+     * <span class="hljs-doctag">@param</span> seqLen 序列长度
+     * <span class="hljs-doctag">@return</span> 掩码矩阵，true 表示允许关注，false 表示屏蔽
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-type">boolean</span>[][] createCausalMask(<span class="hljs-type">int</span> seqLen) {
+        <span class="hljs-type">var</span> <span class="hljs-variable">mask</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">boolean</span>[seqLen][seqLen];
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; seqLen; i++) {
+            <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">j</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; j &lt; seqLen; j++) {
+                mask[i][j] = j &lt;= i;  <span class="hljs-comment">// 下三角为 true</span>
             }
         }
-        return mask;
+        <span class="hljs-keyword">return</span> mask;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 应用掩码到注意力分数
      * 被屏蔽的位置设为 -inf，这样 softmax 后权重为 0
-     */
-    public static float[][] applyMask(float[][] scores, boolean[][] mask) {
-        int n = scores.length;
-        var masked = new float[n][n];
-        for (int i = 0; i &lt; n; i++) {
-            for (int j = 0; j &lt; n; j++) {
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-type">float</span>[][] applyMask(<span class="hljs-type">float</span>[][] scores, <span class="hljs-type">boolean</span>[][] mask) {
+        <span class="hljs-type">int</span> <span class="hljs-variable">n</span> <span class="hljs-operator">=</span> scores.length;
+        <span class="hljs-type">var</span> <span class="hljs-variable">masked</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">float</span>[n][n];
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; n; i++) {
+            <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">j</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; j &lt; n; j++) {
                 masked[i][j] = mask[i][j] ? scores[i][j] : Float.NEGATIVE_INFINITY;
             }
         }
-        return masked;
+        <span class="hljs-keyword">return</span> masked;
     }
 }
-</code></pre></div>
-<h2>Multi-Head Attention</h2>
-<p>单头注意力的表达容量有限 -- 一个 token 只能以&quot;一种视角&quot;看待其他 token。Multi-Head Attention 让模型可以<strong>同时从多个不同的表示子空间</strong>学习注意力。</p>
+</code></pre></div><h2>Multi-Head Attention</h2>
+<p>单头注意力的表达容量有限 -- 一个 token 只能以"一种视角"看待其他 token。Multi-Head Attention 让模型可以<strong>同时从多个不同的表示子空间</strong>学习注意力。</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Multi-Head Attention 结构：
 
-输入 X (n × d_model)
+输入 <span class="hljs-keyword">X</span> (n × d_model)
     │
-    ├──► Head 1: Q1,K1,V1 = X·W_Q1, X·W_K1, X·W_V1  → Attention_1
-    ├──► Head 2: Q2,K2,V2 = X·W_Q2, X·W_K2, X·W_V2  → Attention_2
+    ├──► Head <span class="hljs-number">1</span>: Q<span class="hljs-number">1</span>,K<span class="hljs-number">1</span>,V<span class="hljs-number">1</span> = <span class="hljs-keyword">X</span>·W_Q<span class="hljs-number">1</span>, <span class="hljs-keyword">X</span>·W_K<span class="hljs-number">1</span>, <span class="hljs-keyword">X</span>·W_V<span class="hljs-number">1</span>  → Attention_<span class="hljs-number">1</span>
+    ├──► Head <span class="hljs-number">2</span>: Q<span class="hljs-number">2</span>,K<span class="hljs-number">2</span>,V<span class="hljs-number">2</span> = <span class="hljs-keyword">X</span>·W_Q<span class="hljs-number">2</span>, <span class="hljs-keyword">X</span>·W_K<span class="hljs-number">2</span>, <span class="hljs-keyword">X</span>·W_V<span class="hljs-number">2</span>  → Attention_<span class="hljs-number">2</span>
     ├──► ...
-    └──► Head h: Qh,Kh,Vh = X·W_Qh, X·W_Kh, X·W_Vh  → Attention_h
+    └──► Head h: Qh,Kh,Vh = <span class="hljs-keyword">X</span>·W_Qh, <span class="hljs-keyword">X</span>·W_Kh, <span class="hljs-keyword">X</span>·W_Vh  → Attention_h
     │
     ▼ Concat + Linear Projection
-    MultiHead(Q,K,V) = Concat(head_1, ..., head_h) · W_O
-</code></pre></div>
-<p><strong>每个头的维度</strong>：d_k = d_v = d_model / h。常见配置：</p>
+    MultiHead(Q,K,V) = Concat(head_<span class="hljs-number">1</span>, ..., head_h) · W_O
+</code></pre></div><p><strong>每个头的维度</strong>：d_k = d_v = d_model / h。常见配置：</p>
 <ul>
 <li>Original Transformer: d_model=512, h=8, d_k=64</li>
 <li>GPT-3: d_model=12288, h=96, d_k=128</li>
@@ -216,76 +207,75 @@ t5  ✓   ✓   ✓   ✓   ✓
 <li>稀有头：专门处理特殊符号和低频模式</li>
 </ul>
 <p><strong>Java 模拟 Multi-Head Attention：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.util.Arrays;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> java.util.Arrays;
 
-public record MultiHeadAttention(
-    int numHeads,
-    int dModel,
-    int dK,
-    int dV
-) {
-    public MultiHeadAttention {
-        if (dModel % numHeads != 0) {
-            throw new IllegalArgumentException(
-                &quot;dModel 必须能被 numHeads 整除&quot;);
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">MultiHeadAttention</span><span class="hljs-params">(
+    <span class="hljs-type">int</span> numHeads,
+    <span class="hljs-type">int</span> dModel,
+    <span class="hljs-type">int</span> dK,
+    <span class="hljs-type">int</span> dV
+)</span> {
+    <span class="hljs-keyword">public</span> MultiHeadAttention {
+        <span class="hljs-keyword">if</span> (dModel % numHeads != <span class="hljs-number">0</span>) {
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">IllegalArgumentException</span>(
+                <span class="hljs-string">"dModel 必须能被 numHeads 整除"</span>);
         }
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 模拟：将多头结果拼接后通过 W_O 投影
-     */
-    public float[][] forward(float[][] Q, float[][] K, float[][] V) {
-        int n = Q.length;  // seq_len
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-type">float</span>[][] forward(<span class="hljs-type">float</span>[][] Q, <span class="hljs-type">float</span>[][] K, <span class="hljs-type">float</span>[][] V) {
+        <span class="hljs-type">int</span> <span class="hljs-variable">n</span> <span class="hljs-operator">=</span> Q.length;  <span class="hljs-comment">// seq_len</span>
 
-        // 模拟 h 个头的结果 concat
-        float[][] allHeads = new float[n][dModel];
+        <span class="hljs-comment">// 模拟 h 个头的结果 concat</span>
+        <span class="hljs-type">float</span>[][] allHeads = <span class="hljs-keyword">new</span> <span class="hljs-title class_">float</span>[n][dModel];
 
-        for (int h = 0; h &lt; numHeads; h++) {
-            // 每个头独立做 Scaled Dot-Product Attention
-            float[][] headOutput = scaledDotProductAttention(
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">h</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; h &lt; numHeads; h++) {
+            <span class="hljs-comment">// 每个头独立做 Scaled Dot-Product Attention</span>
+            <span class="hljs-type">float</span>[][] headOutput = scaledDotProductAttention(
                 extractHead(Q, h), extractHead(K, h), extractHead(V, h));
 
-            // 放入对应的维度位置
-            int offset = h * dV;
-            for (int i = 0; i &lt; n; i++) {
-                System.arraycopy(headOutput[i], 0,
+            <span class="hljs-comment">// 放入对应的维度位置</span>
+            <span class="hljs-type">int</span> <span class="hljs-variable">offset</span> <span class="hljs-operator">=</span> h * dV;
+            <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; n; i++) {
+                System.arraycopy(headOutput[i], <span class="hljs-number">0</span>,
                     allHeads[i], offset, dV);
             }
         }
-        return allHeads;  // 简化为省略 W_O 投影
+        <span class="hljs-keyword">return</span> allHeads;  <span class="hljs-comment">// 简化为省略 W_O 投影</span>
     }
 
-    private float[][] extractHead(float[][] matrix, int head) {
-        int n = matrix.length;
-        int offset = head * dK;
-        var headMatrix = new float[n][dK];
-        for (int i = 0; i &lt; n; i++) {
-            System.arraycopy(matrix[i], offset, headMatrix[i], 0, dK);
+    <span class="hljs-keyword">private</span> <span class="hljs-type">float</span>[][] extractHead(<span class="hljs-type">float</span>[][] matrix, <span class="hljs-type">int</span> head) {
+        <span class="hljs-type">int</span> <span class="hljs-variable">n</span> <span class="hljs-operator">=</span> matrix.length;
+        <span class="hljs-type">int</span> <span class="hljs-variable">offset</span> <span class="hljs-operator">=</span> head * dK;
+        <span class="hljs-type">var</span> <span class="hljs-variable">headMatrix</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">float</span>[n][dK];
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; n; i++) {
+            System.arraycopy(matrix[i], offset, headMatrix[i], <span class="hljs-number">0</span>, dK);
         }
-        return headMatrix;
+        <span class="hljs-keyword">return</span> headMatrix;
     }
 
-    private float[][] scaledDotProductAttention(
-            float[][] Q, float[][] K, float[][] V) {
-        int n = Q.length;
-        var scores = new float[n][n];
-        // Q @ K^T
-        for (int i = 0; i &lt; n; i++) {
-            for (int j = 0; j &lt; n; j++) {
-                float dot = 0;
-                for (int d = 0; d &lt; dK; d++) {
+    <span class="hljs-keyword">private</span> <span class="hljs-type">float</span>[][] scaledDotProductAttention(
+            <span class="hljs-type">float</span>[][] Q, <span class="hljs-type">float</span>[][] K, <span class="hljs-type">float</span>[][] V) {
+        <span class="hljs-type">int</span> <span class="hljs-variable">n</span> <span class="hljs-operator">=</span> Q.length;
+        <span class="hljs-type">var</span> <span class="hljs-variable">scores</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">float</span>[n][n];
+        <span class="hljs-comment">// Q @ K^T</span>
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; n; i++) {
+            <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">j</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; j &lt; n; j++) {
+                <span class="hljs-type">float</span> <span class="hljs-variable">dot</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+                <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">d</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; d &lt; dK; d++) {
                     dot += Q[i][d] * K[j][d];
                 }
-                scores[i][j] = dot / (float) Math.sqrt(dK);
+                scores[i][j] = dot / (<span class="hljs-type">float</span>) Math.sqrt(dK);
             }
         }
-        // softmax + 加权求和（省略实现）
-        return scores; // 简化
+        <span class="hljs-comment">// softmax + 加权求和（省略实现）</span>
+        <span class="hljs-keyword">return</span> scores; <span class="hljs-comment">// 简化</span>
     }
 }
-</code></pre></div>
-<h2>Positional Encoding</h2>
-<p>Transformer 自身没有循环结构，因此完全看不到 token 的顺序信息。&quot;A loves B&quot;和&quot;B loves A&quot;的 token 集合完全相同，但语义截然不同。Positional Encoding 就是为了向模型注入位置信息。</p>
+</code></pre></div><h2>Positional Encoding</h2>
+<p>Transformer 自身没有循环结构，因此完全看不到 token 的顺序信息。"A loves B"和"B loves A"的 token 集合完全相同，但语义截然不同。Positional Encoding 就是为了向模型注入位置信息。</p>
 <h3>正弦位置编码</h3>
 <p>原始 Transformer 使用正弦/余弦函数生成位置编码：</p>
 <p>$$PE_{(pos, 2i)} = \sin\left(\frac{pos}{10000^{2i/d_{model}}}\right)$$
@@ -299,53 +289,51 @@ $$\sin(pos+k) = \sin(pos)\cos(k) + \cos(pos)\sin(k)$$
 </li>
 <li><p><strong>外推能力</strong>：理论上可以推广到训练时未见过的序列长度。</p>
 </li>
-<li><p><strong>波长多样性</strong>：不同维度的正弦函数有不同频率（波长从 2π 到 10000·2π），类似不同粒度的&quot;位置刻度尺&quot;。</p>
+<li><p><strong>波长多样性</strong>：不同维度的正弦函数有不同频率（波长从 2π 到 10000·2π），类似不同粒度的"位置刻度尺"。</p>
 </li>
 </ol>
 <p><strong>Java 实现正弦位置编码：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class SinusoidalPositionalEncoding {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">SinusoidalPositionalEncoding</span> {
 
-    /**
-     * @param maxLen 最大序列长度
-     * @param dModel 模型维度
-     * @return PE[maxLen][dModel]
-     */
-    public static float[][] encode(int maxLen, int dModel) {
-        var pe = new float[maxLen][dModel];
-        for (int pos = 0; pos &lt; maxLen; pos++) {
-            for (int i = 0; i &lt; dModel; i++) {
-                double angle = pos / Math.pow(10000.0, (2.0 * (i / 2)) / dModel);
-                pe[pos][i] = (i % 2 == 0)
-                    ? (float) Math.sin(angle)
-                    : (float) Math.cos(angle);
+    <span class="hljs-comment">/**
+     * <span class="hljs-doctag">@param</span> maxLen 最大序列长度
+     * <span class="hljs-doctag">@param</span> dModel 模型维度
+     * <span class="hljs-doctag">@return</span> PE[maxLen][dModel]
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-type">float</span>[][] encode(<span class="hljs-type">int</span> maxLen, <span class="hljs-type">int</span> dModel) {
+        <span class="hljs-type">var</span> <span class="hljs-variable">pe</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">float</span>[maxLen][dModel];
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">pos</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; pos &lt; maxLen; pos++) {
+            <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; dModel; i++) {
+                <span class="hljs-type">double</span> <span class="hljs-variable">angle</span> <span class="hljs-operator">=</span> pos / Math.pow(<span class="hljs-number">10000.0</span>, (<span class="hljs-number">2.0</span> * (i / <span class="hljs-number">2</span>)) / dModel);
+                pe[pos][i] = (i % <span class="hljs-number">2</span> == <span class="hljs-number">0</span>)
+                    ? (<span class="hljs-type">float</span>) Math.sin(angle)
+                    : (<span class="hljs-type">float</span>) Math.cos(angle);
             }
         }
-        return pe;
+        <span class="hljs-keyword">return</span> pe;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 验证：PE(pos+k) 可以通过旋转矩阵从 PE(pos) 得到
-     */
-    public static boolean verifyRelativeProperty() {
-        int dModel = 128;
-        var pe = encode(100, dModel);
-        // 对于任何位置偏移 k，存在线性变换使得 PE(pos+k) = PE(pos) * M
-        // 这对于偶数维度的 2×2 块成立
-        return true; // 理论验证
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">verifyRelativeProperty</span><span class="hljs-params">()</span> {
+        <span class="hljs-type">int</span> <span class="hljs-variable">dModel</span> <span class="hljs-operator">=</span> <span class="hljs-number">128</span>;
+        <span class="hljs-type">var</span> <span class="hljs-variable">pe</span> <span class="hljs-operator">=</span> encode(<span class="hljs-number">100</span>, dModel);
+        <span class="hljs-comment">// 对于任何位置偏移 k，存在线性变换使得 PE(pos+k) = PE(pos) * M</span>
+        <span class="hljs-comment">// 这对于偶数维度的 2×2 块成立</span>
+        <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>; <span class="hljs-comment">// 理论验证</span>
     }
 }
-</code></pre></div>
-<h3>可学习位置编码</h3>
+</code></pre></div><h3>可学习位置编码</h3>
 <p>与正弦编码不同，将位置编码作为可训练参数：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 伪代码：可学习位置编码
-public class LearnablePositionalEmbedding {
-    private final float[][] embeddings; // [maxLen][dModel]
-    // 在训练过程中通过反向传播更新
-    // 优点：灵活性更高
-    // 缺点：无法外推到更长序列
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 伪代码：可学习位置编码</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">LearnablePositionalEmbedding</span> {
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">float</span>[][] embeddings; <span class="hljs-comment">// [maxLen][dModel]</span>
+    <span class="hljs-comment">// 在训练过程中通过反向传播更新</span>
+    <span class="hljs-comment">// 优点：灵活性更高</span>
+    <span class="hljs-comment">// 缺点：无法外推到更长序列</span>
 }
-</code></pre></div>
-<p>GPT 系列使用可学习的位置嵌入。BERT 也使用可学习的位置嵌入。</p>
+</code></pre></div><p>GPT 系列使用可学习的位置嵌入。BERT 也使用可学习的位置嵌入。</p>
 <h3>RoPE（Rotary Position Embedding）</h3>
 <p>2021 年由 Su 等人提出，已成为 LLaMA、Qwen、Mistral 等主流开源模型的标准选择。</p>
 <p><strong>核心思想</strong>：不是将位置信息加到 token embedding 上，而是<strong>通过旋转矩阵将位置信息编码到 attention 计算中的 Q 和 K 上</strong>。</p>
@@ -353,73 +341,70 @@ public class LearnablePositionalEmbedding {
 <p>其中 R^d_{\Theta,m} 是一个块对角旋转矩阵：</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>R^d_{Θ,m} =
 ┌                                          ┐
-│ cos(mθ₁) -sin(mθ₁)    0        0    ... │
-│ sin(mθ₁)  cos(mθ₁)    0        0    ... │
-│   0         0    cos(mθ₂) -sin(mθ₂) ... │
-│   0         0    sin(mθ₂)  cos(mθ₂) ... │
-│  ...       ...       ...      ...  ...  │
+│ cos<span class="hljs-params">(mθ₁)</span> -sin<span class="hljs-params">(mθ₁)</span>    0        0    <span class="hljs-string">...</span> │
+│ sin<span class="hljs-params">(mθ₁)</span>  cos<span class="hljs-params">(mθ₁)</span>    0        0    <span class="hljs-string">...</span> │
+│   0         0    cos<span class="hljs-params">(mθ₂)</span> -sin<span class="hljs-params">(mθ₂)</span> <span class="hljs-string">...</span> │
+│   0         0    sin<span class="hljs-params">(mθ₂)</span>  cos<span class="hljs-params">(mθ₂)</span> <span class="hljs-string">...</span> │
+│  <span class="hljs-string">...</span>       <span class="hljs-string">...</span>       <span class="hljs-string">...</span>      <span class="hljs-string">...</span>  <span class="hljs-string">...</span>  │
 └                                          ┘
-</code></pre></div>
-<p>其中 θ_i = 10000^{-2(i-1)/d}, i = 1, 2, ..., d/2。</p>
+</code></pre></div><p>其中 θ_i = 10000^{-2(i-1)/d}, i = 1, 2, ..., d/2。</p>
 <p><strong>计算简化</strong>：实际实现中不需要构造完整矩阵，而是：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>对于向量 x = [x₀, x₁, x₂, x₃, ...]
-RoPE(x, m)[2i]   = x[2i]·cos(mθᵢ) - x[2i+1]·sin(mθᵢ)
-RoPE(x, m)[2i+1] = x[2i]·sin(mθᵢ) + x[2i+1]·cos(mθᵢ)
-</code></pre></div>
-<p><strong>RoPE 的核心优势：</strong></p>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>对于向量 <span class="hljs-variable language_">x</span> = [<span class="hljs-variable language_">x</span>₀, <span class="hljs-variable language_">x</span>₁, <span class="hljs-variable language_">x</span>₂, <span class="hljs-variable language_">x</span>₃, ...]
+RoPE(<span class="hljs-variable language_">x</span>, m)[<span class="hljs-number">2</span>i]   = <span class="hljs-variable language_">x</span>[<span class="hljs-number">2</span>i]·<span class="hljs-built_in">cos</span>(mθᵢ) - <span class="hljs-variable language_">x</span>[<span class="hljs-number">2</span>i+<span class="hljs-number">1</span>]·<span class="hljs-built_in">sin</span>(mθᵢ)
+RoPE(<span class="hljs-variable language_">x</span>, m)[<span class="hljs-number">2</span>i+<span class="hljs-number">1</span>] = <span class="hljs-variable language_">x</span>[<span class="hljs-number">2</span>i]·<span class="hljs-built_in">sin</span>(mθᵢ) + <span class="hljs-variable language_">x</span>[<span class="hljs-number">2</span>i+<span class="hljs-number">1</span>]·<span class="hljs-built_in">cos</span>(mθᵢ)
+</code></pre></div><p><strong>RoPE 的核心优势：</strong></p>
 <ol>
 <li><strong>相对位置天然编码</strong>：attention 分数 q_m^T·k_n 只依赖于相对位置 (m - n)，而不是绝对位置。</li>
-<li><strong>远程衰减</strong>：随着相对距离增加，attention 分数自然衰减，这符合语言中&quot;距离越远关系越弱&quot;的直觉。</li>
+<li><strong>远程衰减</strong>：随着相对距离增加，attention 分数自然衰减，这符合语言中"距离越远关系越弱"的直觉。</li>
 <li><strong>外推友好</strong>：配合 NTK-aware 插值等技巧，可以在推理时扩展上下文窗口。</li>
 <li><strong>训练稳定性</strong>：不需要额外学习位置参数。</li>
 </ol>
 <p><strong>Java 实现 RoPE：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class RotaryPositionEmbedding {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">RotaryPositionEmbedding</span> {
 
-    /**
+    <span class="hljs-comment">/**
      * 对 Q 或 K 应用 RoPE
-     * @param x 输入向量 [seqLen][numHeads][headDim]
-     * @param pos 当前位置
-     */
-    public static void applyRoPE(float[][][] x, int pos, int headDim) {
-        for (int h = 0; h &lt; x[0].length; h++) {
-            for (int i = 0; i &lt; headDim; i += 2) {
-                double theta = Math.pow(10000.0, -2.0 * (i / 2.0) / headDim);
-                float cos = (float) Math.cos(pos * theta);
-                float sin = (float) Math.sin(pos * theta);
+     * <span class="hljs-doctag">@param</span> x 输入向量 [seqLen][numHeads][headDim]
+     * <span class="hljs-doctag">@param</span> pos 当前位置
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">applyRoPE</span><span class="hljs-params">(<span class="hljs-type">float</span>[][][] x, <span class="hljs-type">int</span> pos, <span class="hljs-type">int</span> headDim)</span> {
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">h</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; h &lt; x[<span class="hljs-number">0</span>].length; h++) {
+            <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; headDim; i += <span class="hljs-number">2</span>) {
+                <span class="hljs-type">double</span> <span class="hljs-variable">theta</span> <span class="hljs-operator">=</span> Math.pow(<span class="hljs-number">10000.0</span>, -<span class="hljs-number">2.0</span> * (i / <span class="hljs-number">2.0</span>) / headDim);
+                <span class="hljs-type">float</span> <span class="hljs-variable">cos</span> <span class="hljs-operator">=</span> (<span class="hljs-type">float</span>) Math.cos(pos * theta);
+                <span class="hljs-type">float</span> <span class="hljs-variable">sin</span> <span class="hljs-operator">=</span> (<span class="hljs-type">float</span>) Math.sin(pos * theta);
 
-                float x0 = x[0][h][i];
-                float x1 = x[0][h][i + 1];
+                <span class="hljs-type">float</span> <span class="hljs-variable">x0</span> <span class="hljs-operator">=</span> x[<span class="hljs-number">0</span>][h][i];
+                <span class="hljs-type">float</span> <span class="hljs-variable">x1</span> <span class="hljs-operator">=</span> x[<span class="hljs-number">0</span>][h][i + <span class="hljs-number">1</span>];
 
-                x[0][h][i] = x0 * cos - x1 * sin;
-                x[0][h][i + 1] = x0 * sin + x1 * cos;
+                x[<span class="hljs-number">0</span>][h][i] = x0 * cos - x1 * sin;
+                x[<span class="hljs-number">0</span>][h][i + <span class="hljs-number">1</span>] = x0 * sin + x1 * cos;
             }
         }
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 批量对序列应用 RoPE
-     * @param x [seqLen][numHeads][headDim]
-     */
-    public static void applyRoPEBatch(float[][][] x) {
-        for (int pos = 0; pos &lt; x.length; pos++) {
-            applyRoPE(new float[][][]{x[pos]}, pos, x[pos][0].length);
+     * <span class="hljs-doctag">@param</span> x [seqLen][numHeads][headDim]
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">applyRoPEBatch</span><span class="hljs-params">(<span class="hljs-type">float</span>[][][] x)</span> {
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">pos</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; pos &lt; x.length; pos++) {
+            applyRoPE(<span class="hljs-keyword">new</span> <span class="hljs-title class_">float</span>[][][]{x[pos]}, pos, x[pos][<span class="hljs-number">0</span>].length);
         }
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 验证：内积 q_i^T k_j 只依赖于 (i-j) 的 cos 值
-     */
-    public static boolean verifyRelativeProperty(
-            float[] q, float[] k, int posI, int posJ, int headDim) {
-        // 理论：
-        // (RoPE(q,i)·RoPE(k,j)) 不含绝对位置 i 或 j
-        // 只含 cos((i-j)·θ) 项
-        return true;
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">verifyRelativeProperty</span><span class="hljs-params">(
+            <span class="hljs-type">float</span>[] q, <span class="hljs-type">float</span>[] k, <span class="hljs-type">int</span> posI, <span class="hljs-type">int</span> posJ, <span class="hljs-type">int</span> headDim)</span> {
+        <span class="hljs-comment">// 理论：</span>
+        <span class="hljs-comment">// (RoPE(q,i)·RoPE(k,j)) 不含绝对位置 i 或 j</span>
+        <span class="hljs-comment">// 只含 cos((i-j)·θ) 项</span>
+        <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
     }
 }
-</code></pre></div>
-<h3>ALiBi (Attention with Linear Biases)</h3>
+</code></pre></div><h3>ALiBi (Attention with Linear Biases)</h3>
 <p>2021 年由 Press 等人提出，是一种极其简洁的位置编码方法：直接给 attention 分数加一个线性衰减的偏置。</p>
 <p>$$\text{ALiBi}(Q, K, V) = \text{softmax}\left(\frac{QK^T}{\sqrt{d_k}} + m \cdot B\right)V$$</p>
 <p>其中 B 是一个固定的矩阵，B_{i,j} = -|i - j|（负值，距离越远惩罚越大），m 是每个头独立的斜率。</p>
@@ -431,41 +416,40 @@ RoPE(x, m)[2i+1] = x[2i]·sin(mθᵢ) + x[2i+1]·cos(mθᵢ)
 <li><strong>训练效率</strong>：不需要计算位置编码</li>
 </ul>
 <p><strong>Java 实现 ALiBi：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class ALiBiMask {
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ALiBiMask</span> {
 
-    /**
+    <span class="hljs-comment">/**
      * 生成 ALiBi 偏置矩阵
-     */
-    public static float[][] generateBiases(int seqLen, int numHeads, int headDim) {
-        var slopes = computeSlopes(numHeads);
-        var biases = new float[seqLen][seqLen];
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-type">float</span>[][] generateBiases(<span class="hljs-type">int</span> seqLen, <span class="hljs-type">int</span> numHeads, <span class="hljs-type">int</span> headDim) {
+        <span class="hljs-type">var</span> <span class="hljs-variable">slopes</span> <span class="hljs-operator">=</span> computeSlopes(numHeads);
+        <span class="hljs-type">var</span> <span class="hljs-variable">biases</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">float</span>[seqLen][seqLen];
 
-        for (int i = 0; i &lt; seqLen; i++) {
-            for (int j = 0; j &lt; seqLen; j++) {
-                // 对因果注意力：只惩罚&quot;向前看&quot;
-                if (j &lt;= i) {
-                    biases[i][j] = slopes[0] * (j - i);  // 距离惩罚
-                } else {
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; seqLen; i++) {
+            <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">j</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; j &lt; seqLen; j++) {
+                <span class="hljs-comment">// 对因果注意力：只惩罚"向前看"</span>
+                <span class="hljs-keyword">if</span> (j &lt;= i) {
+                    biases[i][j] = slopes[<span class="hljs-number">0</span>] * (j - i);  <span class="hljs-comment">// 距离惩罚</span>
+                } <span class="hljs-keyword">else</span> {
                     biases[i][j] = Float.NEGATIVE_INFINITY;
                 }
             }
         }
-        return biases;
+        <span class="hljs-keyword">return</span> biases;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 计算每个头的斜率。遵循几何级数
-     */
-    private static float[] computeSlopes(int numHeads) {
-        var slopes = new float[numHeads];
-        for (int i = 0; i &lt; numHeads; i++) {
-            slopes[i] = (float) Math.pow(2, -8.0 * i / numHeads);
+     */</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-type">float</span>[] computeSlopes(<span class="hljs-type">int</span> numHeads) {
+        <span class="hljs-type">var</span> <span class="hljs-variable">slopes</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">float</span>[numHeads];
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; numHeads; i++) {
+            slopes[i] = (<span class="hljs-type">float</span>) Math.pow(<span class="hljs-number">2</span>, -<span class="hljs-number">8.0</span> * i / numHeads);
         }
-        return slopes;
+        <span class="hljs-keyword">return</span> slopes;
     }
 }
-</code></pre></div>
-<h2>Feed-Forward Network (FFN)</h2>
+</code></pre></div><h2>Feed-Forward Network (FFN)</h2>
 <p>每个 Transformer 层在 Attention 之后还有一个 FFN（也称 MLP 层）：</p>
 <p>$$\text{FFN}(x) = W_2 \cdot \sigma(W_1 \cdot x + b_1) + b_2$$</p>
 <p>其中 σ 是激活函数。FFN 的维度通常是 d_model 的 4 倍（d_ff = 4 × d_model）。</p>
@@ -508,74 +492,72 @@ RoPE(x, m)[2i+1] = x[2i]·sin(mθᵢ) + x[2i+1]·cos(mθᵢ)
 <li>实际常用的 d_ff 大小约为 2.7 × d_model</li>
 </ul>
 <p><strong>Java 示例：FFN 层模拟：</strong></p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import java.util.function.Function;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> java.util.function.Function;
 
-public class FeedForwardNetwork {
-    private final int dModel;
-    private final int dFf;
-    private final Function&lt;Float, Float&gt; activation;
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">FeedForwardNetwork</span> {
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">int</span> dModel;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">int</span> dFf;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Function&lt;Float, Float&gt; activation;
 
-    public FeedForwardNetwork(int dModel, ActivationType activationType) {
-        this.dModel = dModel;
-        this.activation = activationType.getFunction();
-        // 标准 ReLU/GELU FFN
-        this.dFf = activationType == ActivationType.SWIGLU
-            ? (int) Math.ceil(8.0 / 3 * dModel)  // SwiGLU 更大
-            : 4 * dModel;                         // 标准 FFN
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">FeedForwardNetwork</span><span class="hljs-params">(<span class="hljs-type">int</span> dModel, ActivationType activationType)</span> {
+        <span class="hljs-built_in">this</span>.dModel = dModel;
+        <span class="hljs-built_in">this</span>.activation = activationType.getFunction();
+        <span class="hljs-comment">// 标准 ReLU/GELU FFN</span>
+        <span class="hljs-built_in">this</span>.dFf = activationType == ActivationType.SWIGLU
+            ? (<span class="hljs-type">int</span>) Math.ceil(<span class="hljs-number">8.0</span> / <span class="hljs-number">3</span> * dModel)  <span class="hljs-comment">// SwiGLU 更大</span>
+            : <span class="hljs-number">4</span> * dModel;                         <span class="hljs-comment">// 标准 FFN</span>
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 前向传播 (简化，省略实际权重乘法)
-     */
-    public float[] forward(float[] x) {
-        // W1 投影 + 激活
-        var hidden = new float[dFf];
-        for (int i = 0; i &lt; dFf; i++) {
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-type">float</span>[] forward(<span class="hljs-type">float</span>[] x) {
+        <span class="hljs-comment">// W1 投影 + 激活</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">hidden</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">float</span>[dFf];
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; dFf; i++) {
             hidden[i] = activation.apply(x[i % dModel]);
         }
-        // W2 投影回 dModel
-        var output = new float[dModel];
-        for (int i = 0; i &lt; dModel; i++) {
-            for (int j = 0; j &lt; dFf; j++) {
-                output[i] += hidden[j] * 0.01f;  // 模拟权重
+        <span class="hljs-comment">// W2 投影回 dModel</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">output</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">float</span>[dModel];
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; dModel; i++) {
+            <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">j</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; j &lt; dFf; j++) {
+                output[i] += hidden[j] * <span class="hljs-number">0.01f</span>;  <span class="hljs-comment">// 模拟权重</span>
             }
         }
-        return output;
+        <span class="hljs-keyword">return</span> output;
     }
 
-    public enum ActivationType {
-        RELU(x -&gt; Math.max(0, x)),
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">enum</span> <span class="hljs-title class_">ActivationType</span> {
+        RELU(x -&gt; Math.max(<span class="hljs-number">0</span>, x)),
         GELU(x -&gt; {
-            // GELU 近似: 0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))
-            double xd = x;
-            return (float) (0.5 * xd * (1 + Math.tanh(
-                Math.sqrt(2.0 / Math.PI) * (xd + 0.044715 * xd * xd * xd))));
+            <span class="hljs-comment">// GELU 近似: 0.5 * x * (1 + tanh(sqrt(2/pi) * (x + 0.044715 * x^3)))</span>
+            <span class="hljs-type">double</span> <span class="hljs-variable">xd</span> <span class="hljs-operator">=</span> x;
+            <span class="hljs-keyword">return</span> (<span class="hljs-type">float</span>) (<span class="hljs-number">0.5</span> * xd * (<span class="hljs-number">1</span> + Math.tanh(
+                Math.sqrt(<span class="hljs-number">2.0</span> / Math.PI) * (xd + <span class="hljs-number">0.044715</span> * xd * xd * xd))));
         }),
-        SWIGLU(x -&gt; (float) (x / (1 + Math.exp(-x))));  // Swish(x) = x * sigmoid(x)
+        SWIGLU(x -&gt; (<span class="hljs-type">float</span>) (x / (<span class="hljs-number">1</span> + Math.exp(-x))));  <span class="hljs-comment">// Swish(x) = x * sigmoid(x)</span>
 
-        private final Function&lt;Float, Float&gt; function;
-        ActivationType(Function&lt;Float, Float&gt; f) { this.function = f; }
-        Function&lt;Float, Float&gt; getFunction() { return function; }
+        <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Function&lt;Float, Float&gt; function;
+        ActivationType(Function&lt;Float, Float&gt; f) { <span class="hljs-built_in">this</span>.function = f; }
+        Function&lt;Float, Float&gt; <span class="hljs-title function_">getFunction</span><span class="hljs-params">()</span> { <span class="hljs-keyword">return</span> function; }
     }
 }
-</code></pre></div>
-<h2>Layer Normalization</h2>
+</code></pre></div><h2>Layer Normalization</h2>
 <p>Layer Normalization 对每个样本的特征维度做归一化：</p>
 <p>$$\text{LayerNorm}(x) = \gamma \odot \frac{x - \mu}{\sqrt{\sigma^2 + \epsilon}} + \beta$$</p>
 <p>其中 μ 和 σ² 是在 d_model 维度上计算的均值和方差。</p>
 <h3>Pre-LN vs Post-LN</h3>
 <p>这是决定 Transformer 训练稳定性的关键设计选择：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Post-LN (原始 Transformer):
-    x → Attention → + → LN → FFN → + → LN → output
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Post-<span class="hljs-built_in">LN</span> (原始 Transformer):
+    x → Attention → + → <span class="hljs-built_in">LN</span> → FFN → + → <span class="hljs-built_in">LN</span> → <span class="hljs-keyword">output</span>
         |_________|         |______|
         (残差)              (残差)
 
-Pre-LN (GPT-2, LLaMA 等):
-    x → LN → Attention → + → LN → FFN → + → output
+Pre-<span class="hljs-built_in">LN</span> (GPT<span class="hljs-number">-2</span>, LLaMA 等):
+    x → <span class="hljs-built_in">LN</span> → Attention → + → <span class="hljs-built_in">LN</span> → FFN → + → <span class="hljs-keyword">output</span>
                        |              |
                     (残差)         (残差)
-</code></pre></div>
-<p><strong>关键差异：</strong></p>
+</code></pre></div><p><strong>关键差异：</strong></p>
 <table>
 <thead>
 <tr>
@@ -618,80 +600,76 @@ Pre-LN (GPT-2, LLaMA 等):
 │  (BERT, RoBERTa)│ (T5, BART, 原始)    │  (GPT, LLaMA, Claude)       │
 ├─────────────────┼─────────────────────┼─────────────────────────────┤
 │                 │                     │                             │
-│  [IN]→Enc→[OUT] │ [IN]→Enc→Dec→[OUT]  │    [IN]→Dec→Dec→...→[OUT]  │
+│  [<span class="hljs-keyword">IN</span>]→<span class="hljs-keyword">Enc</span>→[<span class="hljs-keyword">OUT</span>] │ [<span class="hljs-keyword">IN</span>]→<span class="hljs-keyword">Enc</span>→<span class="hljs-keyword">Dec</span>→[<span class="hljs-keyword">OUT</span>]  │    [<span class="hljs-keyword">IN</span>]→<span class="hljs-keyword">Dec</span>→<span class="hljs-keyword">Dec</span>→...→[<span class="hljs-keyword">OUT</span>]  │
 │                 │                     │                             │
-│  双向注意力      │ Enc 双向            │    因果注意力 (单向)        │
-│                 │ Dec 因果+交叉注意力  │                             │
+│  双向注意力      │ <span class="hljs-keyword">Enc</span> 双向            │    因果注意力 (单向)        │
+│                 │ <span class="hljs-keyword">Dec</span> 因果+交叉注意力  │                             │
 │                 │                     │                             │
 │  理解任务        │ 生成式任务           │    自回归生成               │
 │  分类/标注/NER   │ 翻译/摘要/问答       │    通用语言模型             │
 └─────────────────┴─────────────────────┴─────────────────────────────┘
-</code></pre></div>
-<h3>Encoder-only (BERT 系)</h3>
+</code></pre></div><h3>Encoder-only (BERT 系)</h3>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>BERT 结构：
 ┌──────────────────────┐
-│  Token Embeddings    │
+│  <span class="hljs-built_in">Token</span> Embeddings    │
 │  + Position Encoding │
 │  + Segment Encoding  │
 └──────────┬───────────┘
            ▼
 ┌──────────────────────┐
-│  Pre-LN              │
+│  Pre-<span class="hljs-built_in">LN</span>              │
 │  Multi-Head          │
-│  Attention (双向)     │  ← 关键：可以看到前后所有 token
+│  <span class="hljs-built_in">Attention</span> (双向)     │  ← 关键：可以看到前后所有 <span class="hljs-built_in">token</span>
 │  + Residual          │
 ├──────────────────────┤
-│  Post-LN (BERT用     │
-│        Post-LN!)     │
-│  FFN (GELU)          │
+│  Post-<span class="hljs-built_in">LN</span> (BERT用     │
+│        Post-<span class="hljs-built_in">LN</span>!)     │
+│  <span class="hljs-built_in">FFN</span> (GELU)          │
 │  + Residual          │
 └──────────┬───────────┘
            ▼  重复 N 层
 ┌──────────────────────┐
-│  输出: 每个 token     │
+│  输出: 每个 <span class="hljs-built_in">token</span>     │
 │  的上下文表示         │
 └──────────────────────┘
-</code></pre></div>
-<h3>Decoder-only (GPT 系)</h3>
+</code></pre></div><h3>Decoder-only (GPT 系)</h3>
 <p>现代 LLM 的主流架构：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>GPT/LLaMA 结构 (Pre-Norm)：
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-variable">GPT</span><span class="hljs-operator">/</span><span class="hljs-variable">LLaMA</span> 结构 <span class="hljs-punctuation">(</span><span class="hljs-variable">Pre</span><span class="hljs-operator">-</span><span class="hljs-built_in">Norm</span><span class="hljs-punctuation">)</span>：
 ┌──────────────────────┐
-│  Token Embeddings    │
-│  + Position (RoPE)   │
+│  <span class="hljs-variable">Token</span> <span class="hljs-variable">Embeddings</span>    │
+│  <span class="hljs-operator">+</span> <span class="hljs-built_in">Position</span> <span class="hljs-punctuation">(</span><span class="hljs-variable">RoPE</span><span class="hljs-punctuation">)</span>   │
 └──────────┬───────────┘
-           ▼  重复 N 层
+           ▼  重复 <span class="hljs-built_in">N</span> 层
 ┌──────────────────────┐
-│  RMSNorm (Pre-LN)    │
-│  Masked Multi-Head   │
-│  Attention (因果)     │  ← 核心：只能看到前面的 token
-│  + RoPE 应用到 Q,K   │
-│  + Residual          │
+│  <span class="hljs-variable">RMSNorm</span> <span class="hljs-punctuation">(</span><span class="hljs-variable">Pre</span><span class="hljs-operator">-</span><span class="hljs-variable">LN</span><span class="hljs-punctuation">)</span>    │
+│  <span class="hljs-variable">Masked</span> <span class="hljs-variable">Multi</span><span class="hljs-operator">-</span><span class="hljs-built_in">Head</span>   │
+│  <span class="hljs-variable">Attention</span> <span class="hljs-punctuation">(</span>因果<span class="hljs-punctuation">)</span>     │  ← 核心：只能看到前面的 <span class="hljs-variable">token</span>
+│  <span class="hljs-operator">+</span> <span class="hljs-variable">RoPE</span> 应用到 <span class="hljs-variable">Q</span><span class="hljs-operator">,</span><span class="hljs-built_in">K</span>   │
+│  <span class="hljs-operator">+</span> <span class="hljs-variable">Residual</span>          │
 ├──────────────────────┤
-│  RMSNorm (Pre-LN)    │
-│  FFN (SwiGLU)        │  ← LLaMA 使用 SwiGLU
-│  + Residual          │
+│  <span class="hljs-variable">RMSNorm</span> <span class="hljs-punctuation">(</span><span class="hljs-variable">Pre</span><span class="hljs-operator">-</span><span class="hljs-variable">LN</span><span class="hljs-punctuation">)</span>    │
+│  <span class="hljs-variable">FFN</span> <span class="hljs-punctuation">(</span><span class="hljs-variable">SwiGLU</span><span class="hljs-punctuation">)</span>        │  ← <span class="hljs-variable">LLaMA</span> 使用 <span class="hljs-variable">SwiGLU</span>
+│  <span class="hljs-operator">+</span> <span class="hljs-variable">Residual</span>          │
 └──────────┬───────────┘
            ▼
 ┌──────────────────────┐
-│  RMSNorm (Final)     │
-│  LM Head → logits    │
+│  <span class="hljs-variable">RMSNorm</span> <span class="hljs-punctuation">(</span><span class="hljs-variable">Final</span><span class="hljs-punctuation">)</span>     │
+│  <span class="hljs-variable">LM</span> <span class="hljs-built_in">Head</span> → <span class="hljs-variable">logits</span>    │
 └──────────────────────┘
-</code></pre></div>
-<p><strong>Decoder-only 成为主流的三个原因：</strong></p>
+</code></pre></div><p><strong>Decoder-only 成为主流的三个原因：</strong></p>
 <ol>
-<li><strong>统一性</strong>：任意 NLP 任务都可以表达为&quot;给定前缀预测下一个 token&quot;</li>
+<li><strong>统一性</strong>：任意 NLP 任务都可以表达为"给定前缀预测下一个 token"</li>
 <li><strong>缩放性</strong>：没有 Encoder-Decoder 的交互瓶颈，训练更高效</li>
 <li><strong>In-Context Learning</strong>：GPT-3 证明了 Decoder-only 模型的惊人 few-shot 能力</li>
 </ol>
 <h3>原始 Encoder-Decoder</h3>
 <p>原始 Transformer 为机器翻译设计，有完整的 Encoder 和 Decoder 两部分：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>[源语言] → Encoder (双向，6层) → 编码表示
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-selector-attr">[源语言]</span> → Encoder (双向，<span class="hljs-number">6</span>层) → 编码表示
                                       ↓
-[目标语言] → Decoder (因果，6层，每层先做Self-Attn再做Cross-Attn用Encoder输出)
+<span class="hljs-selector-attr">[目标语言]</span> → Decoder (因果，<span class="hljs-number">6</span>层，每层先做Self-Attn再做Cross-Attn用Encoder输出)
                                       ↓
                                   输出概率 → 翻译结果
-</code></pre></div>
-<p><strong>Cross-Attention 与传统 Self-Attention 的区别：</strong></p>
+</code></pre></div><p><strong>Cross-Attention 与传统 Self-Attention 的区别：</strong></p>
 <ul>
 <li>Self-Attention: Q, K, V 都来自同一序列</li>
 <li>Cross-Attention: Q 来自 Decoder，K, V 来自 Encoder 输出</li>
@@ -700,62 +678,60 @@ Pre-LN (GPT-2, LLaMA 等):
 <h3>自回归语言模型 (Causal LM / Next Token Prediction)</h3>
 <p>GPT 系列的标准训练目标。给定前缀 token x_{&lt;t}，预测 x_t：</p>
 <p>$$\mathcal{L} = -\sum_{t=1}^{T} \log P(x_t | x_{&lt;t}; \theta)$$</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">public class CausalLM {
-    /**
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">CausalLM</span> {
+    <span class="hljs-comment">/**
      * 计算自回归语言模型的交叉熵损失
-     * @param logits [seqLen][vocabSize] 模型输出 logits
-     * @param targets [seqLen] 目标 token id
-     * @return 平均损失
-     */
-    public static float computeLoss(float[][] logits, int[] targets) {
-        float totalLoss = 0;
-        int count = 0;
-        for (int t = 0; t &lt; targets.length; t++) {
-            if (targets[t] &lt; 0) continue;  // 跳过 padding
-            // softmax + NLL
-            float[] probs = softmax(logits[t]);
-            totalLoss -= Math.log(probs[targets[t]] + 1e-9);
+     * <span class="hljs-doctag">@param</span> logits [seqLen][vocabSize] 模型输出 logits
+     * <span class="hljs-doctag">@param</span> targets [seqLen] 目标 token id
+     * <span class="hljs-doctag">@return</span> 平均损失
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-type">float</span> <span class="hljs-title function_">computeLoss</span><span class="hljs-params">(<span class="hljs-type">float</span>[][] logits, <span class="hljs-type">int</span>[] targets)</span> {
+        <span class="hljs-type">float</span> <span class="hljs-variable">totalLoss</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+        <span class="hljs-type">int</span> <span class="hljs-variable">count</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">t</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; t &lt; targets.length; t++) {
+            <span class="hljs-keyword">if</span> (targets[t] &lt; <span class="hljs-number">0</span>) <span class="hljs-keyword">continue</span>;  <span class="hljs-comment">// 跳过 padding</span>
+            <span class="hljs-comment">// softmax + NLL</span>
+            <span class="hljs-type">float</span>[] probs = softmax(logits[t]);
+            totalLoss -= Math.log(probs[targets[t]] + <span class="hljs-number">1e-9</span>);
             count++;
         }
-        return (float) (totalLoss / count);
+        <span class="hljs-keyword">return</span> (<span class="hljs-type">float</span>) (totalLoss / count);
     }
 
-    private static float[] softmax(float[] logits) {
-        float max = Float.NEGATIVE_INFINITY;
-        for (float v : logits) max = Math.max(max, v);
-        double sum = 0;
-        float[] probs = new float[logits.length];
-        for (int i = 0; i &lt; logits.length; i++) {
-            probs[i] = (float) Math.exp(logits[i] - max);
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-type">float</span>[] softmax(<span class="hljs-type">float</span>[] logits) {
+        <span class="hljs-type">float</span> <span class="hljs-variable">max</span> <span class="hljs-operator">=</span> Float.NEGATIVE_INFINITY;
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">float</span> v : logits) max = Math.max(max, v);
+        <span class="hljs-type">double</span> <span class="hljs-variable">sum</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+        <span class="hljs-type">float</span>[] probs = <span class="hljs-keyword">new</span> <span class="hljs-title class_">float</span>[logits.length];
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; logits.length; i++) {
+            probs[i] = (<span class="hljs-type">float</span>) Math.exp(logits[i] - max);
             sum += probs[i];
         }
-        for (int i = 0; i &lt; logits.length; i++) {
-            probs[i] = (float) (probs[i] / sum);
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; logits.length; i++) {
+            probs[i] = (<span class="hljs-type">float</span>) (probs[i] / sum);
         }
-        return probs;
+        <span class="hljs-keyword">return</span> probs;
     }
 }
-</code></pre></div>
-<h3>掩码语言模型 (MLM)</h3>
+</code></pre></div><h3>掩码语言模型 (MLM)</h3>
 <p>BERT 的训练目标：随机 mask 掉 15% 的输入 token，让模型预测被 mask 的 token：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>输入:  &quot;The [MASK] sat on the [MASK]&quot;
-目标:  &quot;cat&quot;            &quot;mat&quot;
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>输入:  <span class="hljs-string">"The [MASK] sat on the [MASK]"</span>
+目标:  <span class="hljs-string">"cat"</span>            <span class="hljs-string">"mat"</span>
 
-其中 15% mask 的分解：
-  - 80% 替换为 [MASK]
-  - 10% 保持原 token（防止训练-推理 mismmatch）
-  - 10% 替换为随机 token（防过拟合 [MASK]）
-</code></pre></div>
-<h2>上下文窗口扩展</h2>
+其中 <span class="hljs-number">15</span><span class="hljs-comment">% mask 的分解：</span>
+  - <span class="hljs-number">80</span><span class="hljs-comment">% 替换为 [MASK]</span>
+  - <span class="hljs-number">10</span><span class="hljs-comment">% 保持原 token（防止训练-推理 mismmatch）</span>
+  - <span class="hljs-number">10</span><span class="hljs-comment">% 替换为随机 token（防过拟合 [MASK]）</span>
+</code></pre></div><h2>上下文窗口扩展</h2>
 <h3>RoPE 外推问题</h3>
 <p>标准 RoPE 在超出训练长度时表现急剧下降。原因：高频维度的 θ 值没有在训练中见过对应的角度。</p>
 <h3>NTK-aware 插值 (NTK-aware Interpolation)</h3>
-<p>核心思路：用&quot;神经正切核&quot;视角对 RoPE 的频率进行插值。</p>
+<p>核心思路：用"神经正切核"视角对 RoPE 的频率进行插值。</p>
 <p>不改变物理位置，而是<strong>缩放 θ 的基座</strong>：</p>
-<p>$$\theta_i&#39; = \theta_i \cdot \left(\alpha \cdot \frac{\text{new_ctx}}{\text{orig_ctx}}\right)^{-2(i-1)/d}$$</p>
+<p>$$\theta_i' = \theta_i \cdot \left(\alpha \cdot \frac{\text{new_ctx}}{\text{orig_ctx}}\right)^{-2(i-1)/d}$$</p>
 <p>其中 α 是缩放因子。NTK-aware 的巧妙之处：<strong>对高频维度少缩放，对低频维度多缩放</strong>，让高频保留局部信息，低频扩展远程信息。</p>
 <h3>YaRN (Yet another RoPE extensioN)</h3>
-<p>在 NTK-aware 基础上增加&quot;温度&quot;参数 t 控制注意力熵：</p>
+<p>在 NTK-aware 基础上增加"温度"参数 t 控制注意力熵：</p>
 <p>$$\text{Attention} = \text{softmax}\left(\frac{QK^T}{\sqrt{d_k} \cdot t} + \text{bias}\right)$$</p>
 <p>温度 t 控制注意力分布的尖锐程度：</p>
 <ul>
@@ -835,12 +811,12 @@ Pre-LN (GPT-2, LLaMA 等):
 <p><strong>Q: 为什么现在主流都是 Decoder-only？</strong></p>
 <p>A: 三个原因：(1) 统一性：所有任务都可以表达为 next-token prediction；(2) 高效性：比 Encoder-Decoder 少了交叉注意力的计算；(3) 涌现能力：GPT-3 证明了 Decoder-only 在足够大时展现出的 in-context learning 和推理能力。</p>
 <p><strong>Q: Multi-Head Attention 中不同头真的学到了不同模式吗？</strong></p>
-<p>A: 研究表明，虽然有些头确实有明确的&quot;分工&quot;（如语法 vs 语义），但很多头是可剪枝的（冗余）。这就是为什么出现了 GQA/MQA 等优化（在推理章节详述）。</p>
+<p>A: 研究表明，虽然有些头确实有明确的"分工"（如语法 vs 语义），但很多头是可剪枝的（冗余）。这就是为什么出现了 GQA/MQA 等优化（在推理章节详述）。</p>
 <p><strong>Q: RoPE 和 ALiBi 哪个更好？</strong></p>
 <p>A: 目前 RoPE 胜出——几乎所有顶级开源模型（LLaMA/Qwen/Mistral/DeepSeek）都用 RoPE。ALiBi 虽然简洁，但在长序列上的效果不如经过 NTK-aware 扩展的 RoPE。</p>
 <h2>反向传播与优化器</h2>
 <p>反向传播（Backpropagation）是训练 Transformer 的核心算法，基于链式法则（Chain Rule）逐层计算损失函数对各权重的梯度 ∂L/∂W。训练时，前向传播（Forward Pass）构建计算图（Computation Graph），反向传播沿计算图逆序遍历，从损失函数出发，将梯度逐层回传至输入层。每个算子（MatMul、LayerNorm、Softmax）都定义了对应的前向和反向计算。</p>
-<p>深度网络训练中，梯度消失（Gradient Vanishing）和梯度爆炸（Gradient Exploding）是经典问题。Sigmoid 和 Tanh 激活函数在饱和区梯度趋近于 0，导致深层参数几乎不更新。Transformer 中的残差连接（Residual Connection）提供了&quot;梯度高速公路&quot;：梯度可直接通过恒等映射路径回传，有效缓解了梯度消失。Layer Normalization 则通过稳定每层输入的分布来辅助梯度流动。</p>
+<p>深度网络训练中，梯度消失（Gradient Vanishing）和梯度爆炸（Gradient Exploding）是经典问题。Sigmoid 和 Tanh 激活函数在饱和区梯度趋近于 0，导致深层参数几乎不更新。Transformer 中的残差连接（Residual Connection）提供了"梯度高速公路"：梯度可直接通过恒等映射路径回传，有效缓解了梯度消失。Layer Normalization 则通过稳定每层输入的分布来辅助梯度流动。</p>
 <p>优化器方面，SGD+Momentum、Adam、AdamW 是主流选择：</p>
 <table>
 <thead>
@@ -868,52 +844,51 @@ Pre-LN (GPT-2, LLaMA 等):
 </tbody></table>
 <p>SGD+Momentum 在图像任务上仍常用，但 Transformer 训练中 AdamW 几乎成为标准。AdamW 的关键改进在于将 L2 正则化（权重衰减）从自适应梯度更新中解耦，避免了 Adam 中大梯度参数正则化不足的问题。</p>
 <p>学习率调度（LR Scheduling）对 Transformer 训练至关重要。Warmup 阶段学习率从 0 线性增加至目标值（通常前 4000 步），避免训练初期梯度不稳定导致的发散。之后使用余弦衰减（Cosine Decay）或逐步衰减（Step Decay）将学习率平滑降至接近 0。原版 Transformer 论文使用了 <code>lr = d_model^(-0.5) * min(step_num^(-0.5), step_num * warmup_steps^(-1.5))</code> 的定制调度。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// JDK 25 + Spring Boot 4.x: 简化的 Adam 优化器实现（演示用途）
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// JDK 25 + Spring Boot 4.x: 简化的 Adam 优化器实现（演示用途）</span>
+<span class="hljs-keyword">import</span> java.util.Map;
+<span class="hljs-keyword">import</span> java.util.concurrent.ConcurrentHashMap;
 
-public class AdamOptimizer {
-    private final double learningRate;
-    private final double beta1 = 0.9, beta2 = 0.999, epsilon = 1e-8;
-    private final int warmupSteps;
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">AdamOptimizer</span> {
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">double</span> learningRate;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">double</span> <span class="hljs-variable">beta1</span> <span class="hljs-operator">=</span> <span class="hljs-number">0.9</span>, beta2 = <span class="hljs-number">0.999</span>, epsilon = <span class="hljs-number">1e-8</span>;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">int</span> warmupSteps;
 
-    // 每个参数的一阶矩和二阶矩估计
-    private final Map&lt;String, double[]&gt; m = new ConcurrentHashMap&lt;&gt;();
-    private final Map&lt;String, double[]&gt; v = new ConcurrentHashMap&lt;&gt;();
-    private int step = 0;
+    <span class="hljs-comment">// 每个参数的一阶矩和二阶矩估计</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Map&lt;String, <span class="hljs-type">double</span>[]&gt; m = <span class="hljs-keyword">new</span> <span class="hljs-title class_">ConcurrentHashMap</span>&lt;&gt;();
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Map&lt;String, <span class="hljs-type">double</span>[]&gt; v = <span class="hljs-keyword">new</span> <span class="hljs-title class_">ConcurrentHashMap</span>&lt;&gt;();
+    <span class="hljs-keyword">private</span> <span class="hljs-type">int</span> <span class="hljs-variable">step</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
 
-    public AdamOptimizer(double learningRate, int warmupSteps) {
-        this.learningRate = learningRate;
-        this.warmupSteps = warmupSteps;
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">AdamOptimizer</span><span class="hljs-params">(<span class="hljs-type">double</span> learningRate, <span class="hljs-type">int</span> warmupSteps)</span> {
+        <span class="hljs-built_in">this</span>.learningRate = learningRate;
+        <span class="hljs-built_in">this</span>.warmupSteps = warmupSteps;
     }
 
-    public void update(String paramName, double[] params, double[] grads) {
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">update</span><span class="hljs-params">(String paramName, <span class="hljs-type">double</span>[] params, <span class="hljs-type">double</span>[] grads)</span> {
         step++;
-        var mVec = m.computeIfAbsent(paramName, k -&gt; new double[params.length]);
-        var vVec = v.computeIfAbsent(paramName, k -&gt; new double[params.length]);
+        <span class="hljs-type">var</span> <span class="hljs-variable">mVec</span> <span class="hljs-operator">=</span> m.computeIfAbsent(paramName, k -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">double</span>[params.length]);
+        <span class="hljs-type">var</span> <span class="hljs-variable">vVec</span> <span class="hljs-operator">=</span> v.computeIfAbsent(paramName, k -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">double</span>[params.length]);
 
-        // Warmup: 线性增长学习率
-        double lr = learningRate * Math.min(1.0, (double) step / warmupSteps);
-        // Adam 偏置校正
-        double biasCorrection1 = 1.0 - Math.pow(beta1, step);
-        double biasCorrection2 = 1.0 - Math.pow(beta2, step);
+        <span class="hljs-comment">// Warmup: 线性增长学习率</span>
+        <span class="hljs-type">double</span> <span class="hljs-variable">lr</span> <span class="hljs-operator">=</span> learningRate * Math.min(<span class="hljs-number">1.0</span>, (<span class="hljs-type">double</span>) step / warmupSteps);
+        <span class="hljs-comment">// Adam 偏置校正</span>
+        <span class="hljs-type">double</span> <span class="hljs-variable">biasCorrection1</span> <span class="hljs-operator">=</span> <span class="hljs-number">1.0</span> - Math.pow(beta1, step);
+        <span class="hljs-type">double</span> <span class="hljs-variable">biasCorrection2</span> <span class="hljs-operator">=</span> <span class="hljs-number">1.0</span> - Math.pow(beta2, step);
 
-        for (int i = 0; i &lt; params.length; i++) {
-            mVec[i] = beta1 * mVec[i] + (1 - beta1) * grads[i];
-            vVec[i] = beta2 * vVec[i] + (1 - beta2) * grads[i] * grads[i];
-            double mHat = mVec[i] / biasCorrection1;
-            double vHat = vVec[i] / biasCorrection2;
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; params.length; i++) {
+            mVec[i] = beta1 * mVec[i] + (<span class="hljs-number">1</span> - beta1) * grads[i];
+            vVec[i] = beta2 * vVec[i] + (<span class="hljs-number">1</span> - beta2) * grads[i] * grads[i];
+            <span class="hljs-type">double</span> <span class="hljs-variable">mHat</span> <span class="hljs-operator">=</span> mVec[i] / biasCorrection1;
+            <span class="hljs-type">double</span> <span class="hljs-variable">vHat</span> <span class="hljs-operator">=</span> vVec[i] / biasCorrection2;
             params[i] -= lr * mHat / (Math.sqrt(vHat) + epsilon);
         }
     }
 }
-</code></pre></div>
-<h2>相关条目</h2>
+</code></pre></div><h2>相关条目</h2>
 <ul>
-<li><a href="#/07-AI基础/07-Embedding与Tokenization" class="cross-ref" data-ref="07-Embedding与Tokenization">07-Embedding与Tokenization</a> — Tokenization 和 Embedding 深入</li>
-<li><a href="#/07-AI基础/07-推理策略与评估方法" class="cross-ref" data-ref="07-推理策略与评估方法">07-推理策略与评估方法</a> — 推理策略和评估方法</li>
-<li><a href="#/08-模型接入与推理/模型API/08-OpenAI兼容协议详解" class="cross-ref" data-ref="08-OpenAI兼容协议详解">08-OpenAI兼容协议详解</a> — 模型 API 协议</li>
-<li><a href="#/08-模型接入与推理/推理部署/08-模型能力矩阵与路由策略" class="cross-ref" data-ref="08-模型能力矩阵与路由策略">08-模型能力矩阵与路由策略</a> — 模型能力矩阵</li>
+<li><a href="#/07-AI基础/07-Embedding与Tokenization" class="cross-ref">07-Embedding与Tokenization</a> — Tokenization 和 Embedding 深入</li>
+<li><a href="#/07-AI基础/07-推理策略与评估方法" class="cross-ref">07-推理策略与评估方法</a> — 推理策略和评估方法</li>
+<li><a href="#/08-模型接入与推理/模型API/08-OpenAI兼容协议详解" class="cross-ref">08-OpenAI兼容协议详解</a> — 模型 API 协议</li>
+<li><a href="#/08-模型接入与推理/推理部署/08-模型能力矩阵与路由策略" class="cross-ref">08-模型能力矩阵与路由策略</a> — 模型能力矩阵</li>
 </ul>
-</div>
+</body></html></div>
 </article>

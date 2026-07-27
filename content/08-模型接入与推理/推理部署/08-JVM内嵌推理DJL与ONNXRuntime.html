@@ -1,39 +1,37 @@
 
-<article class="kb-entry" data-path="/08-模型接入与推理/推理部署/08-JVM内嵌推理DJL与ONNXRuntime">
+<article class="kb-entry" data-path="/08-模型接入与推理">
   <div class="entry-meta">
     <div class="entry-domain"><a href="#/?d=08">08-模型接入与推理</a></div>
     <h1>JVM内嵌推理：DJL与ONNX Runtime</h1>
-    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#djl</span><span class="badge badge-tag">#onnx-runtime</span><span class="badge badge-tag">#jvm-inference</span><span class="badge badge-tag">#embedding</span></div>
-    
+    <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#djl</span><span class="badge badge-tag">#onnx-runtime</span><span class="badge badge-tag">#jvm-inference</span><span class="badge badge-tag">#embedding</span><span class="badge badge-tag">#sentiment-analysis</span></div>
+    <div class="entry-sources"><small>📖 来源：<a href="https://djl.ai/" target="_blank" rel="noopener" class="source-link" title="DJL (Deep Java Library) 官方文档">DJL (Deep Java Library) 官方文档</a><a href="https://onnxruntime.ai/docs/get-started/with-java.html" target="_blank" rel="noopener" class="source-link" title="ONNX Runtime Java API 官方文档">ONNX Runtime Java API 官方文档</a><a href="https://github.com/deepjavalibrary/djl" target="_blank" rel="noopener" class="source-link" title="DJL GitHub 仓库源码">DJL GitHub 仓库源码</a></small></div>
   </div>
-  <div class="entry-body"><h1>JVM内嵌推理：DJL与ONNX Runtime</h1>
+  <div class="entry-body"><html><head></head><body><h1>JVM内嵌推理：DJL与ONNX Runtime</h1>
 <h2>概述</h2>
 <p>并非所有AI推理都需要GPU集群或云端API。许多场景——如小型Embedding模型、文本分类、情感分析、关键词提取——完全可以在JVM进程内高效完成。JVM内嵌推理避免了网络延迟、序列化开销和外部服务依赖，是实现低延迟、高隐私AI功能的关键技术。本节深入介绍DJL（Deep Java Library）和ONNX Runtime Java两大JVM推理方案，以及它们的适用场景和选型决策。</p>
 <h2>一、DJL (Deep Java Library) 架构</h2>
 <h3>1.1 引擎无关设计</h3>
-<p>DJL的核心设计哲学是&quot;Write Once, Run Anywhere with Any Engine&quot;。它提供统一的Java API，底层可以切换不同的深度学习引擎（PyTorch、TensorFlow、MXNet、ONNX Runtime），而业务代码无需修改。</p>
+<p>DJL的核心设计哲学是"Write Once, Run Anywhere with Any Engine"。它提供统一的Java API，底层可以切换不同的深度学习引擎（PyTorch、TensorFlow、MXNet、ONNX Runtime），而业务代码无需修改。</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌─────────────────────────────────────────────────┐
 │               DJL Unified API                    │
-│   (Model、Predictor、Translator、Criteria...)     │
+│   (<span class="hljs-keyword">Model</span>、Predictor、Translator、Criteria...)     │
 ├──────────┬──────────┬──────────┬────────────────┤
 │ PyTorch  │TensorFlow│  MXNet   │ ONNX Runtime   │
 │ Engine   │ Engine   │  Engine  │    Engine      │
 └──────────┴──────────┴──────────┴────────────────┘
-</code></pre></div>
-<p><strong>引擎切换示例</strong>：只需在依赖中替换引擎，业务代码零改动。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 使用PyTorch引擎
-// pom.xml: djl-pytorch-engine
-var criteria = Criteria.builder()
+</code></pre></div><p><strong>引擎切换示例</strong>：只需在依赖中替换引擎，业务代码零改动。</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 使用PyTorch引擎</span>
+<span class="hljs-comment">// pom.xml: djl-pytorch-engine</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">criteria</span> <span class="hljs-operator">=</span> Criteria.builder()
     .setTypes(Image.class, Classifications.class)
-    .optEngine(&quot;PyTorch&quot;)    // 只需在此处指定引擎
-    .optModelPath(Paths.get(&quot;/models/resnet18.pt&quot;))
+    .optEngine(<span class="hljs-string">"PyTorch"</span>)    <span class="hljs-comment">// 只需在此处指定引擎</span>
+    .optModelPath(Paths.get(<span class="hljs-string">"/models/resnet18.pt"</span>))
     .build();
 
-// 切换到ONNX Runtime引擎
-// pom.xml: djl-onnxruntime-engine
-// 代码不变，只改 optEngine(&quot;OnnxRuntime&quot;)
-</code></pre></div>
-<h3>1.2 ModelZoo — 预训练模型市场</h3>
+<span class="hljs-comment">// 切换到ONNX Runtime引擎</span>
+<span class="hljs-comment">// pom.xml: djl-onnxruntime-engine</span>
+<span class="hljs-comment">// 代码不变，只改 optEngine("OnnxRuntime")</span>
+</code></pre></div><h3>1.2 ModelZoo — 预训练模型市场</h3>
 <p>DJL的ModelZoo提供了开箱即用的预训练模型，覆盖图像识别、目标检测、NLP等场景。常用的ModelZoo包括：</p>
 <table>
 <thead>
@@ -65,388 +63,380 @@ var criteria = Criteria.builder()
 </tr>
 </tbody></table>
 <p><strong>从ModelZoo加载模型</strong>：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">// 方式一：通过 Criteria 加载预训练模型
-var criteria = Criteria.builder()
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 方式一：通过 Criteria 加载预训练模型</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">criteria</span> <span class="hljs-operator">=</span> Criteria.builder()
     .setTypes(Image.class, Classifications.class)
-    .optArtifactId(&quot;ai.djl.mxnet:resnet&quot;)  // 自动下载预训练模型
+    .optArtifactId(<span class="hljs-string">"ai.djl.mxnet:resnet"</span>)  <span class="hljs-comment">// 自动下载预训练模型</span>
     .build();
 
-var model = ModelZoo.loadModel(criteria);
+<span class="hljs-type">var</span> <span class="hljs-variable">model</span> <span class="hljs-operator">=</span> ModelZoo.loadModel(criteria);
 
-// 方式二：加载HuggingFace的Sentence Transformer模型
-var criteria = Criteria.builder()
-    .optEngine(&quot;PyTorch&quot;)
-    .setTypes(String.class, float[].class)
-    .optModelUrls(&quot;djl://ai.djl.huggingface.pytorch/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2&quot;)
+<span class="hljs-comment">// 方式二：加载HuggingFace的Sentence Transformer模型</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">criteria</span> <span class="hljs-operator">=</span> Criteria.builder()
+    .optEngine(<span class="hljs-string">"PyTorch"</span>)
+    .setTypes(String.class, <span class="hljs-type">float</span>[].class)
+    .optModelUrls(<span class="hljs-string">"djl://ai.djl.huggingface.pytorch/sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"</span>)
     .build();
 
-var embedder = ModelZoo.loadModel(criteria);
-</code></pre></div>
-<h3>1.3 Translator — 前后处理抽象</h3>
+<span class="hljs-type">var</span> <span class="hljs-variable">embedder</span> <span class="hljs-operator">=</span> ModelZoo.loadModel(criteria);
+</code></pre></div><h3>1.3 Translator — 前后处理抽象</h3>
 <p>Translator是DJL最核心的抽象之一，封装了模型的输入预处理和输出后处理逻辑：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">/**
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">/**
  * 图像分类Translator：处理图像输入-&gt;分类输出
- */
-var translator = new Translator&lt;Image, Classifications&gt;() {
+ */</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">translator</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Translator</span>&lt;Image, Classifications&gt;() {
 
-    @Override
-    public NDList processInput(TranslatorContext ctx, Image input) {
-        // 预处理：调整大小、归一化、转换为NDArray
-        var array = input.toNDArray(ctx.getNDManager(), Image.Flag.COLOR);
-        array = NDImageUtils.resize(array, 224, 224);    // ResNet标准尺寸
-        array = NDImageUtils.toTensor(array)              // (H,W,C) -&gt; (C,H,W)
-            .div(255.0f);                                 // 归一化到[0,1]
-        array = NDImageUtils.normalize(array,             // 标准化
-            new float[]{0.485f, 0.456f, 0.406f},        // ImageNet均值
-            new float[]{0.229f, 0.224f, 0.225f});       // ImageNet标准差
-        return new NDList(array);
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> NDList <span class="hljs-title function_">processInput</span><span class="hljs-params">(TranslatorContext ctx, Image input)</span> {
+        <span class="hljs-comment">// 预处理：调整大小、归一化、转换为NDArray</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">array</span> <span class="hljs-operator">=</span> input.toNDArray(ctx.getNDManager(), Image.Flag.COLOR);
+        array = NDImageUtils.resize(array, <span class="hljs-number">224</span>, <span class="hljs-number">224</span>);    <span class="hljs-comment">// ResNet标准尺寸</span>
+        array = NDImageUtils.toTensor(array)              <span class="hljs-comment">// (H,W,C) -&gt; (C,H,W)</span>
+            .div(<span class="hljs-number">255.0f</span>);                                 <span class="hljs-comment">// 归一化到[0,1]</span>
+        array = NDImageUtils.normalize(array,             <span class="hljs-comment">// 标准化</span>
+            <span class="hljs-keyword">new</span> <span class="hljs-title class_">float</span>[]{<span class="hljs-number">0.485f</span>, <span class="hljs-number">0.456f</span>, <span class="hljs-number">0.406f</span>},        <span class="hljs-comment">// ImageNet均值</span>
+            <span class="hljs-keyword">new</span> <span class="hljs-title class_">float</span>[]{<span class="hljs-number">0.229f</span>, <span class="hljs-number">0.224f</span>, <span class="hljs-number">0.225f</span>});       <span class="hljs-comment">// ImageNet标准差</span>
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">NDList</span>(array);
     }
 
-    @Override
-    public Classifications processOutput(TranslatorContext ctx, NDList list) {
-        // 后处理：logits -&gt; softmax概率 -&gt; 标签映射
-        var probabilities = list.get(0).softmax(0);
-        return new Classifications(
-            List.of(&quot;cat&quot;, &quot;dog&quot;, &quot;bird&quot;),              // 标签列表
-            probabilities.toFloatArray()                 // 对应概率
+    <span class="hljs-meta">@Override</span>
+    <span class="hljs-keyword">public</span> Classifications <span class="hljs-title function_">processOutput</span><span class="hljs-params">(TranslatorContext ctx, NDList list)</span> {
+        <span class="hljs-comment">// 后处理：logits -&gt; softmax概率 -&gt; 标签映射</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">probabilities</span> <span class="hljs-operator">=</span> list.get(<span class="hljs-number">0</span>).softmax(<span class="hljs-number">0</span>);
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Classifications</span>(
+            List.of(<span class="hljs-string">"cat"</span>, <span class="hljs-string">"dog"</span>, <span class="hljs-string">"bird"</span>),              <span class="hljs-comment">// 标签列表</span>
+            probabilities.toFloatArray()                 <span class="hljs-comment">// 对应概率</span>
         );
     }
 };
-</code></pre></div>
-<p><strong>Translator的生命周期管理</strong>：DJL在每次推理时调用<code>processInput</code>和<code>processOutput</code>，Translator实例可跨请求复用（线程安全由DJL保证）。对于复杂的NLP预处理（如Tokenizer），应在Translator中缓存Tokenizer实例。</p>
+</code></pre></div><p><strong>Translator的生命周期管理</strong>：DJL在每次推理时调用<code>processInput</code>和<code>processOutput</code>，Translator实例可跨请求复用（线程安全由DJL保证）。对于复杂的NLP预处理（如Tokenizer），应在Translator中缓存Tokenizer实例。</p>
 <h3>1.4 Criteria — 声明式模型加载</h3>
 <p>Criteria采用Builder模式提供声明式的模型加载配置：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">var criteria = Criteria.builder()
-    .setTypes(Input.class, Output.class)    // 输入/输出类型
-    .optEngine(&quot;PyTorch&quot;)                   // 推理引擎
-    .optModelName(&quot;bert-base-chinese&quot;)      // 模型名称
-    .optModelPath(Paths.get(&quot;/models&quot;))     // 本地模型路径
-    .optModelUrls(&quot;https://...&quot;)            // 或远程模型URL
-    .optTranslator(translator)              // 自定义Translator
-    .optOption(&quot;optLevel&quot;, &quot;3&quot;)             // 引擎特定优化选项
-    .optDevice(Device.cpu())                // 设备选择(CPU/GPU)
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-type">var</span> <span class="hljs-variable">criteria</span> <span class="hljs-operator">=</span> Criteria.builder()
+    .setTypes(Input.class, Output.class)    <span class="hljs-comment">// 输入/输出类型</span>
+    .optEngine(<span class="hljs-string">"PyTorch"</span>)                   <span class="hljs-comment">// 推理引擎</span>
+    .optModelName(<span class="hljs-string">"bert-base-chinese"</span>)      <span class="hljs-comment">// 模型名称</span>
+    .optModelPath(Paths.get(<span class="hljs-string">"/models"</span>))     <span class="hljs-comment">// 本地模型路径</span>
+    .optModelUrls(<span class="hljs-string">"https://..."</span>)            <span class="hljs-comment">// 或远程模型URL</span>
+    .optTranslator(translator)              <span class="hljs-comment">// 自定义Translator</span>
+    .optOption(<span class="hljs-string">"optLevel"</span>, <span class="hljs-string">"3"</span>)             <span class="hljs-comment">// 引擎特定优化选项</span>
+    .optDevice(Device.cpu())                <span class="hljs-comment">// 设备选择(CPU/GPU)</span>
     .build();
-</code></pre></div>
-<h2>二、DJL常见场景实战</h2>
+</code></pre></div><h2>二、DJL常见场景实战</h2>
 <h3>2.1 图像分类（ResNet）</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import ai.djl.Application;
-import ai.djl.ModelException;
-import ai.djl.inference.Predictor;
-import ai.djl.modality.Classifications;
-import ai.djl.modality.cv.Image;
-import ai.djl.modality.cv.ImageFactory;
-import ai.djl.repository.zoo.Criteria;
-import ai.djl.repository.zoo.ModelZoo;
-import ai.djl.repository.zoo.ZooModel;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> ai.djl.Application;
+<span class="hljs-keyword">import</span> ai.djl.ModelException;
+<span class="hljs-keyword">import</span> ai.djl.inference.Predictor;
+<span class="hljs-keyword">import</span> ai.djl.modality.Classifications;
+<span class="hljs-keyword">import</span> ai.djl.modality.cv.Image;
+<span class="hljs-keyword">import</span> ai.djl.modality.cv.ImageFactory;
+<span class="hljs-keyword">import</span> ai.djl.repository.zoo.Criteria;
+<span class="hljs-keyword">import</span> ai.djl.repository.zoo.ModelZoo;
+<span class="hljs-keyword">import</span> ai.djl.repository.zoo.ZooModel;
 
-import java.io.IOException;
-import java.nio.file.Paths;
+<span class="hljs-keyword">import</span> java.io.IOException;
+<span class="hljs-keyword">import</span> java.nio.file.Paths;
 
-public class ImageClassifier {
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ImageClassifier</span> {
 
-    private final ZooModel&lt;Image, Classifications&gt; model;
-    private final Predictor&lt;Image, Classifications&gt; predictor;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> ZooModel&lt;Image, Classifications&gt; model;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Predictor&lt;Image, Classifications&gt; predictor;
 
-    public ImageClassifier() throws IOException, ModelException {
-        // 从ModelZoo加载ResNet-50
-        var criteria = Criteria.builder()
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">ImageClassifier</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> IOException, ModelException {
+        <span class="hljs-comment">// 从ModelZoo加载ResNet-50</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">criteria</span> <span class="hljs-operator">=</span> Criteria.builder()
             .optApplication(Application.CV.IMAGE_CLASSIFICATION)
             .setTypes(Image.class, Classifications.class)
-            .optArtifactId(&quot;ai.djl.mxnet:resnet&quot;)
-            .optFilter(&quot;layers&quot;, &quot;50&quot;)
-            .optProgress(true)  // 显示下载进度
+            .optArtifactId(<span class="hljs-string">"ai.djl.mxnet:resnet"</span>)
+            .optFilter(<span class="hljs-string">"layers"</span>, <span class="hljs-string">"50"</span>)
+            .optProgress(<span class="hljs-literal">true</span>)  <span class="hljs-comment">// 显示下载进度</span>
             .build();
 
-        this.model = ModelZoo.loadModel(criteria);
-        this.predictor = model.newPredictor();
+        <span class="hljs-built_in">this</span>.model = ModelZoo.loadModel(criteria);
+        <span class="hljs-built_in">this</span>.predictor = model.newPredictor();
     }
 
-    public Classifications classify(String imagePath)
-            throws IOException, ModelException {
-        var img = ImageFactory.getInstance()
+    <span class="hljs-keyword">public</span> Classifications <span class="hljs-title function_">classify</span><span class="hljs-params">(String imagePath)</span>
+            <span class="hljs-keyword">throws</span> IOException, ModelException {
+        <span class="hljs-type">var</span> <span class="hljs-variable">img</span> <span class="hljs-operator">=</span> ImageFactory.getInstance()
             .fromFile(Paths.get(imagePath));
-        return predictor.predict(img);
+        <span class="hljs-keyword">return</span> predictor.predict(img);
     }
 
-    public void close() {
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">close</span><span class="hljs-params">()</span> {
         model.close();
     }
 
-    public static void main(String[] args) throws Exception {
-        var classifier = new ImageClassifier();
-        var result = classifier.classify(&quot;cat.jpg&quot;);
-        System.out.println(&quot;Best: &quot; + result.best());
-        // Output: Best: {&quot;className&quot;: &quot;tabby cat&quot;, &quot;probability&quot;: 0.854}
-        result.topK(5).forEach(System.out::println);
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">main</span><span class="hljs-params">(String[] args)</span> <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-type">var</span> <span class="hljs-variable">classifier</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ImageClassifier</span>();
+        <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> classifier.classify(<span class="hljs-string">"cat.jpg"</span>);
+        System.out.println(<span class="hljs-string">"Best: "</span> + result.best());
+        <span class="hljs-comment">// Output: Best: {"className": "tabby cat", "probability": 0.854}</span>
+        result.topK(<span class="hljs-number">5</span>).forEach(System.out::println);
         classifier.close();
     }
 }
-</code></pre></div>
-<h3>2.2 文本Embedding（Sentence Transformers，小型BERT）</h3>
+</code></pre></div><h3>2.2 文本Embedding（Sentence Transformers，小型BERT）</h3>
 <p>这是JVM内嵌推理最重要的应用场景之一。使用小型BERT模型（如paraphrase-multilingual-MiniLM-L12-v2，约118MB）在JVM中直接生成Embedding：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import ai.djl.ModelException;
-import ai.djl.huggingface.translator.TextEmbeddingTranslator;
-import ai.djl.inference.Predictor;
-import ai.djl.repository.zoo.Criteria;
-import ai.djl.repository.zoo.ZooModel;
-import ai.djl.training.util.ProgressBar;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> ai.djl.ModelException;
+<span class="hljs-keyword">import</span> ai.djl.huggingface.translator.TextEmbeddingTranslator;
+<span class="hljs-keyword">import</span> ai.djl.inference.Predictor;
+<span class="hljs-keyword">import</span> ai.djl.repository.zoo.Criteria;
+<span class="hljs-keyword">import</span> ai.djl.repository.zoo.ZooModel;
+<span class="hljs-keyword">import</span> ai.djl.training.util.ProgressBar;
 
-import java.io.IOException;
-import java.util.Arrays;
+<span class="hljs-keyword">import</span> java.io.IOException;
+<span class="hljs-keyword">import</span> java.util.Arrays;
 
-/**
+<span class="hljs-comment">/**
  * JVM内嵌Sentence Embedding服务。
  * 模型大小约118MB，推理速度约5-10ms/句(CPU)。
  * 输出384维向量，适用于RAG索引、语义搜索、文本聚类。
- */
-public class JvmEmbeddingService {
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">JvmEmbeddingService</span> {
 
-    private final ZooModel&lt;String, float[]&gt; model;
-    private final Predictor&lt;String, float[]&gt; predictor;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> ZooModel&lt;String, <span class="hljs-type">float</span>[]&gt; model;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Predictor&lt;String, <span class="hljs-type">float</span>[]&gt; predictor;
 
-    public JvmEmbeddingService() throws IOException, ModelException {
-        var criteria = Criteria.builder()
-            .setTypes(String.class, float[].class)
-            .optEngine(&quot;PyTorch&quot;)
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">JvmEmbeddingService</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> IOException, ModelException {
+        <span class="hljs-type">var</span> <span class="hljs-variable">criteria</span> <span class="hljs-operator">=</span> Criteria.builder()
+            .setTypes(String.class, <span class="hljs-type">float</span>[].class)
+            .optEngine(<span class="hljs-string">"PyTorch"</span>)
             .optModelUrls(
-                &quot;djl://ai.djl.huggingface.pytorch/&quot; +
-                &quot;sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2&quot;)
-            .optTranslatorFactory(new TextEmbeddingTranslatorFactory())
-            .optProgress(new ProgressBar())
+                <span class="hljs-string">"djl://ai.djl.huggingface.pytorch/"</span> +
+                <span class="hljs-string">"sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"</span>)
+            .optTranslatorFactory(<span class="hljs-keyword">new</span> <span class="hljs-title class_">TextEmbeddingTranslatorFactory</span>())
+            .optProgress(<span class="hljs-keyword">new</span> <span class="hljs-title class_">ProgressBar</span>())
             .build();
 
-        this.model = criteria.loadModel();
-        this.predictor = model.newPredictor();
+        <span class="hljs-built_in">this</span>.model = criteria.loadModel();
+        <span class="hljs-built_in">this</span>.predictor = model.newPredictor();
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 对单条文本生成384维向量
-     */
-    public float[] embed(String text) throws ModelException {
-        return predictor.predict(text);
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-type">float</span>[] embed(String text) <span class="hljs-keyword">throws</span> ModelException {
+        <span class="hljs-keyword">return</span> predictor.predict(text);
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 批量Embedding（利用模型内部的batch优化）
-     */
-    public float[][] embedBatch(String[] texts) throws ModelException {
-        return Arrays.stream(texts)
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-type">float</span>[][] embedBatch(String[] texts) <span class="hljs-keyword">throws</span> ModelException {
+        <span class="hljs-keyword">return</span> Arrays.stream(texts)
             .map(t -&gt; {
-                try {
-                    return predictor.predict(t);
-                } catch (Exception e) {
-                    throw new RuntimeException(e);
+                <span class="hljs-keyword">try</span> {
+                    <span class="hljs-keyword">return</span> predictor.predict(t);
+                } <span class="hljs-keyword">catch</span> (Exception e) {
+                    <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RuntimeException</span>(e);
                 }
             })
-            .toArray(float[][]::new);
+            .toArray(<span class="hljs-type">float</span>[][]::<span class="hljs-keyword">new</span>);
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 余弦相似度计算
-     */
-    public static float cosineSimilarity(float[] a, float[] b) {
-        float dot = 0, normA = 0, normB = 0;
-        for (int i = 0; i &lt; a.length; i++) {
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-type">float</span> <span class="hljs-title function_">cosineSimilarity</span><span class="hljs-params">(<span class="hljs-type">float</span>[] a, <span class="hljs-type">float</span>[] b)</span> {
+        <span class="hljs-type">float</span> <span class="hljs-variable">dot</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>, normA = <span class="hljs-number">0</span>, normB = <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; a.length; i++) {
             dot += a[i] * b[i];
             normA += a[i] * a[i];
             normB += b[i] * b[i];
         }
-        return dot / (float) (Math.sqrt(normA) * Math.sqrt(normB));
+        <span class="hljs-keyword">return</span> dot / (<span class="hljs-type">float</span>) (Math.sqrt(normA) * Math.sqrt(normB));
     }
 
-    public void close() {
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">close</span><span class="hljs-params">()</span> {
         model.close();
     }
 
-    // 使用示例
-    public static void main(String[] args) throws Exception {
-        var service = new JvmEmbeddingService();
+    <span class="hljs-comment">// 使用示例</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">main</span><span class="hljs-params">(String[] args)</span> <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-type">var</span> <span class="hljs-variable">service</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">JvmEmbeddingService</span>();
 
-        var emb1 = service.embed(&quot;Java is a powerful programming language&quot;);
-        var emb2 = service.embed(&quot;Java是一种强大的编程语言&quot;);
-        var emb3 = service.embed(&quot;The weather is nice today&quot;);
+        <span class="hljs-type">var</span> <span class="hljs-variable">emb1</span> <span class="hljs-operator">=</span> service.embed(<span class="hljs-string">"Java is a powerful programming language"</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">emb2</span> <span class="hljs-operator">=</span> service.embed(<span class="hljs-string">"Java是一种强大的编程语言"</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">emb3</span> <span class="hljs-operator">=</span> service.embed(<span class="hljs-string">"The weather is nice today"</span>);
 
-        System.out.printf(&quot;Similarity (en-en): %.4f%n&quot;,
-            cosineSimilarity(emb1, emb2));  // 约0.75 - 语义相似
-        System.out.printf(&quot;Similarity (diff): %.4f%n&quot;,
-            cosineSimilarity(emb1, emb3));  // 约0.30 - 语义不同
+        System.out.printf(<span class="hljs-string">"Similarity (en-en): %.4f%n"</span>,
+            cosineSimilarity(emb1, emb2));  <span class="hljs-comment">// 约0.75 - 语义相似</span>
+        System.out.printf(<span class="hljs-string">"Similarity (diff): %.4f%n"</span>,
+            cosineSimilarity(emb1, emb3));  <span class="hljs-comment">// 约0.30 - 语义不同</span>
 
         service.close();
     }
 }
-</code></pre></div>
-<h3>2.3 文本分类与情感分析</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import ai.djl.ModelException;
-import ai.djl.inference.Predictor;
-import ai.djl.modality.nlp.bert.BertFullTokenizer;
-import ai.djl.ndarray.NDArray;
-import ai.djl.ndarray.NDList;
-import ai.djl.ndarray.NDManager;
-import ai.djl.repository.zoo.Criteria;
-import ai.djl.repository.zoo.ZooModel;
-import ai.djl.translate.Translator;
-import ai.djl.translate.TranslatorContext;
+</code></pre></div><h3>2.3 文本分类与情感分析</h3>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> ai.djl.ModelException;
+<span class="hljs-keyword">import</span> ai.djl.inference.Predictor;
+<span class="hljs-keyword">import</span> ai.djl.modality.nlp.bert.BertFullTokenizer;
+<span class="hljs-keyword">import</span> ai.djl.ndarray.NDArray;
+<span class="hljs-keyword">import</span> ai.djl.ndarray.NDList;
+<span class="hljs-keyword">import</span> ai.djl.ndarray.NDManager;
+<span class="hljs-keyword">import</span> ai.djl.repository.zoo.Criteria;
+<span class="hljs-keyword">import</span> ai.djl.repository.zoo.ZooModel;
+<span class="hljs-keyword">import</span> ai.djl.translate.Translator;
+<span class="hljs-keyword">import</span> ai.djl.translate.TranslatorContext;
 
-import java.io.IOException;
-import java.nio.file.Paths;
+<span class="hljs-keyword">import</span> java.io.IOException;
+<span class="hljs-keyword">import</span> java.nio.file.Paths;
 
-/**
+<span class="hljs-comment">/**
  * JVM内嵌情感分析器。
  * 使用经过微调的BERT模型进行3分类：积极/消极/中性。
- */
-public class SentimentAnalyzer {
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">SentimentAnalyzer</span> {
 
-    private final ZooModel&lt;String, ClassificationResult&gt; model;
-    private final Predictor&lt;String, ClassificationResult&gt; predictor;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> ZooModel&lt;String, ClassificationResult&gt; model;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Predictor&lt;String, ClassificationResult&gt; predictor;
 
-    private static final String[] LABELS = {&quot;negative&quot;, &quot;neutral&quot;, &quot;positive&quot;};
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> String[] LABELS = {<span class="hljs-string">"negative"</span>, <span class="hljs-string">"neutral"</span>, <span class="hljs-string">"positive"</span>};
 
-    public SentimentAnalyzer(String modelPath) throws IOException, ModelException {
-        var criteria = Criteria.builder()
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">SentimentAnalyzer</span><span class="hljs-params">(String modelPath)</span> <span class="hljs-keyword">throws</span> IOException, ModelException {
+        <span class="hljs-type">var</span> <span class="hljs-variable">criteria</span> <span class="hljs-operator">=</span> Criteria.builder()
             .setTypes(String.class, ClassificationResult.class)
-            .optEngine(&quot;PyTorch&quot;)
+            .optEngine(<span class="hljs-string">"PyTorch"</span>)
             .optModelPath(Paths.get(modelPath))
-            .optTranslator(new SentimentTranslator())
+            .optTranslator(<span class="hljs-keyword">new</span> <span class="hljs-title class_">SentimentTranslator</span>())
             .build();
 
-        this.model = criteria.loadModel();
-        this.predictor = model.newPredictor();
+        <span class="hljs-built_in">this</span>.model = criteria.loadModel();
+        <span class="hljs-built_in">this</span>.predictor = model.newPredictor();
     }
 
-    public record ClassificationResult(
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">ClassificationResult</span><span class="hljs-params">(
         String label,
-        float confidence,
-        float[] probabilities
-    ) {}
+        <span class="hljs-type">float</span> confidence,
+        <span class="hljs-type">float</span>[] probabilities
+    )</span> {}
 
-    static class SentimentTranslator
-            implements Translator&lt;String, ClassificationResult&gt; {
+    <span class="hljs-keyword">static</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">SentimentTranslator</span>
+            <span class="hljs-keyword">implements</span> <span class="hljs-title class_">Translator</span>&lt;String, ClassificationResult&gt; {
 
-        private BertFullTokenizer tokenizer;
-        private static final int MAX_LEN = 128;
+        <span class="hljs-keyword">private</span> BertFullTokenizer tokenizer;
+        <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">int</span> <span class="hljs-variable">MAX_LEN</span> <span class="hljs-operator">=</span> <span class="hljs-number">128</span>;
 
-        @Override
-        public NDList processInput(TranslatorContext ctx, String input) {
-            if (tokenizer == null) {
-                // 加载与模型匹配的词汇表
-                var vocabPath = Paths.get(&quot;bert-chinese-vocab.txt&quot;);
-                tokenizer = new BertFullTokenizer(vocabPath);
+        <span class="hljs-meta">@Override</span>
+        <span class="hljs-keyword">public</span> NDList <span class="hljs-title function_">processInput</span><span class="hljs-params">(TranslatorContext ctx, String input)</span> {
+            <span class="hljs-keyword">if</span> (tokenizer == <span class="hljs-literal">null</span>) {
+                <span class="hljs-comment">// 加载与模型匹配的词汇表</span>
+                <span class="hljs-type">var</span> <span class="hljs-variable">vocabPath</span> <span class="hljs-operator">=</span> Paths.get(<span class="hljs-string">"bert-chinese-vocab.txt"</span>);
+                tokenizer = <span class="hljs-keyword">new</span> <span class="hljs-title class_">BertFullTokenizer</span>(vocabPath);
             }
 
-            var encoding = tokenizer.encode(input, MAX_LEN);
-            var manager = ctx.getNDManager();
+            <span class="hljs-type">var</span> <span class="hljs-variable">encoding</span> <span class="hljs-operator">=</span> tokenizer.encode(input, MAX_LEN);
+            <span class="hljs-type">var</span> <span class="hljs-variable">manager</span> <span class="hljs-operator">=</span> ctx.getNDManager();
 
-            var inputIds = manager.create(encoding.getIds());
-            var attentionMask = manager.create(encoding.getAttentionMask());
-            var tokenTypeIds = manager.create(encoding.getTypeIds());
+            <span class="hljs-type">var</span> <span class="hljs-variable">inputIds</span> <span class="hljs-operator">=</span> manager.create(encoding.getIds());
+            <span class="hljs-type">var</span> <span class="hljs-variable">attentionMask</span> <span class="hljs-operator">=</span> manager.create(encoding.getAttentionMask());
+            <span class="hljs-type">var</span> <span class="hljs-variable">tokenTypeIds</span> <span class="hljs-operator">=</span> manager.create(encoding.getTypeIds());
 
-            return new NDList(
-                inputIds.expandDims(0),
-                attentionMask.expandDims(0),
-                tokenTypeIds.expandDims(0)
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">NDList</span>(
+                inputIds.expandDims(<span class="hljs-number">0</span>),
+                attentionMask.expandDims(<span class="hljs-number">0</span>),
+                tokenTypeIds.expandDims(<span class="hljs-number">0</span>)
             );
         }
 
-        @Override
-        public ClassificationResult processOutput(
-                TranslatorContext ctx, NDList list) {
-            var logits = list.get(0).softmax(1);
-            var probs = logits.toFloatArray();
-            int bestIdx = 0;
-            for (int i = 1; i &lt; probs.length; i++) {
-                if (probs[i] &gt; probs[bestIdx]) bestIdx = i;
+        <span class="hljs-meta">@Override</span>
+        <span class="hljs-keyword">public</span> ClassificationResult <span class="hljs-title function_">processOutput</span><span class="hljs-params">(
+                TranslatorContext ctx, NDList list)</span> {
+            <span class="hljs-type">var</span> <span class="hljs-variable">logits</span> <span class="hljs-operator">=</span> list.get(<span class="hljs-number">0</span>).softmax(<span class="hljs-number">1</span>);
+            <span class="hljs-type">var</span> <span class="hljs-variable">probs</span> <span class="hljs-operator">=</span> logits.toFloatArray();
+            <span class="hljs-type">int</span> <span class="hljs-variable">bestIdx</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+            <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">1</span>; i &lt; probs.length; i++) {
+                <span class="hljs-keyword">if</span> (probs[i] &gt; probs[bestIdx]) bestIdx = i;
             }
-            return new ClassificationResult(LABELS[bestIdx], probs[bestIdx], probs);
+            <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ClassificationResult</span>(LABELS[bestIdx], probs[bestIdx], probs);
         }
     }
 
-    public ClassificationResult predict(String text) throws ModelException {
-        return predictor.predict(text);
+    <span class="hljs-keyword">public</span> ClassificationResult <span class="hljs-title function_">predict</span><span class="hljs-params">(String text)</span> <span class="hljs-keyword">throws</span> ModelException {
+        <span class="hljs-keyword">return</span> predictor.predict(text);
     }
 }
-</code></pre></div>
-<h3>2.4 Token计数</h3>
+</code></pre></div><h3>2.4 Token计数</h3>
 <p>在不需要完整NLP模型的情况下，使用DJL自带的HuggingFace Tokenizer进行精确的Token计数——这是AI网关计量计费的刚需：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import ai.djl.huggingface.tokenizers.HuggingFaceTokenizer;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> ai.djl.huggingface.tokenizers.HuggingFaceTokenizer;
 
-import java.nio.file.Paths;
+<span class="hljs-keyword">import</span> java.nio.file.Paths;
 
-/**
+<span class="hljs-comment">/**
  * JVM内嵌Token计数器。不加载完整模型，仅加载tokenizer文件。
  * 支持多种模型词表：GPT-2(BPE)、LLaMA(SentencePiece)、BERT(WordPiece)。
- */
-public class JvmTokenCounter {
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">JvmTokenCounter</span> {
 
-    private final HuggingFaceTokenizer tokenizer;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> HuggingFaceTokenizer tokenizer;
 
-    /**
-     * @param tokenizerPath tokenizer.json 或 vocab.json 路径
-     */
-    public JvmTokenCounter(String tokenizerPath) {
-        this.tokenizer = HuggingFaceTokenizer.newInstance(
+    <span class="hljs-comment">/**
+     * <span class="hljs-doctag">@param</span> tokenizerPath tokenizer.json 或 vocab.json 路径
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">JvmTokenCounter</span><span class="hljs-params">(String tokenizerPath)</span> {
+        <span class="hljs-built_in">this</span>.tokenizer = HuggingFaceTokenizer.newInstance(
             Paths.get(tokenizerPath));
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 精确计算文本的Token数量
-     */
-    public int countTokens(String text) {
-        var encoding = tokenizer.encode(text);
-        return encoding.getIds().length;
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-type">int</span> <span class="hljs-title function_">countTokens</span><span class="hljs-params">(String text)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">encoding</span> <span class="hljs-operator">=</span> tokenizer.encode(text);
+        <span class="hljs-keyword">return</span> encoding.getIds().length;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 分批计数（用于大文本，避免OOM）
-     */
-    public long countTokensLarge(String text, int batchSize) {
-        long total = 0;
-        for (int i = 0; i &lt; text.length(); i += batchSize) {
-            var end = Math.min(i + batchSize, text.length());
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-type">long</span> <span class="hljs-title function_">countTokensLarge</span><span class="hljs-params">(String text, <span class="hljs-type">int</span> batchSize)</span> {
+        <span class="hljs-type">long</span> <span class="hljs-variable">total</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; text.length(); i += batchSize) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">end</span> <span class="hljs-operator">=</span> Math.min(i + batchSize, text.length());
             total += countTokens(text.substring(i, end));
-            // BPE Tokenizer 在分段处可能有少量误差（&lt; 0.5%）
+            <span class="hljs-comment">// BPE Tokenizer 在分段处可能有少量误差（&lt; 0.5%）</span>
         }
-        return total;
+        <span class="hljs-keyword">return</span> total;
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 获取Token ID序列（用于分析）
-     */
-    public long[] tokenIds(String text) {
-        return tokenizer.encode(text).getIds();
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-type">long</span>[] tokenIds(String text) {
+        <span class="hljs-keyword">return</span> tokenizer.encode(text).getIds();
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 基于Token计数的文本截断
-     */
-    public String truncateByTokens(String text, int maxTokens) {
-        var encoding = tokenizer.encode(text);
-        var ids = encoding.getIds();
-        if (ids.length &lt;= maxTokens) return text;
+     */</span>
+    <span class="hljs-keyword">public</span> String <span class="hljs-title function_">truncateByTokens</span><span class="hljs-params">(String text, <span class="hljs-type">int</span> maxTokens)</span> {
+        <span class="hljs-type">var</span> <span class="hljs-variable">encoding</span> <span class="hljs-operator">=</span> tokenizer.encode(text);
+        <span class="hljs-type">var</span> <span class="hljs-variable">ids</span> <span class="hljs-operator">=</span> encoding.getIds();
+        <span class="hljs-keyword">if</span> (ids.length &lt;= maxTokens) <span class="hljs-keyword">return</span> text;
 
-        // 解码前maxTokens个Token
-        var truncatedIds = java.util.Arrays.copyOf(ids, maxTokens);
-        return tokenizer.decode(truncatedIds);
+        <span class="hljs-comment">// 解码前maxTokens个Token</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">truncatedIds</span> <span class="hljs-operator">=</span> java.util.Arrays.copyOf(ids, maxTokens);
+        <span class="hljs-keyword">return</span> tokenizer.decode(truncatedIds);
     }
 
-    public static void main(String[] args) {
-        // 加载LLaMA 3的tokenizer（SentencePiece模型）
-        var counter = new JvmTokenCounter(&quot;/models/llama3-tokenizer.json&quot;);
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">main</span><span class="hljs-params">(String[] args)</span> {
+        <span class="hljs-comment">// 加载LLaMA 3的tokenizer（SentencePiece模型）</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">counter</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">JvmTokenCounter</span>(<span class="hljs-string">"/models/llama3-tokenizer.json"</span>);
 
-        var text = &quot;Java虚拟线程(Virtual Threads)是JDK 21引入的革命性特性。&quot;;
-        System.out.println(&quot;Tokens: &quot; + counter.countTokens(text));
-        // Output: Tokens: ~28 (具体取决于tokenizer)
+        <span class="hljs-type">var</span> <span class="hljs-variable">text</span> <span class="hljs-operator">=</span> <span class="hljs-string">"Java虚拟线程(Virtual Threads)是JDK 21引入的革命性特性。"</span>;
+        System.out.println(<span class="hljs-string">"Tokens: "</span> + counter.countTokens(text));
+        <span class="hljs-comment">// Output: Tokens: ~28 (具体取决于tokenizer)</span>
     }
 }
-</code></pre></div>
-<h2>三、ONNX Runtime Java</h2>
+</code></pre></div><h2>三、ONNX Runtime Java</h2>
 <h3>3.1 ONNX格式简介</h3>
 <p>ONNX（Open Neural Network Exchange）是由Microsoft和Meta联合推出的开放神经网络交换格式。它的核心价值在于<strong>跨框架互操作性</strong>：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>PyTorch模型  ──export──►  ONNX格式  ◄──import──  TensorFlow模型
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-type">PyTorch</span>模型  ──<span class="hljs-keyword">export</span>──►  <span class="hljs-type">ONNX</span>格式  ◄──<span class="hljs-keyword">import</span>──  TensorFlow模型
                               │
-                   ONNX Runtime推理引擎
+                   <span class="hljs-type">ONNX</span> <span class="hljs-type">Runtime</span>推理引擎
                     (跨平台、高性能)
-</code></pre></div>
-<p>ONNX格式的优势：</p>
+</code></pre></div><p>ONNX格式的优势：</p>
 <ul>
 <li><strong>框架无关</strong>：任何训练框架导出的ONNX模型都可以用ONNX Runtime推理</li>
 <li><strong>硬件优化</strong>：ONNX Runtime内置CPU/GPU优化（Intel MKL、NVIDIA TensorRT、AMD ROCm）</li>
@@ -455,157 +445,154 @@ public class JvmTokenCounter {
 </ul>
 <h3>3.2 OrtSession与OrtEnvironment</h3>
 <p>ONNX Runtime Java SDK的核心API：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import ai.onnxruntime.*;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> ai.onnxruntime.*;
 
-import java.nio.FloatBuffer;
-import java.nio.LongBuffer;
-import java.nio.file.Paths;
-import java.util.*;
+<span class="hljs-keyword">import</span> java.nio.FloatBuffer;
+<span class="hljs-keyword">import</span> java.nio.LongBuffer;
+<span class="hljs-keyword">import</span> java.nio.file.Paths;
+<span class="hljs-keyword">import</span> java.util.*;
 
-/**
+<span class="hljs-comment">/**
  * ONNX Runtime Java 推理示例。
  * Maven依赖: com.microsoft.onnxruntime:onnxruntime:1.18+
- */
-public class OnnxBertClassifier {
+ */</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">OnnxBertClassifier</span> {
 
-    private final OrtEnvironment env;
-    private final OrtSession session;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> OrtEnvironment env;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> OrtSession session;
 
-    public OnnxBertClassifier(String modelPath) throws OrtException {
-        // 创建ONNX Runtime环境（全局单例）
-        this.env = OrtEnvironment.getEnvironment();
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">OnnxBertClassifier</span><span class="hljs-params">(String modelPath)</span> <span class="hljs-keyword">throws</span> OrtException {
+        <span class="hljs-comment">// 创建ONNX Runtime环境（全局单例）</span>
+        <span class="hljs-built_in">this</span>.env = OrtEnvironment.getEnvironment();
 
-        // 创建推理会话
-        var sessionOptions = new OrtSession.SessionOptions();
+        <span class="hljs-comment">// 创建推理会话</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">sessionOptions</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">OrtSession</span>.SessionOptions();
         sessionOptions.setOptimizationLevel(
             OrtSession.SessionOptions.OptLevel.BASIC_OPT);
-        sessionOptions.setCPUArenaAllocator(true);
+        sessionOptions.setCPUArenaAllocator(<span class="hljs-literal">true</span>);
 
-        this.session = env.createSession(modelPath, sessionOptions);
+        <span class="hljs-built_in">this</span>.session = env.createSession(modelPath, sessionOptions);
     }
 
-    /**
+    <span class="hljs-comment">/**
      * BERT文本分类推理
-     * @param inputIds Token ID数组 [1, seq_len]
-     * @param attentionMask 注意力掩码 [1, seq_len]
-     * @param tokenTypeIds Token类型ID [1, seq_len]
-     * @return logits [1, num_labels]
-     */
-    public float[] predict(long[] inputIds, long[] attentionMask,
-                           long[] tokenTypeIds) throws OrtException {
-        var batchSize = 1;
-        var seqLen = inputIds.length;
-        var shape = new long[]{batchSize, seqLen};
+     * <span class="hljs-doctag">@param</span> inputIds Token ID数组 [1, seq_len]
+     * <span class="hljs-doctag">@param</span> attentionMask 注意力掩码 [1, seq_len]
+     * <span class="hljs-doctag">@param</span> tokenTypeIds Token类型ID [1, seq_len]
+     * <span class="hljs-doctag">@return</span> logits [1, num_labels]
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-type">float</span>[] predict(<span class="hljs-type">long</span>[] inputIds, <span class="hljs-type">long</span>[] attentionMask,
+                           <span class="hljs-type">long</span>[] tokenTypeIds) <span class="hljs-keyword">throws</span> OrtException {
+        <span class="hljs-type">var</span> <span class="hljs-variable">batchSize</span> <span class="hljs-operator">=</span> <span class="hljs-number">1</span>;
+        <span class="hljs-type">var</span> <span class="hljs-variable">seqLen</span> <span class="hljs-operator">=</span> inputIds.length;
+        <span class="hljs-type">var</span> <span class="hljs-variable">shape</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">long</span>[]{batchSize, seqLen};
 
-        // 准备输入Tensor
-        var inputIdsTensor = OnnxTensor.createTensor(env,
+        <span class="hljs-comment">// 准备输入Tensor</span>
+        <span class="hljs-type">var</span> <span class="hljs-variable">inputIdsTensor</span> <span class="hljs-operator">=</span> OnnxTensor.createTensor(env,
             LongBuffer.wrap(inputIds), shape);
-        var attentionMaskTensor = OnnxTensor.createTensor(env,
+        <span class="hljs-type">var</span> <span class="hljs-variable">attentionMaskTensor</span> <span class="hljs-operator">=</span> OnnxTensor.createTensor(env,
             LongBuffer.wrap(attentionMask), shape);
-        var tokenTypeIdsTensor = OnnxTensor.createTensor(env,
+        <span class="hljs-type">var</span> <span class="hljs-variable">tokenTypeIdsTensor</span> <span class="hljs-operator">=</span> OnnxTensor.createTensor(env,
             LongBuffer.wrap(tokenTypeIds), shape);
 
-        var inputs = Map.of(
-            &quot;input_ids&quot;, inputIdsTensor,
-            &quot;attention_mask&quot;, attentionMaskTensor,
-            &quot;token_type_ids&quot;, tokenTypeIdsTensor
+        <span class="hljs-type">var</span> <span class="hljs-variable">inputs</span> <span class="hljs-operator">=</span> Map.of(
+            <span class="hljs-string">"input_ids"</span>, inputIdsTensor,
+            <span class="hljs-string">"attention_mask"</span>, attentionMaskTensor,
+            <span class="hljs-string">"token_type_ids"</span>, tokenTypeIdsTensor
         );
 
-        // 推理
-        try (var results = session.run(inputs)) {
-            var logits = (OnnxTensor) results.get(0);
-            var logitsBuffer = logits.getFloatBuffer();
-            var logitsArray = new float[(int) results.get(0)
-                .getInfo().getShape()[1]];
+        <span class="hljs-comment">// 推理</span>
+        <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">results</span> <span class="hljs-operator">=</span> session.run(inputs)) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">logits</span> <span class="hljs-operator">=</span> (OnnxTensor) results.get(<span class="hljs-number">0</span>);
+            <span class="hljs-type">var</span> <span class="hljs-variable">logitsBuffer</span> <span class="hljs-operator">=</span> logits.getFloatBuffer();
+            <span class="hljs-type">var</span> <span class="hljs-variable">logitsArray</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">float</span>[(<span class="hljs-type">int</span>) results.get(<span class="hljs-number">0</span>)
+                .getInfo().getShape()[<span class="hljs-number">1</span>]];
             logitsBuffer.get(logitsArray);
 
-            // 应用Softmax
+            <span class="hljs-comment">// 应用Softmax</span>
             softmax(logitsArray);
-            return logitsArray;
-        } finally {
+            <span class="hljs-keyword">return</span> logitsArray;
+        } <span class="hljs-keyword">finally</span> {
             inputIdsTensor.close();
             attentionMaskTensor.close();
             tokenTypeIdsTensor.close();
         }
     }
 
-    private void softmax(float[] arr) {
-        float max = Float.NEGATIVE_INFINITY;
-        for (var v : arr) max = Math.max(max, v);
-        double sum = 0;
-        for (int i = 0; i &lt; arr.length; i++) {
-            arr[i] = (float) Math.exp(arr[i] - max);
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">softmax</span><span class="hljs-params">(<span class="hljs-type">float</span>[] arr)</span> {
+        <span class="hljs-type">float</span> <span class="hljs-variable">max</span> <span class="hljs-operator">=</span> Float.NEGATIVE_INFINITY;
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> v : arr) max = Math.max(max, v);
+        <span class="hljs-type">double</span> <span class="hljs-variable">sum</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>;
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; arr.length; i++) {
+            arr[i] = (<span class="hljs-type">float</span>) Math.exp(arr[i] - max);
             sum += arr[i];
         }
-        for (int i = 0; i &lt; arr.length; i++) {
-            arr[i] = (float) (arr[i] / sum);
+        <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; arr.length; i++) {
+            arr[i] = (<span class="hljs-type">float</span>) (arr[i] / sum);
         }
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 获取模型元数据
-     */
-    public void printModelInfo() {
-        System.out.println(&quot;Input names: &quot; + session.getInputNames());
-        System.out.println(&quot;Output names: &quot; + session.getOutputNames());
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">printModelInfo</span><span class="hljs-params">()</span> {
+        System.out.println(<span class="hljs-string">"Input names: "</span> + session.getInputNames());
+        System.out.println(<span class="hljs-string">"Output names: "</span> + session.getOutputNames());
 
-        for (var name : session.getInputNames()) {
-            var info = session.getInputInfo(name);
-            System.out.printf(&quot;Input[%s]: %s%n&quot;, name, info);
+        <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> name : session.getInputNames()) {
+            <span class="hljs-type">var</span> <span class="hljs-variable">info</span> <span class="hljs-operator">=</span> session.getInputInfo(name);
+            System.out.printf(<span class="hljs-string">"Input[%s]: %s%n"</span>, name, info);
         }
     }
 
-    public void close() throws OrtException {
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">close</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> OrtException {
         session.close();
         env.close();
     }
 }
-</code></pre></div>
-<h3>3.3 从PyTorch/TensorFlow导出ONNX模型</h3>
+</code></pre></div><h3>3.3 从PyTorch/TensorFlow导出ONNX模型</h3>
 <p><strong>从PyTorch导出</strong>：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">python</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-python">import torch
-from transformers import AutoModel, AutoTokenizer
+<div class="code-block"><div class="code-header"><span class="code-lang">python</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-python"><span class="hljs-keyword">import</span> torch
+<span class="hljs-keyword">from</span> transformers <span class="hljs-keyword">import</span> AutoModel, AutoTokenizer
 
-# 加载HuggingFace模型
-model = AutoModel.from_pretrained(&quot;bert-base-chinese&quot;)
-tokenizer = AutoTokenizer.from_pretrained(&quot;bert-base-chinese&quot;)
+<span class="hljs-comment"># 加载HuggingFace模型</span>
+model = AutoModel.from_pretrained(<span class="hljs-string">"bert-base-chinese"</span>)
+tokenizer = AutoTokenizer.from_pretrained(<span class="hljs-string">"bert-base-chinese"</span>)
 
-# 准备示例输入
-inputs = tokenizer(&quot;测试文本&quot;, return_tensors=&quot;pt&quot;)
+<span class="hljs-comment"># 准备示例输入</span>
+inputs = tokenizer(<span class="hljs-string">"测试文本"</span>, return_tensors=<span class="hljs-string">"pt"</span>)
 
-# 导出为ONNX
+<span class="hljs-comment"># 导出为ONNX</span>
 torch.onnx.export(
     model,
-    (inputs[&quot;input_ids&quot;], inputs[&quot;attention_mask&quot;],
-     inputs[&quot;token_type_ids&quot;]),
-    &quot;bert-base-chinese.onnx&quot;,
-    input_names=[&quot;input_ids&quot;, &quot;attention_mask&quot;, &quot;token_type_ids&quot;],
-    output_names=[&quot;last_hidden_state&quot;],
+    (inputs[<span class="hljs-string">"input_ids"</span>], inputs[<span class="hljs-string">"attention_mask"</span>],
+     inputs[<span class="hljs-string">"token_type_ids"</span>]),
+    <span class="hljs-string">"bert-base-chinese.onnx"</span>,
+    input_names=[<span class="hljs-string">"input_ids"</span>, <span class="hljs-string">"attention_mask"</span>, <span class="hljs-string">"token_type_ids"</span>],
+    output_names=[<span class="hljs-string">"last_hidden_state"</span>],
     dynamic_axes={
-        &quot;input_ids&quot;: {0: &quot;batch&quot;, 1: &quot;seq_len&quot;},
-        &quot;attention_mask&quot;: {0: &quot;batch&quot;, 1: &quot;seq_len&quot;},
-        &quot;token_type_ids&quot;: {0: &quot;batch&quot;, 1: &quot;seq_len&quot;},
-        &quot;last_hidden_state&quot;: {0: &quot;batch&quot;, 1: &quot;seq_len&quot;}
+        <span class="hljs-string">"input_ids"</span>: {<span class="hljs-number">0</span>: <span class="hljs-string">"batch"</span>, <span class="hljs-number">1</span>: <span class="hljs-string">"seq_len"</span>},
+        <span class="hljs-string">"attention_mask"</span>: {<span class="hljs-number">0</span>: <span class="hljs-string">"batch"</span>, <span class="hljs-number">1</span>: <span class="hljs-string">"seq_len"</span>},
+        <span class="hljs-string">"token_type_ids"</span>: {<span class="hljs-number">0</span>: <span class="hljs-string">"batch"</span>, <span class="hljs-number">1</span>: <span class="hljs-string">"seq_len"</span>},
+        <span class="hljs-string">"last_hidden_state"</span>: {<span class="hljs-number">0</span>: <span class="hljs-string">"batch"</span>, <span class="hljs-number">1</span>: <span class="hljs-string">"seq_len"</span>}
     },
-    opset_version=17
+    opset_version=<span class="hljs-number">17</span>
 )
-</code></pre></div>
-<p><strong>从TensorFlow导出</strong>：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">python</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-python">import tensorflow as tf
-import tf2onnx
+</code></pre></div><p><strong>从TensorFlow导出</strong>：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">python</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-python"><span class="hljs-keyword">import</span> tensorflow <span class="hljs-keyword">as</span> tf
+<span class="hljs-keyword">import</span> tf2onnx
 
-# 加载模型
-model = tf.keras.models.load_model(&quot;model.h5&quot;)
+<span class="hljs-comment"># 加载模型</span>
+model = tf.keras.models.load_model(<span class="hljs-string">"model.h5"</span>)
 
-# 转换为ONNX
-spec = (tf.TensorSpec(model.inputs[0].shape,
-                      model.inputs[0].dtype, name=&quot;input&quot;),)
+<span class="hljs-comment"># 转换为ONNX</span>
+spec = (tf.TensorSpec(model.inputs[<span class="hljs-number">0</span>].shape,
+                      model.inputs[<span class="hljs-number">0</span>].dtype, name=<span class="hljs-string">"input"</span>),)
 model_proto, _ = tf2onnx.convert.from_keras(model,
-    input_signature=spec, opset=13)
-with open(&quot;model.onnx&quot;, &quot;wb&quot;) as f:
+    input_signature=spec, opset=<span class="hljs-number">13</span>)
+<span class="hljs-keyword">with</span> <span class="hljs-built_in">open</span>(<span class="hljs-string">"model.onnx"</span>, <span class="hljs-string">"wb"</span>) <span class="hljs-keyword">as</span> f:
     f.write(model_proto.SerializeToString())
-</code></pre></div>
-<h2>四、JVM推理适用场景</h2>
+</code></pre></div><h2>四、JVM推理适用场景</h2>
 <h3>4.1 理想场景矩阵</h3>
 <table>
 <thead>
@@ -706,20 +693,19 @@ with open(&quot;model.onnx&quot;, &quot;wb&quot;) as f:
 <h2>五、选型决策：JVM vs 推理服务 vs API</h2>
 <h3>5.1 三维决策矩阵</h3>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>                    延迟要求
-                 低(&lt;50ms)      中(50-500ms)    高(&gt;500ms)
+                 低(&lt;<span class="hljs-number">50ms</span>)      中(<span class="hljs-number">50</span>-<span class="hljs-number">500ms</span>)    高(&gt;<span class="hljs-number">500ms</span>)
                 ┌───────────┬──────────────┬──────────────┐
           小    │  JVM推理  │  JVM推理     │  JVM推理     │
-       (&lt;200MB) │  (首选)   │  (首选)      │  (过度)      │
+       (&lt;<span class="hljs-number">200</span>MB) │  (首选)   │  (首选)      │  (过度)      │
 模               ├───────────┼──────────────┼──────────────┤
 型         中    │  JVM推理  │  推理服务    │  推理服务    │
-大    (200MB-   │  (评估)   │  (vLLM/TGI)  │  (vLLM/TGI)  │
-小       1GB)   │           │              │              │
+大    (<span class="hljs-number">200</span>MB-   │  (评估)   │  (vLLM/TGI)  │  (vLLM/TGI)  │
+小       <span class="hljs-number">1</span>GB)   │           │              │              │
                 ├───────────┼──────────────┼──────────────┤
           大    │  推理服务 │  推理服务    │  API调用     │
-       (&gt;1GB)   │  (GPU必须)│  (GPU必须)   │  (最省心)    │
+       (&gt;<span class="hljs-number">1</span>GB)   │  (GPU必须)│  (GPU必须)   │  (最省心)    │
                 └───────────┴──────────────┴──────────────┘
-</code></pre></div>
-<h3>5.2 各方案详细对比</h3>
+</code></pre></div><h3>5.2 各方案详细对比</h3>
 <table>
 <thead>
 <tr>
@@ -783,115 +769,112 @@ with open(&quot;model.onnx&quot;, &quot;wb&quot;) as f:
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌─────────────────────────────────────────────────┐
 │               AI 推理分层架构                     │
 ├─────────────────────────────────────────────────┤
-│  L1: JVM内嵌 (Token计数/Embedding/分类)          │
-│      DJL + ONNX Runtime                         │
+│  <span class="hljs-params">L1:</span> JVM内嵌 (Token计数<span class="hljs-operator">/</span>Embedding<span class="hljs-operator">/</span>分类)          │
+│      DJL <span class="hljs-operator">+</span> ONNX Runtime                         │
 │      → 所有同步、低延迟、高频调用                 │
 ├─────────────────────────────────────────────────┤
-│  L2: 内网推理服务 (Reranker/中等模型)             │
-│      vLLM / Ollama / Text Embeddings Inference   │
+│  <span class="hljs-params">L2:</span> 内网推理服务 (Reranker<span class="hljs-operator">/</span>中等模型)             │
+│      vLLM <span class="hljs-symbol">/</span> Ollama <span class="hljs-symbol">/</span> Text Embeddings Inference   │
 │      → 需要GPU加速的中型模型                      │
 ├─────────────────────────────────────────────────┤
-│  L3: 云API (大模型/复杂推理)                     │
-│      OpenAI / Anthropic / 国产大模型API           │
-│      → 大规模LLM的Chat/Reasoning/复杂Agent       │
+│  <span class="hljs-params">L3:</span> 云API (大模型<span class="hljs-operator">/</span>复杂推理)                     │
+│      OpenAI <span class="hljs-symbol">/</span> Anthropic <span class="hljs-symbol">/</span> 国产大模型API           │
+│      → 大规模LLM的Chat<span class="hljs-operator">/</span>Reasoning<span class="hljs-operator">/</span>复杂Agent       │
 └─────────────────────────────────────────────────┘
-</code></pre></div>
-<p><strong>Spring Boot中的统一访问层</strong>：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">@Service
-public class HybridEmbeddingService {
+</code></pre></div><p><strong>Spring Boot中的统一访问层</strong>：</p>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Service</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">HybridEmbeddingService</span> {
 
-    // L1: JVM内嵌Embedding（小型模型）
-    private final JvmEmbeddingService jvmEmbedder;
+    <span class="hljs-comment">// L1: JVM内嵌Embedding（小型模型）</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> JvmEmbeddingService jvmEmbedder;
 
-    // L2: 内网推理服务（中型模型，通过OpenAI兼容协议）
-    private final WebClient remoteEmbedder;
+    <span class="hljs-comment">// L2: 内网推理服务（中型模型，通过OpenAI兼容协议）</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> WebClient remoteEmbedder;
 
-    public HybridEmbeddingService() throws Exception {
-        this.jvmEmbedder = new JvmEmbeddingService();
-        this.remoteEmbedder = WebClient.builder()
-            .baseUrl(&quot;http://embedding-service:8080/v1&quot;)
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">HybridEmbeddingService</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-built_in">this</span>.jvmEmbedder = <span class="hljs-keyword">new</span> <span class="hljs-title class_">JvmEmbeddingService</span>();
+        <span class="hljs-built_in">this</span>.remoteEmbedder = WebClient.builder()
+            .baseUrl(<span class="hljs-string">"http://embedding-service:8080/v1"</span>)
             .build();
     }
 
-    /**
+    <span class="hljs-comment">/**
      * 根据文本长度自动选择推理层级
-     */
-    public float[] embed(String text) {
-        // 短文本（&lt; 512 tokens）→ JVM内嵌
-        if (text.length() &lt; 2000) {
-            try {
-                return jvmEmbedder.embed(text);
-            } catch (Exception e) {
-                // 降级：JVM失败时fallback到远程服务
-                return embedRemote(text);
+     */</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-type">float</span>[] embed(String text) {
+        <span class="hljs-comment">// 短文本（&lt; 512 tokens）→ JVM内嵌</span>
+        <span class="hljs-keyword">if</span> (text.length() &lt; <span class="hljs-number">2000</span>) {
+            <span class="hljs-keyword">try</span> {
+                <span class="hljs-keyword">return</span> jvmEmbedder.embed(text);
+            } <span class="hljs-keyword">catch</span> (Exception e) {
+                <span class="hljs-comment">// 降级：JVM失败时fallback到远程服务</span>
+                <span class="hljs-keyword">return</span> embedRemote(text);
             }
         }
-        // 长文本 → 远程服务
-        return embedRemote(text);
+        <span class="hljs-comment">// 长文本 → 远程服务</span>
+        <span class="hljs-keyword">return</span> embedRemote(text);
     }
 
-    private float[] embedRemote(String text) {
-        // 调用 Ollama/vLLM 的 OpenAI 兼容 embedding API
-        return remoteEmbedder.post()
-            .uri(&quot;/embeddings&quot;)
-            .bodyValue(Map.of(&quot;model&quot;, &quot;bge-m3&quot;, &quot;input&quot;, text))
+    <span class="hljs-keyword">private</span> <span class="hljs-type">float</span>[] embedRemote(String text) {
+        <span class="hljs-comment">// 调用 Ollama/vLLM 的 OpenAI 兼容 embedding API</span>
+        <span class="hljs-keyword">return</span> remoteEmbedder.post()
+            .uri(<span class="hljs-string">"/embeddings"</span>)
+            .bodyValue(Map.of(<span class="hljs-string">"model"</span>, <span class="hljs-string">"bge-m3"</span>, <span class="hljs-string">"input"</span>, text))
             .retrieve()
             .bodyToMono(EmbeddingResponse.class)
             .block()
-            .data().get(0).embedding();
+            .data().get(<span class="hljs-number">0</span>).embedding();
     }
 }
-</code></pre></div>
-<h2>六、性能基准测试</h2>
+</code></pre></div><h2>六、性能基准测试</h2>
 <p>使用JMH进行DJL vs ONNX Runtime的微型基准测试：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="language-java">import org.openjdk.jmh.annotations.*;
-import org.openjdk.jmh.runner.Runner;
-import org.openjdk.jmh.runner.options.OptionsBuilder;
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> org.openjdk.jmh.annotations.*;
+<span class="hljs-keyword">import</span> org.openjdk.jmh.runner.Runner;
+<span class="hljs-keyword">import</span> org.openjdk.jmh.runner.options.OptionsBuilder;
 
-import java.util.concurrent.TimeUnit;
+<span class="hljs-keyword">import</span> java.util.concurrent.TimeUnit;
 
-@BenchmarkMode(Mode.AverageTime)
-@OutputTimeUnit(TimeUnit.MILLISECONDS)
-@State(Scope.Benchmark)
-@Warmup(iterations = 3, time = 3)
-@Measurement(iterations = 5, time = 5)
-@Fork(1)
-public class EmbeddingBenchmark {
+<span class="hljs-meta">@BenchmarkMode(Mode.AverageTime)</span>
+<span class="hljs-meta">@OutputTimeUnit(TimeUnit.MILLISECONDS)</span>
+<span class="hljs-meta">@State(Scope.Benchmark)</span>
+<span class="hljs-meta">@Warmup(iterations = 3, time = 3)</span>
+<span class="hljs-meta">@Measurement(iterations = 5, time = 5)</span>
+<span class="hljs-meta">@Fork(1)</span>
+<span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">EmbeddingBenchmark</span> {
 
-    private JvmEmbeddingService djlembedder;
-    private OnnxEmbeddingService onnxEmbedder;
-    private String testText = &quot;Java AI知识库是一个全面的技术知识体系&quot;;
+    <span class="hljs-keyword">private</span> JvmEmbeddingService djlembedder;
+    <span class="hljs-keyword">private</span> OnnxEmbeddingService onnxEmbedder;
+    <span class="hljs-keyword">private</span> <span class="hljs-type">String</span> <span class="hljs-variable">testText</span> <span class="hljs-operator">=</span> <span class="hljs-string">"Java AI知识库是一个全面的技术知识体系"</span>;
 
-    @Setup
-    public void setup() throws Exception {
-        this.djlembedder = new JvmEmbeddingService();     // DJL加载
-        this.onnxEmbedder = new OnnxEmbeddingService();   // ONNX加载
+    <span class="hljs-meta">@Setup</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">setup</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-built_in">this</span>.djlembedder = <span class="hljs-keyword">new</span> <span class="hljs-title class_">JvmEmbeddingService</span>();     <span class="hljs-comment">// DJL加载</span>
+        <span class="hljs-built_in">this</span>.onnxEmbedder = <span class="hljs-keyword">new</span> <span class="hljs-title class_">OnnxEmbeddingService</span>();   <span class="hljs-comment">// ONNX加载</span>
     }
 
-    @Benchmark
-    public float[] djlEmbedding() throws Exception {
-        return djlembedder.embed(testText);
+    <span class="hljs-meta">@Benchmark</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-type">float</span>[] djlEmbedding() <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-keyword">return</span> djlembedder.embed(testText);
     }
 
-    @Benchmark
-    public float[] onnxEmbedding() {
-        return onnxEmbedder.embed(testText);
+    <span class="hljs-meta">@Benchmark</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-type">float</span>[] onnxEmbedding() {
+        <span class="hljs-keyword">return</span> onnxEmbedder.embed(testText);
     }
 
-    @TearDown
-    public void tearDown() {
+    <span class="hljs-meta">@TearDown</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">tearDown</span><span class="hljs-params">()</span> {
         djlembedder.close();
         onnxEmbedder.close();
     }
 
-    public static void main(String[] args) throws Exception {
-        new Runner(new OptionsBuilder()
+    <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">main</span><span class="hljs-params">(String[] args)</span> <span class="hljs-keyword">throws</span> Exception {
+        <span class="hljs-keyword">new</span> <span class="hljs-title class_">Runner</span>(<span class="hljs-keyword">new</span> <span class="hljs-title class_">OptionsBuilder</span>()
             .include(EmbeddingBenchmark.class.getSimpleName())
             .build()).run();
     }
 }
-</code></pre></div>
-<p><strong>典型基准数据</strong>（MacBook Pro M3 Pro, JDK 25, 模型 = MiniLM-L12-v2 118MB）：</p>
+</code></pre></div><p><strong>典型基准数据</strong>（MacBook Pro M3 Pro, JDK 25, 模型 = MiniLM-L12-v2 118MB）：</p>
 <ul>
 <li>DJL (PyTorch引擎): 8.2ms ± 0.3ms</li>
 <li>ONNX Runtime: 6.1ms ± 0.2ms</li>
@@ -915,11 +898,11 @@ A: DJL的native内存由NDManager管理，不经过Java堆。主要GC压力来�
 A: 使用灰度加载策略：新模型预热完成后，通过AtomicReference原子切换Predictor引用，旧模型延迟关闭。</p>
 <h2>相关条目</h2>
 <ul>
-<li><a href="#/08-模型接入与推理/推理部署/08-本地推理与Ollama" class="cross-ref" data-ref="08-本地推理与Ollama">08-本地推理与Ollama</a> — 本地推理服务方案</li>
-<li><a href="#/08-模型接入与推理/推理部署/08-模型能力矩阵与路由策略" class="cross-ref" data-ref="08-模型能力矩阵与路由策略">08-模型能力矩阵与路由策略</a> — 模型选型决策</li>
-<li><a href="#/08-模型接入与推理/模型API/08-云模型API与SDK使用" class="cross-ref" data-ref="08-云模型API与SDK使用">08-云模型API与SDK使用</a> — 云API调用方案</li>
-<li><a href="#/09-Java AI框架/09-SpringAI2深度解析" class="cross-ref" data-ref="09-SpringAI2深度解析">09-SpringAI2深度解析</a> — Spring AI框架中的Embedding集成</li>
-<li><a href="#/02-Java平台/性能诊断/02-Java性能诊断全指南" class="cross-ref" data-ref="02-Java性能诊断全指南">02-Java性能诊断全指南</a> — JMH基准测试详细指南</li>
+<li><a href="#/08-模型接入与推理/推理部署/08-本地推理与Ollama" class="cross-ref">08-本地推理与Ollama</a> — 本地推理服务方案</li>
+<li><a href="#/08-模型接入与推理/推理部署/08-模型能力矩阵与路由策略" class="cross-ref">08-模型能力矩阵与路由策略</a> — 模型选型决策</li>
+<li><a href="#/08-模型接入与推理/模型API/08-云模型API与SDK使用" class="cross-ref">08-云模型API与SDK使用</a> — 云API调用方案</li>
+<li><a href="#/09-Java AI框架/09-SpringAI2深度解析" class="cross-ref">09-SpringAI2深度解析</a> — Spring AI框架中的Embedding集成</li>
+<li><a href="#/02-Java平台/性能诊断/02-Java性能诊断全指南" class="cross-ref">02-Java性能诊断全指南</a> — JMH基准测试详细指南</li>
 </ul>
-</div>
+</body></html></div>
 </article>
