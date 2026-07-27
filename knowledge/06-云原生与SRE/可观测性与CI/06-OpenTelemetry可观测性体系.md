@@ -2,6 +2,9 @@
 domain: "06-云原生与SRE"
 title: "OpenTelemetry 可观测性体系"
 status: "verified"
+verification:
+  reviewed_at: "2026-07-27"
+  version_anchor: "JDK 25 / Spring Boot 4.x / Spring AI 2.x"
 level: "advanced"
 sources:
   - level: "L1"

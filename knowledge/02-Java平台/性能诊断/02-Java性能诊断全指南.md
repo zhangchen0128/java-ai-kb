@@ -2,6 +2,9 @@
 domain: "02-Java平台"
 title: "Java 性能诊断全指南"
 status: "verified"
+verification:
+  reviewed_at: "2026-07-27"
+  version_anchor: "JDK 25 / Spring Boot 4.x / Spring AI 2.x"
 level: "advanced"
 sources:
   - level: "L1"

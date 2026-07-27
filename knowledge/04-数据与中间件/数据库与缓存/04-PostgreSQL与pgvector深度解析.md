@@ -2,6 +2,9 @@
 domain: "04-数据与中间件"
 title: "PostgreSQL 与 pgvector 深度解析"
 status: "verified"
+verification:
+  reviewed_at: "2026-07-27"
+  version_anchor: "JDK 25 / Spring Boot 4.x / Spring AI 2.x"
 level: "advanced"
 sources:
   - level: "L1"

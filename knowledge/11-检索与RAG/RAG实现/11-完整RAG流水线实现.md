@@ -2,6 +2,9 @@
 domain: "11-检索与RAG"
 title: "完整企业RAG流水线Java实现：从文档到答案的端到端系统"
 status: "draft"
+verification:
+  reviewed_at: "2026-07-27"
+  version_anchor: "JDK 25 / Spring Boot 4.x / Spring AI 2.x"
 level: "advanced"
 sources:
   - level: "L1"
