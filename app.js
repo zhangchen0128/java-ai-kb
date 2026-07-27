@@ -358,6 +358,42 @@ window.copyCode = function(btn) {
   });
 };
 
+// ===== TOC Generation =====
+function buildTOC() {
+  const tocNav = document.getElementById('tocNav');
+  if (!tocNav) return;
+  const headings = articleEl.querySelectorAll('.entry-body h2, .entry-body h3');
+  if (headings.length < 2) { tocNav.innerHTML = ''; return; }
+  let html = '';
+  headings.forEach((h, i) => {
+    const id = 'h-' + i;
+    h.id = id;
+    const cls = h.tagName === 'H2' ? 'toc-h2' : 'toc-h3';
+    html += `<a href="#${id}" class="${cls}">${h.textContent}</a>`;
+  });
+  tocNav.innerHTML = html;
+}
+
+// Update TOC after navigation
+const origNavigate = navigate;
+navigate = async function(path) {
+  await origNavigate(path);
+  setTimeout(buildTOC, 100);
+};
+
+// ===== Keyboard Shortcuts =====
+document.addEventListener('keydown', e => {
+  if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+    e.preventDefault();
+    searchInput.focus();
+  }
+  if (e.key === 'Escape') {
+    searchInput.blur();
+    searchResults.classList.remove('open');
+    clearSearch.classList.remove('visible');
+  }
+});
+
 // ===== Init =====
 async function init() {
   await loadNav();
