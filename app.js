@@ -140,11 +140,6 @@ function renderNavNode(node, prefix) {
     const subCount = countEntries(node[sub]);
     html += `<div class="nav-subdir-title">▸ ${sub} <span class="nav-file-count">${subCount}</span></div>`;
     html += `<div style="display:none">`;
-    if (node[sub]._entries?.length) {
-      for (const e of node[sub]._entries) {
-        html += `<a href="#${e.url}" class="nav-file" data-url="${e.url}">${e.title}</a>`;
-      }
-    }
     html += renderNavNode(node[sub], prefix + '  ');
     html += `</div>`;
   }
