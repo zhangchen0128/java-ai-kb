@@ -1,17 +1,7 @@
 // ===== State =====
 let navTree = null;
 let searchIdx = null;
-let currentPath = null;
 let allEntries = [];
-
-// GitHub Pages repo name detection
-const isGHpages = location.hostname.includes('github.io');
-const BASE = isGHpages ? '/' + location.pathname.split('/')[1] : '';
-
-function fixPath(p) {
-  if (isGHpages && p.startsWith(BASE)) return p.slice(BASE.length) || '/';
-  return p;
-}
 
 // ===== DOM refs =====
 const $ = s => document.querySelector(s);
@@ -80,6 +70,17 @@ async function loadSearch() {
   return searchIdx;
 }
 
+// ===== Hash-based routing =====
+function getRoute() {
+  const h = location.hash;
+  if (h.startsWith('#/')) return h.slice(1); // Remove #, keep /
+  return '/';
+}
+
+function setRoute(path) {
+  location.hash = '#' + path;
+}
+
 // ===== Render Nav =====
 async function renderNav() {
   const tree = await loadNav();
@@ -99,7 +100,6 @@ async function renderNav() {
   }
   navTreeEl.innerHTML = html;
 
-  // Toggle domain
   navTreeEl.querySelectorAll('.nav-domain-title').forEach(el => {
     el.onclick = () => {
       const sub = el.nextElementSibling;
@@ -108,14 +108,12 @@ async function renderNav() {
       arrow.classList.toggle('open');
       localStorage.setItem('kb-nav-' + el.dataset.domain, sub.classList.contains('open') ? '1' : '0');
     };
-    // Restore state
     if (localStorage.getItem('kb-nav-' + el.dataset.domain) === '1') {
       el.nextElementSibling.classList.add('open');
       el.querySelector('.arrow').classList.add('open');
     }
   });
 
-  // Subdir toggle
   navTreeEl.querySelectorAll('.nav-subdir-title').forEach(el => {
     el.onclick = (e) => {
       e.stopPropagation();
@@ -144,7 +142,7 @@ function renderNavNode(node, prefix) {
     html += `<div style="display:none">`;
     if (node[sub]._entries?.length) {
       for (const e of node[sub]._entries) {
-        html += `<a href="${e.url}" class="nav-file" data-url="${e.url}">${e.title}</a>`;
+        html += `<a href="#${e.url}" class="nav-file" data-url="${e.url}">${e.title}</a>`;
       }
     }
     html += renderNavNode(node[sub], prefix + '  ');
@@ -152,7 +150,7 @@ function renderNavNode(node, prefix) {
   }
   if (node._entries?.length) {
     for (const e of node._entries) {
-      html += `<a href="${e.url}" class="nav-file" data-url="${e.url}">${e.title}</a>`;
+      html += `<a href="#${e.url}" class="nav-file" data-url="${e.url}">${e.title}</a>`;
     }
   }
   return html;
@@ -165,7 +163,7 @@ async function renderDomainGrid() {
   let html = '';
   for (const d of domains) {
     const num = d.match(/^(\d{2})/)?.[1] || '99';
-    html += `<a href="/?d=${num}" class="domain-card">
+    html += `<a href="#/?d=${num}" class="domain-card">
       <div class="dc-num">${num}</div>
       <div class="dc-name">${d}</div>
       <div class="dc-desc">${countEntries(tree[d])}篇笔记</div>
@@ -174,7 +172,7 @@ async function renderDomainGrid() {
   if (domainGrid) domainGrid.innerHTML = html;
 }
 
-// ===== SPA Router =====
+// ===== Navigate =====
 async function navigate(path) {
   const isDomain = path.startsWith('/?d=');
   if (isDomain) {
@@ -200,6 +198,7 @@ async function navigate(path) {
         articleEl.innerHTML = html;
         highlightNav(contentPath);
         renderPrevNext(contentPath);
+        setTimeout(buildTOC, 100);
       } catch {
         articleEl.innerHTML = '<div class="welcome"><h1>404</h1><p>页面未找到</p></div>';
         prevNext.innerHTML = '';
@@ -212,7 +211,6 @@ async function navigate(path) {
     }
   }
   window.scrollTo(0, 0);
-  // Close sidebar on mobile after navigation
   if (window.innerWidth < 1024) {
     sidebar.classList.remove('open');
     overlay.classList.remove('open');
@@ -230,7 +228,7 @@ function renderDomainEntries(node, prefix = '') {
   }
   if (node._entries?.length) {
     for (const e of node._entries) {
-      html += `<li><a href="${e.url}" class="cross-ref">${e.title}</a> ${e.status === 'draft' ? '📝' : e.status === 'verified' ? '✅' : ''}</li>`;
+      html += `<li><a href="#${e.url}">${e.title}</a> ${e.status === 'draft' ? '📝' : e.status === 'verified' ? '✅' : ''}</li>`;
     }
   }
   return html;
@@ -248,7 +246,6 @@ function highlightNav(url) {
 }
 
 function renderPrevNext(path) {
-  // Build flat list from navTree
   const flat = [];
   function flatten(node) {
     if (node._entries) for (const e of node._entries) flat.push(e);
@@ -260,31 +257,29 @@ function renderPrevNext(path) {
     for (const domain of Object.keys(navTree).sort()) flatten(navTree[domain]);
     const idx = flat.findIndex(e => e.url === path);
     let html = '';
-    if (idx > 0) html += `<a href="${flat[idx-1].url}">← ${flat[idx-1].title}</a>`;
+    if (idx > 0) html += `<a href="#${flat[idx-1].url}">← ${flat[idx-1].title}</a>`;
     else html += '<span></span>';
-    if (idx < flat.length - 1) html += `<a href="${flat[idx+1].url}">${flat[idx+1].title} →</a>`;
+    if (idx < flat.length - 1) html += `<a href="#${flat[idx+1].url}">${flat[idx+1].title} →</a>`;
     else html += '<span></span>';
     prevNext.innerHTML = html;
   }
 }
 
-// ===== Intercept Clicks =====
-document.addEventListener('click', e => {
-  const link = e.target.closest('a');
-  if (!link) return;
-  const href = link.getAttribute('href');
-  if (!href) return;
-  // Internal links only
-  if (href.startsWith('/') && !href.startsWith('//')) {
-    e.preventDefault();
-    const p = fixPath(href);
-    history.pushState(null, '', BASE + p);
-    navigate(p);
-  }
-});
-
-// ===== PopState =====
-window.addEventListener('popstate', () => navigate(fixPath(location.pathname + location.search)));
+// ===== TOC Generation =====
+function buildTOC() {
+  const tocNav = document.getElementById('tocNav');
+  if (!tocNav) return;
+  const headings = articleEl.querySelectorAll('.entry-body h2, .entry-body h3');
+  if (headings.length < 2) { tocNav.innerHTML = ''; return; }
+  let html = '';
+  headings.forEach((h, i) => {
+    const id = 'h-' + i;
+    h.id = id;
+    const cls = h.tagName === 'H2' ? 'toc-h2' : 'toc-h3';
+    html += `<a href="#" onclick="document.getElementById('${id}').scrollIntoView({behavior:'smooth'});return false" class="${cls}">${h.textContent}</a>`;
+  });
+  tocNav.innerHTML = html;
+}
 
 // ===== Search =====
 let searchTimeout;
@@ -311,7 +306,6 @@ clearSearch.onclick = () => {
   searchInput.focus();
 };
 
-// Close search on click outside
 document.addEventListener('click', e => {
   if (!searchResults.contains(e.target) && e.target !== searchInput) {
     searchResults.classList.remove('open');
@@ -332,7 +326,7 @@ async function doSearch(q) {
     searchResultsInner.innerHTML = '<div class="no-results">未找到匹配结果</div>';
   } else {
     searchResultsInner.innerHTML = results.map(r => `
-      <a href="${r.u}" class="search-item">
+      <a href="#${r.u}" class="search-item">
         <div class="si-title"><span class="si-domain">${r.d}</span>${highlightMatch(r.t, q)}</div>
         <div class="si-snippet">${highlightMatch(r.s.slice(0, 180), q)}</div>
         ${r.g?.length ? '<div class="si-tags">' + r.g.slice(0,5).map(t => `<span class="badge badge-tag">#${t}</span>`).join('') + '</div>' : ''}
@@ -358,29 +352,6 @@ window.copyCode = function(btn) {
   });
 };
 
-// ===== TOC Generation =====
-function buildTOC() {
-  const tocNav = document.getElementById('tocNav');
-  if (!tocNav) return;
-  const headings = articleEl.querySelectorAll('.entry-body h2, .entry-body h3');
-  if (headings.length < 2) { tocNav.innerHTML = ''; return; }
-  let html = '';
-  headings.forEach((h, i) => {
-    const id = 'h-' + i;
-    h.id = id;
-    const cls = h.tagName === 'H2' ? 'toc-h2' : 'toc-h3';
-    html += `<a href="#${id}" class="${cls}">${h.textContent}</a>`;
-  });
-  tocNav.innerHTML = html;
-}
-
-// Update TOC after navigation
-const origNavigate = navigate;
-navigate = async function(path) {
-  await origNavigate(path);
-  setTimeout(buildTOC, 100);
-};
-
 // ===== Keyboard Shortcuts =====
 document.addEventListener('keydown', e => {
   if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -394,16 +365,16 @@ document.addEventListener('keydown', e => {
   }
 });
 
+// ===== Listen for hash changes =====
+window.addEventListener('hashchange', () => navigate(getRoute()));
+
 // ===== Init =====
 async function init() {
   await loadNav();
   await loadSearch();
   renderNav();
   renderDomainGrid();
-  // Handle 404 redirect recovery
-  const redirect = sessionStorage.getItem('redirect');
-  if (redirect) { sessionStorage.removeItem('redirect'); history.replaceState(null, '', redirect); }
-  navigate(fixPath(location.pathname + location.search));
+  navigate(getRoute());
 }
 
 init();
