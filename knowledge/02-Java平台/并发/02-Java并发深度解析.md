@@ -220,7 +220,7 @@ class FinalFieldGuarantee {
 
 1. 构造函数中不能显式或隐式地让 `this` 引用逸出（如传入其他线程、放入静态集合、启动线程）。
 2. 构造函数中对 final 字段的写入完成前，不能读 final 字段（通常自然满足）。
-3. JDK 25 引入的 Flexible Constructor Bodies（JEP 482）允许在 `super()` 之前执行代码，但 final 字段仍必须在构造器正常返回前完成写入。
+3. JDK 25 引入的 Flexible Constructor Bodies（JEP 482, Preview）允许在 `super()` 之前执行代码，但 final 字段仍必须在构造器正常返回前完成写入。
 
 **this 逸出的经典反例**：
 
@@ -1554,7 +1554,7 @@ try (var executor = Executors.newFixedThreadPool(
 
 ### 7.7 与 Structured Concurrency 的选择
 
-JDK 25 的 Structured Concurrency（JEP 480）提供了一种结构化的并发范式：
+JDK 25 的 Structured Concurrency（JEP 480, Preview）提供了一种结构化的并发范式：
 
 ```java
 // StructuredTaskScope: 父任务显式管理子任务生命周期

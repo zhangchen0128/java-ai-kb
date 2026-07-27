@@ -5,7 +5,7 @@ status: "draft"
 level: "advanced"
 sources:
   - level: "L1"
-    url: "https://modelcontextprotocol.io/specification/2025-03-26/"
+    url: "https://modelcontextprotocol.io/specification/2025-11-25/"
     description: "MCP Specification"
   - level: "L1"
     url: "https://docs.spring.io/spring-ai/reference/"

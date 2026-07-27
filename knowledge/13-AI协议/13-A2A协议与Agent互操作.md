@@ -299,9 +299,9 @@ public class AgentCardDiscovery {
 }
 ```
 
-### 3.2 任务创建（tasks/send）
+### 3.2 任务创建（message:send）
 
-当Agent A需要Agent B执行任务时，A向B的`/tasks/send`端点发送消息：
+当Agent A需要Agent B执行任务时，A向B的`/message:send`端点发送消息：
 
 ```java
 // 任务发送示例
@@ -332,7 +332,7 @@ public class TaskClient {
         );
 
         var request = java.net.http.HttpRequest.newBuilder()
-            .uri(java.net.URI.create(agentEndpoint + "/tasks/send"))
+            .uri(java.net.URI.create(agentEndpoint + "/message:send"))
             .POST(java.net.http.HttpRequest.BodyPublishers.ofString(
                 JacksonUtils.toJson(taskRequest)))
             .header("Content-Type", "application/json")
@@ -356,7 +356,7 @@ public class TaskClient {
         var taskRequest = Map.of("message", message, "streaming", true);
 
         var request = java.net.http.HttpRequest.newBuilder()
-            .uri(java.net.URI.create(agentEndpoint + "/tasks/send"))
+            .uri(java.net.URI.create(agentEndpoint + "/message:send"))
             .POST(java.net.http.HttpRequest.BodyPublishers.ofString(
                 JacksonUtils.toJson(taskRequest)))
             .header("Content-Type", "application/json")
@@ -392,7 +392,7 @@ public class TaskClient {
 }
 ```
 
-### 3.3 任务状态轮询（tasks/get）
+### 3.3 任务状态轮询（GET /tasks/{id}）
 
 对于非流式任务，客户端通过轮询获取任务状态：
 
@@ -430,7 +430,7 @@ public Task pollUntilComplete(String taskId,
  */
 public Task getTaskStatus(String taskId) throws Exception {
     var request = java.net.http.HttpRequest.newBuilder()
-        .uri(java.net.URI.create(agentEndpoint + "/tasks/get?taskId=" + taskId))
+        .uri(java.net.URI.create(agentEndpoint + "/tasks/" + taskId))
         .GET()
         .header("Authorization", "Bearer " + getAccessToken())
         .build();
@@ -446,7 +446,7 @@ public Task getTaskStatus(String taskId) throws Exception {
 }
 ```
 
-### 3.4 任务取消（tasks/cancel）
+### 3.4 任务取消（DELETE /tasks/{id}）
 
 ```java
 /**
@@ -456,7 +456,7 @@ public Task cancelTask(String taskId) throws Exception {
     var cancelRequest = Map.of("taskId", taskId);
 
     var request = java.net.http.HttpRequest.newBuilder()
-        .uri(java.net.URI.create(agentEndpoint + "/tasks/cancel"))
+        .uri(java.net.URI.create(agentEndpoint + "/tasks/"))
         .POST(java.net.http.HttpRequest.BodyPublishers.ofString(
             JacksonUtils.toJson(cancelRequest)))
         .header("Content-Type", "application/json")
@@ -504,15 +504,15 @@ A2A-Version: 1.0
 HTTP+JSON 是 A2A 1.0 的**主要绑定方式**，也是最简单的入门方式。所有 A2A 端点均以 HTTP RESTful 风格暴露，Payload 使用 JSON 格式：
 
 - Agent Card 发现：`GET /.well-known/agent-card.json` → JSON
-- 任务创建：`POST /tasks/send` → JSON Request/Response
-- 任务查询：`GET /tasks/get?taskId=xxx` → JSON
-- 任务取消：`POST /tasks/cancel` → JSON
-- 流式响应：`POST /tasks/send` + `Accept: text/event-stream` → SSE
+- 任务创建：`POST /message:send` → JSON Request/Response
+- 任务查询：`GET /tasks/xxx` → JSON
+- 任务取消：`POST /tasks/` → JSON
+- 流式响应：`POST /message:send` + `Accept: text/event-stream` → SSE
 
 ```java
 // A2A 1.0 HTTP+JSON 请求示例
 var request = java.net.http.HttpRequest.newBuilder()
-    .uri(java.net.URI.create(agentUrl + "/tasks/send"))
+    .uri(java.net.URI.create(agentUrl + "/message:send"))
     .header("Content-Type", "application/json")
     .header("A2A-Version", "1.0")
     .POST(java.net.http.HttpRequest.BodyPublishers.ofString(jsonPayload))
@@ -530,7 +530,7 @@ A2A-Version: 1.0
 
 {
   "jsonrpc": "2.0",
-  "method": "tasks/send",
+  "method": "message:send",
   "params": { "message": {...} },
   "id": "req-001"
 }
@@ -596,7 +596,7 @@ A2A 1.0 推荐使用 OAuth 2.0 进行 Agent 间认证和授权。Agent Card 的 
 Client → Authorization Server: POST /token (client_credentials)
 Client ← Authorization Server: {"access_token": "...", "expires_in": 3600}
 
-Client → Agent B: GET /tasks/get?taskId=xxx
+Client → Agent B: GET /tasks/xxx
            Authorization: Bearer <access_token>
            A2A-Version: 1.0
 ```
@@ -983,7 +983,7 @@ public class ResearchAgentServer {
         });
 
         // Task处理端点
-        server.createContext("/tasks/send", exchange -> {
+        server.createContext("/message:send", exchange -> {
             if (!"POST".equals(exchange.getRequestMethod())) {
                 exchange.sendResponseHeaders(405, -1);
                 return;
@@ -1286,7 +1286,7 @@ public class IdealAgentArchitecture {
     public TableSchema getTableSchema(String name) { /* ... */ }
 
     // A2A: Agent协作层
-    @A2AEndpoint(path = "/tasks/send")
+    @A2AEndpoint(path = "/message:send")
     public Task handleExternalTask(A2aMessage message) {
         // 1. 解析外部Agent的请求
         // 2. 使用本地MCP Tool收集数据
@@ -1297,11 +1297,11 @@ public class IdealAgentArchitecture {
     // Orchestration: 编排其他Agent
     public Report orchestrateResearch() {
         var dataAgentResult = a2aClient.sendTask(
-            "http://data-agent:8081/tasks/send", queryMessage);
+            "http://data-agent:8081/message:send", queryMessage);
         var analysisAgentResult = a2aClient.sendTask(
-            "http://analysis-agent:8082/tasks/send", dataMessage);
+            "http://analysis-agent:8082/message:send", dataMessage);
         var writerAgentResult = a2aClient.sendTask(
-            "http://writer-agent:8083/tasks/send", analysisMessage);
+            "http://writer-agent:8083/message:send", analysisMessage);
         return compileFinalReport(writerAgentResult);
     }
 }

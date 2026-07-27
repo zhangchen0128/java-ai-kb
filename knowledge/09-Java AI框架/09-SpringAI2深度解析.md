@@ -1012,7 +1012,7 @@ public class AiEvaluationService {
     public void evaluateFactuality() {
         var request = EvaluationRequest.builder()
             .userQuestion("JDK 25有哪些新特性？")
-            .aiResponse("JDK 25引入了Scoped Values、String Templates等特性...")
+            .aiResponse("JDK 25引入了Scoped Values等特性...")
             .referenceFacts("""
                 JDK 25主要特性：
                 - Virtual Threads (JEP 444)

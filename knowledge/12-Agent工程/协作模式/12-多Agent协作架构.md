@@ -5,7 +5,7 @@ status: "draft"
 level: "intermediate"
 sources:
   - level: "L1"
-    url: "https://docs.spring.io/spring-ai/reference/api/multi-agent.html"
+    url: "https://docs.spring.io/spring-ai/reference/api/effective-agents.html"
     description: "Spring AI Multi-Agent 相关文档"
   - level: "L2"
     url: "https://arxiv.org/abs/2308.08155"

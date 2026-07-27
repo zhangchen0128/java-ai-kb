@@ -5,7 +5,7 @@ status: "draft"
 level: "intermediate"
 sources:
   - level: "L1"
-    url: "https://docs.spring.io/spring-ai/reference/api/chatmemory.html"
+    url: "https://docs.spring.io/spring-ai/reference/api/chat-memory.html"
     description: "Spring AI ChatMemory 官方文档"
   - level: "L1"
     url: "https://arxiv.org/abs/2210.03629"

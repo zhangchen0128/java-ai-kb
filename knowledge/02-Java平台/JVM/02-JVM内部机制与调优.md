@@ -75,7 +75,7 @@ JVM 规范定义了六块内存区域，其中方法区和堆是所有线程共�
 | PC Register | 否 | 当前正在执行的字节码指令地址 | — |
 | Direct Memory | 否(共享) | NIO DirectByteBuffer 使用的堆外内存 | OutOfMemoryError: Direct buffer memory |
 
-**重要变化 (JDK 25)：** JDK 24 移除了自 JDK 1.0 以来一直存在的 32-bit x86 端口 (JEP 479) 和所有平台的 32-bit 构建 (JEP 480)。这意味着所有现代 JVM 部署均为 64-bit，CompressedOops 默认启用（堆小于 32GB 时），对象头大小也相应统一。
+**重要变化 (JDK 25)：** JDK 24 移除了自 JDK 1.0 以来一直存在的 32-bit x86 端口 (JEP 479) 。这意味着所有现代 JVM 部署均为 64-bit，CompressedOops 默认启用（堆小于 32GB 时），对象头大小也相应统一。
 
 ### 1.3 Execution Engine（执行引擎）
 

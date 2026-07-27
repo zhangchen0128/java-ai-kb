@@ -14,7 +14,7 @@ sources:
     url: "https://modelcontextprotocol.io/sdk/java/mcp-client"
     description: "MCP Java SDK官方文档 - Client端"
   - level: "L2"
-    url: "https://docs.spring.io/spring-ai/reference/api/mcp.html"
+    url: "https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html"
     description: "Spring AI MCP集成文档"
 relations:
   prerequisite: ["09-SpringAI2深度解析", "09-SpringAI2深度解析"]

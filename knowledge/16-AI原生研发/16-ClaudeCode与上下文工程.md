@@ -1885,7 +1885,7 @@ JDK 8 → 21 → 25 的迁移中，AI 辅助可以：
 
 - **依赖分析**：扫描 pom.xml，自动更新 artifact 版本到与目标 JDK 兼容的版本。例如 JDK 25 需要 Spring Boot 4.x + Hibernate 7.x + Jakarta EE 11。
 - **API 迁移**：识别 `javax.*` → `jakarta.*` 的包名变更、`SecurityManager` 移除、`Thread.stop()` 移除等废弃 API，自动生成替换方案。
-- **新特性应用**：识别可以应用 Record、Switch 表达式、Virtual Threads、String Template 的场景。
+- **新特性应用**：识别可以应用 Record、Switch 表达式、Virtual Threads、String.formatted() 的场景。
 
 ### Spring Boot 2.x → 4.x 升级
 
