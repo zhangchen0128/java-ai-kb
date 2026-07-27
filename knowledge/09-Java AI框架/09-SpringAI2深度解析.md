@@ -1187,6 +1187,853 @@ A: Advisor 是 Spring AI 自己的拦截器概念，专为 LLM 调用设计。�
 
 A: 仅需改配置。例如从 OpenAI 切到 Ollama：从 `spring-ai-openai-spring-boot-starter` 改为 `spring-ai-ollama-spring-boot-starter`，修改 `application.yml` 中的 provider 配置，业务代码零改动。
 
+## 流式处理最佳实践
+
+### Flux\<ChatResponse\> vs SseEmitter 的选择
+
+Spring AI 2.x 提供两种流式输出路径，选择取决于使用场景：
+
+| 维度 | Flux\<String\> / Flux\<ChatResponse\> | SseEmitter |
+|------|----------------------------------------|------------|
+| 编程模型 | 响应式（Reactor） | Servlet 异步 |
+| 线程模型 | 非阻塞事件循环（Netty） | 线程池 + 异步上下文 |
+| 背压支持 | 原生支持 | 无（依赖 TCP 缓冲） |
+| 错误处理 | 丰富的 Reactive 操作符 | 手动 try-catch + completeWithError |
+| 适用场景 | WebFlux + 高并发 | Spring MVC + 传统 Servlet |
+| 推荐度 | **首选**（Spring AI 原生） | 仅限 MVC 遗留项目 |
+
+**选择建议：**
+- 新项目：使用 WebFlux + `Flux<ChatResponse>`，享受完整的响应式生态
+- 遗留 MVC 项目：使用 `SseEmitter` 做最小侵入的流式改造
+- 关键区别：`Flux` 支持 `doOnNext`、`onErrorResume`、`timeout` 等操作符链式组合，`SseEmitter` 需要手动管理
+
+```java
+@RestController
+@RequestMapping("/api/stream")
+public class StreamingComparisonController {
+
+    private final ChatClient chatClient;
+
+    public StreamingComparisonController(ChatClient.Builder builder) {
+        this.chatClient = builder.build();
+    }
+
+    /**
+     * 方案 A：WebFlux + Flux（推荐）
+     * 原生响应式，支持背压和丰富的操作符
+     */
+    @GetMapping(value = "/flux", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<ServerSentEvent<String>> streamWithFlux(@RequestParam String q) {
+        return chatClient.prompt()
+            .user(q)
+            .stream()
+            .chatResponse()
+            .map(chunk -> chunk.getResult().getOutput().getContent())
+            .map(token -> ServerSentEvent.<String>builder().data(token).build())
+            .concatWith(Mono.just(
+                ServerSentEvent.<String>builder().event("done").data("[DONE]").build()));
+    }
+
+    /**
+     * 方案 B：Spring MVC + SseEmitter（遗留兼容）
+     * 使用 Virtual Threads 避免阻塞 Servlet 线程
+     */
+    @GetMapping(value = "/sse", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public SseEmitter streamWithSseEmitter(@RequestParam String q) {
+        var emitter = new SseEmitter(120_000L);  // 120s 超时
+
+        Thread.ofVirtual().start(() -> {
+            try {
+                chatClient.prompt()
+                    .user(q)
+                    .stream()
+                    .content()
+                    .doOnNext(token -> {
+                        try {
+                            emitter.send(SseEmitter.event().data(token));
+                        } catch (IOException e) {
+                            emitter.completeWithError(e);
+                        }
+                    })
+                    .doOnComplete(() -> emitter.complete())
+                    .doOnError(emitter::completeWithError)
+                    .blockLast();
+            } catch (Exception e) {
+                emitter.completeWithError(e);
+            }
+        });
+
+        return emitter;
+    }
+}
+```
+
+### 背压处理
+
+在流式 LLM 调用中，如果生产端（模型输出）快于消费端（客户端处理/网络传输），Reactor 的背压机制会自动调节。但在实际场景中，模型输出速度通常比网络传输慢，所以背压很少成为瓶颈。需要注意的场景：
+
+```java
+/**
+ * 背压处理示例
+ * 场景：消费端需要对每个 chunk 执行耗时操作（如写入数据库）
+ */
+public class BackpressureHandling {
+
+    private final ChatClient chatClient;
+
+    public BackpressureHandling(ChatClient.Builder builder) {
+        this.chatClient = builder.build();
+    }
+
+    /**
+     * 使用 onBackpressureBuffer 缓冲过量数据
+     */
+    public Flux<String> streamWithBuffer(String prompt) {
+        return chatClient.prompt()
+            .user(prompt)
+            .stream()
+            .content()
+            .onBackpressureBuffer(256,  // 缓冲最多 256 个 token
+                dropped -> System.out.println("丢弃 token（客户端处理过慢）: " + dropped))
+            .concatMap(token -> {
+                // 模拟耗时处理（如逐 token 持久化）
+                return Mono.just(token)
+                    .delayElement(Duration.ofMillis(10));  // 10ms 处理时间
+            }, 1);  // concurrency=1 确保顺序处理
+    }
+
+    /**
+     * 使用 onBackpressureLatest — 只保留最新的
+     * 适用于实时显示场景：宁可丢帧也不延迟
+     */
+    public Flux<String> streamDropOldest(String prompt) {
+        return chatClient.prompt()
+            .user(prompt)
+            .stream()
+            .content()
+            .onBackpressureLatest();
+    }
+}
+```
+
+### 错误恢复
+
+流式调用中的错误恢复比非流式更复杂——部分数据已发送给客户端后无法撤回。需要区分"可恢复"和"不可恢复"的错误：
+
+```java
+/**
+ * 流式调用的错误恢复策略
+ */
+public class StreamingErrorRecovery {
+
+    private final ChatClient chatClient;
+
+    public StreamingErrorRecovery(ChatClient.Builder builder) {
+        this.chatClient = builder.build();
+    }
+
+    /**
+     * 完整的错误恢复流程
+     */
+    public Flux<String> streamWithRecovery(String prompt) {
+        return chatClient.prompt()
+            .user(prompt)
+            .stream()
+            .content()
+            // 1. 超时保护：如果超过 30s 无输出，视为断连
+            .timeout(Duration.ofSeconds(30),
+                Flux.just("\n[响应超时，请重试]"))
+
+            // 2. 速率限制产生的 429 错误 → 退避重试
+            .onErrorResume(e -> {
+                if (isRateLimitError(e)) {
+                    System.out.println("遇到限流，3秒后重试...");
+                    return chatClient.prompt()
+                        .user(prompt)
+                        .stream()
+                        .content()
+                        .delaySubscription(Duration.ofSeconds(3));
+                }
+                return Flux.error(e);  // 非限流错误，向上传播
+            })
+
+            // 3. 连接断开 → 优雅降级
+            .onErrorResume(e -> {
+                if (isConnectionError(e)) {
+                    return Flux.just("\n[连接中断，已生成的内容如上]");
+                }
+                return Flux.error(e);
+            })
+
+            // 4. 重试逻辑（最多 2 次，指数退避）
+            .retryWhen(Retry.backoff(2, Duration.ofSeconds(1))
+                .maxBackoff(Duration.ofSeconds(10))
+                .filter(this::isRetryable)
+                .doBeforeRetry(signal ->
+                    System.out.println("第 " + (signal.totalRetries() + 1) + " 次重试...")));
+    }
+
+    private boolean isRateLimitError(Throwable e) {
+        return e.getMessage() != null && e.getMessage().contains("429");
+    }
+
+    private boolean isConnectionError(Throwable e) {
+        return e instanceof java.net.ConnectException ||
+               e.getMessage() != null && e.getMessage().contains("connection");
+    }
+
+    private boolean isRetryable(Throwable e) {
+        return isRateLimitError(e) || isConnectionError(e);
+    }
+}
+```
+
+### Virtual Threads + 流式输出的组合
+
+JDK 25 的 Virtual Threads 与流式 LLM 输出天然互补——Virtual Threads 提供简洁的同步编程模型，而流式输出保证用户体验不受阻塞影响：
+
+```java
+/**
+ * Virtual Threads + 流式输出：同时为多个用户提供流式 AI 响应
+ * 每个用户请求在独立的 Virtual Thread 中处理，不阻塞平台线程
+ */
+@Service
+public class VirtualThreadStreamingService {
+
+    private final ChatClient chatClient;
+    private final ConcurrentHashMap<String, SseEmitter> activeEmitters = new ConcurrentHashMap<>();
+
+    public VirtualThreadStreamingService(ChatClient.Builder builder) {
+        this.chatClient = builder.build();
+    }
+
+    /**
+     * 启动一个 Virtual Thread 来流式处理用户请求
+     * 场景：用户通过 WebSocket 或长轮询订阅 AI 响应流
+     */
+    public void startStreaming(String sessionId, String prompt,
+                                Consumer<String> onToken,
+                                Runnable onComplete,
+                                Consumer<Throwable> onError) {
+
+        Thread.ofVirtual()
+            .name("ai-stream-" + sessionId)
+            .start(() -> {
+                try {
+                    chatClient.prompt()
+                        .user(prompt)
+                        .stream()
+                        .content()
+                        .doOnNext(onToken)
+                        .doOnComplete(onComplete)
+                        .doOnError(onError)
+                        .blockLast();
+                } catch (Exception e) {
+                    onError.accept(e);
+                }
+            });
+    }
+
+    /**
+     * 批量启动多个并发的流式请求
+     * 每个请求在自己的 Virtual Thread 中独立运行
+     */
+    public void streamToMultipleUsers(Map<String, String> sessionPrompts) {
+        sessionPrompts.forEach((sessionId, prompt) -> {
+            var emitter = new SseEmitter(300_000L);
+            activeEmitters.put(sessionId, emitter);
+
+            startStreaming(sessionId, prompt,
+                token -> {
+                    try {
+                        emitter.send(SseEmitter.event().data(token));
+                    } catch (IOException e) {
+                        emitter.completeWithError(e);
+                    }
+                },
+                () -> {
+                    emitter.complete();
+                    activeEmitters.remove(sessionId);
+                },
+                error -> {
+                    emitter.completeWithError(error);
+                    activeEmitters.remove(sessionId);
+                }
+            );
+        });
+        System.out.println("启动了 " + sessionPrompts.size() +
+            " 个 Virtual Thread 流式请求（0 个平台线程占用）");
+    }
+
+    /**
+     * 使用 Structured Concurrency 同时发起多个模型的流式调用
+     * 用于 A/B 对比或 ensemble 场景
+     */
+    public void ensembleStream(String prompt, List<ChatClient> models) {
+        try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+            models.forEach(model ->
+                scope.fork(() -> {
+                    model.prompt().user(prompt).stream().content().blockLast();
+                    return null;
+                })
+            );
+            scope.join();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+}
+```
+
+**Virtual Threads + 流式的核心优势：**
+1. 同步编码思维，无需理解 Reactor 的复杂操作符链
+2. 每个用户请求一个 Virtual Thread，资源开销极低（~1KB 栈内存）
+3. `StructuredTaskScope` 提供自动取消和异常传播
+4. 与 `SseEmitter` 结合可快速为 MVC 项目添加流式 AI 能力
+
+## 生产就绪配置
+
+### 连接池与超时
+
+LLM API 调用是网络 IO 密集型操作，合理的连接池和超时配置直接影响系统稳定性：
+
+```java
+/**
+ * 生产环境的 HTTP Client 配置
+ */
+@Configuration
+public class AiHttpClientConfig {
+
+    /**
+     * 为 Spring AI 配置专用的 HttpClient
+     * 使用 JDK 25 的 HttpClient（原生支持 Virtual Threads）
+     */
+    @Bean
+    public HttpClient aiHttpClient() {
+        return HttpClient.newBuilder()
+            // 1. 连接池：LLM API 通常是低频长连接，连接数不需要太多
+            .connectTimeout(Duration.ofSeconds(10))  // 建连超时 10s
+
+            // 2. HTTP/2 多路复用（一个连接承载多个并发请求）
+            .version(HttpClient.Version.HTTP_2)
+
+            // 3. 使用 Virtual Threads 的 Executor（JDK 25 默认）
+            .executor(Executors.newVirtualThreadPerTaskExecutor())
+
+            .build();
+    }
+
+    /**
+     * Spring AI 的统一超时配置
+     * application.yml 示例（注释形式展示）
+     */
+    public static final String YAML_CONFIG = """
+        spring:
+          ai:
+            openai:
+              api-key: ${OPENAI_API_KEY}
+              base-url: https://api.openai.com
+              chat:
+                options:
+                  model: gpt-4o
+                  temperature: 0.7
+                  max-tokens: 4096
+              # 连接池配置
+              http-client:
+                connect-timeout: 10s        # 建连超时
+                read-timeout: 120s          # 读取超时（流式场景要足够大）
+                write-timeout: 30s          # 写入超时
+                max-connections: 20         # 最大连接数
+                max-connections-per-route: 10  # 单路由最大连接
+                acquire-timeout: 5s         # 从连接池获取连接的超时
+                idle-timeout: 300s          # 空闲连接保留时间
+        """;
+}
+```
+
+### 重试策略（指数退避）
+
+LLM API 调用的可重试错误主要有三类：速率限制（429）、服务不可用（503）、瞬时网络错误。指数退避 + 抖动是标准的重试策略：
+
+```java
+/**
+ * 生产级重试策略：指数退避 + 随机抖动
+ */
+@Component
+public class AiRetryStrategy {
+
+    private static final int MAX_RETRIES = 3;
+    private static final Duration INITIAL_BACKOFF = Duration.ofSeconds(1);
+    private static final Duration MAX_BACKOFF = Duration.ofSeconds(60);
+
+    /**
+     * 使用 Resilience4j 配置声明式重试
+     */
+    @Bean
+    public Retry aiRetry() {
+        return RetryConfig.<ChatResponse>custom()
+            .maxAttempts(MAX_RETRIES)
+            .intervalBiFunction((attempt, outcome) -> {
+                // 指数退避：1s → 2s → 4s → 8s → ...（上限 60s）
+                long baseMs = INITIAL_BACKOFF.toMillis() * (1L << (attempt - 1));
+                // 随机抖动：在 [base * 0.5, base * 1.5] 范围内随机
+                long jitterMs = (long) (baseMs * (0.5 + Math.random()));
+                long delayMs = Math.min(jitterMs, MAX_BACKOFF.toMillis());
+                return Duration.ofMillis(delayMs);
+            })
+            .retryOnException(e -> {
+                // 只重试瞬时错误
+                if (e instanceof HttpClientErrorException httpEx) {
+                    return httpEx.getStatusCode().value() == 429;  // Rate Limit
+                }
+                if (e instanceof HttpServerErrorException httpEx) {
+                    return httpEx.getStatusCode().is5xxServerError();  // 503 等
+                }
+                return e instanceof java.net.ConnectException ||
+                       e instanceof java.net.http.HttpTimeoutException;
+            })
+            .failAfterMaxAttempts(true)
+            .build()
+            |> Retry::of;  // JDK 25 pipe operator (preview)
+    }
+
+    /**
+     * 手动实现的重试逻辑（无需额外依赖）
+     */
+    public String callWithRetry(ChatClient chatClient, String prompt) {
+        Exception lastException = null;
+
+        for (int attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                return chatClient.prompt()
+                    .user(prompt)
+                    .call()
+                    .content();
+            } catch (Exception e) {
+                lastException = e;
+                if (attempt >= MAX_RETRIES || !isRetryable(e)) {
+                    throw new RuntimeException("调用失败（已重试" + attempt + "次）", e);
+                }
+
+                long delayMs = calculateBackoff(attempt);
+                System.out.printf("[重试] 第%d次失败，%dms后重试: %s%n",
+                    attempt, delayMs, e.getMessage());
+                try {
+                    Thread.sleep(delayMs);
+                } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw new RuntimeException("重试被中断", ie);
+                }
+            }
+        }
+        throw new RuntimeException("重试耗尽", lastException);
+    }
+
+    private long calculateBackoff(int attempt) {
+        long baseMs = INITIAL_BACKOFF.toMillis() * (1L << (attempt - 1));
+        long jitterMs = (long) (baseMs * (0.5 + Math.random()));
+        return Math.min(jitterMs, MAX_BACKOFF.toMillis());
+    }
+
+    private boolean isRetryable(Exception e) {
+        String msg = e.getMessage() != null ? e.getMessage() : "";
+        return msg.contains("429") || msg.contains("503") || msg.contains("502") ||
+               msg.contains("timeout") || msg.contains("connection");
+    }
+}
+```
+
+### 速率限制
+
+LLM API 通常有 RPM（每分钟请求数）和 TPM（每分钟 Token 数）双重限制。常用`Bucket4j`实现令牌桶限流：
+
+```java
+/**
+ * 基于令牌桶的 LLM API 速率限制
+ * 同时限制请求数（RPM）和 Token 消耗量（TPM）
+ */
+@Component
+public class LlmRateLimiter {
+
+    private final Bucket requestBucket;  // RPM 限制
+    private final Bucket tokenBucket;    // TPM 限制
+
+    public LlmRateLimiter(
+            @Value("${ai.rate-limit.requests-per-minute:500}") int rpm,
+            @Value("${ai.rate-limit.tokens-per-minute:200000}") int tpm) {
+
+        // RPM 令牌桶：每分钟补充 rpm 个令牌
+        // 每个请求消耗 1 个令牌
+        this.requestBucket = Bucket.builder()
+            .addLimit(Bandwidth.builder()
+                .capacity(rpm)
+                .refillIntervally(rpm, Duration.ofMinutes(1))
+                .build())
+            .build();
+
+        // TPM 令牌桶：每分钟补充 tpm 个令牌
+        // 按预估的 token 消耗量（prompt tokens + max_tokens）消耗
+        this.tokenBucket = Bucket.builder()
+            .addLimit(Bandwidth.builder()
+                .capacity(tpm)
+                .refillIntervally(tpm, Duration.ofMinutes(1))
+                .build())
+            .build();
+    }
+
+    /**
+     * 尝试获取调用许可
+     * @param estimatedTokens 预估总 token 消耗
+     * @param maxWait 最大等待时间
+     * @return 是否获取成功
+     */
+    public boolean tryAcquire(int estimatedTokens, Duration maxWait) {
+        // 同时需要请求配额和 Token 配额
+        var requestProbe = requestBucket.tryConsumeAndReturnRemaining(1);
+        if (!requestProbe.isConsumed()) {
+            return false;  // RPM 限流
+        }
+
+        var tokenProbe = tokenBucket.tryConsumeAndReturnRemaining(estimatedTokens);
+        if (!tokenProbe.isConsumed()) {
+            // Token 配额不足，退回请求配额
+            requestBucket.addTokens(1);
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * 阻塞等待获取许可（带超时）
+     */
+    public boolean acquireWithTimeout(int estimatedTokens, Duration timeout)
+            throws InterruptedException {
+        var deadline = System.currentTimeMillis() + timeout.toMillis();
+
+        while (System.currentTimeMillis() < deadline) {
+            if (tryAcquire(estimatedTokens, timeout)) {
+                return true;
+            }
+            Thread.sleep(100);  // 轮询间隔 100ms
+        }
+        return false;
+    }
+
+    /**
+     * Advisor 集成：将速率限制集成到 Spring AI Advisor 链
+     */
+    public static class RateLimitingAdvisor implements CallAroundAdvisor {
+
+        private final LlmRateLimiter rateLimiter;
+
+        public RateLimitingAdvisor(LlmRateLimiter rateLimiter) {
+            this.rateLimiter = rateLimiter;
+        }
+
+        @Override
+        public String getName() { return "rate-limiting-advisor"; }
+
+        @Override
+        public int getOrder() { return -100; }  // 最早执行
+
+        @Override
+        public AdvisedResponse aroundCall(
+                AdvisedRequest advisedRequest, CallAroundAdvisorChain chain) {
+            int estimatedTokens = estimateTokens(advisedRequest);
+
+            if (!rateLimiter.tryAcquire(estimatedTokens, Duration.ofSeconds(5))) {
+                throw new RuntimeException(
+                    "速率限制：当前请求速率超过限制，请稍后重试");
+            }
+
+            return chain.nextAroundCall(advisedRequest);
+        }
+
+        private int estimateTokens(AdvisedRequest request) {
+            // 粗略估计：字符数 / 4（中文约 1.5 token/字，英文约 0.75 token/字）
+            int promptChars = request.messages().stream()
+                .mapToInt(m -> m.getContent() != null ? m.getContent().length() : 0)
+                .sum();
+            return promptChars / 2 + 500;  // 预算 500 输出 token
+        }
+
+        @Override
+        public Flux<AdvisedResponse> aroundStream(
+                AdvisedRequest advisedRequest, StreamAroundAdvisorChain chain) {
+            // 流式调用：先尝试获取令牌，失败则快速失败
+            int estimatedTokens = estimateTokens(advisedRequest);
+            if (!rateLimiter.tryAcquire(estimatedTokens, Duration.ofSeconds(5))) {
+                return Flux.error(new RuntimeException("速率限制"));
+            }
+            return chain.nextAroundStream(advisedRequest);
+        }
+    }
+}
+```
+
+### 降级与熔断
+
+当主 LLM 服务不可用时，需要降级到备用方案。Resilience4j 的 CircuitBreaker 提供标准的熔断机制：
+
+```java
+/**
+ * LLM 调用的降级与熔断策略
+ * 主模型 → 备用模型 → 缓存兜底的三级降级
+ */
+@Service
+public class LlmDegradationService {
+
+    private final ChatClient primaryClient;    // 主模型（如 GPT-4o）
+    private final ChatClient fallbackClient;   // 备用模型（如本地 LLaMA）
+    private final CircuitBreaker circuitBreaker;
+
+    public LlmDegradationService(
+            @Qualifier("openAi") ChatClient.Builder primaryBuilder,
+            @Qualifier("ollama") ChatClient.Builder fallbackBuilder) {
+
+        this.primaryClient = primaryBuilder.build();
+        this.fallbackClient = fallbackBuilder.build();
+
+        // 配置熔断器：5 次调用中失败 3 次 → 熔断
+        this.circuitBreaker = CircuitBreaker.of("llm-api",
+            CircuitBreakerConfig.custom()
+                .failureRateThreshold(60)          // 60% 失败率触发熔断
+                .slidingWindowSize(10)             // 滑动窗口大小
+                .minimumNumberOfCalls(5)            // 最少调用次数
+                .waitDurationInOpenState(Duration.ofSeconds(30))  // 熔断 30s
+                .permittedNumberOfCallsInHalfOpenState(3)  // 半开状态允许 3 次探测
+                .recordExceptions(Exception.class)  // 记录所有异常
+                .build());
+    }
+
+    /**
+     * 三级降级调用
+     */
+    public String callWithDegradation(String prompt) {
+        // Level 1：尝试主模型（带熔断保护）
+        try {
+            return circuitBreaker.executeCallable(() ->
+                primaryClient.prompt().user(prompt).call().content());
+        } catch (Exception e) {
+            System.out.println("主模型不可用（熔断/异常），降级到备用模型: " +
+                e.getMessage());
+        }
+
+        // Level 2：备用模型
+        try {
+            return fallbackClient.prompt()
+                .user("请简洁回答: " + prompt)  // 备用模型能力较弱，简化 prompt
+                .options(OllamaOptions.builder()
+                    .withTemperature(0.3)
+                    .build())
+                .call()
+                .content();
+        } catch (Exception e) {
+            System.out.println("备用模型也不可用: " + e.getMessage());
+        }
+
+        // Level 3：静态缓存兜底
+        return getCachedFallback(prompt);
+    }
+
+    /**
+     * 静态缓存：常见问题的预生成回答
+     */
+    private String getCachedFallback(String prompt) {
+        return "很抱歉，当前 AI 服务暂时不可用，请稍后重试。如有紧急问题，请联系人工客服。";
+    }
+
+    /**
+     * 熔断器状态监控端点
+     */
+    @GetMapping("/actuator/ai/status")
+    public Map<String, Object> aiStatus() {
+        var status = new LinkedHashMap<String, Object>();
+        status.put("circuitBreakerState", circuitBreaker.getState().name());
+        status.put("failureRate", circuitBreaker.getMetrics().getFailureRate());
+        status.put("numberOfFailedCalls",
+            circuitBreaker.getMetrics().getNumberOfFailedCalls());
+        status.put("numberOfSuccessfulCalls",
+            circuitBreaker.getMetrics().getNumberOfSuccessfulCalls());
+        return status;
+    }
+
+    /**
+     * 熔断器事件的 Advisor 集成
+     */
+    public static class CircuitBreakerAdvisor implements CallAroundAdvisor {
+
+        private final CircuitBreaker circuitBreaker;
+
+        public CircuitBreakerAdvisor(CircuitBreaker circuitBreaker) {
+            this.circuitBreaker = circuitBreaker;
+        }
+
+        @Override
+        public String getName() { return "circuit-breaker-advisor"; }
+
+        @Override
+        public int getOrder() { return -200; }
+
+        @Override
+        public AdvisedResponse aroundCall(
+                AdvisedRequest advisedRequest, CallAroundAdvisorChain chain) {
+            try {
+                return circuitBreaker.executeCallable(
+                    () -> chain.nextAroundCall(advisedRequest));
+            } catch (Exception e) {
+                throw new RuntimeException("LLM 调用被熔断", e);
+            }
+        }
+
+        @Override
+        public Flux<AdvisedResponse> aroundStream(
+                AdvisedRequest advisedRequest, StreamAroundAdvisorChain chain) {
+            // 流式调用：熔断器检查后直接放行（流式不支持 Callable 包装）
+            if (circuitBreaker.tryAcquirePermission()) {
+                return chain.nextAroundStream(advisedRequest)
+                    .doOnComplete(() -> circuitBreaker.onSuccess(System.nanoTime()))
+                    .doOnError(e -> circuitBreaker.onError(
+                        System.nanoTime(), Duration.ZERO, e));
+            }
+            return Flux.error(new RuntimeException("LLM 调用被熔断"));
+        }
+    }
+}
+```
+
+**生产配置总结表：**
+
+| 配置项 | 推荐值 | 说明 |
+|--------|--------|------|
+| 连接超时 | 10s | 建连不应太慢 |
+| 读取超时 | 120s（流式）/ 60s（非流式） | 长回答需要足够时间 |
+| 最大连接数 | 20 | LLM API 是低频长连接 |
+| 重试次数 | 3 | 超过 3 次通常是持续性问题 |
+| 初始退避 | 1s | 太短加重服务压力，太长用户等待 |
+| 最大退避 | 60s | 避免无限等待 |
+| 熔断失败率 | 60% | 超过即触发熔断 |
+| 熔断恢复时间 | 30s | 半开探测窗口 |
+| RPM 限额 | 模型 provider 限制的 80% | 留 20% buffer 防突发 |
+
+## 流式处理最佳实践
+
+### Flux vs SseEmitter 选择
+
+Spring AI 的 `ChatClient` 提供两种流式模式：
+
+```java
+// 方式1：Flux<ChatResponse>（推荐，Reactor生态）
+Flux<ChatResponse> flux = chatClient.prompt()
+    .user("解释Java Virtual Threads")
+    .stream()
+    .chatResponse();
+flux.subscribe(r -> System.out.print(r.getResult().getOutput().getContent()));
+
+// 方式2：Flux<String>（简化版，仅获取文本流）
+Flux<String> textFlux = chatClient.prompt()
+    .user("解释Java Virtual Threads")
+    .stream()
+    .content();
+```
+
+**选型原则：**
+- `Flux<ChatResponse>`：需要访问 metadata（token usage、finish reason、tool calls）
+- `Flux<String>`：只展示文本，如聊天 UI
+- `SseEmitter`：Spring MVC 传统方式，适合已有 MVC 项目无需迁移到 WebFlux
+
+### 背压处理
+
+当消费者处理速度慢于生产者（模型输出速度）时，Reactor 提供多种背压策略：
+
+```java
+flux.onBackpressureBuffer(100)      // 缓冲最多100条
+   .onBackpressureDrop(msg -> log.warn("丢弃: {}", msg)) // 丢弃并记录
+   .subscribe(...);
+```
+
+### Virtual Threads + 流式输出
+
+在 Spring MVC 中使用 Virtual Threads 处理 SSE，避免 WebFlux 迁移成本：
+
+```java
+@GetMapping(value = "/chat/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+public SseEmitter chatStream(@RequestParam String query) {
+    var emitter = new SseEmitter(0L); // 无超时
+    Thread.ofVirtual().start(() -> {
+        try {
+            chatClient.prompt().user(query).stream().content()
+                .doOnComplete(() -> emitter.complete())
+                .doOnError(emitter::completeWithError)
+                .subscribe(content -> {
+                    try { emitter.send(SseEmitter.event().data(content)); }
+                    catch (IOException e) { emitter.completeWithError(e); }
+                });
+        } catch (Exception e) { emitter.completeWithError(e); }
+    });
+    return emitter;
+}
+```
+
+## 生产就绪配置
+
+### 连接池与超时
+
+```java
+@Configuration
+public class AiHttpConfig {
+    @Bean
+    public HttpClient aiHttpClient() {
+        return HttpClient.create()
+            .responseTimeout(Duration.ofSeconds(60))        // 模型响应超时
+            .option(ChannelOption.CONNECT_TIMEOUT_MILLIS, 5000) // 连接超时
+            .doOnConnected(conn -> conn.addHandlerLast(
+                new ReadTimeoutHandler(120, TimeUnit.SECONDS))); // 流式读取超时
+    }
+}
+```
+
+### 重试策略（指数退避）
+
+```java
+@Bean
+public RestClient.Builder aiRestClient() {
+    return RestClient.builder()
+        .requestInterceptor((req, body, exec) -> {
+            var retry = Retry.backoff(3, Duration.ofSeconds(2))  // 3次，指数退避
+                .maxBackoff(Duration.ofSeconds(30))
+                .filter(t -> t instanceof IOException || 
+                       (t instanceof HttpClientErrorException e && e.getStatusCode().value() == 429));
+            return RetryClient.wrap(exec, retry).execute(req, body);
+        });
+}
+```
+
+### 降级与熔断
+
+```java
+// 使用 Resilience4j 保护 AI 调用
+@Bean
+public CircuitBreaker aiCircuitBreaker() {
+    return CircuitBreaker.of("ai-chat",
+        CircuitBreakerConfig.custom()
+            .failureRateThreshold(50)           // 50%失败率打开熔断
+            .waitDurationInOpenState(Duration.ofSeconds(30))
+            .slidingWindowSize(10)
+            .build());
+}
+
+// 降级到备选模型
+public String chatWithFallback(String prompt) {
+    return Try.ofSupplier(
+        CircuitBreaker.decorateSupplier(aiCircuitBreaker,
+            () -> primaryModel.call(prompt)))
+        .recover(t -> fallbackModel.call(prompt))
+        .get();
+}
+```
+
 ## 相关条目
 
 - [[09-架构抽象层设计]] — 在 Spring AI 上构建抽象层
