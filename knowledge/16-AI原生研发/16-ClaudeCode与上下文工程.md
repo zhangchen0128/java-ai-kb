@@ -1996,6 +1996,449 @@ record MigrationPlan(String fileName, String plan) {}
 
 ---
 
+## 上线检查清单 (Production Readiness Checklist)
+
+AI应用的上线风险远高于传统应用——模型输出的非确定性、Prompt注入的对抗性攻击、Token成本的不可预测性，以及模型版本升级导致的行为漂移，都可能在线上造成严重后果。一套系统的上线检查清单是AI应用投产前的最后一道防线。
+
+### AI应用上线前12项检查
+
+| # | 检查项 | 关键问 | 不通过时的阻断等级 |
+|---|--------|--------|-------------------|
+| 1 | 安全审计 | 是否完成了OWASP GenAI Top 10全覆盖的安全审查？Prompt注入防护是否生效？ | Critical — 阻断上线 |
+| 2 | 评估指标 | RAG的Recall@10是否达标？Agent的Tool调用准确率是否>90%？ | Critical — 阻断上线 |
+| 3 | 降级策略 | LLM API不可用时是否有降级方案（静态回复/规则兜底/排队重试）？ | Critical — 阻断上线 |
+| 4 | 成本预算 | 是否设置了每用户/每会话的Token消耗上限？是否配置了费用告警？ | High — 需总监审批 |
+| 5 | 监控仪表盘 | 是否接入了LLM调用的延迟P50/P99、Token消耗速率、错误率、空响应率？ | High |
+| 6 | 文档 | 是否有完整的运维手册（含降级操作步骤、模型回滚流程）？ | High |
+| 7 | 灾难演练 | 是否已完成故障演练（模拟LLM API全量超时、向量库宕机、Prompt注入攻击）？ | Critical — 阻断上线 |
+| 8 | 审计日志 | 所有AI交互是否记录了完整的审计事件（用户ID、原始Prompt、安全事件、Tool调用链）？ | Critical（金融/保险行业合规要求） |
+| 9 | 模型版本锁定 | 是否锁定了生产环境使用的具体模型版本（避免模型供应商静默升级导致行为漂移）？ | High |
+| 10 | 灰度发布 | 是否支持按用户百分比逐步放量？是否有A/B对比基线？ | Medium |
+| 11 | 数据隐私 | 用户输入是否在日志中脱敏？Embedding向量是否做了反推攻击防护？ | Critical（GDPR合规） |
+| 12 | 回滚方案 | 是否有模型版本回滚的一键操作流程？回滚后向量索引是否需要重建？ | High |
+
+### Checklist的Java实现：自动化检查工具
+
+与其依赖人工逐项核对，不如将检查逻辑编码为自动化工具，集成到CI/CD Pipeline中——每次部署前自动执行检查并生成报告：
+
+```java
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * AI应用上线就绪自动化检查器。
+ * 集成到CI/CD Pipeline中，在部署前自动执行12项检查。
+ */
+public class ProductionReadinessChecker {
+
+    private final List<CheckItem> checks = new ArrayList<>();
+
+    public ProductionReadinessChecker() {
+        // 注册12项检查
+        checks.add(new CheckItem("安全审计", CheckSeverity.CRITICAL,
+            () -> runOwaspTop10SecurityScan()));
+        checks.add(new CheckItem("评估指标验证", CheckSeverity.CRITICAL,
+            () -> validateEvaluationMetrics(0.90, 0.85)));
+        checks.add(new CheckItem("降级策略配置", CheckSeverity.CRITICAL,
+            () -> validateFallbackMechanism()));
+        checks.add(new CheckItem("成本预算告警", CheckSeverity.HIGH,
+            () -> validateCostBudgetAlert()));
+        checks.add(new CheckItem("监控仪表盘", CheckSeverity.HIGH,
+            () -> validateDashboardIntegration()));
+        checks.add(new CheckItem("运维文档完整性", CheckSeverity.HIGH,
+            () -> validateRunbookExistence()));
+        checks.add(new CheckItem("灾难演练完成", CheckSeverity.CRITICAL,
+            () -> validateDrillCompletion()));
+        checks.add(new CheckItem("审计日志配置", CheckSeverity.CRITICAL,
+            () -> validateAuditLogConfig()));
+        checks.add(new CheckItem("模型版本锁定", CheckSeverity.HIGH,
+            () -> validateModelVersionPinned()));
+        checks.add(new CheckItem("灰度发布配置", CheckSeverity.MEDIUM,
+            () -> validateCanaryConfig()));
+        checks.add(new CheckItem("数据脱敏验证", CheckSeverity.CRITICAL,
+            () -> validateDataMasking()));
+        checks.add(new CheckItem("回滚方案", CheckSeverity.HIGH,
+            () -> validateRollbackPlan()));
+    }
+
+    /**
+     * 执行全部检查并生成报告
+     */
+    public ReadinessReport check() {
+        var results = new ArrayList<CheckResult>();
+        var allPassed = true;
+        var blockingCount = 0;
+
+        for (var check : checks) {
+            var result = check.execute();
+            results.add(result);
+
+            if (!result.passed()) {
+                allPassed = false;
+                if (check.severity() == CheckSeverity.CRITICAL) {
+                    blockingCount++;
+                }
+            }
+        }
+
+        return new ReadinessReport(
+            allPassed ? "READY" : blockingCount > 0 ? "BLOCKED" : "CONDITIONAL",
+            results,
+            blockingCount
+        );
+    }
+
+    // 模拟各检查项的实现（生产环境使用真实端点/配置文件）
+    private CheckResult runOwaspTop10SecurityScan() {
+        var url = System.getenv("AI_SERVICE_URL");
+        var response = fetchScanResults(url + "/actuator/security/owasp-scan");
+        return new CheckResult("安全审计", response.contains("\"passed\":true"),
+            response.contains("\"passed\":true") ? "通过" : "未通过: " + response);
+    }
+
+    private CheckResult validateEvaluationMetrics(double minRecall, double minAccuracy) {
+        var metrics = fetchJson("/actuator/ai/eval-metrics");
+        var recall = extractDouble(metrics, "recall_at_10");
+        var accuracy = extractDouble(metrics, "tool_call_accuracy");
+        var passed = recall >= minRecall && accuracy >= minAccuracy;
+        return new CheckResult("评估指标",
+            passed,
+            passed ? String.format("Recall@10=%.2f, ToolAccuracy=%.2f", recall, accuracy)
+                   : String.format("不达标: Recall@10=%.2f(<%.2f) 或 ToolAccuracy=%.2f(<%.2f)",
+                       recall, minRecall, accuracy, minAccuracy));
+    }
+
+    private CheckResult validateFallbackMechanism() {
+        // 验证降级配置是否存在
+        var config = fetchJson("/actuator/configprop/ai.fallback");
+        return new CheckResult("降级策略",
+            !config.contains("\"enabled\":false"),
+            config.contains("\"enabled\":true") ? "降级策略已配置" : "降级策略未启用");
+    }
+
+    private CheckResult validateCostBudgetAlert() {
+        var config = fetchJson("/actuator/configprop/ai.cost");
+        var hasBudget = config.contains("\"maxTokensPerSession\"");
+        var hasAlert = config.contains("\"alertThreshold\"");
+        return new CheckResult("成本预算",
+            hasBudget && hasAlert,
+            hasBudget && hasAlert ? "Token预算+费用告警已配置" : "缺少预算限制或告警配置");
+    }
+
+    private CheckResult validateDashboardIntegration() {
+        var health = fetchJson("/actuator/health/aiObservability");
+        return new CheckResult("监控仪表盘",
+            health.contains("\"status\":\"UP\""),
+            health.contains("\"status\":\"UP\"") ? "可观测性集成正常" : "仪表盘未就绪");
+    }
+
+    private CheckResult validateRunbookExistence() {
+        var path = java.nio.file.Path.of("docs/runbooks/ai-service-runbook.md");
+        return new CheckResult("运维文档",
+            java.nio.file.Files.exists(path),
+            java.nio.file.Files.exists(path) ? "运维手册已就绪" : "缺少运维手册");
+    }
+
+    private CheckResult validateDrillCompletion() {
+        var drillLog = fetchJson("/actuator/ai/drill-results");
+        return new CheckResult("灾难演练",
+            drillLog.contains("\"completed\":true"),
+            drillLog.contains("\"completed\":true") ? "故障演练已完成" : "故障演练未执行");
+    }
+
+    private CheckResult validateAuditLogConfig() {
+        var config = fetchJson("/actuator/configprop/ai.audit");
+        return new CheckResult("审计日志",
+            config.contains("\"enabled\":true"),
+            config.contains("\"enabled\":true") ? "审计日志已启用" : "审计日志未配置");
+    }
+
+    private CheckResult validateModelVersionPinned() {
+        var config = fetchJson("/actuator/configprop/spring.ai.openai");
+        var pinned = config.contains("\"model\"")
+            && config.contains("\"version\"")
+            && !config.contains("\"latest\"");
+        return new CheckResult("模型版本锁定",
+            pinned,
+            pinned ? "模型版本已锁定" : "模型版本未锁定（使用了latest）");
+    }
+
+    private CheckResult validateCanaryConfig() {
+        var config = fetchJson("/actuator/configprop/deployment.canary");
+        return new CheckResult("灰度发布",
+            config.contains("\"enabled\":true"),
+            config.contains("\"enabled\":true") ? "灰度策略已配置" : "灰度发布未启用");
+    }
+
+    private CheckResult validateDataMasking() {
+        var maskerEndpoint = fetchJson("/actuator/health/piiMasker");
+        return new CheckResult("数据脱敏",
+            maskerEndpoint.contains("\"status\":\"UP\""),
+            maskerEndpoint.contains("\"status\":\"UP\"") ? "PII脱敏组件正常" : "脱敏组件异常");
+    }
+
+    private CheckResult validateRollbackPlan() {
+        var path = java.nio.file.Path.of("docs/runbooks/rollback-procedure.md");
+        return new CheckResult("回滚方案",
+            java.nio.file.Files.exists(path),
+            java.nio.file.Files.exists(path) ? "回滚方案文档已就绪" : "缺少回滚方案");
+    }
+
+    // 辅助类型
+    record CheckItem(String name, CheckSeverity severity,
+                     java.util.function.Supplier<CheckResult> executor) {
+        CheckResult execute() {
+            var start = System.currentTimeMillis();
+            var result = executor.get();
+            return new CheckResult(result.name(), result.passed(),
+                result.detail() + " [耗时: " + (System.currentTimeMillis() - start) + "ms]");
+        }
+    }
+
+    record CheckResult(String name, boolean passed, String detail) {}
+    enum CheckSeverity { CRITICAL, HIGH, MEDIUM }
+    record ReadinessReport(String status, List<CheckResult> results, int blockingCount) {}
+
+    // HTTP调用辅助方法（简化）
+    private String fetchJson(String path) {
+        try {
+            var url = System.getenv("AI_SERVICE_URL") + path;
+            var client = java.net.http.HttpClient.newHttpClient();
+            var request = java.net.http.HttpRequest.newBuilder()
+                .uri(java.net.URI.create(url)).build();
+            var response = client.send(request,
+                java.net.http.HttpResponse.BodyHandlers.ofString());
+            return response.body();
+        } catch (Exception e) { return "{\"error\":\"" + e.getMessage() + "\"}"; }
+    }
+
+    private String fetchScanResults(String url) {
+        try {
+            var client = java.net.http.HttpClient.newHttpClient();
+            var request = java.net.http.HttpRequest.newBuilder()
+                .uri(java.net.URI.create(url)).build();
+            var response = client.send(request,
+                java.net.http.HttpResponse.BodyHandlers.ofString());
+            return response.body();
+        } catch (Exception e) { return "{\"error\":\"" + e.getMessage() + "\"}"; }
+    }
+
+    private double extractDouble(String json, String key) {
+        // 简化JSON解析
+        var pattern = java.util.regex.Pattern.compile(
+            "\"" + key + "\"\\s*:\\s*([0-9.]+)");
+        var matcher = pattern.matcher(json);
+        return matcher.find() ? Double.parseDouble(matcher.group(1)) : 0.0;
+    }
+}
+```
+
+---
+
+## AI代码审查模式
+
+AI生成的代码虽然效率极高，但存在四类常见的"AI幻觉"问题。这些问题比人类代码审查中遇到的Bug更难发现——因为代码编译通过、测试通过，但调用了不存在的API或引用了过时的配置。本节总结AI生成代码的审查模式和自动化检测方法。
+
+### AI生成代码的4类常见问题
+
+**1. Hallucination API（幻觉API）**
+
+AI可能"发明"不存在的类、方法或注解。典型例子：
+- `SmartPoolingDataSource` — Spring Boot中不存在的数据源实现
+- `ChatClient.stream().withSmartRetry()` — Spring AI中没有的"智能重试"
+- `@AutoAIConfiguration` — AI自创的注解，混淆了多个真实注解的名称
+
+检测方法：符号解析。使用JavaParser+JavaSymbolSolver验证每个导入的类和调用的方法是否在classpath中存在（参考OOP的`HallucinationDetector`实现）。
+
+**2. 不存在的配置**
+
+AI可能编造看起来合理的Spring配置属性：
+- `spring.ai.openai.retry-strategy=exponential-backoff-v2` — "v2"不存在
+- `spring.datasource.hikari.connection-test-query` — 正确属性是`connection-test-query`（在特定版本中）
+- `management.endpoint.ai.enabled=true` — Spring Actuator没有此端点
+
+检测方法：维护已知的有效配置属性白名单（可从Spring Boot `additional-spring-configuration-metadata.json`自动生成）。
+
+**3. 过时的版本**
+
+AI的训练数据截止日期可能导致使用已废弃的API：
+- `javax.persistence.*` → 应使用 `jakarta.persistence.*`（Jakarta EE迁移）
+- `@EnableSwagger2` → 应使用 `springdoc-openapi`
+- `RestTemplate` → AI场景推荐使用 `java.net.http.HttpClient`（JDK 25原生）
+
+检测方法：维护过时API列表，正则匹配扫描。
+
+**4. 安全漏洞**
+
+AI可能在不经意间引入安全风险：
+- 动态拼接SQL而非使用参数化查询
+- 日志中直接输出用户输入（可能导致Log Injection）
+- 缺少`@PreAuthorize`注解的Admin接口
+- OpenAI API Key 硬编码在代码中
+
+### 自动审查规则示例（基于正则+AST）
+
+```java
+import com.github.javaparser.StaticJavaParser;
+import com.github.javaparser.ast.CompilationUnit;
+import com.github.javaparser.ast.expr.MethodCallExpr;
+import com.github.javaparser.ast.expr.StringLiteralExpr;
+
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Set;
+import java.util.regex.Pattern;
+
+/**
+ * AI代码审查规则引擎。
+ * 针对AI生成代码的4类常见问题，提供基于正则+AST的自动化检测。
+ */
+public class AICodeReviewRules {
+
+    // === 规则1: Hallucination API检测 ===
+    private static final Set<String> HALLUCINATED_METHODS = Set.of(
+        "withSmartRetry", "withMagicTimeout", "autoConfigure",
+        "buildWithDefaults", "createDefaultInstance"
+    );
+
+    private static final Set<String> HALLUCINATED_ANNOTATIONS = Set.of(
+        "AutoAIConfiguration", "AIService", "SmartBean",
+        "IntelligentComponent", "AutoPromptOptimizer"
+    );
+
+    // === 规则2: 不存在的配置检测 ===
+    private static final Pattern[] INVALID_CONFIG_PATTERNS = {
+        Pattern.compile("spring\\.ai\\.openai\\.retry-strategy"),
+        Pattern.compile("management\\.endpoint\\.ai\\."),
+        Pattern.compile("spring\\.datasource\\.smart-pooling"),
+        Pattern.compile("server\\.tomcat\\.max-keep-alive-requests")
+    };
+
+    // === 规则3: 过时API检测 ===
+    private static final Pattern[] DEPRECATED_IMPORTS = {
+        Pattern.compile("import\\s+javax\\.persistence\\."),
+        Pattern.compile("import\\s+javax\\.annotation\\."),
+        Pattern.compile("import\\s+springfox\\."),
+        Pattern.compile("import\\s+org\\.springframework\\.web\\.client\\.RestTemplate"),
+        Pattern.compile("@EnableSwagger2")
+    };
+
+    // === 规则4: 安全漏洞检测 ===
+    private static final Pattern[] SECURITY_VULNERABILITIES = {
+        // SQL拼接
+        Pattern.compile("\"\\s*SELECT.*\\+.*\\+|.*\\+.*SELECT.*\""),
+        // 硬编码密钥
+        Pattern.compile("(apiKey|api_key|secretKey)\\s*=\\s*\"[^\"]{20,}\""),
+        // System.out输出用户输入
+        Pattern.compile("System\\.out\\.println\\(.*input.*\\)|System\\.out\\.println\\(.*user.*\\)"),
+        // 缺少事务注解的写操作
+        Pattern.compile("public\\s+void\\s+(delete|update|save|insert).*\\{[^}]*repository\\.")
+    };
+
+    /**
+     * 对指定文件执行全部4类审查规则
+     */
+    public List<ReviewIssue> review(Path sourceFile) throws Exception {
+        var issues = new ArrayList<ReviewIssue>();
+        var sourceCode = Files.readString(sourceFile);
+        var fileName = sourceFile.getFileName().toString();
+
+        // 规则1: Hallucination API
+        checkHallucinatedAPIs(sourceCode, fileName, issues);
+
+        // 规则2: 不存在的配置
+        checkInvalidConfig(sourceCode, fileName, issues);
+
+        // 规则3: 过时API
+        checkDeprecatedAPIs(sourceCode, fileName, issues);
+
+        // 规则4: 安全漏洞
+        checkSecurityVulnerabilities(sourceCode, fileName, issues);
+
+        return issues;
+    }
+
+    private void checkHallucinatedAPIs(String code, String file, List<ReviewIssue> issues) {
+        var cu = StaticJavaParser.parse(code);
+
+        // 检查方法调用
+        cu.findAll(MethodCallExpr.class).forEach(methodCall -> {
+            var methodName = methodCall.getNameAsString();
+            if (HALLUCINATED_METHODS.contains(methodName)) {
+                issues.add(new ReviewIssue("Hallucination API", file,
+                    methodCall.getBegin().map(p -> p.line).orElse(-1),
+                    "疑似AI幻觉方法: '" + methodName + "()' — 该方法在Spring AI中不存在",
+                    "验证方法签名是否在当前依赖版本中真实存在"));
+            }
+        });
+
+        // 检查注解
+        cu.findAll(com.github.javaparser.ast.expr.AnnotationExpr.class).forEach(annotation -> {
+            var name = annotation.getNameAsString();
+            if (HALLUCINATED_ANNOTATIONS.contains(name)) {
+                issues.add(new ReviewIssue("Hallucination API", file,
+                    annotation.getBegin().map(p -> p.line).orElse(-1),
+                    "疑似AI幻觉注解: '@" + name + "' — 该注解在Spring生态中不存在",
+                    "验证注解来源并确认其真实存在于依赖中"));
+            }
+        });
+    }
+
+    private void checkInvalidConfig(String code, String file, List<ReviewIssue> issues) {
+        for (var pattern : INVALID_CONFIG_PATTERNS) {
+            var matcher = pattern.matcher(code);
+            while (matcher.find()) {
+                issues.add(new ReviewIssue("不存在配置", file, -1,
+                    "引用了不存在的Spring配置属性: " + matcher.group(),
+                    "查阅Spring Boot官方文档确认正确的属性路径"));
+            }
+        }
+    }
+
+    private void checkDeprecatedAPIs(String code, String file, List<ReviewIssue> issues) {
+        for (var pattern : DEPRECATED_IMPORTS) {
+            var matcher = pattern.matcher(code);
+            while (matcher.find()) {
+                issues.add(new ReviewIssue("过时API", file, -1,
+                    "使用了已过时的API: " + matcher.group(),
+                    "升级到Jakarta EE 11 / Spring Boot 4.x对应的新API"));
+            }
+        }
+    }
+
+    private void checkSecurityVulnerabilities(String code, String file,
+                                               List<ReviewIssue> issues) {
+        for (var pattern : SECURITY_VULNERABILITIES) {
+            var matcher = pattern.matcher(code);
+            while (matcher.find()) {
+                var matched = matcher.group();
+                var description = switch (pattern.pattern().substring(0, 10)) {
+                    case "\"\\s*SELECT" -> "SQL字符串拼接 — 应使用参数化查询(JPA Criteria/QueryDSL)";
+                    case "(apiKey|ap" -> "API Key 硬编码 — 应使用Vault/环境变量";
+                    case "System\\.ou" -> "System.out.println打印用户输入 — 使用SLF4J + PII脱敏";
+                    case "public\\s+v" -> "写操作缺少@Transactional注解";
+                    default -> "潜在安全问题";
+                };
+                issues.add(new ReviewIssue("安全漏洞", file, -1,
+                    description + ": " + truncated(matched, 60),
+                    "按照CLAUDE.md安全规则修改"));
+            }
+        }
+    }
+
+    private String truncated(String s, int maxLen) {
+        return s.length() <= maxLen ? s : s.substring(0, maxLen) + "...";
+    }
+
+    record ReviewIssue(String category, String file, int line,
+                       String description, String suggestion) {}
+}
+```
+
+---
+
 ## 参考资源
 
 - Claude Code官方文档: https://docs.anthropic.com/en/docs/claude-code

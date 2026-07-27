@@ -1650,6 +1650,666 @@ public class BudgetAlertService {
 
 ---
 
+## 弹性降级策略
+
+在生产环境中，模型服务不可用是常态而非异常——厂商 API 限流、网络抖动、机房故障、模型过载都可能导致调用失败。弹性降级策略的目标是确保故障发生时系统仍能提供**有损但可用**的服务。核心设计是四级降级链：**主模型 → 备选模型 → 本地模型 → 缓存兜底**。
+
+- **第一级（主模型）**：业务指定的首选模型，如 Claude Opus 4，承载正常流量。
+- **第二级（备选模型）**：同类能力的替代模型，如主模型故障时自动切换至 GPT-4o。备选模型的功能集和能力应与主模型接近，避免降级后返回格式不一致导致下游解析异常。
+- **第三级（本地模型）**：部署在本地 GPU 服务器上的开源模型（如 Qwen3-72B），通过网络隔离保障基础可用性，即使外网中断仍可响应。本地模型推理延迟可能较高（100-500ms），需在网关层设置更宽松的超时。
+- **第四级（缓存兜底）**：返回语义缓存中相似度最高的历史响应，并标注 `x-degraded: true` 让客户端知晓。
+
+降级触发条件不是单一维度。推荐复合判据：（1）错误率超过 5%（连续 1 分钟窗口）；（2）延迟 P99 超过正常值 3 倍；（3）Token 消耗突然超过日预算的 50%/小时（可能是死循环）。Java 侧使用 Resilience4j 的 CircuitBreaker 配合 Fallback Chain 实现。
+
+```java
+// JDK 25 + Spring Boot 4.x — 四级降级链：Resilience4j CircuitBreaker + Fallback
+import io.github.resilience4j.circuitbreaker.*;
+import io.github.resilience4j.circuitbreaker.autoconfigure.*;
+import org.springframework.stereotype.Service;
+
+import java.time.Duration;
+import java.util.*;
+import java.util.function.Supplier;
+
+@Service
+public class GracefulDegradationService {
+
+    /** 四级降级模型链 */
+    private static final List<String> DEGRADATION_CHAIN = List.of(
+        "claude-opus-4",          // 第一级：主模型
+        "gpt-4o",                 // 第二级：备选模型
+        "qwen3-72b-local",        // 第三级：本地模型
+        "cache-fallback"          // 第四级：缓存兜底
+    );
+
+    public record DegradationResult(
+        String response,
+        String modelUsed,
+        int degradationLevel,
+        long latencyMs,
+        boolean isDegraded
+    ) {}
+
+    private final Map<String, ModelAdapter> adapters;
+    private final GatewayCacheService cacheService;
+    private final Map<String, CircuitBreaker> circuitBreakers;
+    private final DegradationMetrics metrics;
+
+    public GracefulDegradationService(
+            List<ModelAdapter> adapterList,
+            GatewayCacheService cacheService,
+            DegradationMetrics metrics) {
+        this.cacheService = cacheService;
+        this.metrics = metrics;
+        this.adapters = new HashMap<>();
+
+        // 为每个模型创建独立的 CircuitBreaker
+        this.circuitBreakers = new ConcurrentHashMap<>();
+        for (var modelName : DEGRADATION_CHAIN) {
+            var cb = CircuitBreaker.of(modelName,
+                CircuitBreakerConfig.custom()
+                    .failureRateThreshold(50)           // 失败率阈值 50%
+                    .slowCallRateThreshold(50)          // 慢调用阈值 50%
+                    .slowCallDurationThreshold(Duration.ofSeconds(10))  // 慢=超10s
+                    .slidingWindowSize(20)             // 滑动窗口 20 次
+                    .minimumNumberOfCalls(10)           // 最少 10 次才熔断
+                    .waitDurationInOpenState(Duration.ofSeconds(30))  // 半开等待
+                    .permittedNumberOfCallsInHalfOpenState(3)
+                    .automaticTransitionFromOpenToHalfOpenEnabled(true)
+                    .build());
+            this.circuitBreakers.put(modelName, cb);
+        }
+    }
+
+    /**
+     * 带降级链的聊天调用
+     */
+    public DegradationResult chatWithDegradation(UnifiedChatRequest request) {
+        var span = metrics.startSpan("gateway.degraded_chat");
+        var startTime = System.currentTimeMillis();
+
+        for (int level = 0; level < DEGRADATION_CHAIN.size(); level++) {
+            var modelName = DEGRADATION_CHAIN.get(level);
+            var isLastLevel = level == DEGRADATION_CHAIN.size() - 1;
+
+            try {
+                // 检查熔断器状态
+                var cb = circuitBreakers.get(modelName);
+                if (cb != null && cb.getState() == CircuitBreaker.State.OPEN
+                        && !isLastLevel) {
+                    metrics.recordDegradation(modelName, level, "circuit_open");
+                    continue; // 熔断器打开，跳至下一级
+                }
+
+                // 尝试调用
+                var response = tryCallModel(modelName, request, level);
+                var latency = System.currentTimeMillis() - startTime;
+
+                var result = new DegradationResult(
+                    response, modelName, level, latency, level > 0);
+                metrics.recordSuccess(modelName, level, latency);
+                span.setAttribute("degradation.level", level);
+                span.setAttribute("model.used", modelName);
+                span.end();
+                return result;
+
+            } catch (Exception e) {
+                var latency = System.currentTimeMillis() - startTime;
+                metrics.recordFailure(modelName, level, e.getClass().getSimpleName());
+
+                // 记录熔断器失败
+                if (circuitBreakers.containsKey(modelName)) {
+                    circuitBreakers.get(modelName).acquirePermission();
+                }
+
+                if (isLastLevel) {
+                    // 所有级别都失败，最后的兜底
+                    var cached = cacheService.getSemanticMatch(
+                        request.messages().getLast().content(), 0.80);
+                    var degradedResponse = cached.orElse(
+                        "抱歉，AI 服务暂时不可用，请稍后重试。");
+
+                    span.setAttribute("degradation.all_failed", true);
+                    span.end();
+                    return new DegradationResult(
+                        degradedResponse, "cache-fallback",
+                        level, System.currentTimeMillis() - startTime, true);
+                }
+
+                System.err.printf("[降级] 模型 %s (级别%d) 调用失败: %s，切换至下一级%n",
+                    modelName, level, e.getMessage());
+            }
+        }
+
+        throw new IllegalStateException("Unexpected: unreachable");
+    }
+
+    /** -------------------- 降级触发条件检测 -------------------- **/
+
+    /**
+     * 复合判据：综合错误率、延迟、Token异常决定是否触发降级
+     */
+    public DegradationDecision evaluateDegradation(String modelName) {
+        var errorRate = metrics.getErrorRate(modelName, Duration.ofMinutes(1));
+        var p99Latency = metrics.getP99Latency(modelName, Duration.ofMinutes(5));
+        var normalP99 = metrics.getBaselineP99(modelName);
+        var tokenBurnRate = metrics.getTokenBurnRate(modelName);
+
+        var reasons = new ArrayList<String>();
+        var shouldDegrade = false;
+
+        // 判据1: 错误率 > 5%
+        if (errorRate > 0.05) {
+            reasons.add("错误率 %.1f%% > 5%%".formatted(errorRate * 100));
+            shouldDegrade = true;
+        }
+
+        // 判据2: P99 延迟 > 正常值 3 倍
+        if (normalP99 > 0 && p99Latency > normalP99 * 3) {
+            reasons.add("P99延迟 %dms > 正常值 %dms × 3".formatted(
+                p99Latency, normalP99));
+            shouldDegrade = true;
+        }
+
+        // 判据3: Token 消耗异常（> 日预算 50% / 小时）
+        if (tokenBurnRate > 0.5) {
+            reasons.add("Token消耗率 %.1f%/h > 50%/h ".formatted(tokenBurnRate * 100));
+            shouldDegrade = true;
+        }
+
+        return new DegradationDecision(shouldDegrade, reasons);
+    }
+
+    public record DegradationDecision(boolean shouldDegrade, List<String> reasons) {}
+
+    // --- 辅助方法 ---
+    private String tryCallModel(String modelName, UnifiedChatRequest request,
+                                 int level) throws Exception {
+        var adapter = adapters.get(modelName);
+        if (adapter == null) throw new IllegalArgumentException("未知模型: " + modelName);
+
+        if (circuitBreakers.containsKey(modelName)) {
+            var cb = circuitBreakers.get(modelName);
+            Supplier<String> call = CircuitBreaker.decorateSupplier(cb,
+                () -> {
+                    try {
+                        var resp = adapter.chat(request);
+                        return resp.content();
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                });
+            return call.get();
+        }
+        return adapter.chat(request).content();
+    }
+
+    // --- 指标接口（简化）---
+    interface DegradationMetrics {
+        Object startSpan(String name);
+        void recordDegradation(String model, int level, String reason);
+        void recordSuccess(String model, int level, long latencyMs);
+        void recordFailure(String model, int level, String errorType);
+        double getErrorRate(String model, Duration window);
+        long getP99Latency(String model, Duration window);
+        long getBaselineP99(String model);
+        double getTokenBurnRate(String model);
+    }
+}
+```
+
+---
+
+## Prompt 与数据版本化
+
+Prompt 模板不是一成不变的静态文本——随着模型升级、场景演进和 A/B 实验结果，Prompt 会持续迭代。没有版本控制的 Prompt 管理就像没有 Git 的代码库，无法回滚、无法对比、无法追溯变更历史。
+
+**Prompt 语义版本化（Semantic Versioning）** 借鉴 SemVer 规范：MAJOR 版本（不兼容变更）——修改输出格式要求、新增强制约束、改变工具调用协议；MINOR 版本（向后兼容的功能性变更）——新增示例、优化措辞、补充边界条件；PATCH 版本（向后兼容的修正）——修复拼写错误、调整标点、补充遗漏的字段说明。每次修改在 Prompt 仓库中以 Git commit 形式记录，commit message 需包含变更类型（MAJOR/MINOR/PATCH）和影响评估。
+
+**Embedding 模型版本管理** 是更复杂的工程挑战。当 text-embedding-3-small (1536d) 升级到 text-embedding-3-large (3072d) 时，新旧向量维度不同且语义空间不对齐，无法直接比较。自动化迁移方案：（1）创建新索引（新维度、新索引名）；（2）在低峰期对全量文档用新模型重新 Embedding 并写入新索引；（3）查询时同时路由到新旧两套索引，按灰度比例融合结果；（4）新索引覆盖率达到 100% 后切换全量流量；（5）归档并删除旧索引。整个流程通过 CI/CD Pipeline 编排，每阶段有自动化的召回率对比验证。
+
+**Golden Dataset 版本追踪**：评估 Prompt 质量的"金标准"数据集同样需要版本化。采用 Git-like 的版本追踪——每次 Prompt 变更时，在 Golden Dataset 上运行评估并产出对比报告（准确率、召回率、F1、延迟）。评估结果与 Prompt 版本号绑定，形成可追溯的质量档案。
+
+```java
+// JDK 25 + Spring Boot 4.x — Prompt 语义版本化与 Golden Dataset 追踪
+import java.time.Instant;
+import java.util.*;
+
+public class PromptVersioningSystem {
+
+    /** Prompt 语义版本号 */
+    public record SemVersion(int major, int minor, int patch)
+            implements Comparable<SemVersion> {
+        public static SemVersion parse(String version) {
+            var parts = version.split("\\.");
+            return new SemVersion(
+                Integer.parseInt(parts[0]),
+                Integer.parseInt(parts[1]),
+                Integer.parseInt(parts[2]));
+        }
+
+        @Override
+        public String toString() {
+            return "%d.%d.%d".formatted(major, minor, patch);
+        }
+
+        @Override
+        public int compareTo(SemVersion o) {
+            int cmp = Integer.compare(this.major, o.major);
+            if (cmp != 0) return cmp;
+            cmp = Integer.compare(this.minor, o.minor);
+            if (cmp != 0) return cmp;
+            return Integer.compare(this.patch, o.patch);
+        }
+    }
+
+    /** 变更类型 */
+    public enum ChangeType { MAJOR, MINOR, PATCH }
+
+    /** Prompt 版本记录 */
+    public record PromptVersionRecord(
+        String promptId,
+        SemVersion version,
+        ChangeType changeType,
+        String template,
+        String commitMessage,
+        String author,
+        Instant timestamp,
+        String parentCommitHash
+    ) {}
+
+    /** Golden Dataset 评估结果 */
+    public record EvaluationResult(
+        String promptId,
+        SemVersion promptVersion,
+        double accuracy,
+        double recall,
+        double f1Score,
+        long avgLatencyMs,
+        Map<String, Double> detailScores,
+        Instant evaluatedAt
+    ) {}
+
+    /** 版本发布决策 */
+    public record ReleaseDecision(
+        boolean approved,
+        SemVersion version,
+        EvaluationResult currentResult,
+        EvaluationResult baselineResult,
+        String recommendation
+    ) {}
+
+    private final PromptVersionRepository versionRepo;
+    private final GoldenDatasetEvaluator evaluator;
+
+    public PromptVersioningSystem(PromptVersionRepository versionRepo,
+                                   GoldenDatasetEvaluator evaluator) {
+        this.versionRepo = versionRepo;
+        this.evaluator = evaluator;
+    }
+
+    /**
+     * 发布新版本：自动判定变更类型 + 运行 Golden Dataset 评估
+     */
+    public ReleaseDecision releaseVersion(
+            String promptId, String newTemplate,
+            String commitMessage, String author) {
+
+        var current = versionRepo.getLatestVersion(promptId);
+        var changeType = detectChangeType(current.template(), newTemplate);
+        var newVersion = bumpVersion(
+            current != null ? current.version() : new SemVersion(0, 0, 0),
+            changeType);
+
+        // 创建版本记录
+        var record = new PromptVersionRecord(
+            promptId, newVersion, changeType, newTemplate,
+            commitMessage, author, Instant.now(),
+            current != null ? current.parentCommitHash() : null);
+        versionRepo.save(record);
+
+        // 在 Golden Dataset 上运行评估
+        var evalResult = evaluator.evaluate(promptId, newVersion, newTemplate);
+
+        // 与基线版本对比
+        var baselineResult = evaluator.getLatestEvaluation(promptId);
+        var decision = makeReleaseDecision(
+            newVersion, evalResult, baselineResult, changeType);
+
+        System.out.printf("[版本发布] %s -> %s | %s | 准确率:%.2f F1:%.2f%n",
+            promptId, newVersion, changeType,
+            evalResult.accuracy(), evalResult.f1Score());
+
+        return decision;
+    }
+
+    /** 自动检测变更类型 */
+    private ChangeType detectChangeType(String oldTemplate, String newTemplate) {
+        if (oldTemplate == null) return ChangeType.PATCH;
+
+        // 检查是否修改了输出格式或工具调用协议（MAJOR）
+        var formatPatterns = List.of(
+            "输出格式", "返回JSON", "返回XML",
+            "tool_call", "function_call", "必须包含");
+        boolean hasMajorChange = formatPatterns.stream()
+            .anyMatch(p -> !oldTemplate.contains(p) && newTemplate.contains(p))
+            || formatPatterns.stream()
+            .anyMatch(p -> oldTemplate.contains(p) && !newTemplate.contains(p));
+
+        if (hasMajorChange) return ChangeType.MAJOR;
+
+        // 检查是否为实质性内容变更（MINOR）
+        var oldLines = oldTemplate.split("\n");
+        var newLines = newTemplate.split("\n");
+        int changedLines = Math.abs(oldLines.length - newLines.length);
+
+        // 行数差异 > 5 行或者新增了示例/约束 → MINOR
+        if (changedLines > 5 ||
+            (!oldTemplate.contains("示例") && newTemplate.contains("示例")) ||
+            (!oldTemplate.contains("约束") && newTemplate.contains("约束"))) {
+            return ChangeType.MINOR;
+        }
+
+        return ChangeType.PATCH;
+    }
+
+    /** SemVer 版本号递增 */
+    private SemVersion bumpVersion(SemVersion current, ChangeType changeType) {
+        return switch (changeType) {
+            case MAJOR -> new SemVersion(current.major() + 1, 0, 0);
+            case MINOR -> new SemVersion(current.major(), current.minor() + 1, 0);
+            case PATCH -> new SemVersion(current.major(), current.minor(),
+                                         current.patch() + 1);
+        };
+    }
+
+    /** 基于评估结果做发布决策 */
+    private ReleaseDecision makeReleaseDecision(
+            SemVersion newVersion,
+            EvaluationResult currentResult,
+            EvaluationResult baselineResult,
+            ChangeType changeType) {
+
+        // PATCH 变更：只需不退化即可
+        if (changeType == ChangeType.PATCH) {
+            var approved = baselineResult == null
+                || currentResult.f1Score() >= baselineResult.f1Score() - 0.01;
+            return new ReleaseDecision(approved, newVersion,
+                currentResult, baselineResult,
+                approved ? "PATCH 变更通过，评估指标无明显退化"
+                         : "PATCH 变更导致 F1 下降 > 1%，请检查修改内容");
+        }
+
+        // MINOR/MAJOR 变更：必须达到最低质量门槛
+        if (currentResult.f1Score() < 0.75) {
+            return new ReleaseDecision(false, newVersion,
+                currentResult, baselineResult,
+                "F1 分数 %.2f 低于最低门槛 0.75，建议继续优化".formatted(
+                    currentResult.f1Score()));
+        }
+
+        // 与基线对比，退化不超过 2%
+        if (baselineResult != null &&
+                currentResult.f1Score() < baselineResult.f1Score() - 0.02) {
+            return new ReleaseDecision(false, newVersion,
+                currentResult, baselineResult,
+                "F1 分数较基线下降 %.2f (>2%%)，不建议发布".formatted(
+                    baselineResult.f1Score() - currentResult.f1Score()));
+        }
+
+        return new ReleaseDecision(true, newVersion,
+            currentResult, baselineResult, "评估通过，建议发布");
+    }
+
+    // --- 接口定义 ---
+    interface PromptVersionRepository {
+        PromptVersionRecord getLatestVersion(String promptId);
+        void save(PromptVersionRecord record);
+    }
+
+    interface GoldenDatasetEvaluator {
+        EvaluationResult evaluate(String promptId, SemVersion version,
+                                   String template);
+        EvaluationResult getLatestEvaluation(String promptId);
+    }
+}
+```
+
+---
+
+## 成本归集与优化
+
+AI API 调用成本是规模化 AI 应用的最大开销之一。没有精细化的成本归集，就无法回答"哪个租户消耗最多预算""哪个模型 ROI 最高"等关键问题。
+
+**多维度成本归集**：成本应按三个维度拆分——租户（业务线/客户）、用户（终端用户）、模型（具体模型版本）。每次 API 调用后，根据响应中的 `usage.total_tokens` 和模型单价计算本次调用成本，写入时序数据库（如 InfluxDB 或 ClickHouse）。使用 Prometheus Counter + Grafana Dashboard 实时展示，支持按天/周/月聚合和钻取。关键指标包括：每租户日均成本、Top-N 高消耗用户、各模型占总成本比例、平均每请求成本。
+
+**语义缓存成本收益分析**：缓存不是免费的——Redis 实例有存储和网络成本，语义缓存的 Embedding 计算也有推理成本。以每日 100 万次 API 调用为例：假设语义缓存命中率 20%，每次 API 调用平均 $0.005，则每日节省 $1,000。Redis 内存成本（16GB）约 $200/月 + Embedding 推理（20 万次/天 x $0.00002）约 $4/天。总体 ROI 约 8:1。但命中率是关键变量——如果 Query 高度差异化（如长尾问答），命中率可能低于 5%，此时缓存基础设施成本反而超过节省。
+
+**模型降级策略的成本对比**：不是所有任务都需要旗舰模型。以情感分析任务为例——Claude Opus 4 ($15/M tokens) 和 GPT-5 Mini ($0.15/M tokens) 的准确率差异通常 <1%，但成本相差 100 倍。建立基于任务复杂度的自动路由：简单分类/提取任务 → 轻量模型；中等推理/总结 → 中等模型；复杂推理/代码生成 → 旗舰模型。在网关层实现复杂度检测（基于关键词 + 规则），自动选择成本最优的模型。
+
+```java
+// JDK 25 + Spring Boot 4.x — 多维度成本归集与模型降级建议
+import java.time.*;
+import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
+
+public class CostAttributionService {
+
+    /** 模型单价表 ($/1M tokens) */
+    private static final Map<String, Double> MODEL_PRICING = Map.of(
+        "claude-opus-4",      15.0,
+        "gpt-4o",             2.5,
+        "gpt-5-mini",         0.15,
+        "claude-haiku-3-5",   0.80,
+        "qwen3-72b-local",    0.0     // 本地模型无 API 成本
+    );
+
+    /** 单次调用成本明细 */
+    public record CostRecord(
+        String tenantId,
+        String userId,
+        String modelName,
+        int promptTokens,
+        int completionTokens,
+        double costUsd,
+        Instant timestamp
+    ) {}
+
+    /** 租户成本汇总 */
+    public record TenantCostSummary(
+        String tenantId,
+        double totalCost,
+        double dailyCost,
+        double monthlyCost,
+        Map<String, Double> costByModel,    // 各模型成本占比
+        List<HighCostUser> topUsers
+    ) {}
+
+    public record HighCostUser(String userId, double cost, int requestCount) {}
+
+    /** 模型降级推荐 */
+    public record DowngradeRecommendation(
+        String currentModel,
+        String recommendedModel,
+        double currentCostPer1k,
+        double recommendedCostPer1k,
+        double estimatedSavingPercent,
+        String reason
+    ) {}
+
+    // 按租户的成本累积计数器（生产环境应写入时序数据库）
+    private final Map<String, TenantCostAccumulator> tenantCosts =
+        new ConcurrentHashMap<>();
+
+    /**
+     * 记录一次 API 调用的成本
+     */
+    public void recordCost(CostRecord record) {
+        var accumulator = tenantCosts.computeIfAbsent(
+            record.tenantId(), TenantCostAccumulator::new);
+
+        accumulator.addRecord(record);
+
+        // 异步写入时序数据库
+        Thread.startVirtualThread(() -> persistToTimeSeriesDB(record));
+    }
+
+    /**
+     * 获取租户成本汇总
+     */
+    public TenantCostSummary getTenantSummary(String tenantId) {
+        var acc = tenantCosts.get(tenantId);
+        if (acc == null) {
+            return new TenantCostSummary(tenantId, 0, 0, 0, Map.of(), List.of());
+        }
+
+        var now = Instant.now();
+        var dayStart = LocalDate.now().atStartOfDay(ZoneId.systemDefault())
+            .toInstant();
+
+        var dailyCost = acc.getCostSince(dayStart);
+        var monthlyCost = acc.getCostSince(
+            LocalDate.now().withDayOfMonth(1)
+                .atStartOfDay(ZoneId.systemDefault()).toInstant());
+        var costByModel = acc.getCostByModel();
+        var topUsers = acc.getTopUsers(5);
+
+        return new TenantCostSummary(
+            tenantId, acc.totalCost, dailyCost, monthlyCost,
+            costByModel, topUsers);
+    }
+
+    /**
+     * 基于任务复杂度推荐成本最优模型
+     */
+    public DowngradeRecommendation recommendDowngrade(
+            String currentModel, String taskDescription) {
+
+        var complexity = assessTaskComplexity(taskDescription);
+        var currentPrice = MODEL_PRICING.getOrDefault(currentModel, 5.0);
+
+        var recommendedModel = switch (complexity) {
+            case SIMPLE -> selectCheapestModel(60);    // 最低能力门槛 60
+            case MODERATE -> selectCheapestModel(75);   // 中等能力门槛 75
+            case COMPLEX -> selectCheapestModel(90);    // 高能力门槛 90
+        };
+
+        var recommendedPrice = MODEL_PRICING.getOrDefault(recommendedModel, 5.0);
+        var savingPercent = currentPrice > 0
+            ? (1 - recommendedPrice / currentPrice) * 100
+            : 0;
+
+        var reason = buildRecommendationReason(
+            currentModel, recommendedModel, complexity,
+            currentPrice, recommendedPrice, savingPercent);
+
+        return new DowngradeRecommendation(
+            currentModel, recommendedModel,
+            currentPrice, recommendedPrice, savingPercent, reason);
+    }
+
+    /** 评估任务复杂度 */
+    private TaskComplexity assessTaskComplexity(String task) {
+        var lower = task.toLowerCase();
+        var complexKeywords = List.of(
+            "证明", "推理", "分析", "设计", "生成代码",
+            "多步骤", "数学", "逻辑", "架构");
+        var simpleKeywords = List.of(
+            "分类", "提取", "总结", "摘要", "判断",
+            "是/否", "关键词", "情感", "格式化");
+
+        long complexHits = complexKeywords.stream()
+            .filter(lower::contains).count();
+        long simpleHits = simpleKeywords.stream()
+            .filter(lower::contains).count();
+
+        if (complexHits >= 2) return TaskComplexity.COMPLEX;
+        if (simpleHits >= 2) return TaskComplexity.SIMPLE;
+        return TaskComplexity.MODERATE;
+    }
+
+    /** 选择满足能力门槛的最便宜模型 */
+    private String selectCheapestModel(int minCapabilityScore) {
+        var capabilityScores = Map.of(
+            "claude-opus-4", 98,
+            "gpt-4o", 92,
+            "gpt-5-mini", 75,
+            "claude-haiku-3-5", 65
+        );
+
+        return capabilityScores.entrySet().stream()
+            .filter(e -> e.getValue() >= minCapabilityScore)
+            .min(Comparator.comparingDouble(e ->
+                MODEL_PRICING.getOrDefault(e.getKey(), 999.0)))
+            .map(Map.Entry::getKey)
+            .orElse("gpt-5-mini");
+    }
+
+    private String buildRecommendationReason(
+            String current, String recommended, TaskComplexity complexity,
+            double currentPrice, double recommendedPrice, double saving) {
+        return """
+            任务复杂度: %s
+            当前模型: %s ($%.4f/1K tokens)
+            推荐模型: %s ($%.4f/1K tokens)
+            预估节省: %.0f%%
+            """.formatted(complexity, current, currentPrice,
+                recommended, recommendedPrice, saving);
+    }
+
+    private void persistToTimeSeriesDB(CostRecord record) {
+        // 写入 InfluxDB / ClickHouse / Prometheus Pushgateway
+    }
+
+    private enum TaskComplexity { SIMPLE, MODERATE, COMPLEX }
+
+    // --- 内部累加器 ---
+    private static class TenantCostAccumulator {
+        final String tenantId;
+        double totalCost;
+        final Map<String, Double> modelCosts = new HashMap<>();
+        final Map<String, UserCost> userCosts = new HashMap<>();
+        final List<CostRecord> records = new ArrayList<>();
+
+        TenantCostAccumulator(String tenantId) { this.tenantId = tenantId; }
+
+        synchronized void addRecord(CostRecord r) {
+            totalCost += r.costUsd();
+            modelCosts.merge(r.modelName(), r.costUsd(), Double::sum);
+            userCosts.computeIfAbsent(r.userId(), UserCost::new)
+                .addCost(r.costUsd());
+            records.add(r);
+        }
+
+        synchronized double getCostSince(Instant since) {
+            return records.stream()
+                .filter(r -> r.timestamp().isAfter(since))
+                .mapToDouble(CostRecord::costUsd).sum();
+        }
+
+        synchronized Map<String, Double> getCostByModel() {
+            return new HashMap<>(modelCosts);
+        }
+
+        synchronized List<HighCostUser> getTopUsers(int n) {
+            return userCosts.values().stream()
+                .sorted((a, b) -> Double.compare(b.cost, a.cost))
+                .limit(n)
+                .map(u -> new HighCostUser(u.userId, u.cost, u.requestCount))
+                .toList();
+        }
+    }
+
+    private static class UserCost {
+        final String userId;
+        double cost;
+        int requestCount;
+        UserCost(String userId) { this.userId = userId; }
+        void addCost(double c) { cost += c; requestCount++; }
+    }
+}
+```
+
 ## 九、总结
 
 本文介绍了企业级 AI 模型网关和 Prompt 管理平台的完整设计思路和 Spring 实现。模型网关提供了协议统一、智能路由、精细化限流、密钥安全管理和多层缓存等能力，是 AI 基础设施的关键组件。Prompt 管理平台通过模板引擎、版本控制、环境绑定和 A/B 测试，让 Prompt 成为可管理、可追踪、可优化的工程资产。
