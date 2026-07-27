@@ -28,6 +28,9 @@ function walk(dir, base = '') {
 // ===== Main Build =====
 console.log('🔨 构建知识库网页...\n');
 
+// Ensure output directory exists before any writes
+ensureDir(PUBLIC);
+
 // Clean old content
 if (existsSync(CONTENT)) {
   rmSync(CONTENT, { recursive: true });
