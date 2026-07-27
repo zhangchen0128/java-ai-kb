@@ -1,0 +1,53 @@
+name: Build & Deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  check:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: kb-web/package-lock.json }
+      - run: npm ci
+        working-directory: kb-web
+      - run: npm run validate
+        working-directory: kb-web
+      - run: npm test
+        working-directory: kb-web
+      - run: npm run build
+        working-directory: kb-web
+
+  build-and-deploy:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: kb-web/package-lock.json }
+      - run: npm ci
+        working-directory: kb-web
+      - run: npm run validate
+        working-directory: kb-web
+      - run: npm test
+        working-directory: kb-web
+      - run: npm run build
+        working-directory: kb-web
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: kb-web/public }
+      - uses: actions/deploy-pages@v4

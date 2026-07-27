@@ -1,0 +1,1388 @@
+---
+domain: "03-Java应用平台"
+title: "Spring Boot 4 In-Depth"
+status: "draft"
+level: "intermediate"
+sources:
+  - level: "L1"
+    url: "https://docs.spring.io/spring-boot/reference/"
+    description: "Spring Boot 4.x Reference Documentation — auto-configuration, starter, actuator, AOT, configuration, lifecycle"
+  - level: "L1"
+    url: "https://docs.spring.io/spring-boot/specification/configuration-metadata/"
+    description: "Spring Boot Configuration Metadata Specification — @ConfigurationProperties metadata format"
+  - level: "L2"
+    url: "https://github.com/spring-projects/spring-boot"
+    description: "Spring Boot source code — AutoConfigurationImportSelector, ConditionEvaluator, SpringApplication implementation"
+  - level: "L4"
+    url: "https://spring.io/blog"
+    description: "Spring Official Blog — AOT compilation updates, configuration encryption, virtual threads configuration guides"
+relations:
+  prerequisite: ["02-现代Java25深度解析"]
+  related: ["03-Spring核心IoC-AOP-事务", "03-SpringMVC与SSE流式输出"]
+tags: ["spring-boot", "auto-configuration", "starter", "actuator", "aot", "configuration", "virtual-threads", "lifecycle"]
+created: "2026-07-17"
+updated: "2026-07-17"
+---
+
+# Spring Boot 4 In-Depth
+
+## 概述
+
+Spring Boot 4.x 是 Java 企业应用开发的基石框架，基于 Spring Framework 构建，提供开箱即用的自动配置、嵌入式服务器、生产就绪特性（Actuator）和 AOT 编译支持。本文深入剖析 Spring Boot 的核心机制：自动配置原理、Starter 机制、配置体系、Actuator、AOT 编译、应用启动生命周期以及 Virtual Thread 集成。每一次剖析都从源码级别展开，帮助读者建立"不仅会用，更知其所以然"的技术深度。
+
+本文知识点在技术雷达中均为 **Adopt** 象限（AOT/GraalVM 为 Trial，文中已标注），代码示例默认使用 JDK 25 + Spring Boot 4.x 风格。
+
+---
+
+## 一、自动配置原理
+
+自动配置（Auto-Configuration）是 Spring Boot 最核心的设计理念。它试图根据类路径中的依赖、已定义的 Bean 以及各种属性配置，自动推断并配置 Spring 应用。
+
+### 1.1 @SpringBootApplication 的解剖
+
+`@SpringBootApplication` 是一个组合注解，等价于同时声明三个注解：
+
+```java
+@Target(ElementType.TYPE)
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+@Inherited
+@SpringBootConfiguration    // 1. 标识为配置类
+@EnableAutoConfiguration    // 2. 触发自动配置机制
+@ComponentScan(             // 3. 组件扫描
+    excludeFilters = {
+        @Filter(type = FilterType.CUSTOM, classes = TypeExcludeFilter.class),
+        @Filter(type = FilterType.CUSTOM, classes = AutoConfigurationExcludeFilter.class)
+    }
+)
+public @interface SpringBootApplication {
+    // ...属性省略
+}
+```
+
+三个组成部分的职责：
+
+| 注解 | 职责 |
+|------|------|
+| `@SpringBootConfiguration` | 标记该类为 Spring Boot 配置类，本质是 `@Configuration` 的派生注解，表示该类可包含 `@Bean` 方法 |
+| `@EnableAutoConfiguration` | 核心触发器，导入 `AutoConfigurationImportSelector`，根据类路径条件自动加载配置类 |
+| `@ComponentScan` | 扫描当前包及其子包中的 `@Component`、`@Service`、`@Repository`、`@Controller` 等组件 |
+
+**关键设计：** `@ComponentScan` 默认不加 `basePackages`，意味着扫描范围是声明该注解的类所在的包及其子包。这就是为什么 Spring Boot 主类通常放在根包下。
+
+### 1.2 @EnableAutoConfiguration 的工作链路
+
+`@EnableAutoConfiguration` 导入 `AutoConfigurationImportSelector`，这是自动配置的真正执行者：
+
+```java
+@Target(ElementType.TYPE)
+@Retention(RetentionPolicy.RUNTIME)
+@Documented
+@Inherited
+@AutoConfigurationPackage        // 记录自动配置的包名，供后续组件扫描
+@Import(AutoConfigurationImportSelector.class)  // 核心：导入选择器
+public @interface EnableAutoConfiguration {
+    String ENABLED_OVERRIDE_PROPERTY = "spring.boot.enableautoconfiguration";
+    Class<?>[] exclude() default {};
+    String[] excludeName() default {};
+}
+```
+
+`AutoConfigurationImportSelector` 实现了 `DeferredImportSelector`，保证自动配置类在所有用户显式配置之后加载。其核心流程：
+
+```
+AutoConfigurationImportSelector.selectImports()
+  → getAutoConfigurationEntry()
+    → getCandidateConfigurations()
+      → ImportCandidates.load(AutoConfiguration.class, classLoader)
+        → 读取 META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports
+          (Spring Boot 3.x+ 已从 spring.factories 迁移至此文件)
+      → 返回所有候选自动配置类全限定名列表
+    → removeDuplicates()                // 去重
+    → getExclusions()                   // 处理 spring.autoconfigure.exclude 属性
+    → filter(configurations, autoConfigurationMetadata)
+      → 使用 ConditionEvaluator 逐个评估 @Conditional 系列注解
+      → 过滤掉不满足条件的配置类
+    → fireAutoConfigurationImportEvents()  // 发布事件，供 Actuator 展示
+    → 返回最终要加载的配置类列表
+```
+
+关键代码片段（简化后的逻辑）：
+
+```java
+// AutoConfigurationImportSelector 核心方法
+protected AutoConfigurationEntry getAutoConfigurationEntry(
+        AnnotationMetadata annotationMetadata) {
+    if (!isEnabled(annotationMetadata)) {
+        return EMPTY_ENTRY;
+    }
+    var attributes = getAttributes(annotationMetadata);
+    // Step 1: 加载所有候选配置类
+    var configurations = getCandidateConfigurations(annotationMetadata, attributes);
+    // Step 2: 去重
+    configurations = removeDuplicates(configurations);
+    // Step 3: 处理显式排除
+    var exclusions = getExclusions(annotationMetadata, attributes);
+    configurations.removeAll(exclusions);
+    // Step 4: 条件过滤（核心步骤）
+    configurations = filter(configurations, autoConfigurationMetadata);
+    // Step 5: 发布导入事件
+    fireAutoConfigurationImportEvents(configurations, exclusions);
+    return new AutoConfigurationEntry(configurations, exclusions);
+}
+
+// 从 spring.factories → AutoConfiguration.imports 的演变
+protected List<String> getCandidateConfigurations(
+        AnnotationMetadata metadata, AnnotationAttributes attributes) {
+    // Spring Boot 3.x+ 使用专用文件
+    var candidates = ImportCandidates.load(AutoConfiguration.class, getBeanClassLoader())
+            .getCandidates();
+    // 早先版本使用 spring.factories 中的 EnableAutoConfiguration key
+    // SpringFactoriesLoader.loadFactoryNames(EnableAutoConfiguration.class, classLoader);
+    return new ArrayList<>(candidates);
+}
+```
+
+### 1.3 spring.factories → AutoConfiguration.imports 的迁移
+
+自 Spring Boot 3.0 起，自动配置的注册方式发生重大变化：
+
+| 版本 | 注册文件 | 示例 |
+|------|----------|------|
+| Spring Boot 2.x | `META-INF/spring.factories` | `org.springframework.boot.autoconfigure.EnableAutoConfiguration=\com.example.MyAutoConfig` |
+| Spring Boot 3.x / 4.x | `META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports` | 每行一个全限定类名，不需要 key |
+
+新文件格式更简洁、更专用，避免了 `spring.factories` 文件中 key 冲突和语法解析问题。`spring.factories` 仍被用于其他扩展点（如 `ApplicationContextInitializer`、`EnvironmentPostProcessor`），但自动配置注册已完全迁移。
+
+### 1.4 条件注解体系 (@ConditionalOn*)
+
+自动配置的核心魔法在于条件注解。每个自动配置类都带有一组 `@Conditional` 派生注解，`ConditionEvaluator` 在运行时逐个评估：
+
+| 条件注解 | 匹配逻辑 | 典型用途 |
+|----------|----------|----------|
+| `@ConditionalOnClass` | 类路径中存在指定类 | "有 DataSource 在类路径就配置数据源" |
+| `@ConditionalOnMissingClass` | 类路径中不存在指定类 | "没有 H2 就不配置嵌入式数据库" |
+| `@ConditionalOnBean` | 容器中存在指定 Bean | "有 DataSource Bean 就配置 JdbcTemplate" |
+| `@ConditionalOnMissingBean` | 容器中不存在指定 Bean | "用户没自己定义 RestTemplate 就自动配置一个" |
+| `@ConditionalOnProperty` | 配置属性满足条件 | "spring.datasource.url 有值才配置数据源" |
+| `@ConditionalOnResource` | 类路径中存在指定资源 | "存在 schema.sql 就执行初始化" |
+| `@ConditionalOnWebApplication` | 当前是 Web 应用 | "Web 环境才配置 DispatcherServlet" |
+| `@ConditionalOnExpression` | SpEL 表达式为 true | 复杂条件组合判断 |
+
+**源码级示例：** DataSourceAutoConfiguration 的条件注解：
+
+```java
+@AutoConfiguration
+@ConditionalOnClass({DataSource.class, EmbeddedDatabaseType.class})
+@ConditionalOnMissingBean(type = "io.r2dbc.spi.ConnectionFactory")
+@EnableConfigurationProperties(DataSourceProperties.class)
+@Import({DataSourcePoolMetadataProvidersConfiguration.class,
+         DataSourceCheckpointRestoreConfiguration.class})
+public class DataSourceAutoConfiguration {
+    // ...
+}
+```
+
+条件评估顺序（从源码 `ConditionEvaluator` 分析）：
+1. `@ConditionalOnClass` / `@ConditionalOnMissingClass` — 最先评估，基于类路径
+2. `@ConditionalOnBean` / `@ConditionalOnMissingBean` — 第二阶段，需要 BeanFactory
+3. `@ConditionalOnProperty` — 第三阶段，需要 Environment
+4. 其他条件注解 — 按注册顺序评估
+
+每个条件失败都会导致该配置类被跳过，其内所有 `@Bean` 定义都不会注册。
+
+### 1.5 自动配置报告 (Auto-Configuration Report)
+
+调试自动配置问题的利器。启用方式：
+
+```properties
+# application.properties
+logging.level.org.springframework.boot.autoconfigure=DEBUG
+```
+
+或在启动时添加 JVM 参数：`--debug`
+
+报告分为两部分：
+- **Positive matches** — 匹配成功并生效的自动配置类
+- **Negative matches** — 未匹配的配置类及不匹配原因
+
+也可以通过 Actuator 的 `/actuator/conditions` 端点实时查看（需引入 `spring-boot-starter-actuator`）。
+
+示例输出解读：
+```
+Positive matches:
+   DataSourceAutoConfiguration matched:
+      - @ConditionalOnClass found required class 'javax.sql.DataSource'
+      - @ConditionalOnMissingBean (types: io.r2dbc.spi.ConnectionFactory) did not find any beans
+
+Negative matches:
+   RabbitAutoConfiguration did not match:
+      - @ConditionalOnClass did not find required class 'com.rabbitmq.client.Channel'
+```
+
+`ConditionEvaluationReportAutoConfigurationImportListener` 负责收集所有条件评估结果，并在 `ApplicationContext` 刷新完成后写入日志。Actuator 的 `ConditionsReportEndpoint` 则通过 `ConditionEvaluationReport.get(context.getBeanFactory())` 获取报告。
+
+---
+
+## 二、Starter 机制
+
+### 2.1 Starter 的本质
+
+Starter 是一个 Maven/Gradle 依赖描述符，它本身不包含代码（或仅包含极少量自动配置代码），而是传递性地引入一组相关的依赖，并提供对应的自动配置类。一个 Starter 通常对应一个技术领域，例如：
+
+| Starter | 传递引入的核心依赖 |
+|---------|---------------------|
+| `spring-boot-starter-web` | spring-webmvc, spring-boot-starter-json (Jackson), embedded Tomcat, Hibernate Validator |
+| `spring-boot-starter-data-jpa` | spring-data-jpa, Hibernate, spring-orm, HikariCP |
+| `spring-boot-starter-test` | JUnit 5, Mockito, AssertJ, Hamcrest, spring-test |
+
+**命名约定：**
+- 官方 Starter：`spring-boot-starter-*`（由 Spring 团队维护）
+- 第三方 Starter：`*-spring-boot-starter`（如 `mybatis-spring-boot-starter`）
+- 模块内部 Starter：`myproject-spring-boot-starter`
+
+### 2.2 Starter 的依赖管理策略
+
+Spring Boot 通过 `spring-boot-dependencies` BOM（Bill of Materials）统一管理所有官方 Starter 及其传递依赖的版本。用户只需引入 Starter，无需指定子依赖版本：
+
+```xml
+<!-- 父 POM 中声明 -->
+<parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>4.0.0</version>
+</parent>
+
+<!-- 或使用 dependencyManagement 导入 BOM -->
+<dependencyManagement>
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-dependencies</artifactId>
+            <version>4.0.0</version>
+            <type>pom</type>
+            <scope>import</scope>
+        </dependency>
+    </dependencies>
+</dependencyManagement>
+```
+
+### 2.3 自定义 Starter 实现（完整示例）
+
+下面演示创建一个完整的自定义 Starter，为应用提供"请求日志记录"能力。
+
+**项目结构：**
+
+```
+my-logging-spring-boot-starter/
+├── pom.xml
+└── src/main/java/com/example/logging/
+    ├── MyLoggingProperties.java          # 配置属性类
+    ├── MyLoggingAutoConfiguration.java   # 自动配置类
+    └── LoggingFilter.java                # 实际功能逻辑
+└── src/main/resources/META-INF/spring/
+    └── org.springframework.boot.autoconfigure.AutoConfiguration.imports
+```
+
+**Step 1: pom.xml**
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0
+         http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <groupId>com.example</groupId>
+    <artifactId>my-logging-spring-boot-starter</artifactId>
+    <version>1.0.0</version>
+    <packaging>jar</packaging>
+
+    <properties>
+        <java.version>25</java.version>
+        <spring-boot.version>4.0.0</spring-boot.version>
+    </properties>
+
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>${spring-boot.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <!-- 必须：提供自动配置注解和条件注解 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-autoconfigure</artifactId>
+        </dependency>
+        <!-- 可选但推荐：生成配置元数据 JSON -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-configuration-processor</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <!-- 如果 Starter 依赖 Web 层 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+            <optional>true</optional>
+        </dependency>
+    </dependencies>
+</project>
+```
+
+**Step 2: 配置属性类**
+
+```java
+package com.example.logging;
+
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.boot.context.properties.bind.DefaultValue;
+
+/**
+ * 读取 my-logging.* 配置。
+ * IDE 可通过 spring-boot-configuration-processor 生成的
+ * META-INF/spring-configuration-metadata.json 获得提示。
+ */
+@ConfigurationProperties(prefix = "my-logging")
+public record MyLoggingProperties(
+        @DefaultValue("true")   boolean enabled,
+        @DefaultValue("INFO")   String level,
+        @DefaultValue("true")   boolean includeHeaders,
+        @DefaultValue("true")   boolean includeBody,
+        @DefaultValue("/api/**") String[] pathPatterns
+) {}
+```
+
+**Step 3: 功能逻辑实现**
+
+```java
+package com.example.logging;
+
+import jakarta.servlet.*;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import java.io.IOException;
+
+public class LoggingFilter implements Filter {
+
+    private static final Logger log = LoggerFactory.getLogger(LoggingFilter.class);
+
+    private final MyLoggingProperties properties;
+
+    public LoggingFilter(MyLoggingProperties properties) {
+        this.properties = properties;
+    }
+
+    @Override
+    public void doFilter(ServletRequest request, ServletResponse response,
+                         FilterChain chain) throws IOException, ServletException {
+        if (!properties.enabled()) {
+            chain.doFilter(request, response);
+            return;
+        }
+
+        var httpReq = (HttpServletRequest) request;
+        var start = System.currentTimeMillis();
+        try {
+            chain.doFilter(request, response);
+        } finally {
+            var httpResp = (HttpServletResponse) response;
+            var duration = System.currentTimeMillis() - start;
+            var sb = new StringBuilder();
+            sb.append(httpReq.getMethod()).append(" ")
+              .append(httpReq.getRequestURI())
+              .append(" → ").append(httpResp.getStatus())
+              .append(" (").append(duration).append("ms)");
+
+            if (properties.includeHeaders()) {
+                sb.append(" [headers]");
+            }
+            if (properties.includeBody()) {
+                sb.append(" [body]");
+            }
+
+            log.info(sb.toString());
+        }
+    }
+}
+```
+
+**Step 4: 自动配置类**
+
+```java
+package com.example.logging;
+
+import org.springframework.boot.autoconfigure.AutoConfiguration;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnWebApplication;
+import org.springframework.boot.context.properties.EnableConfigurationProperties;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
+import org.springframework.context.annotation.Bean;
+
+import java.util.List;
+
+@AutoConfiguration
+@ConditionalOnWebApplication
+@ConditionalOnClass(Filter.class)
+@ConditionalOnProperty(
+    prefix = "my-logging",
+    name = "enabled",
+    havingValue = "true",
+    matchIfMissing = true
+)
+@EnableConfigurationProperties(MyLoggingProperties.class)
+public class MyLoggingAutoConfiguration {
+
+    @Bean
+    @ConditionalOnMissingBean
+    public LoggingFilter loggingFilter(MyLoggingProperties properties) {
+        return new LoggingFilter(properties);
+    }
+
+    @Bean
+    @ConditionalOnMissingBean
+    public FilterRegistrationBean<LoggingFilter> loggingFilterRegistration(
+            LoggingFilter filter, MyLoggingProperties properties) {
+        var registration = new FilterRegistrationBean<>(filter);
+        registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 10);
+        registration.setUrlPatterns(List.of(properties.pathPatterns()));
+        return registration;
+    }
+}
+```
+
+**Step 5: 自动配置注册文件**
+
+`src/main/resources/META-INF/spring/org.springframework.boot.autoconfigure.AutoConfiguration.imports`:
+
+```
+com.example.logging.MyLoggingAutoConfiguration
+```
+
+**Step 6: 使用方引入**
+
+```xml
+<dependency>
+    <groupId>com.example</groupId>
+    <artifactId>my-logging-spring-boot-starter</artifactId>
+    <version>1.0.0</version>
+</dependency>
+```
+
+```properties
+# application.properties
+my-logging.level=DEBUG
+my-logging.include-body=false
+my-logging.path-patterns=/api/v1/**,/web/**
+```
+
+**设计要点总结：**
+1. `@ConditionalOnMissingBean` 允许用户覆盖默认实现
+2. `@ConditionalOnProperty(matchIfMissing = true)` 保证默认开启但可关闭
+3. `@ConditionalOnWebApplication` 保证仅在 Web 环境生效
+4. `@EnableConfigurationProperties` 自动注册 Properties 类并启用类型安全绑定
+5. `AutoConfiguration.imports` 文件是唯一的注册入口
+
+---
+
+## 三、配置体系
+
+### 3.1 14 级配置优先级
+
+Spring Boot 的 `Environment` 聚合了多个 `PropertySource`，优先级从高到低：
+
+| 优先级 | 来源 | 说明 |
+|--------|------|------|
+| 1 (最高) | 命令行参数 `--server.port=9090` | 通过 `SimpleCommandLinePropertySource` 处理 |
+| 2 | `java:comp/env` JNDI 属性 | Jakarta EE 环境 |
+| 3 | `System.getProperties()` | JVM 系统属性 |
+| 4 | OS 环境变量 | 如 `SERVER_PORT` |
+| 5 | `spring.application.json` | 命令行 JSON 或 `SPRING_APPLICATION_JSON` 环境变量 |
+| 6 | `RandomValuePropertySource` | `random.*` 随机值 |
+| 7 | 打包在 jar 外部的 `application-{profile}.properties` | 外部 profile 文件 |
+| 8 | 打包在 jar 内部的 `application-{profile}.properties` | 内部 profile 文件 |
+| 9 | 打包在 jar 外部的 `application.properties` | 外部默认配置 |
+| 10 | 打包在 jar 内部的 `application.properties` | 内部默认配置 |
+| 11 | `@PropertySource` on `@Configuration` | 代码级属性源 |
+| 12 | `SpringApplication.setDefaultProperties()` | 编程式默认属性 |
+| 13 | `application-{profile}.yml` | YAML 格式的 profile 文件（比 properties 低一档） |
+| 14 | `application.yml` | YAML 格式的默认文件 |
+
+**实际调试：** 可以通过 Actuator `/actuator/env` 端点查看所有 `PropertySource` 及其顺序。
+
+环境变量到属性的映射规则（Relaxed Binding）：
+- `SERVER_PORT` → `server.port`
+- `SPRING_DATASOURCE_URL` → `spring.datasource.url`
+- 将 `_` 替换为 `.`，转小写
+
+### 3.2 @ConfigurationProperties vs @Value
+
+| 特性 | `@ConfigurationProperties` | `@Value` |
+|------|---------------------------|----------|
+| 类型安全 | 是（强类型绑定） | 否（字符串注入） |
+| 松散绑定 | 支持（kebab-case、camelCase、underscore 自动转换） | 不直接支持 |
+| 批量绑定 | 一组相关属性绑定到一个对象 | 每个字段单独绑定 |
+| 数据校验 | 支持 `@Validated` + Bean Validation | 不支持，需手动校验 |
+| 复杂类型 | 支持 List、Map、嵌套对象 | 仅简单类型和 String |
+| 默认值 | `@DefaultValue` 优雅设置 | SpEL `:#{default}` |
+| Metadata 生成 | IDE 自动补全 | 无 |
+| 适用场景 | 结构化配置（用户自定义配置、第三方组件配置） | 单个简单值的注入 |
+
+`@ConfigurationProperties` 示例（推荐的数据载体 Record 风格）：
+
+```java
+@ConfigurationProperties(prefix = "app.cache")
+public record CacheProperties(
+        @DefaultValue("LOCAL") CacheType type,
+        @DefaultValue("100") int maxSize,
+        @DefaultValue("30") int ttlMinutes,
+        Redis redis
+) {
+    public record Redis(
+            @DefaultValue("localhost") String host,
+            @DefaultValue("6379") int port
+    ) {}
+}
+
+enum CacheType { LOCAL, REDIS }
+```
+
+使用方式——通过 `@EnableConfigurationProperties` 注册：
+
+```java
+@AutoConfiguration
+@EnableConfigurationProperties(CacheProperties.class)
+@ConditionalOnProperty(prefix = "app.cache", name = "enabled", matchIfMissing = true)
+public class CacheAutoConfiguration {
+
+    @Bean
+    public CacheManager cacheManager(CacheProperties props) {
+        return switch (props.type()) {
+            case LOCAL -> new LocalCacheManager(props.maxSize(), props.ttlMinutes());
+            case REDIS -> new RedisCacheManager(
+                    props.redis().host(), props.redis().port(), props.ttlMinutes());
+        };
+    }
+}
+```
+
+### 3.3 Profiles 机制
+
+Spring Boot 的 Profile 允许根据环境（dev、test、prod）激活不同的配置和 Bean。
+
+**激活方式（按优先级）：**
+1. 命令行参数：`--spring.profiles.active=prod`
+2. OS 环境变量：`SPRING_PROFILES_ACTIVE=prod`
+3. `application.properties` 中设置 `spring.profiles.active=prod`（不推荐在此设置环境相关 profile）
+4. 编程式：`SpringApplicationBuilder.profiles("prod")`
+5. `@ActiveProfiles("test")` — 测试专用
+
+**Profile 特定的配置文件：**
+- `application-{profile}.properties` 或 `application-{profile}.yml`
+- 同一目录下 profile 文件优先级高于默认文件
+
+**Profile 表达式（Spring Boot 4.x）：**
+```java
+@Bean
+@Profile("!prod")  // 非 prod 环境创建
+public DataSource h2DataSource() { ... }
+
+@Bean
+@Profile("prod & cloud")  // prod 且 cloud 同时激活
+public DataSource cloudDataSource() { ... }
+
+@Bean
+@Profile("dev | test")    // dev 或 test 激活
+public DataSource embeddedDataSource() { ... }
+```
+
+### 3.4 外部化配置
+
+除了标准 properties/yml 文件，Spring Boot 支持从多种外部源加载配置：
+
+```java
+// 方式 1: 命令行指定外部配置文件
+// java -jar app.jar --spring.config.location=/opt/config/application.yml
+
+// 方式 2: 命令行指定额外的配置文件（不替换原有）
+// java -jar app.jar --spring.config.additional-location=/opt/config/
+
+// 方式 3: 编程式
+var app = new SpringApplication(MyApp.class);
+app.setDefaultProperties(Map.of(
+    "spring.config.location", "/opt/config/"
+));
+app.run(args);
+
+// 方式 4: Config Server (Spring Cloud Config)
+// 通过 spring.cloud.config.uri 指向配置中心
+```
+
+**配置导入（Spring Boot 4.x）：**
+```properties
+# 导入其他配置文件
+spring.config.import=optional:classpath:/extra-config.yml
+spring.config.import=optional:configserver:http://config-server:8888
+```
+
+### 3.5 配置加密
+
+生产环境中敏感配置（数据库密码、API Key）需要加密存储。
+
+**方案一：Jasypt 集成（Spring Boot 2.x 主流方案，4.x 需兼容适配）：**
+
+```xml
+<dependency>
+    <groupId>com.github.ulisesbocchio</groupId>
+    <artifactId>jasypt-spring-boot-starter</artifactId>
+    <version>3.0.5</version>
+</dependency>
+```
+
+```properties
+# 加密值使用 ENC(...) 包裹
+spring.datasource.password=ENC(BKJ3kf2Jk3n...)
+# 解密密钥通过环境变量或启动参数传入（绝不可写入配置文件）
+jasypt.encryptor.password=${JASYPT_ENCRYPTOR_PASSWORD}
+```
+
+**方案二：Spring Cloud Vault / AWS Secrets Manager / Azure Key Vault（推荐）：**
+
+```xml
+<dependency>
+    <groupId>org.springframework.cloud</groupId>
+    <artifactId>spring-cloud-starter-vault-config</artifactId>
+</dependency>
+```
+
+```properties
+spring.cloud.vault.token=${VAULT_TOKEN}
+spring.cloud.vault.scheme=https
+spring.cloud.vault.host=vault.example.com
+spring.cloud.vault.port=8200
+spring.config.import=vault://secret/application
+```
+
+**最佳实践：**
+- 绝不将解密密钥硬编码到源码或配置文件中
+- 预发/生产环境使用 Secret Manager（Vault / AWS Secrets Manager / K8s Secrets）
+- 本地开发和 CI 环境使用加密文件 + 环境变量传入解密密钥
+
+---
+
+## 四、Actuator
+
+Spring Boot Actuator 提供生产就绪的特性，包括健康检查、指标监控、环境信息、日志管理等。
+
+### 4.1 端点总览
+
+| 端点 | 路径 | 说明 |
+|------|------|------|
+| `health` | `/actuator/health` | 应用健康状态 |
+| `info` | `/actuator/info` | 自定义应用信息 |
+| `metrics` | `/actuator/metrics` | 应用指标（JVM、HTTP、DB 等） |
+| `env` | `/actuator/env` | 环境属性和配置来源 |
+| `loggers` | `/actuator/loggers` | 运行时动态调整日志级别 |
+| `configprops` | `/actuator/configprops` | `@ConfigurationProperties` 值 |
+| `beans` | `/actuator/beans` | 容器中所有 Bean |
+| `conditions` | `/actuator/conditions` | 自动配置评估报告 |
+| `mappings` | `/actuator/mappings` | 所有 `@RequestMapping` |
+| `threaddump` | `/actuator/threaddump` | 线程 Dump |
+| `heapdump` | `/actuator/heapdump` | 堆 Dump（二进制下载） |
+| `startup` | `/actuator/startup` | 应用启动步骤耗时分析 |
+| `scheduledtasks` | `/actuator/scheduledtasks` | 定时任务信息 |
+| `caches` | `/actuator/caches` | 缓存管理 |
+| `sessions` | `/actuator/sessions` | Spring Session 信息（需引入 spring-session） |
+
+### 4.2 端点暴露策略
+
+```properties
+# 默认：仅暴露 health
+management.endpoints.web.exposure.include=health,info
+
+# 暴露所有（开发环境）
+management.endpoints.web.exposure.include=*
+
+# 精确控制
+management.endpoints.web.exposure.include=health,info,metrics,prometheus
+management.endpoints.web.exposure.exclude=env,beans
+
+# 启用 JMX 暴露
+management.endpoints.jmx.exposure.include=health,info
+```
+
+### 4.3 自定义 HealthIndicator
+
+```java
+import org.springframework.boot.actuate.health.Health;
+import org.springframework.boot.actuate.health.HealthIndicator;
+import org.springframework.stereotype.Component;
+
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.time.Duration;
+
+@Component
+public class ExternalServiceHealthIndicator implements HealthIndicator {
+
+    private final HttpClient httpClient = HttpClient.newBuilder()
+            .connectTimeout(Duration.ofSeconds(2))
+            .build();
+
+    @Override
+    public Health health() {
+        try {
+            var request = HttpRequest.newBuilder()
+                    .uri(URI.create("https://api.example.com/health"))
+                    .timeout(Duration.ofSeconds(3))
+                    .GET()
+                    .build();
+            var response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+
+            if (response.statusCode() == 200) {
+                return Health.up()
+                        .withDetail("service", "external-api")
+                        .withDetail("latency_ms", "...")
+                        .build();
+            } else {
+                return Health.down()
+                        .withDetail("service", "external-api")
+                        .withDetail("status", response.statusCode())
+                        .build();
+            }
+        } catch (Exception e) {
+            return Health.down(e).build();
+        }
+    }
+}
+```
+
+**Health 状态聚合：** `/actuator/health` 会聚合所有 `HealthIndicator`，取最差状态：
+- 全部 UP → 返回 200 + `{"status":"UP"}`
+- 任一 DOWN → 返回 503 + `{"status":"DOWN"}` + 详情
+
+显示详情需要配置：
+```properties
+management.endpoint.health.show-details=always
+management.endpoint.health.show-components=always
+```
+
+### 4.4 自定义 Metrics
+
+Spring Boot Actuator 基于 Micrometer，支持多种监控系统（Prometheus、Graphite 等）。
+
+```java
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
+import org.springframework.stereotype.Component;
+
+import java.util.concurrent.atomic.AtomicLong;
+
+@Component
+public class OrderMetrics {
+
+    private final AtomicLong activeOrders;
+    private final MeterRegistry registry;
+
+    public OrderMetrics(MeterRegistry registry) {
+        this.registry = registry;
+        this.activeOrders = registry.gauge(
+                "orders.active", new AtomicLong(0));
+    }
+
+    // Counter: 只增不减的计数指标
+    public void recordOrderCreated() {
+        registry.counter("orders.created.total").increment();
+    }
+
+    // Timer: 记录耗时的指标
+    public void recordOrderProcessingTime(long millis) {
+        registry.timer("orders.processing.time").record(
+                Duration.ofMillis(millis));
+    }
+
+    // Gauge: 瞬时值（通过回调获取最新值）
+    public void setActiveOrders(long count) {
+        this.activeOrders.set(count);
+    }
+}
+```
+
+配置 Prometheus 暴露：
+```properties
+management.endpoint.prometheus.enabled=true
+management.endpoints.web.exposure.include=health,info,metrics,prometheus
+```
+
+### 4.5 Actuator 安全配置
+
+```java
+@Configuration
+@EnableWebSecurity
+public class ActuatorSecurityConfig {
+
+    @Bean
+    public SecurityFilterChain actuatorFilterChain(HttpSecurity http) throws Exception {
+        http
+            .securityMatcher("/actuator/**")
+            .authorizeHttpRequests(auth -> auth
+                .requestMatchers("/actuator/health", "/actuator/info").permitAll()
+                .requestMatchers("/actuator/prometheus").hasRole("MONITOR")
+                .requestMatchers("/actuator/**").hasRole("ADMIN")
+            )
+            .httpBasic(Customizer.withDefaults());
+        return http.build();
+    }
+}
+```
+
+### 4.6 自定义 Actuator 端点
+
+`@Endpoint` 注解让自定义端点自动暴露（通过 Web 和 JMX）：
+
+```java
+import org.springframework.boot.actuate.endpoint.annotation.Endpoint;
+import org.springframework.boot.actuate.endpoint.annotation.ReadOperation;
+import org.springframework.boot.actuate.endpoint.annotation.WriteOperation;
+import org.springframework.stereotype.Component;
+
+import java.util.concurrent.atomic.AtomicLong;
+
+@Component
+@Endpoint(id = "feature-flags")
+public class FeatureFlagsEndpoint {
+
+    private final Map<String, Boolean> flags = new ConcurrentHashMap<>();
+
+    public FeatureFlagsEndpoint() {
+        flags.put("new-search", true);
+        flags.put("beta-recommendation", false);
+    }
+
+    @ReadOperation
+    public Map<String, Boolean> listAll() {
+        return Map.copyOf(flags);
+    }
+
+    @ReadOperation
+    public Boolean getFlag(@Selector String name) {
+        return flags.get(name);
+    }
+
+    @WriteOperation
+    public void setFlag(String name, boolean enabled) {
+        flags.put(name, enabled);
+    }
+}
+```
+
+访问方式：
+- `GET /actuator/feature-flags` → `{"new-search": true, "beta-recommendation": false}`
+- `GET /actuator/feature-flags/new-search` → `true`
+- `POST /actuator/feature-flags` with `{"name":"beta","enabled":true}`
+
+---
+
+## 五、AOT 编译
+
+> 技术雷达：Trial — GraalVM AOT 编译在低延迟/低内存场景有显著优势，但编译时间长、部分动态特性受限，生产使用需充分评估。
+
+### 5.1 AOT 引擎概述
+
+Spring Boot 4.x 的 AOT（Ahead-of-Time）编译引擎在构建时将部分运行时工作提前处理，生成优化的字节码和 GraalVM 原生镜像所需的元数据。AOT 处理分为两个阶段：
+
+1. **AOT Processing（处理阶段）：** 在构建时分析应用代码，生成 GraalVM 所需的配置文件（reflect-config.json、proxy-config.json 等），以及 Spring 自身的优化代码
+2. **AOT Execution（执行阶段）：** GraalVM `native-image` 编译器将字节码编译为原生可执行文件
+
+**AOT 引擎工作流程：**
+```
+源代码 → Java 编译 → 字节码 → AOT Processing (Maven/Gradle Plugin)
+  → 生成 SpringFactories.factories 的静态版本
+  → 生成反射配置 (reflect-config.json)
+  → 生成代理配置 (proxy-config.json)
+  → 生成资源配置 (resource-config.json)
+  → 生成序列化配置 (serialization-config.json)
+  → 生成预初始化的 Bean 定义
+  → GraalVM native-image 编译 → 原生可执行文件
+```
+
+### 5.2 Maven 构建配置
+
+```xml
+<build>
+    <plugins>
+        <plugin>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-maven-plugin</artifactId>
+            <configuration>
+                <!-- 启用 AOT 处理 -->
+                <aot>true</aot>
+            </configuration>
+        </plugin>
+        <!-- GraalVM Native Image 插件 -->
+        <plugin>
+            <groupId>org.graalvm.buildtools</groupId>
+            <artifactId>native-maven-plugin</artifactId>
+        </plugin>
+    </plugins>
+</build>
+```
+
+**构建命令：**
+```bash
+# Step 1: 先执行 AOT 处理并生成原生镜像
+mvn -Pnative spring-boot:build-image
+
+# Step 2: 或分步执行（AOT 处理）
+mvn spring-boot:process-aot
+
+# Step 3: 再编译为原生镜像
+mvn -Pnative native:compile
+```
+
+### 5.3 @Reflective 提示和 RuntimeHints API
+
+GraalVM 原生镜像在构建时执行静态分析（closed-world assumption），通过 `RuntimeHints` API 注册反射、资源、序列化等需求：
+
+```java
+import org.springframework.aot.hint.*;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.ImportRuntimeHints;
+
+@Configuration
+@ImportRuntimeHints(MyRuntimeHints.class)
+public class AotConfig {
+}
+
+class MyRuntimeHints implements RuntimeHintsRegistrar {
+
+    @Override
+    public void registerHints(RuntimeHints hints, ClassLoader classLoader) {
+        // 注册反射
+        hints.reflection()
+                .registerType(MyDto.class,
+                        MemberCategory.INVOKE_DECLARED_CONSTRUCTORS,
+                        MemberCategory.INVOKE_DECLARED_METHODS,
+                        MemberCategory.DECLARED_FIELDS);
+
+        // 注册资源文件
+        hints.resources()
+                .registerPattern("data/*.json")
+                .registerPattern("templates/*.mustache");
+
+        // 注册序列化
+        hints.serialization()
+                .registerType(MySerializableClass.class);
+
+        // 注册 JDK 代理
+        hints.proxies()
+                .registerJdkProxy(MyInterface.class);
+    }
+}
+```
+
+**更便捷的 `@Reflective` 注解（Spring Boot 4.x 引入）：**
+
+```java
+import org.springframework.aot.hint.annotation.Reflective;
+
+@Reflective  // 表示该类需要进行反射注册
+public record UserCreatedEvent(
+        String userId,
+        String userName,
+        Instant timestamp
+) {}
+```
+
+### 5.4 代理生成
+
+Spring AOP（CGLIB 代理）和 JDK 动态代理在原生镜像中需要预配置：
+
+```java
+// Interface-based proxy: JDK dynamic proxy
+hints.proxies()
+    .registerJdkProxy(MyService.class);
+
+// 也可以扫描特定包中所有带有 @Transactional 注解的接口
+hints.proxies()
+    .registerJdkProxy(proxyHint -> proxyHint
+        .proxiedInterfaces(MyService.class, AnotherService.class));
+```
+
+### 5.5 AOT 的限制和注意事项
+
+- 动态类加载：`Class.forName("com.example." + suffix)` 无法在 AOT 时分析，需显式注册
+- 反射使用：所有反射访问的类、方法、字段必须通过 RuntimeHints 注册
+- CGLIB 代理：`@Configuration` 类中的 `@Bean` 方法若在 AOT 模式下被 CGLIB 代理，可能需调整
+- 模板引擎：Thymeleaf 等运行时模板引擎在 AOT 模式下功能受限
+- 编译时间：原生镜像编译可能需要数分钟，CI/CD 流水线需考虑此开销
+
+**AOT 就绪检查清单：**
+1. 检查所有 `@ConfigurationProperties` 类是否被 AOT 正确发现
+2. 确认 Jackson 序列化/反序列化的 DTO 已注册
+3. 检查 `@EventListener` 方法参数类型的反射注册
+4. 验证 `@Scheduled` 方法不被动态代理阻断
+5. 检查所有第三方库是否提供 GraalVM 原生支持（`native-image` metadata）
+
+---
+
+## 六、Lifecycle
+
+### 6.1 SpringApplication.run() 内部步骤
+
+`SpringApplication.run()` 是 Spring Boot 启动的入口。理解其内部步骤对于调试启动问题、自定义启动流程至关重要。
+
+```java
+// 入口
+public static ConfigurableApplicationContext run(Class<?> primarySource, String... args) {
+    return new SpringApplication(primarySource).run(args);
+}
+```
+
+内部 `run()` 方法的 10 个关键步骤：
+
+```
+1. 创建 BootstrapContext
+   └── 启动早期的共享上下文，管理 BootstrapRegistry
+
+2. 获取 SpringApplicationRunListeners
+   └── 从 spring.factories 加载 SpringApplicationRunListener 实现
+   └── 默认：EventPublishingRunListener（将生命周期事件转为 ApplicationEvent）
+
+3. 准备 Environment
+   └── 创建或获取 ConfigurableEnvironment
+   └── 配置 PropertySources 和 Profiles
+   └── 发布 ApplicationEnvironmentPreparedEvent
+   └── 此阶段 ApplicationContextInitializer 可修改 Environment
+
+4. 打印 Banner
+   └── 默认 Spring Boot Banner，可通过 banner.txt 或 spring.banner.location 自定义
+
+5. 创建 ApplicationContext
+   └── 根据 WebApplicationType 决定：
+       ├── SERVLET → AnnotationConfigServletWebServerApplicationContext
+       ├── REACTIVE → AnnotationConfigReactiveWebServerApplicationContext
+       └── NONE → AnnotationConfigApplicationContext
+
+6. 准备 ApplicationContext
+   └── 设置 Environment
+   └── 执行 ApplicationContextInitializer（从 spring.factories 加载）
+   └── 注册 primarySource
+   └── 发布 ApplicationContextInitializedEvent
+
+7. 加载 Bean 定义
+   └── 扫描 @Configuration、@Component、@Bean 等
+   └── 触发 AutoConfigurationImportSelector 加载自动配置类
+
+8. Refresh ApplicationContext
+   └── 调用 AbstractApplicationContext.refresh()（Spring 核心生命周期）
+   └── 该阶段完成：BeanFactory 准备 → Bean 实例化 → Property 注入
+       → BeanPostProcessor 注册和执行 → 国际化 → 事件多播器 → 
+       Register Listeners → 实例化所有单例 Bean → 启动 WebServer
+
+9. 发布 ApplicationStartedEvent
+   └── Context 刷新完成，WebServer 已启动
+   └── ApplicationRunner 和 CommandLineRunner 在此之后执行
+
+10. 发布 ApplicationReadyEvent
+    └── 应用完全就绪，可接受请求
+```
+
+**WebApplicationType 的判断逻辑：**
+```java
+static WebApplicationType deduceFromClasspath() {
+    if (isPresent("org.springframework.web.reactive.DispatcherHandler")
+            && !isPresent("org.springframework.web.servlet.DispatcherServlet")) {
+        return WebApplicationType.REACTIVE;
+    }
+    if (!isPresent("org.springframework.web.servlet.DispatcherServlet")
+            && !isPresent("org.glassfish.jersey.servlet.ServletContainer")) {
+        return WebApplicationType.NONE;
+    }
+    return WebApplicationType.SERVLET;
+}
+```
+
+### 6.2 ApplicationContextInitializer
+
+在 `ApplicationContext` 刷新之前修改或增强它。定义方式：
+
+```java
+// 1. 实现接口
+public class MyContextInitializer implements
+        ApplicationContextInitializer<ConfigurableApplicationContext> {
+    @Override
+    public void initialize(ConfigurableApplicationContext ctx) {
+        // 添加自定义 BeanFactoryPostProcessor
+        ctx.addBeanFactoryPostProcessor(
+            beanFactory -> {
+                // 在此阶段 Environment 已就绪，但 Bean 尚未实例化
+                var env = ctx.getEnvironment();
+                log.info("Active profiles: {}", (Object) env.getActiveProfiles());
+            }
+        );
+    }
+}
+
+// 2. 注册到 spring.factories
+// META-INF/spring.factories
+// org.springframework.context.ApplicationContextInitializer=com.example.MyContextInitializer
+
+// 3. 或编程式注册
+var app = new SpringApplication(MyApp.class);
+app.addInitializers(new MyContextInitializer());
+app.run(args);
+```
+
+### 6.3 EnvironmentPostProcessor
+
+在 `Environment` 创建后、ApplicationContext 准备前修改环境：
+
+```java
+public class MyEnvironmentPostProcessor implements EnvironmentPostProcessor {
+
+    @Override
+    public void postProcessEnvironment(
+            ConfigurableEnvironment env, SpringApplication application) {
+        // 在此阶段可以：
+        // 1. 添加自定义 PropertySource
+        env.getPropertySources().addLast(
+            new MapPropertySource("my-custom", Map.of("custom.key", "value"))
+        );
+
+        // 2. 从外部服务加载配置
+        // var remoteProps = loadFromRemoteConfigServer();
+        // env.getPropertySources().addFirst(new MapPropertySource("remote", remoteProps));
+
+        // 3. 动态激活 Profile
+        // env.addActiveProfile("dynamic-profile");
+    }
+}
+```
+
+同样通过 `META-INF/spring.factories` 注册：
+```
+org.springframework.boot.env.EnvironmentPostProcessor=com.example.MyEnvironmentPostProcessor
+```
+
+### 6.4 Listeners 体系
+
+Spring Boot 的生命周期事件体系：
+
+| 事件类 | 发布时机 | 典型用途 |
+|--------|----------|----------|
+| `ApplicationStartingEvent` | 启动开始（最早事件） | 初始化日志框架 |
+| `ApplicationEnvironmentPreparedEvent` | Environment 就绪 | 修改 Environment |
+| `ApplicationContextInitializedEvent` | Context 创建、Environment 设置完成 | Context 定制 |
+| `ApplicationPreparedEvent` | Bean 定义加载完成、Refresh 之前 | 注册额外 Bean 定义 |
+| `ApplicationStartedEvent` | Refresh 完成、ApplicationRunner 之前 | 后置处理 |
+| `ApplicationReadyEvent` | 应用完全就绪 | 预热缓存、健康检查 |
+| `ApplicationFailedEvent` | 启动失败 | 记录失败信息、发送告警 |
+
+**自定义 Listener：**
+
+```java
+@Component
+public class AppLifecycleListener {
+
+    private static final Logger log = LoggerFactory.getLogger(AppLifecycleListener.class);
+
+    @EventListener
+    public void onReady(ApplicationReadyEvent event) {
+        log.info("=== Application fully started in {} ms ===",
+                event.getTimeTaken().toMillis());
+        // 执行预热操作
+    }
+
+    @EventListener
+    public void onFailed(ApplicationFailedEvent event) {
+        log.error("Application failed to start: {}",
+                event.getException().getMessage());
+    }
+}
+```
+
+---
+
+## 七、Virtual Thread 配置
+
+### 7.1 spring.threads.virtual.enabled
+
+JDK 25 的 Virtual Threads (JEP 444) 是 Adopt 象限的核心技术。Spring Boot 4.x 通过 `spring.threads.virtual.enabled` 配置提供声明式支持。
+
+```properties
+# 启用 Virtual Threads
+spring.threads.virtual.enabled=true
+```
+
+### 7.2 内部实现：它做了什么
+
+当 `spring.threads.virtual.enabled=true` 时，Spring Boot 自动配置会注册三个关键的 `BeanFactoryPostProcessor`：
+
+**1. Tomcat 请求处理线程：**
+
+```java
+// 实际源码逻辑简化
+@AutoConfiguration
+@ConditionalOnProperty(prefix = "spring.threads", name = "virtual.enabled", havingValue = "true")
+@ConditionalOnClass(name = "org.apache.tomcat.util.threads.VirtualThreadExecutor")
+static class VirtualThreadsAutoConfiguration {
+
+    @Bean
+    static BeanFactoryPostProcessor tomcatVirtualThreads() {
+        return beanFactory -> {
+            if (beanFactory.containsBean("tomcatProtocolHandlerCustomizer")) {
+                // 将 Tomcat 的请求处理线程池切换为 Virtual Thread executor
+                // 即：每个请求在一个新的 Virtual Thread 上处理
+                beanFactory.getBean(TomcatProtocolHandlerCustomizer.class)
+                    .addCustomizer(protocolHandler ->
+                        protocolHandler.setExecutor(
+                            java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor()
+                        ));
+            }
+        };
+    }
+```
+
+**2. @Async 任务执行：**
+
+```java
+@Bean
+@ConditionalOnMissingBean
+public TaskExecutor applicationTaskExecutor() {
+    // 默认的 @Async 执行器切换为 Virtual Thread 执行器
+    return new TaskExecutorAdapter(
+        Executors.newVirtualThreadPerTaskExecutor()
+    );
+}
+```
+
+**3. @Scheduled 定时任务：**
+
+`TaskSchedulingAutoConfiguration` 检测到 `spring.threads.virtual.enabled=true` 之后，会为 `@Scheduled` 注解的方法使用 Virtual Thread 执行器。
+
+**4. Spring Cloud Gateway / WebFlux 适配：**
+
+对于响应式栈，`reactor.netty` 也支持使用 Virtual Thread 编排。
+
+### 7.3 完整配置示例
+
+```properties
+# application.properties
+spring.threads.virtual.enabled=true
+
+# 可选：控制 Virtual Thread 的最大数量（默认无限制）
+spring.threads.virtual.max-threads=1000
+
+# 可选：为特定线程池保留平台线程
+# 比如数据库连接池不适合每个查询都创建 Virtual Thread
+spring.threads.virtual.exclude-bean-names=taskScheduler
+```
+
+### 7.4 代码验证 Virtual Thread 生效
+
+```java
+import io.micrometer.core.instrument.MeterRegistry;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
+import org.springframework.web.bind.annotation.*;
+import org.springframework.scheduling.annotation.Async;
+import org.springframework.stereotype.Service;
+
+@RestController
+class ThreadCheckController {
+
+    @GetMapping("/check-thread")
+    public Map<String, Object> check() {
+        var current = Thread.currentThread();
+        return Map.of(
+            "name", current.getName(),
+            "isVirtual", current.isVirtual(),
+            "threadId", current.threadId()
+        );
+    }
+
+    // 预期输出: {"name":"", "isVirtual":true, "threadId":12345}
+}
+
+@Service
+class VirtualThreadDemo {
+
+    @Async
+    public void asyncTask() {
+        var thread = Thread.currentThread();
+        System.out.println("Async running on virtual thread: " + thread.isVirtual());
+        // 输出: Async running on virtual thread: true
+    }
+}
+```
+
+### 7.5 Virtual Thread 的适用场景与注意事项
+
+**适合 Virtual Thread 的场景：**
+- 高并发 I/O 密集型任务（HTTP 请求、数据库查询、RPC 调用）
+- 传统Servlet 模型的 Web 应用（无需迁移到 WebFlux）
+- `@Async` 异步方法调用
+
+**不适合或需要注意的场景：**
+- CPU 密集型计算（Virtual Thread 不增加 CPU 吞吐量）
+- 需要线程本地存储且未迁移到 Scoped Values 的代码
+- `synchronized` 块内阻塞操作（会 pin 住载体线程，JDK 25 已显著改善但仍需注意）
+- 需要固定线程数保证资源隔离的场景（如数据库连接池的协调线程）
+
+**诊断 Pin 操作（JDK 25）：**
+```java
+// 通过 JFR 事件检测 Virtual Thread 的 Pin 情况
+// 启动参数：-XX:StartFlightRecording:filename=recording.jfr
+// 在 JDK Mission Control 中查看 jdk.VirtualThreadPinned 事件
+```
+
+**总结对比：**
+
+| 场景 | JDK 21 之前 | JDK 25 + Spring Boot 4.x |
+|------|-------------|--------------------------|
+| Web 请求处理 | Tomcat 线程池（200线程） | Virtual Threads（按需创建） |
+| 高并发 I/O | WebFlux + Reactor | 保持 Spring MVC，一行配置 |
+| `@Async` | 固定线程池 | 每个任务一个 Virtual Thread |
+| 线程本地数据 | ThreadLocal | ThreadLocal 仍可用，推荐 Scoped Values |
+
+---
+
+## 常见问题
+
+**Q1: 自动配置没生效怎么排查？**
+A: 三步走：1) 启用 `--debug` 查看自动配置报告（Positive/Negative matches）；2) 检查类路径是否有所需依赖（`@ConditionalOnClass`）；3) 通过 `/actuator/conditions` 端点在线查看。
+
+**Q2: 多个同类型 Bean 如何指定注入哪个？**
+A: 使用 `@Qualifier` 或 `@Primary` 注解。Spring Boot 自动配置通常使用 `@ConditionalOnMissingBean`，即用户只要自己定义了同类型 Bean，自动配置的就被跳过。
+
+**Q3: application.properties 和 application.yml 同时存在时谁生效？**
+A: `.properties` 文件优先级高于 `.yml`。Spring Boot 按 `PropertySourceLoader` 的注册顺序加载，`PropertiesPropertySourceLoader` 排在 `YamlPropertySourceLoader` 之前。
+
+**Q4: AOT 编译失败最常见的原因是什么？**
+A: 反射使用未注册、动态类加载（`Class.forName`）、不兼容的第三方库（缺少 GraalVM Reachability Metadata）。解决方式：使用 `RuntimeHintsRegistrar` 注册缺失的反射/代理/资源。
+
+**Q5: Virtual Thread 启用后 JDBC 连接池需要做什么调整？**
+A: 通常不需要调整 HikariCP 连接池本身，因为连接池的连接数是有限的（如 10-20），Virtual Thread 会在等待连接时让出载体线程。但 `maximumPoolSize` 不应过大，因为数据库的连接数是昂贵资源。
+
+---
+
+## 相关条目
+- 02-Java平台（Java 平台，Virtual Threads 基础）
+- 03-spring-core-ioc-aop（Spring 核心 IoC/AOP）
+- 03-spring-mvc-sse（Spring MVC 与 SSE 流式输出）
