@@ -5,7 +5,7 @@ status: "verified"
 level: "advanced"
 sources:
   - level: "L0"
-    url: "https://openjdk.org/groups/nio/"
+    url: "https://openjdk.org/projects/nio/"
     description: "OpenJDK NIO 官方文档与规范，涵盖 Buffer、Channel、Selector API 定义"
   - level: "L1"
     url: "https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/nio/package-summary.html"
