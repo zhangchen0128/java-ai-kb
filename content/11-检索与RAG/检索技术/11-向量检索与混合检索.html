@@ -6,7 +6,7 @@
     <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#vector-search</span><span class="badge badge-tag">#hnsw</span><span class="badge badge-tag">#ivfflat</span><span class="badge badge-tag">#bm25</span><span class="badge badge-tag">#hybrid-search</span></div>
     <div class="entry-sources"><small>📖 来源：<a href="https://arxiv.org/abs/1603.09320" target="_blank" rel="noopener" class="source-link" title="HNSW论文 — Efficient and robust approximate nearest neighbor search">HNSW论文 — Efficient and robust approximate nearest neighbor search</a><a href="https://github.com/pgvector/pgvector" target="_blank" rel="noopener" class="source-link" title="pgvector 官方文档 — HNSW和IVFFlat索引">pgvector 官方文档 — HNSW和IVFFlat索引</a><a href="https://www.elastic.co/guide/en/elasticsearch/reference/current/knn-search.html" target="_blank" rel="noopener" class="source-link" title="Elasticsearch kNN 检索官方文档">Elasticsearch kNN 检索官方文档</a><a href="https://plg.uwaterloo.ca/~gvcormac/climax/" target="_blank" rel="noopener" class="source-link" title="RRF (Reciprocal Rank Fusion) 原始论文">RRF (Reciprocal Rank Fusion) 原始论文</a></small></div>
   </div>
-  <div class="entry-body"><html><head></head><body><h1>向量检索与混合检索：从HNSW到RRF融合</h1>
+  <div class="entry-body"><h1>向量检索与混合检索：从HNSW到RRF融合</h1>
 <h2>概述</h2>
 <p>检索是RAG系统的核心环节。现代检索系统通常结合两种范式：稠密向量检索（语义匹配）和稀疏关键词检索（精确匹配）。本文从向量检索的底层索引结构（HNSW、IVFFlat）出发，推导BM25的数学原理，最终构建完整的混合检索+RRF融合方案，并提供在PostgreSQL pgvector和Elasticsearch上的完整Java实现。</p>
 <hr>
@@ -136,10 +136,10 @@ Layer <span class="hljs-number">0</span>: ●─●─●─●─●─●─�
 
 <span class="hljs-comment">-- 向量相似度检索</span>
 <span class="hljs-keyword">SELECT</span> c.chunk_id, c.content,
-       <span class="hljs-number">1</span> <span class="hljs-operator">-</span> (e.embedding <span class="hljs-operator">&lt;=&gt;</span> <span class="hljs-string">'[0.1, 0.2, ...]'</span>::vector) <span class="hljs-keyword">AS</span> similarity
+       <span class="hljs-number">1</span> <span class="hljs-operator">-</span> (e.embedding <span class="hljs-operator">&lt;=&gt;</span> <span class="hljs-string">&#x27;[0.1, 0.2, ...]&#x27;</span>::vector) <span class="hljs-keyword">AS</span> similarity
 <span class="hljs-keyword">FROM</span> chunk_embeddings e
 <span class="hljs-keyword">JOIN</span> chunks c <span class="hljs-keyword">ON</span> e.chunk_id <span class="hljs-operator">=</span> c.chunk_id
-<span class="hljs-keyword">ORDER</span> <span class="hljs-keyword">BY</span> e.embedding <span class="hljs-operator">&lt;=&gt;</span> <span class="hljs-string">'[0.1, 0.2, ...]'</span>::vector
+<span class="hljs-keyword">ORDER</span> <span class="hljs-keyword">BY</span> e.embedding <span class="hljs-operator">&lt;=&gt;</span> <span class="hljs-string">&#x27;[0.1, 0.2, ...]&#x27;</span>::vector
 LIMIT <span class="hljs-number">10</span>;
 </code></pre></div><p><strong>推荐的初始化SQL（Spring Boot自动配置）</strong>：</p>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">import</span> org.springframework.boot.autoconfigure.jdbc.DataSourceProperties;
@@ -163,10 +163,10 @@ LIMIT <span class="hljs-number">10</span>;
              <span class="hljs-type">var</span> <span class="hljs-variable">stmt</span> <span class="hljs-operator">=</span> conn.createStatement()) {
 
             <span class="hljs-comment">// 启用pgvector扩展</span>
-            stmt.execute(<span class="hljs-string">"CREATE EXTENSION IF NOT EXISTS vector"</span>);
+            stmt.execute(<span class="hljs-string">&quot;CREATE EXTENSION IF NOT EXISTS vector&quot;</span>);
 
             <span class="hljs-comment">// 创建表</span>
-            stmt.execute(<span class="hljs-string">"""
+            stmt.execute(<span class="hljs-string">&quot;&quot;&quot;
                 CREATE TABLE IF NOT EXISTS chunk_embeddings (
                     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
                     chunk_id UUID NOT NULL,
@@ -174,15 +174,15 @@ LIMIT <span class="hljs-number">10</span>;
                     model_name VARCHAR(128),
                     created_at TIMESTAMPTZ DEFAULT now()
                 )
-                """</span>);
+                &quot;&quot;&quot;</span>);
 
             <span class="hljs-comment">// 创建HNSW索引（如果不存在）</span>
-            stmt.execute(<span class="hljs-string">"""
+            stmt.execute(<span class="hljs-string">&quot;&quot;&quot;
                 CREATE INDEX IF NOT EXISTS idx_chunk_embeddings_hnsw
                 ON chunk_embeddings
                 USING hnsw (embedding vector_cosine_ops)
                 WITH (m = 16, ef_construction = 200)
-                """</span>);
+                &quot;&quot;&quot;</span>);
 
         } <span class="hljs-keyword">catch</span> (Exception e) {
             <span class="hljs-comment">// 初始化失败不阻止应用启动</span>
@@ -276,13 +276,13 @@ $$IDF(q_i) = \ln\left(1 + \frac{N - n(q_i) + 0.5}{n(q_i) + 0.5}\right)$$</p>
             .index(indexName)
             .query(q -&gt; q
                 .match(m -&gt; m
-                    .field(<span class="hljs-string">"content"</span>)
+                    .field(<span class="hljs-string">&quot;content&quot;</span>)
                     .query(query)
                 )
             )
             .size(size)
             .highlight(h -&gt; h
-                .fields(<span class="hljs-string">"content"</span>, hf -&gt; hf
+                .fields(<span class="hljs-string">&quot;content&quot;</span>, hf -&gt; hf
                     .fragmentSize(<span class="hljs-number">150</span>)
                     .numberOfFragments(<span class="hljs-number">3</span>)
                 )
@@ -293,8 +293,8 @@ $$IDF(q_i) = \ln\left(1 + \frac{N - n(q_i) + 0.5}{n(q_i) + 0.5}\right)$$</p>
 
         <span class="hljs-keyword">return</span> response.hits().hits().stream()
             .map(hit -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">SearchResult</span>(
-                (String) hit.source().get(<span class="hljs-string">"chunk_id"</span>),
-                (String) hit.source().get(<span class="hljs-string">"content"</span>),
+                (String) hit.source().get(<span class="hljs-string">&quot;chunk_id&quot;</span>),
+                (String) hit.source().get(<span class="hljs-string">&quot;content&quot;</span>),
                 hit.score() != <span class="hljs-literal">null</span> ? hit.score() : <span class="hljs-number">0.0</span>,
                 hit.highlight() != <span class="hljs-literal">null</span> ? hit.highlight() : Map.of()
             ))
@@ -308,7 +308,7 @@ $$IDF(q_i) = \ln\left(1 + \frac{N - n(q_i) + 0.5}{n(q_i) + 0.5}\right)$$</p>
         <span class="hljs-type">var</span> <span class="hljs-variable">response</span> <span class="hljs-operator">=</span> esClient.explain(e -&gt; e
             .index(indexName)
             .id(documentId)
-            .query(q -&gt; q.match(m -&gt; m.field(<span class="hljs-string">"content"</span>).query(query)))
+            .query(q -&gt; q.match(m -&gt; m.field(<span class="hljs-string">&quot;content&quot;</span>).query(query)))
         );
         <span class="hljs-keyword">return</span> response.explanation().toString();
     }
@@ -316,10 +316,10 @@ $$IDF(q_i) = \ln\left(1 + \frac{N - n(q_i) + 0.5}{n(q_i) + 0.5}\right)$$</p>
 </code></pre></div><h3>4.4 PostgreSQL BM25 (ts_rank)</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-sql"><span class="hljs-comment">-- PostgreSQL全文搜索示例</span>
 <span class="hljs-keyword">SELECT</span> c.chunk_id, c.content,
-       ts_rank(to_tsvector(<span class="hljs-string">'chinese'</span>, c.content),
-               to_tsquery(<span class="hljs-string">'chinese'</span>, <span class="hljs-string">'向量 &amp; 检索 &amp; 混合'</span>)) <span class="hljs-keyword">AS</span> rank
+       ts_rank(to_tsvector(<span class="hljs-string">&#x27;chinese&#x27;</span>, c.content),
+               to_tsquery(<span class="hljs-string">&#x27;chinese&#x27;</span>, <span class="hljs-string">&#x27;向量 &amp; 检索 &amp; 混合&#x27;</span>)) <span class="hljs-keyword">AS</span> rank
 <span class="hljs-keyword">FROM</span> chunks c
-<span class="hljs-keyword">WHERE</span> to_tsvector(<span class="hljs-string">'chinese'</span>, c.content) @@ to_tsquery(<span class="hljs-string">'chinese'</span>, <span class="hljs-string">'向量 &amp; 检索 &amp; 混合'</span>)
+<span class="hljs-keyword">WHERE</span> to_tsvector(<span class="hljs-string">&#x27;chinese&#x27;</span>, c.content) @@ to_tsquery(<span class="hljs-string">&#x27;chinese&#x27;</span>, <span class="hljs-string">&#x27;向量 &amp; 检索 &amp; 混合&#x27;</span>)
 <span class="hljs-keyword">ORDER</span> <span class="hljs-keyword">BY</span> rank <span class="hljs-keyword">DESC</span>
 LIMIT <span class="hljs-number">10</span>;
 </code></pre></div><p>注意：PostgreSQL的全文搜索默认使用<code>ts_rank</code>，不是严格意义上的BM25，但效果接近。</p>
@@ -542,7 +542,7 @@ B排在<span class="hljs-keyword">A</span>前面，虽然<span class="hljs-keywo
         <span class="hljs-keyword">return</span> List.of();
     }
 
-    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">getContent</span><span class="hljs-params">(String chunkId)</span> { <span class="hljs-keyword">return</span> <span class="hljs-string">""</span>; }
+    <span class="hljs-keyword">private</span> String <span class="hljs-title function_">getContent</span><span class="hljs-params">(String chunkId)</span> { <span class="hljs-keyword">return</span> <span class="hljs-string">&quot;&quot;</span>; }
     <span class="hljs-keyword">private</span> Map&lt;String, Object&gt; <span class="hljs-title function_">getMetadata</span><span class="hljs-params">(String chunkId)</span> { <span class="hljs-keyword">return</span> Map.of(); }
 }
 </code></pre></div><h3>5.4 Elasticsearch混合检索（BM25 + kNN + RRF）</h3>
@@ -561,14 +561,14 @@ B排在<span class="hljs-keyword">A</span>前面，虽然<span class="hljs-keywo
         <span class="hljs-comment">// BM25子查询</span>
         .query(q -&gt; q.bool(b -&gt; b
             .should(sq -&gt; sq.match(m -&gt; m
-                .field(<span class="hljs-string">"content"</span>)
+                .field(<span class="hljs-string">&quot;content&quot;</span>)
                 .query(query)
                 .boost(<span class="hljs-number">1.0f</span>)
             ))
         ))
         <span class="hljs-comment">// kNN子查询</span>
         .knn(k -&gt; k
-            .field(<span class="hljs-string">"embedding"</span>)
+            .field(<span class="hljs-string">&quot;embedding&quot;</span>)
             .queryVector(Arrays.stream(queryEmbedding)
                 .boxed().toList())
             .k(topK * <span class="hljs-number">2</span>)
@@ -584,8 +584,8 @@ B排在<span class="hljs-keyword">A</span>前面，虽然<span class="hljs-keywo
 
     <span class="hljs-keyword">return</span> response.hits().hits().stream()
         .map(hit -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">SearchResult</span>(
-            (String) hit.source().get(<span class="hljs-string">"chunk_id"</span>),
-            (String) hit.source().get(<span class="hljs-string">"content"</span>),
+            (String) hit.source().get(<span class="hljs-string">&quot;chunk_id&quot;</span>),
+            (String) hit.source().get(<span class="hljs-string">&quot;content&quot;</span>),
             hit.score() != <span class="hljs-literal">null</span> ? hit.score() : <span class="hljs-number">0.0</span>,
             Map.of()
         ))
@@ -599,22 +599,22 @@ B排在<span class="hljs-keyword">A</span>前面，虽然<span class="hljs-keywo
            <span class="hljs-built_in">ROW_NUMBER</span>() <span class="hljs-keyword">OVER</span> (<span class="hljs-keyword">ORDER</span> <span class="hljs-keyword">BY</span> e.embedding <span class="hljs-operator">&lt;=&gt;</span> :query_vector::vector) <span class="hljs-keyword">AS</span> vector_rank
     <span class="hljs-keyword">FROM</span> chunk_embeddings e
     <span class="hljs-keyword">JOIN</span> chunks c <span class="hljs-keyword">ON</span> e.chunk_id <span class="hljs-operator">=</span> c.chunk_id
-    <span class="hljs-keyword">WHERE</span> c.status <span class="hljs-operator">=</span> <span class="hljs-string">'active'</span>
+    <span class="hljs-keyword">WHERE</span> c.status <span class="hljs-operator">=</span> <span class="hljs-string">&#x27;active&#x27;</span>
       <span class="hljs-keyword">AND</span> c.tenant_id <span class="hljs-operator">=</span> :tenant_id
     <span class="hljs-keyword">ORDER</span> <span class="hljs-keyword">BY</span> e.embedding <span class="hljs-operator">&lt;=&gt;</span> :query_vector::vector
     LIMIT :limit
 ),
 bm25_results <span class="hljs-keyword">AS</span> (
     <span class="hljs-keyword">SELECT</span> c.chunk_id, c.content,
-           ts_rank(to_tsvector(<span class="hljs-string">'chinese'</span>, c.content),
-                   plainto_tsquery(<span class="hljs-string">'chinese'</span>, :query_text)) <span class="hljs-keyword">AS</span> bm25_score,
+           ts_rank(to_tsvector(<span class="hljs-string">&#x27;chinese&#x27;</span>, c.content),
+                   plainto_tsquery(<span class="hljs-string">&#x27;chinese&#x27;</span>, :query_text)) <span class="hljs-keyword">AS</span> bm25_score,
            <span class="hljs-built_in">ROW_NUMBER</span>() <span class="hljs-keyword">OVER</span> (<span class="hljs-keyword">ORDER</span> <span class="hljs-keyword">BY</span>
-               ts_rank(to_tsvector(<span class="hljs-string">'chinese'</span>, c.content),
-                       plainto_tsquery(<span class="hljs-string">'chinese'</span>, :query_text)) <span class="hljs-keyword">DESC</span>
+               ts_rank(to_tsvector(<span class="hljs-string">&#x27;chinese&#x27;</span>, c.content),
+                       plainto_tsquery(<span class="hljs-string">&#x27;chinese&#x27;</span>, :query_text)) <span class="hljs-keyword">DESC</span>
            ) <span class="hljs-keyword">AS</span> bm25_rank
     <span class="hljs-keyword">FROM</span> chunks c
-    <span class="hljs-keyword">WHERE</span> to_tsvector(<span class="hljs-string">'chinese'</span>, c.content) @@ plainto_tsquery(<span class="hljs-string">'chinese'</span>, :query_text)
-      <span class="hljs-keyword">AND</span> c.status <span class="hljs-operator">=</span> <span class="hljs-string">'active'</span>
+    <span class="hljs-keyword">WHERE</span> to_tsvector(<span class="hljs-string">&#x27;chinese&#x27;</span>, c.content) @@ plainto_tsquery(<span class="hljs-string">&#x27;chinese&#x27;</span>, :query_text)
+      <span class="hljs-keyword">AND</span> c.status <span class="hljs-operator">=</span> <span class="hljs-string">&#x27;active&#x27;</span>
       <span class="hljs-keyword">AND</span> c.tenant_id <span class="hljs-operator">=</span> :tenant_id
     <span class="hljs-keyword">ORDER</span> <span class="hljs-keyword">BY</span> bm25_score <span class="hljs-keyword">DESC</span>
     LIMIT :limit
@@ -699,8 +699,8 @@ LIMIT <span class="hljs-number">10</span>;
         java.time.Instant until
     )</span> {
         <span class="hljs-keyword">public</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">matches</span><span class="hljs-params">(Map&lt;String, Object&gt; metadata)</span> {
-            <span class="hljs-keyword">if</span> (tenantId != <span class="hljs-literal">null</span> &amp;&amp; !tenantId.equals(metadata.get(<span class="hljs-string">"tenant_id"</span>))) <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
-            <span class="hljs-keyword">if</span> (!accessLevels.isEmpty() &amp;&amp; !accessLevels.contains(metadata.get(<span class="hljs-string">"access_level"</span>))) <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+            <span class="hljs-keyword">if</span> (tenantId != <span class="hljs-literal">null</span> &amp;&amp; !tenantId.equals(metadata.get(<span class="hljs-string">&quot;tenant_id&quot;</span>))) <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
+            <span class="hljs-keyword">if</span> (!accessLevels.isEmpty() &amp;&amp; !accessLevels.contains(metadata.get(<span class="hljs-string">&quot;access_level&quot;</span>))) <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
             <span class="hljs-comment">// ... 更多条件</span>
             <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
         }
@@ -785,5 +785,5 @@ LIMIT <span class="hljs-number">10</span>;
 <li><a href="#/11-检索与RAG/RAG实现/11-完整RAG流水线实现" class="cross-ref">11-完整RAG流水线实现</a> — 完整RAG流水线</li>
 <li><a href="#/04-数据与中间件/数据库与缓存/04-PostgreSQL与pgvector深度解析" class="cross-ref">04-PostgreSQL与pgvector深度解析</a> — pgvector深入</li>
 </ul>
-</body></html></div>
+</div>
 </article>

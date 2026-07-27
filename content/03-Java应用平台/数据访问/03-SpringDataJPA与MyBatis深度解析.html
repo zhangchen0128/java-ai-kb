@@ -6,7 +6,7 @@
     <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#jpa</span><span class="badge badge-tag">#hibernate</span><span class="badge badge-tag">#mybatis</span><span class="badge badge-tag">#mybatis-plus</span><span class="badge badge-tag">#spring-data-jpa</span></div>
     <div class="entry-sources"><small>📖 来源：<a href="https://docs.spring.io/spring-data/jpa/reference/" target="_blank" rel="noopener" class="source-link" title="Spring Data JPA Reference Documentation">Spring Data JPA Reference Documentation</a><a href="https://mybatis.org/mybatis-3/" target="_blank" rel="noopener" class="source-link" title="MyBatis 3 Official Documentation">MyBatis 3 Official Documentation</a><a href="https://github.com/spring-projects/spring-data-jpa" target="_blank" rel="noopener" class="source-link" title="Spring Data JPA source code">Spring Data JPA source code</a><a href="https://www.manning.com/books/java-persistence-with-spring-data-and-hibernate" target="_blank" rel="noopener" class="source-link" title="Java Persistence with Spring Data and Hibernate">Java Persistence with Spring Data and Hibernate</a></small></div>
   </div>
-  <div class="entry-body"><html><head></head><body><h1>Spring Data JPA 与 MyBatis 深度解析</h1>
+  <div class="entry-body"><h1>Spring Data JPA 与 MyBatis 深度解析</h1>
 <h2>概述</h2>
 <p>数据持久化是 Java 后端的核心战场。Spring Data JPA（基于 Hibernate）和 MyBatis（及其增强工具 MyBatis-Plus）代表了 Java 持久层的两大流派：<strong>ORM 自动映射</strong>与<strong>SQL 显式控制</strong>。</p>
 <p>本文从 JPA 实体映射、关系管理、N+1 问题、Spring Data Repository 模式，到 MyBatis XML Mapper、动态 SQL、MyBatis-Plus 条件构造器，全面对比两种方案的适用场景，并提供可运行的代码示例（JDK 25 + Spring Boot 4.x）。</p>
@@ -14,8 +14,8 @@
 <h2>一、JPA 核心</h2>
 <h3>1.1 Entity 映射</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Entity</span>
-<span class="hljs-meta">@Table(name = "users", indexes = {
-    @Index(name = "idx_email", columnList = "email", unique = true)
+<span class="hljs-meta">@Table(name = &quot;users&quot;, indexes = {
+    @Index(name = &quot;idx_email&quot;, columnList = &quot;email&quot;, unique = true)
 })</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">User</span> {
 
@@ -33,10 +33,10 @@
     <span class="hljs-meta">@Column(nullable = false)</span>
     <span class="hljs-keyword">private</span> UserStatus status;
 
-    <span class="hljs-meta">@Column(name = "created_at", updatable = false)</span>
+    <span class="hljs-meta">@Column(name = &quot;created_at&quot;, updatable = false)</span>
     <span class="hljs-keyword">private</span> LocalDateTime createdAt;
 
-    <span class="hljs-meta">@Column(name = "updated_at")</span>
+    <span class="hljs-meta">@Column(name = &quot;updated_at&quot;)</span>
     <span class="hljs-keyword">private</span> LocalDateTime updatedAt;
 
     <span class="hljs-comment">// 生命周期回调</span>
@@ -55,7 +55,7 @@
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 一对多：一个用户有多个订单</span>
 <span class="hljs-meta">@Entity</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">User</span> {
-    <span class="hljs-meta">@OneToMany(mappedBy = "user", cascade = CascadeType.ALL, orphanRemoval = true,
+    <span class="hljs-meta">@OneToMany(mappedBy = &quot;user&quot;, cascade = CascadeType.ALL, orphanRemoval = true,
                fetch = FetchType.LAZY)</span> <span class="hljs-comment">// 默认 LAZY</span>
     <span class="hljs-keyword">private</span> List&lt;Order&gt; orders = <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;&gt;();
 
@@ -70,7 +70,7 @@
 <span class="hljs-meta">@Entity</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">Order</span> {
     <span class="hljs-meta">@ManyToOne(fetch = FetchType.LAZY)</span> <span class="hljs-comment">// 多对一默认 EAGER！必须改为 LAZY</span>
-    <span class="hljs-meta">@JoinColumn(name = "user_id", nullable = false)</span>
+    <span class="hljs-meta">@JoinColumn(name = &quot;user_id&quot;, nullable = false)</span>
     <span class="hljs-keyword">private</span> User user;
 }
 
@@ -79,9 +79,9 @@
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">User</span> {
     <span class="hljs-meta">@ManyToMany</span>
     <span class="hljs-meta">@JoinTable(
-        name = "user_roles",
-        joinColumns = @JoinColumn(name = "user_id"),
-        inverseJoinColumns = @JoinColumn(name = "role_id")
+        name = &quot;user_roles&quot;,
+        joinColumns = @JoinColumn(name = &quot;user_id&quot;),
+        inverseJoinColumns = @JoinColumn(name = &quot;role_id&quot;)
     )</span>
     <span class="hljs-keyword">private</span> Set&lt;Role&gt; roles = <span class="hljs-keyword">new</span> <span class="hljs-title class_">HashSet</span>&lt;&gt;();
 }
@@ -129,8 +129,8 @@ cascade = CascadeType.<span class="hljs-type">REMOVE</span>
 <span class="hljs-variable">orphanRemoval</span> <span class="hljs-operator">=</span> <span class="hljs-literal">true</span> <span class="hljs-comment">// 从集合中移除订单时，自动删除数据库记录</span>
 
 <span class="hljs-comment">// 不做级联删除的安全做法：使用软删除</span>
-<span class="hljs-meta">@SQLDelete(sql = "UPDATE orders SET deleted = true WHERE id = ?")</span>
-<span class="hljs-meta">@Where(clause = "deleted = false")</span> <span class="hljs-comment">// Hibernate 6+ 改用 @SoftDelete</span>
+<span class="hljs-meta">@SQLDelete(sql = &quot;UPDATE orders SET deleted = true WHERE id = ?&quot;)</span>
+<span class="hljs-meta">@Where(clause = &quot;deleted = false&quot;)</span> <span class="hljs-comment">// Hibernate 6+ 改用 @SoftDelete</span>
 </code></pre></div><hr>
 <h2>二、N+1 问题：原因与解决方案</h2>
 <h3>2.1 问题演示</h3>
@@ -146,33 +146,33 @@ List&lt;User&gt; users = userRepository.findAll(); <span class="hljs-comment">//
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 方案1：在 Repository 方法上直接声明</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">UserRepository</span> <span class="hljs-keyword">extends</span> <span class="hljs-title class_">JpaRepository</span>&lt;User, Long&gt; {
 
-    <span class="hljs-meta">@EntityGraph(attributePaths = {"orders", "roles"})</span>
+    <span class="hljs-meta">@EntityGraph(attributePaths = {&quot;orders&quot;, &quot;roles&quot;})</span>
     List&lt;User&gt; <span class="hljs-title function_">findAll</span><span class="hljs-params">()</span>; <span class="hljs-comment">// 生成的 SQL 使用 LEFT JOIN FETCH</span>
 
-    <span class="hljs-meta">@EntityGraph(attributePaths = {"orders"})</span>
+    <span class="hljs-meta">@EntityGraph(attributePaths = {&quot;orders&quot;})</span>
     Optional&lt;User&gt; <span class="hljs-title function_">findById</span><span class="hljs-params">(Long id)</span>;
 }
 
 <span class="hljs-comment">// 方案2：在 Entity 上定义命名 EntityGraph</span>
 <span class="hljs-meta">@NamedEntityGraph(
-    name = "User.withOrders",
-    attributeNodes = @NamedAttributeNode("orders")
+    name = &quot;User.withOrders&quot;,
+    attributeNodes = @NamedAttributeNode(&quot;orders&quot;)
 )</span>
 <span class="hljs-meta">@Entity</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">User</span> { <span class="hljs-comment">/* ... */</span> }
 
 <span class="hljs-comment">// 使用时引用</span>
-<span class="hljs-meta">@EntityGraph("User.withOrders")</span>
+<span class="hljs-meta">@EntityGraph(&quot;User.withOrders&quot;)</span>
 List&lt;User&gt; <span class="hljs-title function_">findAll</span><span class="hljs-params">()</span>;
 </code></pre></div><h3>2.3 解决方案二：JOIN FETCH</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// JPQL JOIN FETCH</span>
-<span class="hljs-meta">@Query("SELECT DISTINCT u FROM User u LEFT JOIN FETCH u.orders WHERE u.status = :status")</span>
-List&lt;User&gt; <span class="hljs-title function_">findUsersWithOrders</span><span class="hljs-params">(<span class="hljs-meta">@Param("status")</span> UserStatus status)</span>;
+<span class="hljs-meta">@Query(&quot;SELECT DISTINCT u FROM User u LEFT JOIN FETCH u.orders WHERE u.status = :status&quot;)</span>
+List&lt;User&gt; <span class="hljs-title function_">findUsersWithOrders</span><span class="hljs-params">(<span class="hljs-meta">@Param(&quot;status&quot;)</span> UserStatus status)</span>;
 </code></pre></div><h3>2.4 解决方案三：Batch Size</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Entity</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">User</span> {
     <span class="hljs-meta">@BatchSize(size = 50)</span> <span class="hljs-comment">// 一次加载 50 个关联对象</span>
-    <span class="hljs-meta">@OneToMany(mappedBy = "user")</span>
+    <span class="hljs-meta">@OneToMany(mappedBy = &quot;user&quot;)</span>
     <span class="hljs-keyword">private</span> List&lt;Order&gt; orders;
 }
 
@@ -182,21 +182,21 @@ List&lt;User&gt; <span class="hljs-title function_">findUsersWithOrders</span><s
 <h2>三、JPQL 与 Criteria</h2>
 <h3>3.1 JPQL 语法</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 基本查询</span>
-<span class="hljs-meta">@Query("SELECT u FROM User u WHERE u.email = :email")</span>
-Optional&lt;User&gt; <span class="hljs-title function_">findByEmail</span><span class="hljs-params">(<span class="hljs-meta">@Param("email")</span> String email)</span>;
+<span class="hljs-meta">@Query(&quot;SELECT u FROM User u WHERE u.email = :email&quot;)</span>
+Optional&lt;User&gt; <span class="hljs-title function_">findByEmail</span><span class="hljs-params">(<span class="hljs-meta">@Param(&quot;email&quot;)</span> String email)</span>;
 
 <span class="hljs-comment">// 投影查询（返回 DTO）</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">UserSummary</span><span class="hljs-params">(Long id, String name, String email)</span> {}
 
-<span class="hljs-meta">@Query("SELECT new com.example.dto.UserSummary(u.id, u.name, u.email) " +
-       "FROM User u WHERE u.status = :status")</span>
-List&lt;UserSummary&gt; <span class="hljs-title function_">findSummariesByStatus</span><span class="hljs-params">(<span class="hljs-meta">@Param("status")</span> UserStatus status)</span>;
+<span class="hljs-meta">@Query(&quot;SELECT new com.example.dto.UserSummary(u.id, u.name, u.email) &quot; +
+       &quot;FROM User u WHERE u.status = :status&quot;)</span>
+List&lt;UserSummary&gt; <span class="hljs-title function_">findSummariesByStatus</span><span class="hljs-params">(<span class="hljs-meta">@Param(&quot;status&quot;)</span> UserStatus status)</span>;
 
 <span class="hljs-comment">// 更新查询</span>
 <span class="hljs-meta">@Modifying</span>
-<span class="hljs-meta">@Query("UPDATE User u SET u.status = :status WHERE u.lastLoginAt &lt; :threshold")</span>
-<span class="hljs-type">int</span> <span class="hljs-title function_">deactivateInactiveUsers</span><span class="hljs-params">(<span class="hljs-meta">@Param("status")</span> UserStatus status,
-                            <span class="hljs-meta">@Param("threshold")</span> LocalDateTime threshold)</span>;
+<span class="hljs-meta">@Query(&quot;UPDATE User u SET u.status = :status WHERE u.lastLoginAt &lt; :threshold&quot;)</span>
+<span class="hljs-type">int</span> <span class="hljs-title function_">deactivateInactiveUsers</span><span class="hljs-params">(<span class="hljs-meta">@Param(&quot;status&quot;)</span> UserStatus status,
+                            <span class="hljs-meta">@Param(&quot;threshold&quot;)</span> LocalDateTime threshold)</span>;
 </code></pre></div><h3>3.2 CriteriaBuilder 动态查询</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Repository</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">UserSearchRepository</span> {
@@ -212,14 +212,14 @@ List&lt;UserSummary&gt; <span class="hljs-title function_">findSummariesByStatus
         <span class="hljs-type">var</span> <span class="hljs-variable">predicates</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;Predicate&gt;();
 
         <span class="hljs-keyword">if</span> (name != <span class="hljs-literal">null</span> &amp;&amp; !name.isBlank()) {
-            predicates.add(cb.like(root.get(<span class="hljs-string">"name"</span>), <span class="hljs-string">"%"</span> + name + <span class="hljs-string">"%"</span>));
+            predicates.add(cb.like(root.get(<span class="hljs-string">&quot;name&quot;</span>), <span class="hljs-string">&quot;%&quot;</span> + name + <span class="hljs-string">&quot;%&quot;</span>));
         }
         <span class="hljs-keyword">if</span> (status != <span class="hljs-literal">null</span>) {
-            predicates.add(cb.equal(root.get(<span class="hljs-string">"status"</span>), status));
+            predicates.add(cb.equal(root.get(<span class="hljs-string">&quot;status&quot;</span>), status));
         }
         <span class="hljs-keyword">if</span> (fromDate != <span class="hljs-literal">null</span>) {
             predicates.add(cb.greaterThanOrEqualTo(
-                root.get(<span class="hljs-string">"createdAt"</span>), fromDate.atStartOfDay()));
+                root.get(<span class="hljs-string">&quot;createdAt&quot;</span>), fromDate.atStartOfDay()));
         }
 
         query.where(predicates.toArray(<span class="hljs-keyword">new</span> <span class="hljs-title class_">Predicate</span>[<span class="hljs-number">0</span>]));
@@ -233,12 +233,12 @@ List&lt;UserSummary&gt; <span class="hljs-title function_">findSummariesByStatus
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">UserSpecifications</span> {
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> Specification&lt;User&gt; <span class="hljs-title function_">nameContains</span><span class="hljs-params">(String name)</span> {
         <span class="hljs-keyword">return</span> (root, query, cb) -&gt;
-            name == <span class="hljs-literal">null</span> ? <span class="hljs-literal">null</span> : cb.like(root.get(<span class="hljs-string">"name"</span>), <span class="hljs-string">"%"</span> + name + <span class="hljs-string">"%"</span>);
+            name == <span class="hljs-literal">null</span> ? <span class="hljs-literal">null</span> : cb.like(root.get(<span class="hljs-string">&quot;name&quot;</span>), <span class="hljs-string">&quot;%&quot;</span> + name + <span class="hljs-string">&quot;%&quot;</span>);
     }
 
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> Specification&lt;User&gt; <span class="hljs-title function_">hasStatus</span><span class="hljs-params">(UserStatus status)</span> {
         <span class="hljs-keyword">return</span> (root, query, cb) -&gt;
-            status == <span class="hljs-literal">null</span> ? <span class="hljs-literal">null</span> : cb.equal(root.get(<span class="hljs-string">"status"</span>), status);
+            status == <span class="hljs-literal">null</span> ? <span class="hljs-literal">null</span> : cb.equal(root.get(<span class="hljs-string">&quot;status&quot;</span>), status);
     }
 }
 
@@ -248,7 +248,7 @@ List&lt;UserSummary&gt; <span class="hljs-title function_">findSummariesByStatus
 
 <span class="hljs-comment">// 组合多种条件</span>
 <span class="hljs-type">var</span> <span class="hljs-variable">spec</span> <span class="hljs-operator">=</span> Specification
-    .where(UserSpecifications.nameContains(<span class="hljs-string">"zhang"</span>))
+    .where(UserSpecifications.nameContains(<span class="hljs-string">&quot;zhang&quot;</span>))
     .and(UserSpecifications.hasStatus(UserStatus.ACTIVE));
 List&lt;User&gt; users = userRepository.findAll(spec);
 </code></pre></div><hr>
@@ -287,10 +287,10 @@ List&lt;User&gt; users = userRepository.findAll(spec);
 </code></pre></div><h3>4.2 分页与排序</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 分页查询</span>
 Page&lt;User&gt; page = userRepository.findAll(PageRequest.of(<span class="hljs-number">0</span>, <span class="hljs-number">20</span>,
-    Sort.by(Sort.Direction.DESC, <span class="hljs-string">"createdAt"</span>)));
+    Sort.by(Sort.Direction.DESC, <span class="hljs-string">&quot;createdAt&quot;</span>)));
 
-System.out.println(<span class="hljs-string">"Total pages: "</span> + page.getTotalPages());
-System.out.println(<span class="hljs-string">"Total elements: "</span> + page.getTotalElements());
+System.out.println(<span class="hljs-string">&quot;Total pages: &quot;</span> + page.getTotalPages());
+System.out.println(<span class="hljs-string">&quot;Total elements: &quot;</span> + page.getTotalElements());
 
 <span class="hljs-comment">// Slice：不查询总数，更高效（适合无限滚动）</span>
 Slice&lt;User&gt; slice = userRepository.findByStatus(
@@ -304,33 +304,33 @@ Slice&lt;User&gt; slice = userRepository.findByStatus(
 <h2>五、MyBatis</h2>
 <h3>5.1 XML Mapper</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">xml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-xml"><span class="hljs-comment">&lt;!-- UserMapper.xml --&gt;</span>
-<span class="hljs-tag">&lt;<span class="hljs-name">mapper</span> <span class="hljs-attr">namespace</span>=<span class="hljs-string">"com.example.mapper.UserMapper"</span>&gt;</span>
+<span class="hljs-tag">&lt;<span class="hljs-name">mapper</span> <span class="hljs-attr">namespace</span>=<span class="hljs-string">&quot;com.example.mapper.UserMapper&quot;</span>&gt;</span>
 
     <span class="hljs-comment">&lt;!-- ResultMap：字段映射 --&gt;</span>
-    <span class="hljs-tag">&lt;<span class="hljs-name">resultMap</span> <span class="hljs-attr">id</span>=<span class="hljs-string">"userResultMap"</span> <span class="hljs-attr">type</span>=<span class="hljs-string">"com.example.entity.User"</span>&gt;</span>
-        <span class="hljs-tag">&lt;<span class="hljs-name">id</span> <span class="hljs-attr">property</span>=<span class="hljs-string">"id"</span> <span class="hljs-attr">column</span>=<span class="hljs-string">"id"</span>/&gt;</span>
-        <span class="hljs-tag">&lt;<span class="hljs-name">result</span> <span class="hljs-attr">property</span>=<span class="hljs-string">"name"</span> <span class="hljs-attr">column</span>=<span class="hljs-string">"name"</span>/&gt;</span>
-        <span class="hljs-tag">&lt;<span class="hljs-name">result</span> <span class="hljs-attr">property</span>=<span class="hljs-string">"email"</span> <span class="hljs-attr">column</span>=<span class="hljs-string">"email"</span>/&gt;</span>
-        <span class="hljs-tag">&lt;<span class="hljs-name">result</span> <span class="hljs-attr">property</span>=<span class="hljs-string">"createdAt"</span> <span class="hljs-attr">column</span>=<span class="hljs-string">"created_at"</span>/&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">resultMap</span> <span class="hljs-attr">id</span>=<span class="hljs-string">&quot;userResultMap&quot;</span> <span class="hljs-attr">type</span>=<span class="hljs-string">&quot;com.example.entity.User&quot;</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">id</span> <span class="hljs-attr">property</span>=<span class="hljs-string">&quot;id&quot;</span> <span class="hljs-attr">column</span>=<span class="hljs-string">&quot;id&quot;</span>/&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">result</span> <span class="hljs-attr">property</span>=<span class="hljs-string">&quot;name&quot;</span> <span class="hljs-attr">column</span>=<span class="hljs-string">&quot;name&quot;</span>/&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">result</span> <span class="hljs-attr">property</span>=<span class="hljs-string">&quot;email&quot;</span> <span class="hljs-attr">column</span>=<span class="hljs-string">&quot;email&quot;</span>/&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">result</span> <span class="hljs-attr">property</span>=<span class="hljs-string">&quot;createdAt&quot;</span> <span class="hljs-attr">column</span>=<span class="hljs-string">&quot;created_at&quot;</span>/&gt;</span>
         <span class="hljs-comment">&lt;!-- 一对多关联 --&gt;</span>
-        <span class="hljs-tag">&lt;<span class="hljs-name">collection</span> <span class="hljs-attr">property</span>=<span class="hljs-string">"orders"</span> <span class="hljs-attr">ofType</span>=<span class="hljs-string">"com.example.entity.Order"</span>
-                    <span class="hljs-attr">select</span>=<span class="hljs-string">"com.example.mapper.OrderMapper.findByUserId"</span>
-                    <span class="hljs-attr">column</span>=<span class="hljs-string">"id"</span>/&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">collection</span> <span class="hljs-attr">property</span>=<span class="hljs-string">&quot;orders&quot;</span> <span class="hljs-attr">ofType</span>=<span class="hljs-string">&quot;com.example.entity.Order&quot;</span>
+                    <span class="hljs-attr">select</span>=<span class="hljs-string">&quot;com.example.mapper.OrderMapper.findByUserId&quot;</span>
+                    <span class="hljs-attr">column</span>=<span class="hljs-string">&quot;id&quot;</span>/&gt;</span>
     <span class="hljs-tag">&lt;/<span class="hljs-name">resultMap</span>&gt;</span>
 
     <span class="hljs-comment">&lt;!-- 动态查询 --&gt;</span>
-    <span class="hljs-tag">&lt;<span class="hljs-name">select</span> <span class="hljs-attr">id</span>=<span class="hljs-string">"findByCondition"</span> <span class="hljs-attr">resultMap</span>=<span class="hljs-string">"userResultMap"</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">select</span> <span class="hljs-attr">id</span>=<span class="hljs-string">&quot;findByCondition&quot;</span> <span class="hljs-attr">resultMap</span>=<span class="hljs-string">&quot;userResultMap&quot;</span>&gt;</span>
         SELECT * FROM users
         <span class="hljs-tag">&lt;<span class="hljs-name">where</span>&gt;</span>
-            <span class="hljs-tag">&lt;<span class="hljs-name">if</span> <span class="hljs-attr">test</span>=<span class="hljs-string">"name != null and name != ''"</span>&gt;</span>
-                AND name LIKE CONCAT('%', #{name}, '%')
+            <span class="hljs-tag">&lt;<span class="hljs-name">if</span> <span class="hljs-attr">test</span>=<span class="hljs-string">&quot;name != null and name != &#x27;&#x27;&quot;</span>&gt;</span>
+                AND name LIKE CONCAT(&#x27;%&#x27;, #{name}, &#x27;%&#x27;)
             <span class="hljs-tag">&lt;/<span class="hljs-name">if</span>&gt;</span>
-            <span class="hljs-tag">&lt;<span class="hljs-name">if</span> <span class="hljs-attr">test</span>=<span class="hljs-string">"status != null"</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">if</span> <span class="hljs-attr">test</span>=<span class="hljs-string">&quot;status != null&quot;</span>&gt;</span>
                 AND status = #{status}
             <span class="hljs-tag">&lt;/<span class="hljs-name">if</span>&gt;</span>
-            <span class="hljs-tag">&lt;<span class="hljs-name">if</span> <span class="hljs-attr">test</span>=<span class="hljs-string">"ids != null and ids.size() &gt; 0"</span>&gt;</span>
+            <span class="hljs-tag">&lt;<span class="hljs-name">if</span> <span class="hljs-attr">test</span>=<span class="hljs-string">&quot;ids != null and ids.size() &gt; 0&quot;</span>&gt;</span>
                 AND id IN
-                <span class="hljs-tag">&lt;<span class="hljs-name">foreach</span> <span class="hljs-attr">collection</span>=<span class="hljs-string">"ids"</span> <span class="hljs-attr">item</span>=<span class="hljs-string">"id"</span> <span class="hljs-attr">open</span>=<span class="hljs-string">"("</span> <span class="hljs-attr">separator</span>=<span class="hljs-string">","</span> <span class="hljs-attr">close</span>=<span class="hljs-string">")"</span>&gt;</span>
+                <span class="hljs-tag">&lt;<span class="hljs-name">foreach</span> <span class="hljs-attr">collection</span>=<span class="hljs-string">&quot;ids&quot;</span> <span class="hljs-attr">item</span>=<span class="hljs-string">&quot;id&quot;</span> <span class="hljs-attr">open</span>=<span class="hljs-string">&quot;(&quot;</span> <span class="hljs-attr">separator</span>=<span class="hljs-string">&quot;,&quot;</span> <span class="hljs-attr">close</span>=<span class="hljs-string">&quot;)&quot;</span>&gt;</span>
                     #{id}
                 <span class="hljs-tag">&lt;/<span class="hljs-name">foreach</span>&gt;</span>
             <span class="hljs-tag">&lt;/<span class="hljs-name">if</span>&gt;</span>
@@ -339,9 +339,9 @@ Slice&lt;User&gt; slice = userRepository.findByStatus(
     <span class="hljs-tag">&lt;/<span class="hljs-name">select</span>&gt;</span>
 
     <span class="hljs-comment">&lt;!-- 批量插入 --&gt;</span>
-    <span class="hljs-tag">&lt;<span class="hljs-name">insert</span> <span class="hljs-attr">id</span>=<span class="hljs-string">"batchInsert"</span>&gt;</span>
+    <span class="hljs-tag">&lt;<span class="hljs-name">insert</span> <span class="hljs-attr">id</span>=<span class="hljs-string">&quot;batchInsert&quot;</span>&gt;</span>
         INSERT INTO users (name, email, status, created_at) VALUES
-        <span class="hljs-tag">&lt;<span class="hljs-name">foreach</span> <span class="hljs-attr">collection</span>=<span class="hljs-string">"users"</span> <span class="hljs-attr">item</span>=<span class="hljs-string">"user"</span> <span class="hljs-attr">separator</span>=<span class="hljs-string">","</span>&gt;</span>
+        <span class="hljs-tag">&lt;<span class="hljs-name">foreach</span> <span class="hljs-attr">collection</span>=<span class="hljs-string">&quot;users&quot;</span> <span class="hljs-attr">item</span>=<span class="hljs-string">&quot;user&quot;</span> <span class="hljs-attr">separator</span>=<span class="hljs-string">&quot;,&quot;</span>&gt;</span>
             (#{user.name}, #{user.email}, #{user.status}, #{user.createdAt})
         <span class="hljs-tag">&lt;/<span class="hljs-name">foreach</span>&gt;</span>
     <span class="hljs-tag">&lt;/<span class="hljs-name">insert</span>&gt;</span>
@@ -396,27 +396,27 @@ Slice&lt;User&gt; slice = userRepository.findByStatus(
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Mapper</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">UserMapper</span> {
 
-    <span class="hljs-meta">@Select("SELECT * FROM users WHERE id = #{id}")</span>
+    <span class="hljs-meta">@Select(&quot;SELECT * FROM users WHERE id = #{id}&quot;)</span>
     User <span class="hljs-title function_">findById</span><span class="hljs-params">(Long id)</span>;
 
-    <span class="hljs-meta">@Select("SELECT * FROM users WHERE email = #{email}")</span>
+    <span class="hljs-meta">@Select(&quot;SELECT * FROM users WHERE email = #{email}&quot;)</span>
     <span class="hljs-meta">@Results({
-        @Result(property = "createdAt", column = "created_at"),
-        @Result(property = "orders", column = "id",
-                many = @Many(select = "com.example.mapper.OrderMapper.findByUserId"))
+        @Result(property = &quot;createdAt&quot;, column = &quot;created_at&quot;),
+        @Result(property = &quot;orders&quot;, column = &quot;id&quot;,
+                many = @Many(select = &quot;com.example.mapper.OrderMapper.findByUserId&quot;))
     })</span>
     User <span class="hljs-title function_">findByEmail</span><span class="hljs-params">(String email)</span>;
 
-    <span class="hljs-meta">@Insert("INSERT INTO users(name, email, status, created_at) " +
-            "VALUES(#{name}, #{email}, #{status}, #{createdAt})")</span>
-    <span class="hljs-meta">@Options(useGeneratedKeys = true, keyProperty = "id")</span>
+    <span class="hljs-meta">@Insert(&quot;INSERT INTO users(name, email, status, created_at) &quot; +
+            &quot;VALUES(#{name}, #{email}, #{status}, #{createdAt})&quot;)</span>
+    <span class="hljs-meta">@Options(useGeneratedKeys = true, keyProperty = &quot;id&quot;)</span>
     <span class="hljs-type">int</span> <span class="hljs-title function_">insert</span><span class="hljs-params">(User user)</span>;
 }
 </code></pre></div><h3>5.4 Plugin 拦截器</h3>
 <p>MyBatis Plugin 可以实现分页、审计、SQL 监控等功能：</p>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 自定义 SQL 监控拦截器</span>
 <span class="hljs-meta">@Intercepts({
-    @Signature(type = StatementHandler.class, method = "prepare",
+    @Signature(type = StatementHandler.class, method = &quot;prepare&quot;,
                args = {Connection.class, Integer.class})
 })</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">SqlMonitorInterceptor</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">Interceptor</span> {
@@ -430,8 +430,8 @@ Slice&lt;User&gt; slice = userRepository.findByStatus(
             <span class="hljs-keyword">return</span> invocation.proceed();
         } <span class="hljs-keyword">finally</span> {
             <span class="hljs-type">var</span> <span class="hljs-variable">elapsed</span> <span class="hljs-operator">=</span> (System.nanoTime() - start) / <span class="hljs-number">1_000_000</span>;
-            System.out.printf(<span class="hljs-string">"[SQL] %s (took %dms)%n"</span>,
-                sql.replaceAll(<span class="hljs-string">"\\s+"</span>, <span class="hljs-string">" "</span>).trim(), elapsed);
+            System.out.printf(<span class="hljs-string">&quot;[SQL] %s (took %dms)%n&quot;</span>,
+                sql.replaceAll(<span class="hljs-string">&quot;\\s+&quot;</span>, <span class="hljs-string">&quot; &quot;</span>).trim(), elapsed);
         }
     }
 }
@@ -477,13 +477,13 @@ Slice&lt;User&gt; slice = userRepository.findByStatus(
 
     <span class="hljs-meta">@Override</span>
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">insertFill</span><span class="hljs-params">(MetaObject metaObject)</span> {
-        <span class="hljs-built_in">this</span>.strictInsertFill(metaObject, <span class="hljs-string">"createdAt"</span>, LocalDateTime.class, LocalDateTime.now());
-        <span class="hljs-built_in">this</span>.strictInsertFill(metaObject, <span class="hljs-string">"updatedAt"</span>, LocalDateTime.class, LocalDateTime.now());
+        <span class="hljs-built_in">this</span>.strictInsertFill(metaObject, <span class="hljs-string">&quot;createdAt&quot;</span>, LocalDateTime.class, LocalDateTime.now());
+        <span class="hljs-built_in">this</span>.strictInsertFill(metaObject, <span class="hljs-string">&quot;updatedAt&quot;</span>, LocalDateTime.class, LocalDateTime.now());
     }
 
     <span class="hljs-meta">@Override</span>
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">updateFill</span><span class="hljs-params">(MetaObject metaObject)</span> {
-        <span class="hljs-built_in">this</span>.strictUpdateFill(metaObject, <span class="hljs-string">"updatedAt"</span>, LocalDateTime.class, LocalDateTime.now());
+        <span class="hljs-built_in">this</span>.strictUpdateFill(metaObject, <span class="hljs-string">&quot;updatedAt&quot;</span>, LocalDateTime.class, LocalDateTime.now());
     }
 }
 
@@ -562,8 +562,8 @@ A: Spring Boot 通过 <code>@Primary</code> 标注主数据源，自定义 <code
 <ul>
 <li><a href="#/03-Java应用平台/Spring核心/03-Spring核心IoC-AOP-事务" class="cross-ref">03-Spring核心IoC-AOP-事务</a>：事务管理</li>
 <li><a href="#/03-Java应用平台/Spring核心/03-SpringBoot4深度解析" class="cross-ref">03-SpringBoot4深度解析</a>：自动配置</li>
-<li><span class="broken-ref" title="未找到: 04-数据库与缓存/PostgreSQL">04-数据库与缓存/PostgreSQL</span>：数据库选型</li>
+<li><a href="#/04-数据与中间件/数据库与缓存/04-PostgreSQL与pgvector深度解析" class="cross-ref">04-PostgreSQL与pgvector深度解析</a>：数据库选型</li>
 <li><a href="#/01-计算机基础/数据库原理/01-数据库原理" class="cross-ref">01-数据库原理</a>：索引与查询优化</li>
 </ul>
-</body></html></div>
+</div>
 </article>

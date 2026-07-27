@@ -6,14 +6,14 @@
     <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#concurrency</span><span class="badge badge-tag">#JMM</span><span class="badge badge-tag">#synchronized</span><span class="badge badge-tag">#volatile</span><span class="badge badge-tag">#AQS</span></div>
     <div class="entry-sources"><small>📖 来源：<a href="https://docs.oracle.com/javase/specs/jls/se25/html/jls-17.html" target="_blank" rel="noopener" class="source-link" title="JLS Chapter 17: Threads and Locks — Java 内存模型规范">JLS Chapter 17: Threads and Locks — Java 内存模型规范</a><a href="https://github.com/openjdk/jdk/tree/master/src/java.base/share/classes/java/util/concurrent" target="_blank" rel="noopener" class="source-link" title="OpenJDK java.util.concurrent 源码">OpenJDK java.util.concurrent 源码</a><a href="https://jcip.net/" target="_blank" rel="noopener" class="source-link" title="Brian Goetz, Java Concurrency in Practice — 并发编程必读经典">Brian Goetz, Java Concurrency in Practice — 并发编程必读经典</a><a href="https://shipilev.net/blog/2014/jmm/" target="_blank" rel="noopener" class="source-link" title="Aleksey Shipilev, JMM Pragmatics — JMM深入解读与翻译">Aleksey Shipilev, JMM Pragmatics — JMM深入解读与翻译</a><a href="https://tech.meituan.com/2018/11/15/java-lock.html" target="_blank" rel="noopener" class="source-link" title="美团技术博客，synchronized 锁升级源码详解">美团技术博客，synchronized 锁升级源码详解</a><a href="https://www.cs.rochester.edu/~scott/papers/1991_TOCS_synch.pdf" target="_blank" rel="noopener" class="source-link" title="Mellor-Crummey &amp; Scott, Algorithms for Scalable Synchronization on Shared-Memory Multiprocessors — CLH/MCS 锁原始论文">Mellor-Crummey &amp; Scott, Algorithms for Scalable Synchronization on Shared-Memory Multiprocessors — CLH/MCS 锁原始论文</a></small></div>
   </div>
-  <div class="entry-body"><html><head></head><body><h1>Java 并发深度解析</h1>
+  <div class="entry-body"><h1>Java 并发深度解析</h1>
 <h2>概述</h2>
 <p>本文系统讲解 Java 并发编程的核心机制，从 JMM（Java Memory Model）内存模型入手，逐层深入 synchronized 锁升级、volatile 内存屏障、AQS 框架源码、ConcurrentHashMap 演进、原子类 CAS 原理、CompletableFuture 异步编排、ForkJoinPool 工作窃取，以及 StampedLock 读写策略。本文以 JDK 25 LTS 为基准，代码示例使用 <code>var</code> 和 Virtual Threads 等现代特性。</p>
 <p>内容覆盖面试高频考点和日常开发中的真实并发问题，适合有 Java 基础、需要深挖并发底层实现的工程师。</p>
 <hr>
 <h2>一、JMM——Java Memory Model</h2>
 <h3>1.1 为什么需要内存模型</h3>
-<p>在没有 JMM 的时代，同一个 Java 程序在不同 CPU 架构（x86、ARM、POWER）上可能表现出截然不同的并发行为。原因是各 CPU 的缓存一致性协议不同，编译器也有权对指令重排。JMM 定义了 <strong>共享变量在多线程环境下的可见性、有序性和原子性</strong> 规则，让 Java 程序员编写 "Write Once, Run Anywhere" 的并发代码成为可能。</p>
+<p>在没有 JMM 的时代，同一个 Java 程序在不同 CPU 架构（x86、ARM、POWER）上可能表现出截然不同的并发行为。原因是各 CPU 的缓存一致性协议不同，编译器也有权对指令重排。JMM 定义了 <strong>共享变量在多线程环境下的可见性、有序性和原子性</strong> 规则，让 Java 程序员编写 &quot;Write Once, Run Anywhere&quot; 的并发代码成为可能。</p>
 <p>JMM 的核心是两个概念：</p>
 <ul>
 <li><strong>主内存（Main Memory）</strong>：所有线程共享的变量存储区域。</li>
@@ -33,7 +33,7 @@
   Thread-A write x = 1
 </code></pre></div><p>JMM 的关键抽象是 <strong>happens-before 偏序关系</strong>，它定义了操作之间的内存可见性。JMM 为程序员提供一个跨平台的并发语义约定；具体性能由 JVM 在不同硬件上生成对应的内存屏障（memory barrier）来保证。</p>
 <h3>1.2 happens-before 规则详解</h3>
-<p>happens-before 是 JMM 的灵魂。如果操作 A happens-before 操作 B，则 A 的结果对 B 可见，且 A 的执行顺序在 B 之前（虽然实际 CPU 可能重排，但对程序员来说"看起来"是顺序的）。每条规则都必须熟练掌握。</p>
+<p>happens-before 是 JMM 的灵魂。如果操作 A happens-before 操作 B，则 A 的结果对 B 可见，且 A 的执行顺序在 B 之前（虽然实际 CPU 可能重排，但对程序员来说&quot;看起来&quot;是顺序的）。每条规则都必须熟练掌握。</p>
 <p><strong>规则 1：程序次序规则（Program Order Rule）</strong></p>
 <p>同一线程内，按照控制流顺序，前面的操作 happens-before 后面的操作。</p>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-type">int</span> <span class="hljs-variable">x</span> <span class="hljs-operator">=</span> <span class="hljs-number">1</span>;   <span class="hljs-comment">// (A)</span>
@@ -84,7 +84,7 @@ t.interrupt();  <span class="hljs-comment">// (C)</span>
 </code></pre></div><p><strong>规则 7：对象终结规则（Finalizer Rule）</strong></p>
 <p>对象的构造函数执行结束 happens-before 该对象的 <code>finalize()</code> 方法开始（此规则在 JDK 9 中随 finalize 的废弃而不再重要，但概念仍在）。</p>
 <p><strong>规则 8：传递性（Transitivity）</strong></p>
-<p>如果 A happens-before B，且 B happens-before C，则 A happens-before C。传递性是实现跨线程可见性推导的关键——它是 volatile 能充当"可见性桥梁"的理论基础。</p>
+<p>如果 A happens-before B，且 B happens-before C，则 A happens-before C。传递性是实现跨线程可见性推导的关键——它是 volatile 能充当&quot;可见性桥梁&quot;的理论基础。</p>
 <p><strong>传递性的经典应用——volatile 充当可见性桥梁：</strong></p>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">class</span> <span class="hljs-title class_">SafePublish</span> {
     <span class="hljs-keyword">private</span> <span class="hljs-type">int</span> data;                      <span class="hljs-comment">// 普通变量</span>
@@ -265,9 +265,9 @@ GC 标记      | <span class="hljs-type">CMS</span> 使用:<span class="hljs-num
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 优化前：StringBuffer.append() 内部有 synchronized</span>
 String <span class="hljs-title function_">concat</span><span class="hljs-params">()</span> {
     <span class="hljs-type">var</span> <span class="hljs-variable">sb</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuffer</span>();  <span class="hljs-comment">// sb 不逃逸——局部变量</span>
-    sb.append(<span class="hljs-string">"Hello"</span>);
-    sb.append(<span class="hljs-string">" "</span>);
-    sb.append(<span class="hljs-string">"World"</span>);
+    sb.append(<span class="hljs-string">&quot;Hello&quot;</span>);
+    sb.append(<span class="hljs-string">&quot; &quot;</span>);
+    sb.append(<span class="hljs-string">&quot;World&quot;</span>);
     <span class="hljs-keyword">return</span> sb.toString();
 }
 <span class="hljs-comment">// JIT 优化后：所有 synchronized 被消除，等效于 StringBuilder（非线程安全）</span>
@@ -411,9 +411,9 @@ String <span class="hljs-title function_">concat</span><span class="hljs-params"
     <span class="hljs-keyword">static</span> {
         <span class="hljs-keyword">try</span> {
             <span class="hljs-type">var</span> <span class="hljs-variable">lookup</span> <span class="hljs-operator">=</span> MethodHandles.lookup();
-            PLAIN = lookup.findVarHandle(VarHandleDemo.class, <span class="hljs-string">"plainValue"</span>, <span class="hljs-type">int</span>.class);
-            RELEASE = lookup.findVarHandle(VarHandleDemo.class, <span class="hljs-string">"releaseValue"</span>, <span class="hljs-type">int</span>.class);
-            VOLATILE = lookup.findVarHandle(VarHandleDemo.class, <span class="hljs-string">"volatileValue"</span>, <span class="hljs-type">int</span>.class);
+            PLAIN = lookup.findVarHandle(VarHandleDemo.class, <span class="hljs-string">&quot;plainValue&quot;</span>, <span class="hljs-type">int</span>.class);
+            RELEASE = lookup.findVarHandle(VarHandleDemo.class, <span class="hljs-string">&quot;releaseValue&quot;</span>, <span class="hljs-type">int</span>.class);
+            VOLATILE = lookup.findVarHandle(VarHandleDemo.class, <span class="hljs-string">&quot;volatileValue&quot;</span>, <span class="hljs-type">int</span>.class);
         } <span class="hljs-keyword">catch</span> (ReflectiveOperationException e) {
             <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ExceptionInInitializerError</span>(e);
         }
@@ -534,7 +534,7 @@ String <span class="hljs-title function_">concat</span><span class="hljs-params"
         node.prev = pred;
         <span class="hljs-keyword">if</span> (compareAndSetTail(pred, node)) {  <span class="hljs-comment">// CAS 入队</span>
             pred.next = node;       <span class="hljs-comment">// 成功！但 pred.next 不是 CAS 的（允许失败）</span>
-            <span class="hljs-keyword">return</span> node;            <span class="hljs-comment">// 因为 pred 可能并发被取消，next 只是 "提示"</span>
+            <span class="hljs-keyword">return</span> node;            <span class="hljs-comment">// 因为 pred 可能并发被取消，next 只是 &quot;提示&quot;</span>
         }
     }
     enq(node);                      <span class="hljs-comment">// 慢速路径：循环 CAS 或初始化队列</span>
@@ -676,7 +676,7 @@ String <span class="hljs-title function_">concat</span><span class="hljs-params"
     }
     <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (current == getExclusiveOwnerThread()) { <span class="hljs-comment">// 重入检查</span>
         <span class="hljs-type">int</span> <span class="hljs-variable">nextc</span> <span class="hljs-operator">=</span> c + acquires;
-        <span class="hljs-keyword">if</span> (nextc &lt; <span class="hljs-number">0</span>) <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Error</span>(<span class="hljs-string">"Maximum lock count exceeded"</span>);
+        <span class="hljs-keyword">if</span> (nextc &lt; <span class="hljs-number">0</span>) <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Error</span>(<span class="hljs-string">&quot;Maximum lock count exceeded&quot;</span>);
         setState(nextc);
         <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
     }
@@ -696,7 +696,7 @@ String <span class="hljs-title function_">concat</span><span class="hljs-params"
     }
     <span class="hljs-keyword">else</span> <span class="hljs-keyword">if</span> (current == getExclusiveOwnerThread()) {
         <span class="hljs-type">int</span> <span class="hljs-variable">nextc</span> <span class="hljs-operator">=</span> c + acquires;
-        <span class="hljs-keyword">if</span> (nextc &lt; <span class="hljs-number">0</span>) <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Error</span>(<span class="hljs-string">"Maximum lock count exceeded"</span>);
+        <span class="hljs-keyword">if</span> (nextc &lt; <span class="hljs-number">0</span>) <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Error</span>(<span class="hljs-string">&quot;Maximum lock count exceeded&quot;</span>);
         setState(nextc);
         <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
     }
@@ -752,12 +752,12 @@ Head → <span class="hljs-keyword">Node</span><span class="hljs-title">(T1</spa
     <span class="hljs-keyword">void</span> <span class="hljs-title function_">put</span><span class="hljs-params">(T item)</span> <span class="hljs-keyword">throws</span> InterruptedException {
         lock.lock();
         <span class="hljs-keyword">try</span> {
-            <span class="hljs-keyword">while</span> (count == items.length)   <span class="hljs-comment">// 队列满，等待 "not full"</span>
+            <span class="hljs-keyword">while</span> (count == items.length)   <span class="hljs-comment">// 队列满，等待 &quot;not full&quot;</span>
                 notFull.await();
             items[putIndex] = item;
             <span class="hljs-keyword">if</span> (++putIndex == items.length) putIndex = <span class="hljs-number">0</span>;
             count++;
-            notEmpty.signal();              <span class="hljs-comment">// 通知等待 "not empty" 的消费者</span>
+            notEmpty.signal();              <span class="hljs-comment">// 通知等待 &quot;not empty&quot; 的消费者</span>
         } <span class="hljs-keyword">finally</span> {
             lock.unlock();
         }
@@ -766,12 +766,12 @@ Head → <span class="hljs-keyword">Node</span><span class="hljs-title">(T1</spa
     T <span class="hljs-title function_">take</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> InterruptedException {
         lock.lock();
         <span class="hljs-keyword">try</span> {
-            <span class="hljs-keyword">while</span> (count == <span class="hljs-number">0</span>)              <span class="hljs-comment">// 队列空，等待 "not empty"</span>
+            <span class="hljs-keyword">while</span> (count == <span class="hljs-number">0</span>)              <span class="hljs-comment">// 队列空，等待 &quot;not empty&quot;</span>
                 notEmpty.await();
             <span class="hljs-type">var</span> <span class="hljs-variable">item</span> <span class="hljs-operator">=</span> items[takeIndex];
             <span class="hljs-keyword">if</span> (++takeIndex == items.length) takeIndex = <span class="hljs-number">0</span>;
             count--;
-            notFull.signal();               <span class="hljs-comment">// 通知等待 "not full" 的生产者</span>
+            notFull.signal();               <span class="hljs-comment">// 通知等待 &quot;not full&quot; 的生产者</span>
             <span class="hljs-keyword">return</span> item;
         } <span class="hljs-keyword">finally</span> {
             lock.unlock();
@@ -864,7 +864,7 @@ Head → <span class="hljs-keyword">Node</span><span class="hljs-title">(T1</spa
 <span class="hljs-keyword">void</span> <span class="hljs-title function_">parallelDataPipeline</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> Exception {
     <span class="hljs-type">var</span> <span class="hljs-variable">readyLatch</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">CountDownLatch</span>(<span class="hljs-number">3</span>);   <span class="hljs-comment">// 等待所有数据源就绪</span>
     <span class="hljs-type">var</span> <span class="hljs-variable">semaphore</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Semaphore</span>(<span class="hljs-number">5</span>);          <span class="hljs-comment">// 限流：最多 5 并发处理</span>
-    <span class="hljs-type">var</span> <span class="hljs-variable">barrier</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">CyclicBarrier</span>(<span class="hljs-number">3</span>, () -&gt; System.out.println(<span class="hljs-string">"阶段完成"</span>));
+    <span class="hljs-type">var</span> <span class="hljs-variable">barrier</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">CyclicBarrier</span>(<span class="hljs-number">3</span>, () -&gt; System.out.println(<span class="hljs-string">&quot;阶段完成&quot;</span>));
 
     <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">executor</span> <span class="hljs-operator">=</span> Executors.newVirtualThreadPerTaskExecutor()) {
         <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; <span class="hljs-number">3</span>; i++) {
@@ -876,7 +876,7 @@ Head → <span class="hljs-keyword">Node</span><span class="hljs-title">(T1</spa
         }
 
         readyLatch.await();  <span class="hljs-comment">// 等待所有数据源就绪</span>
-        System.out.println(<span class="hljs-string">"All data sources ready"</span>);
+        System.out.println(<span class="hljs-string">&quot;All data sources ready&quot;</span>);
 
         <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">batch</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; batch &lt; <span class="hljs-number">10</span>; batch++) {
             <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; <span class="hljs-number">3</span>; i++) {
@@ -1073,7 +1073,7 @@ Head → <span class="hljs-keyword">Node</span><span class="hljs-title">(T1</spa
   └─ <span class="hljs-number">3.</span> 所有线程迁移完成后，最后一个线程：
          table = nextTab
          sizeCtl = <span class="hljs-number">1.5</span> * n  (下一次扩容阈值)
-</code></pre></div><p><strong>为什么能做无锁的并发迁移</strong>：每个线程锁住独立的 bin 进行迁移，不同 bin 之间无竞争。<code>ForwardingNode</code> 充当"已迁移"的哨兵——后续 <code>put</code> 看到它会自动 <code>helpTransfer</code>。</p>
+</code></pre></div><p><strong>为什么能做无锁的并发迁移</strong>：每个线程锁住独立的 bin 进行迁移，不同 bin 之间无竞争。<code>ForwardingNode</code> 充当&quot;已迁移&quot;的哨兵——后续 <code>put</code> 看到它会自动 <code>helpTransfer</code>。</p>
 <hr>
 <h2>六、原子类——CAS 原理与进化路线</h2>
 <h3>6.1 CAS 的 CPU 指令级实现</h3>
@@ -1096,7 +1096,7 @@ Head → <span class="hljs-keyword">Node</span><span class="hljs-title">(T1</spa
     <span class="hljs-keyword">static</span> {
         <span class="hljs-keyword">try</span> {
             VALUE = MethodHandles.lookup()
-                .findVarHandle(AtomicInteger.class, <span class="hljs-string">"value"</span>, <span class="hljs-type">int</span>.class);
+                .findVarHandle(AtomicInteger.class, <span class="hljs-string">&quot;value&quot;</span>, <span class="hljs-type">int</span>.class);
         } <span class="hljs-keyword">catch</span> (ReflectiveOperationException e) {
             <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ExceptionInInitializerError</span>(e);
         }
@@ -1128,22 +1128,22 @@ Head → <span class="hljs-keyword">Node</span><span class="hljs-title">(T1</spa
   结果栈 = <span class="hljs-keyword">B</span> → C，但 <span class="hljs-keyword">B</span> 已经被 <span class="hljs-keyword">pop</span> 过了！
 </code></pre></div><p><strong>解决方案——AtomicStampedReference（版本号）</strong>：</p>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 使用 stamp（版本号）解决 ABA</span>
-<span class="hljs-type">var</span> <span class="hljs-variable">ref</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">AtomicStampedReference</span>&lt;String&gt;(<span class="hljs-string">"A"</span>, <span class="hljs-number">0</span>);
+<span class="hljs-type">var</span> <span class="hljs-variable">ref</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">AtomicStampedReference</span>&lt;String&gt;(<span class="hljs-string">&quot;A&quot;</span>, <span class="hljs-number">0</span>);
 
 <span class="hljs-comment">// Thread-1: 读取当前值和版本</span>
 <span class="hljs-type">int</span>[] stampHolder = <span class="hljs-keyword">new</span> <span class="hljs-title class_">int</span>[<span class="hljs-number">1</span>];
-<span class="hljs-type">String</span> <span class="hljs-variable">current</span> <span class="hljs-operator">=</span> ref.get(stampHolder);     <span class="hljs-comment">// current="A", stamp=0</span>
+<span class="hljs-type">String</span> <span class="hljs-variable">current</span> <span class="hljs-operator">=</span> ref.get(stampHolder);     <span class="hljs-comment">// current=&quot;A&quot;, stamp=0</span>
 <span class="hljs-type">int</span> <span class="hljs-variable">stamp</span> <span class="hljs-operator">=</span> stampHolder[<span class="hljs-number">0</span>];
 
 <span class="hljs-comment">// ... 中间可能被 Thread-2 修改 ...</span>
 
 <span class="hljs-comment">// Thread-1: CAS 带着版本号</span>
-<span class="hljs-type">boolean</span> <span class="hljs-variable">ok</span> <span class="hljs-operator">=</span> ref.compareAndSet(current, <span class="hljs-string">"C"</span>, stamp, stamp + <span class="hljs-number">1</span>);
+<span class="hljs-type">boolean</span> <span class="hljs-variable">ok</span> <span class="hljs-operator">=</span> ref.compareAndSet(current, <span class="hljs-string">&quot;C&quot;</span>, stamp, stamp + <span class="hljs-number">1</span>);
 <span class="hljs-comment">// 如果 Thread-2 做过 A→B→A (stamp: 0→1→2)，则 stamp 0 不匹配 → CAS 失败</span>
 
-<span class="hljs-comment">// 另一个方案：AtomicMarkableReference（布尔标记，适合"是否用过"场景）</span>
-<span class="hljs-type">var</span> <span class="hljs-variable">markableRef</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">AtomicMarkableReference</span>&lt;&gt;(<span class="hljs-string">"data"</span>, <span class="hljs-literal">false</span>);
-markableRef.compareAndSet(<span class="hljs-string">"data"</span>, <span class="hljs-string">"updated"</span>, <span class="hljs-literal">false</span>, <span class="hljs-literal">true</span>);
+<span class="hljs-comment">// 另一个方案：AtomicMarkableReference（布尔标记，适合&quot;是否用过&quot;场景）</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">markableRef</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">AtomicMarkableReference</span>&lt;&gt;(<span class="hljs-string">&quot;data&quot;</span>, <span class="hljs-literal">false</span>);
+markableRef.compareAndSet(<span class="hljs-string">&quot;data&quot;</span>, <span class="hljs-string">&quot;updated&quot;</span>, <span class="hljs-literal">false</span>, <span class="hljs-literal">true</span>);
 </code></pre></div><h3>6.3 LongAdder ——热点分离与伪共享消除</h3>
 <p><code>LongAdder</code> 解决了 <code>AtomicLong</code> 在高并发下的 <strong>缓存行竞争（cache line contention）</strong> 问题。</p>
 <p><strong>AtomicLong 为什么在高并发下慢</strong>：</p>
@@ -1217,7 +1217,7 @@ Cell 结构（@Contended 填充避免伪共享）：
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// ====== 1. thenApply: T → U（同步/异步转换）======</span>
 CompletableFuture
     .supplyAsync(() -&gt; fetchUserId(name))        <span class="hljs-comment">// CF&lt;String&gt;</span>
-    .thenApply(id -&gt; <span class="hljs-string">"user:"</span> + id);              <span class="hljs-comment">// CF&lt;String&gt; 同步转换</span>
+    .thenApply(id -&gt; <span class="hljs-string">&quot;user:&quot;</span> + id);              <span class="hljs-comment">// CF&lt;String&gt; 同步转换</span>
 
 <span class="hljs-comment">// ====== 2. thenCompose: T → CF&lt;U&gt;（展平，类似 flatMap）======</span>
 CompletableFuture
@@ -1226,38 +1226,38 @@ CompletableFuture
 <span class="hljs-comment">// 如果使用 thenApply 会得到 CF&lt;CF&lt;Profile&gt;&gt;，而 thenCompose 展平为 CF&lt;Profile&gt;</span>
 
 <span class="hljs-comment">// ====== 3. thenCombine: (CF&lt;T&gt;, CF&lt;U&gt;) → CF&lt;V&gt;（合并两个独立结果）======</span>
-<span class="hljs-type">var</span> <span class="hljs-variable">priceFuture</span> <span class="hljs-operator">=</span> CompletableFuture.supplyAsync(() -&gt; fetchPrice(<span class="hljs-string">"AAPL"</span>));
-<span class="hljs-type">var</span> <span class="hljs-variable">newsFuture</span> <span class="hljs-operator">=</span> CompletableFuture.supplyAsync(() -&gt; fetchNews(<span class="hljs-string">"AAPL"</span>));
+<span class="hljs-type">var</span> <span class="hljs-variable">priceFuture</span> <span class="hljs-operator">=</span> CompletableFuture.supplyAsync(() -&gt; fetchPrice(<span class="hljs-string">&quot;AAPL&quot;</span>));
+<span class="hljs-type">var</span> <span class="hljs-variable">newsFuture</span> <span class="hljs-operator">=</span> CompletableFuture.supplyAsync(() -&gt; fetchNews(<span class="hljs-string">&quot;AAPL&quot;</span>));
 priceFuture.thenCombine(newsFuture, (price, news) -&gt;
     <span class="hljs-keyword">new</span> <span class="hljs-title class_">StockSummary</span>(price, news));               <span class="hljs-comment">// CF&lt;StockSummary&gt;</span>
 
 <span class="hljs-comment">// ====== 4. thenAccept: 消费结果，不返回======</span>
-userFuture.thenAccept(user -&gt; System.out.println(<span class="hljs-string">"Got user: "</span> + user));
+userFuture.thenAccept(user -&gt; System.out.println(<span class="hljs-string">&quot;Got user: &quot;</span> + user));
 
 <span class="hljs-comment">// ====== 5. thenRun: 不关心结果，只执行后续动作======</span>
-allDone.thenRun(() -&gt; System.out.println(<span class="hljs-string">"All tasks completed"</span>));
+allDone.thenRun(() -&gt; System.out.println(<span class="hljs-string">&quot;All tasks completed&quot;</span>));
 </code></pre></div><h3>7.3 异常处理——exceptionally vs handle vs whenComplete</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java">CompletableFuture
     .supplyAsync(() -&gt; {
         <span class="hljs-keyword">if</span> (Math.random() &gt; <span class="hljs-number">0.5</span>)
-            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RuntimeException</span>(<span class="hljs-string">"Fetch failed"</span>);
-        <span class="hljs-keyword">return</span> <span class="hljs-string">"data"</span>;
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RuntimeException</span>(<span class="hljs-string">&quot;Fetch failed&quot;</span>);
+        <span class="hljs-keyword">return</span> <span class="hljs-string">&quot;data&quot;</span>;
     })
     <span class="hljs-comment">// 方案 A: exceptionally —— 仅处理异常，正常结果原封不动传递</span>
     .exceptionally(ex -&gt; {
-        log.error(<span class="hljs-string">"Failed: {}"</span>, ex.getMessage());
-        <span class="hljs-keyword">return</span> <span class="hljs-string">"FALLBACK"</span>;                       <span class="hljs-comment">// 异常恢复为默认值</span>
+        log.error(<span class="hljs-string">&quot;Failed: {}&quot;</span>, ex.getMessage());
+        <span class="hljs-keyword">return</span> <span class="hljs-string">&quot;FALLBACK&quot;</span>;                       <span class="hljs-comment">// 异常恢复为默认值</span>
     })
     <span class="hljs-comment">// 方案 B: handle —— 正常和异常都处理，两者都能转换结果</span>
     .handle((result, ex) -&gt; {
         <span class="hljs-keyword">if</span> (ex != <span class="hljs-literal">null</span>)
-            <span class="hljs-keyword">return</span> <span class="hljs-string">"Error: "</span> + ex.getMessage();  <span class="hljs-comment">// 异常分支</span>
-        <span class="hljs-keyword">return</span> <span class="hljs-string">"Success: "</span> + result;             <span class="hljs-comment">// 正常分支</span>
+            <span class="hljs-keyword">return</span> <span class="hljs-string">&quot;Error: &quot;</span> + ex.getMessage();  <span class="hljs-comment">// 异常分支</span>
+        <span class="hljs-keyword">return</span> <span class="hljs-string">&quot;Success: &quot;</span> + result;             <span class="hljs-comment">// 正常分支</span>
     })
     <span class="hljs-comment">// 方案 C: whenComplete —— 观察结果+异常，但不改变结果</span>
     .whenComplete((result, ex) -&gt; {              <span class="hljs-comment">// 类似 finally</span>
-        <span class="hljs-keyword">if</span> (ex != <span class="hljs-literal">null</span>) log.error(<span class="hljs-string">"Failed"</span>, ex);
-        <span class="hljs-keyword">else</span> log.info(<span class="hljs-string">"Completed: {}"</span>, result);
+        <span class="hljs-keyword">if</span> (ex != <span class="hljs-literal">null</span>) log.error(<span class="hljs-string">&quot;Failed&quot;</span>, ex);
+        <span class="hljs-keyword">else</span> log.info(<span class="hljs-string">&quot;Completed: {}&quot;</span>, result);
     });
 </code></pre></div><p><strong>异常传播规则</strong>：</p>
 <ul>
@@ -1285,9 +1285,9 @@ allDone.thenRun(() -&gt; System.out.println(<span class="hljs-string">"All tasks
 <span class="hljs-comment">// anyOf: 只要有一个完成就继续（竞速）</span>
 <span class="hljs-type">var</span> <span class="hljs-variable">fastest</span> <span class="hljs-operator">=</span> CompletableFuture
     .anyOf(
-        CompletableFuture.supplyAsync(() -&gt; callService(<span class="hljs-string">"cdm-hy-1"</span>)),
-        CompletableFuture.supplyAsync(() -&gt; callService(<span class="hljs-string">"cdm-hy-2"</span>)),
-        CompletableFuture.supplyAsync(() -&gt; callService(<span class="hljs-string">"cdm-hy-3"</span>))
+        CompletableFuture.supplyAsync(() -&gt; callService(<span class="hljs-string">&quot;cdm-hy-1&quot;</span>)),
+        CompletableFuture.supplyAsync(() -&gt; callService(<span class="hljs-string">&quot;cdm-hy-2&quot;</span>)),
+        CompletableFuture.supplyAsync(() -&gt; callService(<span class="hljs-string">&quot;cdm-hy-3&quot;</span>))
     )
     .thenApply(result -&gt; (String) result)
     .join();
@@ -1295,11 +1295,11 @@ allDone.thenRun(() -&gt; System.out.println(<span class="hljs-string">"All tasks
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> CompletableFuture
     .supplyAsync(() -&gt; slowServiceCall())
     .orTimeout(<span class="hljs-number">3</span>, TimeUnit.SECONDS)              <span class="hljs-comment">// 超时抛 TimeoutException</span>
-    <span class="hljs-comment">// .completeOnTimeout("FALLBACK", 3, TimeUnit.SECONDS)  // 超时返回默认值</span>
+    <span class="hljs-comment">// .completeOnTimeout(&quot;FALLBACK&quot;, 3, TimeUnit.SECONDS)  // 超时返回默认值</span>
     .exceptionally(ex -&gt; {
         <span class="hljs-keyword">if</span> (ex <span class="hljs-keyword">instanceof</span> TimeoutException)
-            <span class="hljs-keyword">return</span> <span class="hljs-string">"TIMEOUT_FALLBACK"</span>;
-        <span class="hljs-keyword">return</span> <span class="hljs-string">"ERROR_FALLBACK"</span>;
+            <span class="hljs-keyword">return</span> <span class="hljs-string">&quot;TIMEOUT_FALLBACK&quot;</span>;
+        <span class="hljs-keyword">return</span> <span class="hljs-string">&quot;ERROR_FALLBACK&quot;</span>;
     })
     .join();
 </code></pre></div><h3>7.6 自定义线程池与 Virtual Threads</h3>
@@ -1678,7 +1678,7 @@ list.parallelStream().map(<span class="hljs-built_in">this</span>::cpuHeavyOpera
 <li><code>join()</code> 抛出非受检异常（<code>CompletionException</code>），适合声明式链式调用，本质是对 <code>get()</code> 的包装。</li>
 </ul>
 <p><strong>Q5: 为什么 JDK 15 默认关闭偏向锁？</strong></p>
-<p>偏向锁为"一个对象只有一个线程反复获取锁"的场景优化。现代应用大量使用线程池，对象生命周期短，锁竞争模式不规则，偏向锁的撤销代价（需在 SafePoint 暂停原持有线程检查）经常超过收益。</p>
+<p>偏向锁为&quot;一个对象只有一个线程反复获取锁&quot;的场景优化。现代应用大量使用线程池，对象生命周期短，锁竞争模式不规则，偏向锁的撤销代价（需在 SafePoint 暂停原持有线程检查）经常超过收益。</p>
 <p><strong>Q6: LongAdder 的 sum() 为什么不保证强一致性？</strong></p>
 <p><code>LongAdder.sum()</code> 读取 <code>base</code> 和所有 <code>Cell</code> 时没有加锁，读取过程中其他线程可能正在写。这意味着 <code>sum()</code> 返回的可能是近似值——这正是它适合统计场景的原因（允许微小的不精确换取超高性能）。</p>
 <hr>
@@ -1690,5 +1690,5 @@ list.parallelStream().map(<span class="hljs-built_in">this</span>::cpuHeavyOpera
 <li><a href="#/05-分布式架构/弹性设计/05-幂等设计与分布式锁" class="cross-ref">05-幂等设计与分布式锁</a> — 分布式锁，synchronized/ReentrantLock 的分布式版本</li>
 <li><a href="#/02-Java平台/性能诊断/02-Java性能诊断全指南" class="cross-ref">02-Java性能诊断全指南</a> — 性能诊断，如何使用 JFR 观察锁膨胀和线程调度</li>
 </ul>
-</body></html></div>
+</div>
 </article>

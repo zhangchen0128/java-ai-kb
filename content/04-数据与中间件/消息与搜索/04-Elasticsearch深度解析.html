@@ -6,7 +6,7 @@
     <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#elasticsearch</span><span class="badge badge-tag">#inverted-index</span><span class="badge badge-tag">#bm25</span><span class="badge badge-tag">#aggregation</span><span class="badge badge-tag">#knn</span></div>
     <div class="entry-sources"><small>📖 来源：<a href="https://www.elastic.co/guide/en/elasticsearch/reference/current/index.html" target="_blank" rel="noopener" class="source-link" title="Elasticsearch 9.x 官方参考文档">Elasticsearch 9.x 官方参考文档</a><a href="https://github.com/elastic/elasticsearch" target="_blank" rel="noopener" class="source-link" title="Elasticsearch 源码（倒排索引、相关性评分、集群管理）">Elasticsearch 源码（倒排索引、相关性评分、集群管理）</a><a href="https://www.oreilly.com/library/view/elasticsearch-the-definitive/" target="_blank" rel="noopener" class="source-link" title="《Elasticsearch: The Definitive Guide》— Elastic 官方权威指南">《Elasticsearch: The Definitive Guide》— Elastic 官方权威指南</a></small></div>
   </div>
-  <div class="entry-body"><html><head></head><body><h1>Elasticsearch 深度解析</h1>
+  <div class="entry-body"><h1>Elasticsearch 深度解析</h1>
 <h2>概述</h2>
 <p>Elasticsearch 是基于 Apache Lucene 的分布式搜索和分析引擎，在 AI 应用中承担全文检索、向量检索、混合搜索和语义重排等核心角色。RAG 系统典型的检索流水线中，ES 作为多阶段检索的执行引擎：BM25 关键词检索 → kNN 向量检索 → 语义重排。</p>
 <p>本文深入倒排索引原理、分析器链、查询 DSL、相关性评分机制、向量检索能力、集群管理和性能优化。</p>
@@ -65,15 +65,15 @@
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>倒排索引 <span class="hljs-operator">=</span> Term Dictionary <span class="hljs-operator">+</span> Posting List
 
 Term Dictionary (FST<span class="hljs-symbol">/Finite</span> State Transducer, 内存映射):
-  <span class="hljs-string">"elasticsearch"</span> → <span class="hljs-params">term_id:</span> <span class="hljs-number">3</span>
-  <span class="hljs-string">"kafka"</span>         → <span class="hljs-params">term_id:</span> <span class="hljs-number">7</span>
-  <span class="hljs-string">"redis"</span>         → <span class="hljs-params">term_id:</span> <span class="hljs-number">12</span>
+  <span class="hljs-string">&quot;elasticsearch&quot;</span> → <span class="hljs-params">term_id:</span> <span class="hljs-number">3</span>
+  <span class="hljs-string">&quot;kafka&quot;</span>         → <span class="hljs-params">term_id:</span> <span class="hljs-number">7</span>
+  <span class="hljs-string">&quot;redis&quot;</span>         → <span class="hljs-params">term_id:</span> <span class="hljs-number">12</span>
 
 Posting List (倒排表 <span class="hljs-operator">+</span> 跳表<span class="hljs-symbol">/Skip</span> List):
   <span class="hljs-params">term_id:</span> <span class="hljs-number">3</span> → [<span class="hljs-params">doc_id:</span> [<span class="hljs-number">1</span>(tf<span class="hljs-operator">=</span><span class="hljs-number">2</span>), <span class="hljs-number">5</span>(tf<span class="hljs-operator">=</span><span class="hljs-number">1</span>), <span class="hljs-number">9</span>(tf<span class="hljs-operator">=</span><span class="hljs-number">3</span>)]]
                └─ <span class="hljs-params">skip:</span> doc_id <span class="hljs-number">1</span> → doc_id <span class="hljs-number">5</span> → doc_id <span class="hljs-number">9</span>
 </code></pre></div><p><strong>跳表（Skip List）加速交集运算：</strong></p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Query: <span class="hljs-string">"elasticsearch AND kafka"</span>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Query: <span class="hljs-string">&quot;elasticsearch AND kafka&quot;</span>
 <span class="hljs-function"><span class="hljs-title">doc_ids</span><span class="hljs-params">(elasticsearch)</span></span>: <span class="hljs-selector-attr">[1, 5, 9, 15, 20, ...]</span>
 <span class="hljs-function"><span class="hljs-title">doc_ids</span><span class="hljs-params">(kafka)</span></span>:         <span class="hljs-selector-attr">[3, 5, 8, 20, ...]</span>
 
@@ -120,12 +120,12 @@ Posting List (倒排表 <span class="hljs-operator">+</span> 跳表<span class="
 <hr>
 <h2>二、分析器（Analyzer）</h2>
 <h3>2.1 分析器链</h3>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>"Hello, Elasticsearch <span class="hljs-number">2026</span>!"
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>&quot;Hello, Elasticsearch <span class="hljs-number">2026</span>!&quot;
         │
         ▼
 ┌────────────────────┐
 │ Character <span class="hljs-attribute">Filter</span>   │ ← <span class="hljs-selector-tag">HTML</span> 剥离、特殊字符映射
-│ → "Hello, Elasticsearch <span class="hljs-number">2026</span>!"
+│ → &quot;Hello, Elasticsearch <span class="hljs-number">2026</span>!&quot;
 └────────┬───────────┘
          ▼
 ┌────────────────────┐
@@ -140,30 +140,30 @@ Posting List (倒排表 <span class="hljs-operator">+</span> 跳表<span class="
 </code></pre></div><h3>2.2 自定义分析器</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-json">PUT /my_index
 <span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">"settings"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">"analysis"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">"char_filter"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-        <span class="hljs-attr">"my_char_filter"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-          <span class="hljs-attr">"type"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"mapping"</span><span class="hljs-punctuation">,</span>
-          <span class="hljs-attr">"mappings"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">"&amp;=&gt; and"</span><span class="hljs-punctuation">,</span> <span class="hljs-string">"=&gt;=&gt; greater_than"</span><span class="hljs-punctuation">]</span>
+  <span class="hljs-attr">&quot;settings&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;analysis&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;char_filter&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">&quot;my_char_filter&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+          <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;mapping&quot;</span><span class="hljs-punctuation">,</span>
+          <span class="hljs-attr">&quot;mappings&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;&amp;=&gt; and&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;=&gt;=&gt; greater_than&quot;</span><span class="hljs-punctuation">]</span>
         <span class="hljs-punctuation">}</span>
       <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"filter"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-        <span class="hljs-attr">"my_stop"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-          <span class="hljs-attr">"type"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"stop"</span><span class="hljs-punctuation">,</span>
-          <span class="hljs-attr">"stopwords"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">"_english_"</span><span class="hljs-punctuation">,</span> <span class="hljs-string">"the"</span><span class="hljs-punctuation">,</span> <span class="hljs-string">"a"</span><span class="hljs-punctuation">]</span>
+      <span class="hljs-attr">&quot;filter&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">&quot;my_stop&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+          <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;stop&quot;</span><span class="hljs-punctuation">,</span>
+          <span class="hljs-attr">&quot;stopwords&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;_english_&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;the&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;a&quot;</span><span class="hljs-punctuation">]</span>
         <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-        <span class="hljs-attr">"my_synonym"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-          <span class="hljs-attr">"type"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"synonym"</span><span class="hljs-punctuation">,</span>
-          <span class="hljs-attr">"synonyms"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">"AI, artificial intelligence, 人工智能"</span><span class="hljs-punctuation">]</span>
+        <span class="hljs-attr">&quot;my_synonym&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+          <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;synonym&quot;</span><span class="hljs-punctuation">,</span>
+          <span class="hljs-attr">&quot;synonyms&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;AI, artificial intelligence, 人工智能&quot;</span><span class="hljs-punctuation">]</span>
         <span class="hljs-punctuation">}</span>
       <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"analyzer"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-        <span class="hljs-attr">"my_analyzer"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-          <span class="hljs-attr">"type"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"custom"</span><span class="hljs-punctuation">,</span>
-          <span class="hljs-attr">"char_filter"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">"html_strip"</span><span class="hljs-punctuation">,</span> <span class="hljs-string">"my_char_filter"</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
-          <span class="hljs-attr">"tokenizer"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"standard"</span><span class="hljs-punctuation">,</span>
-          <span class="hljs-attr">"filter"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">"lowercase"</span><span class="hljs-punctuation">,</span> <span class="hljs-string">"my_stop"</span><span class="hljs-punctuation">,</span> <span class="hljs-string">"my_synonym"</span><span class="hljs-punctuation">]</span>
+      <span class="hljs-attr">&quot;analyzer&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">&quot;my_analyzer&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+          <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;custom&quot;</span><span class="hljs-punctuation">,</span>
+          <span class="hljs-attr">&quot;char_filter&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;html_strip&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;my_char_filter&quot;</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+          <span class="hljs-attr">&quot;tokenizer&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;standard&quot;</span><span class="hljs-punctuation">,</span>
+          <span class="hljs-attr">&quot;filter&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;lowercase&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;my_stop&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;my_synonym&quot;</span><span class="hljs-punctuation">]</span>
         <span class="hljs-punctuation">}</span>
       <span class="hljs-punctuation">}</span>
     <span class="hljs-punctuation">}</span>
@@ -183,40 +183,40 @@ Posting List (倒排表 <span class="hljs-operator">+</span> 跳表<span class="
 <tbody><tr>
 <td><code>ik_smart</code></td>
 <td>最粗</td>
-<td>"中华人民共和国" → ["中华人民共和国"]</td>
+<td>&quot;中华人民共和国&quot; → [&quot;中华人民共和国&quot;]</td>
 <td>短语匹配</td>
 </tr>
 <tr>
 <td><code>ik_max_word</code></td>
 <td>最细</td>
-<td>"中华人民共和国" → ["中华人民共和国", "中华人民", "中华", "华人", "人民共和国", "人民", "共和国", "共和", "国"]</td>
+<td>&quot;中华人民共和国&quot; → [&quot;中华人民共和国&quot;, &quot;中华人民&quot;, &quot;中华&quot;, &quot;华人&quot;, &quot;人民共和国&quot;, &quot;人民&quot;, &quot;共和国&quot;, &quot;共和&quot;, &quot;国&quot;]</td>
 <td>索引阶段（提高召回率）</td>
 </tr>
 </tbody></table>
 <div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-json">PUT /docs
 <span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">"settings"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">"analysis"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">"analyzer"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-        <span class="hljs-attr">"ik_index_analyzer"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-          <span class="hljs-attr">"type"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"custom"</span><span class="hljs-punctuation">,</span>
-          <span class="hljs-attr">"tokenizer"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"ik_max_word"</span><span class="hljs-punctuation">,</span>
-          <span class="hljs-attr">"filter"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">"lowercase"</span><span class="hljs-punctuation">]</span>
+  <span class="hljs-attr">&quot;settings&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;analysis&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;analyzer&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">&quot;ik_index_analyzer&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+          <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;custom&quot;</span><span class="hljs-punctuation">,</span>
+          <span class="hljs-attr">&quot;tokenizer&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;ik_max_word&quot;</span><span class="hljs-punctuation">,</span>
+          <span class="hljs-attr">&quot;filter&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;lowercase&quot;</span><span class="hljs-punctuation">]</span>
         <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-        <span class="hljs-attr">"ik_search_analyzer"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-          <span class="hljs-attr">"type"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"custom"</span><span class="hljs-punctuation">,</span>
-          <span class="hljs-attr">"tokenizer"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"ik_smart"</span><span class="hljs-punctuation">,</span>
-          <span class="hljs-attr">"filter"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">"lowercase"</span><span class="hljs-punctuation">]</span>
+        <span class="hljs-attr">&quot;ik_search_analyzer&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+          <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;custom&quot;</span><span class="hljs-punctuation">,</span>
+          <span class="hljs-attr">&quot;tokenizer&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;ik_smart&quot;</span><span class="hljs-punctuation">,</span>
+          <span class="hljs-attr">&quot;filter&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;lowercase&quot;</span><span class="hljs-punctuation">]</span>
         <span class="hljs-punctuation">}</span>
       <span class="hljs-punctuation">}</span>
     <span class="hljs-punctuation">}</span>
   <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">"mappings"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">"properties"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">"title"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-        <span class="hljs-attr">"type"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"text"</span><span class="hljs-punctuation">,</span>
-        <span class="hljs-attr">"analyzer"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"ik_index_analyzer"</span><span class="hljs-punctuation">,</span>
-        <span class="hljs-attr">"search_analyzer"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"ik_search_analyzer"</span>
+  <span class="hljs-attr">&quot;mappings&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;properties&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;title&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;text&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;analyzer&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;ik_index_analyzer&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;search_analyzer&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;ik_search_analyzer&quot;</span>
       <span class="hljs-punctuation">}</span>
     <span class="hljs-punctuation">}</span>
   <span class="hljs-punctuation">}</span>
@@ -226,23 +226,23 @@ Posting List (倒排表 <span class="hljs-operator">+</span> 跳表<span class="
 <h2>三、查询 DSL</h2>
 <h3>3.1 Bool Query</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-json"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">"query"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">"bool"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">"must"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
-        <span class="hljs-punctuation">{</span> <span class="hljs-attr">"match"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"title"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"spring ai"</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span>
+  <span class="hljs-attr">&quot;query&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;bool&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;must&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
+        <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;match&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;title&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;spring ai&quot;</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span>
       <span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"filter"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
-        <span class="hljs-punctuation">{</span> <span class="hljs-attr">"term"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"status"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"published"</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-        <span class="hljs-punctuation">{</span> <span class="hljs-attr">"range"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"created_at"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"gte"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"2026-01-01"</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span>
+      <span class="hljs-attr">&quot;filter&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
+        <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;term&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;status&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;published&quot;</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;range&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;created_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;gte&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-01-01&quot;</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span>
       <span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"should"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
-        <span class="hljs-punctuation">{</span> <span class="hljs-attr">"term"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"tags"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"ai"</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-        <span class="hljs-punctuation">{</span> <span class="hljs-attr">"term"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"tags"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"machine-learning"</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span>
+      <span class="hljs-attr">&quot;should&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
+        <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;term&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;tags&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;ai&quot;</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;term&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;tags&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;machine-learning&quot;</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span>
       <span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"must_not"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
-        <span class="hljs-punctuation">{</span> <span class="hljs-attr">"term"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"status"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"deleted"</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span>
+      <span class="hljs-attr">&quot;must_not&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
+        <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;term&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;status&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;deleted&quot;</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span>
       <span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"minimum_should_match"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
+      <span class="hljs-attr">&quot;minimum_should_match&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span>
     <span class="hljs-punctuation">}</span>
   <span class="hljs-punctuation">}</span>
 <span class="hljs-punctuation">}</span>
@@ -282,74 +282,74 @@ Posting List (倒排表 <span class="hljs-operator">+</span> 跳表<span class="
 </tbody></table>
 <h3>3.2 核心查询类型</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-json"><span class="hljs-comment">// Term 查询（不分词，精确匹配keyword类型）</span>
-<span class="hljs-punctuation">{</span> <span class="hljs-attr">"term"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"user_id"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"12345"</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;term&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;user_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;12345&quot;</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span>
 
 <span class="hljs-comment">// Terms 查询（多值精确匹配）</span>
-<span class="hljs-punctuation">{</span> <span class="hljs-attr">"terms"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"tags"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">"java"</span><span class="hljs-punctuation">,</span> <span class="hljs-string">"spring"</span><span class="hljs-punctuation">,</span> <span class="hljs-string">"ai"</span><span class="hljs-punctuation">]</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;terms&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;tags&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;java&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;spring&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;ai&quot;</span><span class="hljs-punctuation">]</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span>
 
 <span class="hljs-comment">// Match 查询（分词后匹配）</span>
-<span class="hljs-punctuation">{</span> <span class="hljs-attr">"match"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"content"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"分布式事务实现"</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;match&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;分布式事务实现&quot;</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span>
 
 <span class="hljs-comment">// Match Phrase 查询（分词+顺序匹配）</span>
-<span class="hljs-punctuation">{</span> <span class="hljs-attr">"match_phrase"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"content"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"分布式事务"</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">"slop"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">2</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;match_phrase&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;分布式事务&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;slop&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">2</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span>
 
 <span class="hljs-comment">// Multi-Match 查询（多字段搜索）</span>
 <span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">"multi_match"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">"query"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"spring ai pgvector"</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">"fields"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">"title^3"</span><span class="hljs-punctuation">,</span> <span class="hljs-string">"content"</span><span class="hljs-punctuation">,</span> <span class="hljs-string">"tags^2"</span><span class="hljs-punctuation">]</span>
+  <span class="hljs-attr">&quot;multi_match&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;query&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;spring ai pgvector&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;fields&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;title^3&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;content&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;tags^2&quot;</span><span class="hljs-punctuation">]</span>
   <span class="hljs-punctuation">}</span>
 <span class="hljs-punctuation">}</span>
 
 <span class="hljs-comment">// Range 查询</span>
 <span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">"range"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">"price"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"gte"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">100</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">"lte"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">500</span> <span class="hljs-punctuation">}</span>
+  <span class="hljs-attr">&quot;range&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;price&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;gte&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">100</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;lte&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">500</span> <span class="hljs-punctuation">}</span>
   <span class="hljs-punctuation">}</span>
 <span class="hljs-punctuation">}</span>
 
 <span class="hljs-comment">// Wildcard 查询（性能差，避免前导通配符）</span>
-<span class="hljs-punctuation">{</span> <span class="hljs-attr">"wildcard"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"email"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"*@example.com"</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span>
+<span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;wildcard&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;email&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;*@example.com&quot;</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span>
 </code></pre></div><h3>3.3 聚合（Aggregation）</h3>
 <p><strong>Bucket 聚合（分桶）：</strong></p>
 <div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-json"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">"size"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">0</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">"aggs"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">"status_distribution"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">"terms"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"field"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"status"</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">"size"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">10</span> <span class="hljs-punctuation">}</span>
+  <span class="hljs-attr">&quot;size&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">0</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;aggs&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;status_distribution&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;terms&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;field&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;status&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;size&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">10</span> <span class="hljs-punctuation">}</span>
     <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">"date_histogram"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">"date_histogram"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-        <span class="hljs-attr">"field"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"created_at"</span><span class="hljs-punctuation">,</span>
-        <span class="hljs-attr">"calendar_interval"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"1d"</span>
+    <span class="hljs-attr">&quot;date_histogram&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;date_histogram&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">&quot;field&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;created_at&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;calendar_interval&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;1d&quot;</span>
       <span class="hljs-punctuation">}</span>
     <span class="hljs-punctuation">}</span>
   <span class="hljs-punctuation">}</span>
 <span class="hljs-punctuation">}</span>
 </code></pre></div><p><strong>Metrics 聚合（计算）：</strong></p>
 <div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-json"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">"size"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">0</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">"aggs"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">"avg_response_time"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"avg"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"field"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"response_time_ms"</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">"max_response_time"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"max"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"field"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"response_time_ms"</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">"p95_response_time"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">"percentiles"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"field"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"response_time_ms"</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">"percents"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-number">50</span><span class="hljs-punctuation">,</span> <span class="hljs-number">95</span><span class="hljs-punctuation">,</span> <span class="hljs-number">99</span><span class="hljs-punctuation">]</span> <span class="hljs-punctuation">}</span>
+  <span class="hljs-attr">&quot;size&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">0</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;aggs&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;avg_response_time&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;avg&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;field&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;response_time_ms&quot;</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;max_response_time&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;max&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;field&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;response_time_ms&quot;</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;p95_response_time&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;percentiles&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;field&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;response_time_ms&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;percents&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-number">50</span><span class="hljs-punctuation">,</span> <span class="hljs-number">95</span><span class="hljs-punctuation">,</span> <span class="hljs-number">99</span><span class="hljs-punctuation">]</span> <span class="hljs-punctuation">}</span>
     <span class="hljs-punctuation">}</span>
   <span class="hljs-punctuation">}</span>
 <span class="hljs-punctuation">}</span>
 </code></pre></div><p><strong>Pipeline 聚合（对聚合结果的二次计算）：</strong></p>
 <div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-json"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">"size"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">0</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">"aggs"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">"daily_orders"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">"date_histogram"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"field"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"created_at"</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">"calendar_interval"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"day"</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"aggs"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-        <span class="hljs-attr">"order_count"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"value_count"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"field"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"id"</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span>
+  <span class="hljs-attr">&quot;size&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">0</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;aggs&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;daily_orders&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;date_histogram&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;field&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;created_at&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;calendar_interval&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;day&quot;</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;aggs&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">&quot;order_count&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;value_count&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;field&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;id&quot;</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span>
       <span class="hljs-punctuation">}</span>
     <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">"avg_daily_orders"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">"avg_bucket"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-        <span class="hljs-attr">"buckets_path"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"daily_orders&gt;order_count"</span>
+    <span class="hljs-attr">&quot;avg_daily_orders&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;avg_bucket&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">&quot;buckets_path&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;daily_orders&gt;order_count&quot;</span>
       <span class="hljs-punctuation">}</span>
     <span class="hljs-punctuation">}</span>
   <span class="hljs-punctuation">}</span>
@@ -371,48 +371,48 @@ where:
 </code></pre></div><h3>4.2 Explain API</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-json">GET /my_index/_explain/doc_id
 <span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">"query"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"match"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"title"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"elasticsearch"</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span>
+  <span class="hljs-attr">&quot;query&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;match&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;title&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;elasticsearch&quot;</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span>
 <span class="hljs-punctuation">}</span>
 
 <span class="hljs-comment">// 返回：</span>
 <span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">"value"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">3.14</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">"description"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"weight(title:elasticsearch in 42) [PerFieldSimilarity], result of:"</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">"details"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
+  <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">3.14</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;description&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;weight(title:elasticsearch in 42) [PerFieldSimilarity], result of:&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;details&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
     <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">"value"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">3.14</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"description"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"score(freq=3.0), computed as boost * idf * tf from:"</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"details"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
-        <span class="hljs-punctuation">{</span> <span class="hljs-attr">"value"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">2.2</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">"description"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"idf, computed as ..."</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-        <span class="hljs-punctuation">{</span> <span class="hljs-attr">"value"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1.43</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">"description"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"tf, computed as ..."</span> <span class="hljs-punctuation">}</span>
+      <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">3.14</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;description&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;score(freq=3.0), computed as boost * idf * tf from:&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;details&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
+        <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">2.2</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;description&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;idf, computed as ...&quot;</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;value&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1.43</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;description&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;tf, computed as ...&quot;</span> <span class="hljs-punctuation">}</span>
       <span class="hljs-punctuation">]</span>
     <span class="hljs-punctuation">}</span>
   <span class="hljs-punctuation">]</span>
 <span class="hljs-punctuation">}</span>
 </code></pre></div><h3>4.3 Function Score</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-json"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">"query"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">"function_score"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">"query"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"match"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"title"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"elasticsearch"</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"boost_mode"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"multiply"</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"functions"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
+  <span class="hljs-attr">&quot;query&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;function_score&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;query&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;match&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;title&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;elasticsearch&quot;</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;boost_mode&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;multiply&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;functions&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
         <span class="hljs-punctuation">{</span>
-          <span class="hljs-attr">"filter"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"term"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"is_verified"</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-          <span class="hljs-attr">"weight"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">2</span>
+          <span class="hljs-attr">&quot;filter&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;term&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;is_verified&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+          <span class="hljs-attr">&quot;weight&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">2</span>
         <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
         <span class="hljs-punctuation">{</span>
-          <span class="hljs-attr">"field_value_factor"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-            <span class="hljs-attr">"field"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"popularity"</span><span class="hljs-punctuation">,</span>
-            <span class="hljs-attr">"modifier"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"log1p"</span><span class="hljs-punctuation">,</span>
-            <span class="hljs-attr">"factor"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">0.1</span>
+          <span class="hljs-attr">&quot;field_value_factor&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+            <span class="hljs-attr">&quot;field&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;popularity&quot;</span><span class="hljs-punctuation">,</span>
+            <span class="hljs-attr">&quot;modifier&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;log1p&quot;</span><span class="hljs-punctuation">,</span>
+            <span class="hljs-attr">&quot;factor&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">0.1</span>
           <span class="hljs-punctuation">}</span>
         <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
         <span class="hljs-punctuation">{</span>
-          <span class="hljs-attr">"gauss"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-            <span class="hljs-attr">"publish_date"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-              <span class="hljs-attr">"origin"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"2026-07-17"</span><span class="hljs-punctuation">,</span>
-              <span class="hljs-attr">"scale"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"30d"</span><span class="hljs-punctuation">,</span>
-              <span class="hljs-attr">"decay"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">0.5</span>
+          <span class="hljs-attr">&quot;gauss&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+            <span class="hljs-attr">&quot;publish_date&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+              <span class="hljs-attr">&quot;origin&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2026-07-17&quot;</span><span class="hljs-punctuation">,</span>
+              <span class="hljs-attr">&quot;scale&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;30d&quot;</span><span class="hljs-punctuation">,</span>
+              <span class="hljs-attr">&quot;decay&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">0.5</span>
             <span class="hljs-punctuation">}</span>
           <span class="hljs-punctuation">}</span>
         <span class="hljs-punctuation">}</span>
@@ -425,21 +425,21 @@ where:
 <h3>5.1 dense_vector 类型</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-json">PUT /docs
 <span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">"mappings"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">"properties"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">"title"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"type"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"text"</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"content"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"type"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"text"</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"title_vector"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-        <span class="hljs-attr">"type"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"dense_vector"</span><span class="hljs-punctuation">,</span>
-        <span class="hljs-attr">"dims"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1536</span><span class="hljs-punctuation">,</span>
-        <span class="hljs-attr">"index"</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span>
-        <span class="hljs-attr">"similarity"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"cosine"</span>
+  <span class="hljs-attr">&quot;mappings&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;properties&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;title&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;text&quot;</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;text&quot;</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;title_vector&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;dense_vector&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;dims&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1536</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;index&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;similarity&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;cosine&quot;</span>
       <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"content_vector"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-        <span class="hljs-attr">"type"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"dense_vector"</span><span class="hljs-punctuation">,</span>
-        <span class="hljs-attr">"dims"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1536</span><span class="hljs-punctuation">,</span>
-        <span class="hljs-attr">"index"</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span>
-        <span class="hljs-attr">"similarity"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"dot_product"</span>
+      <span class="hljs-attr">&quot;content_vector&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;dense_vector&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;dims&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1536</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;index&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;similarity&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;dot_product&quot;</span>
       <span class="hljs-punctuation">}</span>
     <span class="hljs-punctuation">}</span>
   <span class="hljs-punctuation">}</span>
@@ -447,40 +447,40 @@ where:
 </code></pre></div><h3>5.2 kNN 查询</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-json">GET /docs/_search
 <span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">"knn"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">"field"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"content_vector"</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">"query_vector"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-number">0.12</span><span class="hljs-punctuation">,</span> <span class="hljs-number">-0.34</span><span class="hljs-punctuation">,</span> <span class="hljs-number">0.56</span><span class="hljs-punctuation">,</span> ...<span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">"k"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">10</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">"num_candidates"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">100</span>
+  <span class="hljs-attr">&quot;knn&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;field&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;content_vector&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;query_vector&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-number">0.12</span><span class="hljs-punctuation">,</span> <span class="hljs-number">-0.34</span><span class="hljs-punctuation">,</span> <span class="hljs-number">0.56</span><span class="hljs-punctuation">,</span> ...<span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;k&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">10</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;num_candidates&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">100</span>
   <span class="hljs-punctuation">}</span>
 <span class="hljs-punctuation">}</span>
 </code></pre></div><h3>5.3 混合检索（RRF 融合）</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-json">GET /docs/_search
 <span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">"sub_searches"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
+  <span class="hljs-attr">&quot;sub_searches&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
     <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">"query"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-        <span class="hljs-attr">"match"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-          <span class="hljs-attr">"content"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-            <span class="hljs-attr">"query"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"分布式事务实现方案"</span><span class="hljs-punctuation">,</span>
-            <span class="hljs-attr">"boost"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1.0</span>
+      <span class="hljs-attr">&quot;query&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">&quot;match&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+          <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+            <span class="hljs-attr">&quot;query&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;分布式事务实现方案&quot;</span><span class="hljs-punctuation">,</span>
+            <span class="hljs-attr">&quot;boost&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1.0</span>
           <span class="hljs-punctuation">}</span>
         <span class="hljs-punctuation">}</span>
       <span class="hljs-punctuation">}</span>
     <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
     <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">"knn"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-        <span class="hljs-attr">"field"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"content_vector"</span><span class="hljs-punctuation">,</span>
-        <span class="hljs-attr">"query_vector"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-number">0.12</span><span class="hljs-punctuation">,</span> <span class="hljs-number">-0.34</span><span class="hljs-punctuation">,</span> ...<span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
-        <span class="hljs-attr">"k"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">10</span><span class="hljs-punctuation">,</span>
-        <span class="hljs-attr">"num_candidates"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">50</span>
+      <span class="hljs-attr">&quot;knn&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">&quot;field&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;content_vector&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;query_vector&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-number">0.12</span><span class="hljs-punctuation">,</span> <span class="hljs-number">-0.34</span><span class="hljs-punctuation">,</span> ...<span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;k&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">10</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;num_candidates&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">50</span>
       <span class="hljs-punctuation">}</span>
     <span class="hljs-punctuation">}</span>
   <span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">"rank"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">"rrf"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">"window_size"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">50</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"rank_constant"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">60</span>
+  <span class="hljs-attr">&quot;rank&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;rrf&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;window_size&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">50</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;rank_constant&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">60</span>
     <span class="hljs-punctuation">}</span>
   <span class="hljs-punctuation">}</span>
 <span class="hljs-punctuation">}</span>
@@ -488,26 +488,26 @@ where:
 <div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-json"><span class="hljs-comment">// 使用 text_similarity_reranker（ES 8.15+ 支持 Cross-Encoder 重排）</span>
 GET /docs/_search
 <span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">"retriever"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">"standard"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">"query"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-        <span class="hljs-attr">"match"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"content"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"如何实现分布式事务"</span> <span class="hljs-punctuation">}</span>
+  <span class="hljs-attr">&quot;retriever&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;standard&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;query&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">&quot;match&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;如何实现分布式事务&quot;</span> <span class="hljs-punctuation">}</span>
       <span class="hljs-punctuation">}</span>
     <span class="hljs-punctuation">}</span>
   <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">"rank"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">"rrf"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-comment">/* ... */</span> <span class="hljs-punctuation">}</span>
+  <span class="hljs-attr">&quot;rank&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;rrf&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-comment">/* ... */</span> <span class="hljs-punctuation">}</span>
   <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">"retrievers"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">"rrf_reranker"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">"text_similarity_reranker"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-        <span class="hljs-attr">"retriever"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-          <span class="hljs-attr">"standard"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-comment">/* ... */</span> <span class="hljs-punctuation">}</span>
+  <span class="hljs-attr">&quot;retrievers&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;rrf_reranker&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;text_similarity_reranker&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">&quot;retriever&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+          <span class="hljs-attr">&quot;standard&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-comment">/* ... */</span> <span class="hljs-punctuation">}</span>
         <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-        <span class="hljs-attr">"field"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"content"</span><span class="hljs-punctuation">,</span>
-        <span class="hljs-attr">"inference_id"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"my-cross-encoder"</span><span class="hljs-punctuation">,</span>
-        <span class="hljs-attr">"inference_text"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"如何实现分布式事务"</span><span class="hljs-punctuation">,</span>
-        <span class="hljs-attr">"min_score"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">0.5</span>
+        <span class="hljs-attr">&quot;field&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;content&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;inference_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;my-cross-encoder&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;inference_text&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;如何实现分布式事务&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;min_score&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">0.5</span>
       <span class="hljs-punctuation">}</span>
     <span class="hljs-punctuation">}</span>
   <span class="hljs-punctuation">}</span>
@@ -517,35 +517,35 @@ GET /docs/_search
 <h3>6.1 Mapping 设计</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-json">PUT /optimized_docs
 <span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">"settings"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">"number_of_shards"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">3</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">"number_of_replicas"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">"refresh_interval"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"30s"</span><span class="hljs-punctuation">,</span>      <span class="hljs-comment">// 降低刷新频率提高写入性能</span>
-    <span class="hljs-attr">"index"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">"sort.field"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"created_at"</span><span class="hljs-punctuation">,</span>   <span class="hljs-comment">// 索引排序（提升范围查询）</span>
-      <span class="hljs-attr">"sort.order"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"desc"</span>
+  <span class="hljs-attr">&quot;settings&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;number_of_shards&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">3</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;number_of_replicas&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;refresh_interval&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;30s&quot;</span><span class="hljs-punctuation">,</span>      <span class="hljs-comment">// 降低刷新频率提高写入性能</span>
+    <span class="hljs-attr">&quot;index&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;sort.field&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;created_at&quot;</span><span class="hljs-punctuation">,</span>   <span class="hljs-comment">// 索引排序（提升范围查询）</span>
+      <span class="hljs-attr">&quot;sort.order&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;desc&quot;</span>
     <span class="hljs-punctuation">}</span>
   <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">"mappings"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">"dynamic"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"strict"</span><span class="hljs-punctuation">,</span>            <span class="hljs-comment">// 禁止动态映射，防止字段爆炸</span>
-    <span class="hljs-attr">"_source"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"enabled"</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">"properties"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">"id"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"type"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"keyword"</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"title"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-        <span class="hljs-attr">"type"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"text"</span><span class="hljs-punctuation">,</span>
-        <span class="hljs-attr">"analyzer"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"ik_max_word"</span><span class="hljs-punctuation">,</span>
-        <span class="hljs-attr">"search_analyzer"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"ik_smart"</span><span class="hljs-punctuation">,</span>
-        <span class="hljs-attr">"fields"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-          <span class="hljs-attr">"keyword"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"type"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"keyword"</span> <span class="hljs-punctuation">}</span>  <span class="hljs-comment">// 多字段映射</span>
+  <span class="hljs-attr">&quot;mappings&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;dynamic&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;strict&quot;</span><span class="hljs-punctuation">,</span>            <span class="hljs-comment">// 禁止动态映射，防止字段爆炸</span>
+    <span class="hljs-attr">&quot;_source&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;enabled&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;properties&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;keyword&quot;</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;title&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;text&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;analyzer&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;ik_max_word&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;search_analyzer&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;ik_smart&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;fields&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+          <span class="hljs-attr">&quot;keyword&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;keyword&quot;</span> <span class="hljs-punctuation">}</span>  <span class="hljs-comment">// 多字段映射</span>
         <span class="hljs-punctuation">}</span>
       <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"status"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"type"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"keyword"</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">"doc_values"</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"created_at"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"type"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"date"</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">"doc_values"</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"content_vector"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-        <span class="hljs-attr">"type"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"dense_vector"</span><span class="hljs-punctuation">,</span>
-        <span class="hljs-attr">"dims"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1536</span><span class="hljs-punctuation">,</span>
-        <span class="hljs-attr">"index"</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span>
-        <span class="hljs-attr">"similarity"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"cosine"</span>
+      <span class="hljs-attr">&quot;status&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;keyword&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;doc_values&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;created_at&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;date&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;doc_values&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;content_vector&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;dense_vector&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;dims&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1536</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;index&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;similarity&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;cosine&quot;</span>
       <span class="hljs-punctuation">}</span>
     <span class="hljs-punctuation">}</span>
   <span class="hljs-punctuation">}</span>
@@ -577,10 +577,10 @@ GET /docs/_search
 </tbody></table>
 <div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-json">PUT /my_index/_settings
 <span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">"refresh_interval"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"30s"</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">"translog"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">"durability"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"async"</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">"sync_interval"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"5s"</span>
+  <span class="hljs-attr">&quot;refresh_interval&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;30s&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;translog&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;durability&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;async&quot;</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-attr">&quot;sync_interval&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;5s&quot;</span>
   <span class="hljs-punctuation">}</span>
 <span class="hljs-punctuation">}</span>
 </code></pre></div><h3>6.3 Force Merge</h3>
@@ -593,9 +593,9 @@ POST /rebuild_target/_forcemerge?max_num_segments=<span class="hljs-number">5</s
 <h3>6.4 段合并策略</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-json">PUT /my_index/_settings
 <span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">"index.merge.policy.max_merged_segment"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"5gb"</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">"index.merge.policy.segments_per_tier"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">10</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">"index.merge.policy.max_merge_at_once"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">10</span>
+  <span class="hljs-attr">&quot;index.merge.policy.max_merged_segment&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;5gb&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;index.merge.policy.segments_per_tier&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">10</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;index.merge.policy.max_merge_at_once&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">10</span>
 <span class="hljs-punctuation">}</span>
 </code></pre></div><hr>
 <h2>七、集群管理</h2>
@@ -649,21 +649,21 @@ node.roles: [<span class="hljs-literal">master</span>]                <span clas
  └─────────────────────────────────┘
 </code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-json">PUT _ilm/policy/logs_policy
 <span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">"phases"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">"hot"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">"actions"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"rollover"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"max_size"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"50GB"</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">"max_age"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"1d"</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span>
+  <span class="hljs-attr">&quot;phases&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;hot&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;actions&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;rollover&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;max_size&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;50GB&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;max_age&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;1d&quot;</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span>
     <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">"warm"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">"min_age"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"7d"</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"actions"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-        <span class="hljs-attr">"forcemerge"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"max_num_segments"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-        <span class="hljs-attr">"shrink"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"number_of_shards"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-        <span class="hljs-attr">"allocate"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"require"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"data"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"warm"</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span>
+    <span class="hljs-attr">&quot;warm&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;min_age&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;7d&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;actions&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">&quot;forcemerge&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;max_num_segments&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;shrink&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;number_of_shards&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;allocate&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;require&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;data&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;warm&quot;</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span>
       <span class="hljs-punctuation">}</span>
     <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-attr">"delete"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">"min_age"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"90d"</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"actions"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"delete"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span><span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span>
+    <span class="hljs-attr">&quot;delete&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;min_age&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;90d&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;actions&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;delete&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span><span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span>
     <span class="hljs-punctuation">}</span>
   <span class="hljs-punctuation">}</span>
 <span class="hljs-punctuation">}</span>
@@ -700,11 +700,11 @@ GET /_nodes/stats/indices/request_cache
 <p>默认所有 keyword、date、numeric、geo_point 类型字段开启 <code>doc_values</code>（列式存储），用于聚合和排序。</p>
 <div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-json"><span class="hljs-comment">// 始终不需要聚合排序的字段关闭 doc_values 节省磁盘</span>
 <span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">"mappings"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">"properties"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">"raw_content"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-        <span class="hljs-attr">"type"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"keyword"</span><span class="hljs-punctuation">,</span>
-        <span class="hljs-attr">"doc_values"</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">false</span></span>
+  <span class="hljs-attr">&quot;mappings&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;properties&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;raw_content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;keyword&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;doc_values&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">false</span></span>
       <span class="hljs-punctuation">}</span>
     <span class="hljs-punctuation">}</span>
   <span class="hljs-punctuation">}</span>
@@ -713,8 +713,8 @@ GET /_nodes/stats/indices/request_cache
 <div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-json"><span class="hljs-comment">// Profile API（分析各组件耗时）</span>
 GET /docs/_search
 <span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">"profile"</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">"query"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"match"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"content"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"elasticsearch"</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span>
+  <span class="hljs-attr">&quot;profile&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">true</span></span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;query&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;match&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;elasticsearch&quot;</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span>
 <span class="hljs-punctuation">}</span>
 
 <span class="hljs-comment">// Hot Threads（查看繁忙线程）</span>
@@ -731,10 +731,10 @@ GET /_nodes/stats/indices<span class="hljs-punctuation">,</span>os<span class="h
     <span class="hljs-meta">@Bean</span>
     <span class="hljs-keyword">public</span> ElasticsearchClient <span class="hljs-title function_">elasticsearchClient</span><span class="hljs-params">()</span> {
         <span class="hljs-type">var</span> <span class="hljs-variable">restClient</span> <span class="hljs-operator">=</span> RestClient.builder(
-                HttpHost.create(<span class="hljs-string">"http://localhost:9200"</span>))
+                HttpHost.create(<span class="hljs-string">&quot;http://localhost:9200&quot;</span>))
                 .setHttpClientConfigCallback(httpClientBuilder -&gt;
                         httpClientBuilder.setDefaultCredentialsProvider(() -&gt;
-                                <span class="hljs-keyword">new</span> <span class="hljs-title class_">UsernamePasswordCredentials</span>(<span class="hljs-string">"user"</span>, <span class="hljs-string">"pass"</span>)))
+                                <span class="hljs-keyword">new</span> <span class="hljs-title class_">UsernamePasswordCredentials</span>(<span class="hljs-string">&quot;user&quot;</span>, <span class="hljs-string">&quot;pass&quot;</span>)))
                 .build();
         <span class="hljs-type">var</span> <span class="hljs-variable">transport</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RestClientTransport</span>(restClient, <span class="hljs-keyword">new</span> <span class="hljs-title class_">JacksonJsonpMapper</span>());
         <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ElasticsearchClient</span>(transport);
@@ -748,12 +748,12 @@ GET /_nodes/stats/indices<span class="hljs-punctuation">,</span>os<span class="h
 
     <span class="hljs-keyword">public</span> List&lt;Doc&gt; <span class="hljs-title function_">hybridSearch</span><span class="hljs-params">(String query, <span class="hljs-type">float</span>[] queryVector, <span class="hljs-type">int</span> topK)</span> <span class="hljs-keyword">throws</span> IOException {
         <span class="hljs-type">var</span> <span class="hljs-variable">response</span> <span class="hljs-operator">=</span> client.search(s -&gt; s
-                .index(<span class="hljs-string">"docs"</span>)
+                .index(<span class="hljs-string">&quot;docs&quot;</span>)
                 .subSearches(ss -&gt; ss
                         .subSearch(sub -&gt; sub
-                                .query(q -&gt; q.match(m -&gt; m.field(<span class="hljs-string">"content"</span>).query(query))))
+                                .query(q -&gt; q.match(m -&gt; m.field(<span class="hljs-string">&quot;content&quot;</span>).query(query))))
                         .subSearch(sub -&gt; sub
-                                .knn(k -&gt; k.field(<span class="hljs-string">"content_vector"</span>)
+                                .knn(k -&gt; k.field(<span class="hljs-string">&quot;content_vector&quot;</span>)
                                         .queryVector(queryVector).k(topK).numCandidates(<span class="hljs-number">100</span>))))
                 .rank(r -&gt; r.rrf(rrf -&gt; rrf.windowSize(<span class="hljs-number">50</span>).rankConstant(<span class="hljs-number">60</span>))),
                 Doc.class);
@@ -764,11 +764,11 @@ GET /_nodes/stats/indices<span class="hljs-punctuation">,</span>os<span class="h
     }
 }
 </code></pre></div><h3>9.2 Spring Data Elasticsearch</h3>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Document(indexName = "docs")</span>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Document(indexName = &quot;docs&quot;)</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">Doc</span><span class="hljs-params">(
         @Id String id,
-        @Field(type = FieldType.Text, analyzer = "ik_max_word")</span> String title,
-        <span class="hljs-meta">@Field(type = FieldType.Text, analyzer = "ik_max_word")</span> String content,
+        @Field(type = FieldType.Text, analyzer = &quot;ik_max_word&quot;)</span> String title,
+        <span class="hljs-meta">@Field(type = FieldType.Text, analyzer = &quot;ik_max_word&quot;)</span> String content,
         <span class="hljs-meta">@Field(type = FieldType.Dense_Vector, dims = 1536)</span> <span class="hljs-type">float</span>[] contentVector,
         <span class="hljs-meta">@Field(type = FieldType.Date)</span> Instant createdAt
 ) {}
@@ -777,7 +777,7 @@ GET /_nodes/stats/indices<span class="hljs-punctuation">,</span>os<span class="h
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">interface</span> <span class="hljs-title class_">DocRepository</span> <span class="hljs-keyword">extends</span> <span class="hljs-title class_">ElasticsearchRepository</span>&lt;Doc, String&gt; {
 
     <span class="hljs-comment">// 全文搜索</span>
-    <span class="hljs-meta">@Query("{\"match\": {\"content\": \"?0\"}}")</span>
+    <span class="hljs-meta">@Query(&quot;{\&quot;match\&quot;: {\&quot;content\&quot;: \&quot;?0\&quot;}}&quot;)</span>
     List&lt;Doc&gt; <span class="hljs-title function_">searchByContent</span><span class="hljs-params">(String query)</span>;
 
     <span class="hljs-comment">// 混合搜索（全文 + 向量）需要在 Service 层组合实现</span>
@@ -786,7 +786,7 @@ GET /_nodes/stats/indices<span class="hljs-punctuation">,</span>os<span class="h
 <h2>十、AI 场景：RAG 检索流水线</h2>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>RAG 三阶段检索流水线：
 
-Query: <span class="hljs-string">"Spring AI pgvector混合检索的实现"</span>
+Query: <span class="hljs-string">&quot;Spring AI pgvector混合检索的实现&quot;</span>
           │
           ▼
 ┌──────────────────────────┐
@@ -819,7 +819,7 @@ A: 单分片 10-50GB 为宜。太小浪费资源，太大恢复慢。公式：<c
 <p><strong>Q: 什么时候用索引排序（index sorting）？</strong>
 A: 主要为 range 聚合加速（如时序数据按时间排序）。</p>
 <p><strong>Q: ES 和 pgvector 怎么分工？</strong>
-A: pgvector 适合"与业务数据紧耦合的向量检索"；ES 适合"大规模多维度检索（全文+向量+聚合+过滤）"。</p>
+A: pgvector 适合&quot;与业务数据紧耦合的向量检索&quot;；ES 适合&quot;大规模多维度检索（全文+向量+聚合+过滤）&quot;。</p>
 <hr>
 <h2>相关条目</h2>
 <ul>
@@ -827,5 +827,5 @@ A: pgvector 适合"与业务数据紧耦合的向量检索"；ES 适合"大规�
 <li><a href="#/04-数据与中间件/消息与搜索/04-Kafka深度解析" class="cross-ref">04-Kafka深度解析</a> — CDC → Kafka → ES 索引更新管道</li>
 <li><a href="#/11-检索与RAG/检索技术/11-向量检索与混合检索" class="cross-ref">11-向量检索与混合检索</a> — 混合检索 RRF 融合原理</li>
 </ul>
-</body></html></div>
+</div>
 </article>

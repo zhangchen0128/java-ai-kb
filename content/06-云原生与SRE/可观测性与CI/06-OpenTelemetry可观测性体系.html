@@ -6,7 +6,7 @@
     <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#opentelemetry</span><span class="badge badge-tag">#observability</span><span class="badge badge-tag">#metrics</span><span class="badge badge-tag">#tracing</span><span class="badge badge-tag">#logging</span></div>
     <div class="entry-sources"><small>📖 来源：<a href="https://opentelemetry.io/docs/languages/java/" target="_blank" rel="noopener" class="source-link" title="OpenTelemetry Java 官方文档">OpenTelemetry Java 官方文档</a><a href="https://opentelemetry.io/docs/specs/semconv/gen-ai/" target="_blank" rel="noopener" class="source-link" title="OpenTelemetry GenAI 语义约定">OpenTelemetry GenAI 语义约定</a><a href="https://grafana.com/docs/grafana/latest/" target="_blank" rel="noopener" class="source-link" title="Grafana 官方文档">Grafana 官方文档</a><a href="https://prometheus.io/docs/introduction/overview/" target="_blank" rel="noopener" class="source-link" title="Prometheus 官方文档">Prometheus 官方文档</a></small></div>
   </div>
-  <div class="entry-body"><html><head></head><body><h1>OpenTelemetry 可观测性体系</h1>
+  <div class="entry-body"><h1>OpenTelemetry 可观测性体系</h1>
 <h2>概述</h2>
 <p>可观测性（Observability）是生产系统运维的基础能力。OpenTelemetry（OTel）作为 CNCF 孵化项目，已成为分布式追踪、指标和日志的统一标准。在 AI 应用中，GenAI 语义约定（SemConv）为 LLM 调用、RAG 检索、Tool Calling 提供了标准化的观测维度。</p>
 <p>本文深入 OTel 架构、Java 集成方案、GenAI 语义约定的完整应用、Prometheus + Grafana 实现，以及 AI 应用专属的 Dashboard 和告警设计。</p>
@@ -23,28 +23,28 @@
 </thead>
 <tbody><tr>
 <td>Metrics</td>
-<td>"系统发生了什么？"</td>
+<td>&quot;系统发生了什么？&quot;</td>
 <td>Prometheus</td>
 <td>Counter/Gauge/Histogram/Summary</td>
 </tr>
 <tr>
 <td>Tracing</td>
-<td>"一次请求如何流转？"</td>
+<td>&quot;一次请求如何流转？&quot;</td>
 <td>Tempo/Jaeger</td>
 <td>Span/Trace</td>
 </tr>
 <tr>
 <td>Logging</td>
-<td>"具体发生了什么？"</td>
+<td>&quot;具体发生了什么？&quot;</td>
 <td>Loki/ELK</td>
 <td>结构化日志</td>
 </tr>
 </tbody></table>
 <p><strong>三者关系：</strong> Metrics 发现问题，Tracing 定位问题范围，Logging 提供问题细节。</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>请求示例：
-<span class="hljs-symbol">  Metrics:</span> <span class="hljs-string">"延迟 P99 从 200ms 飙升到 2s"</span>（发现问题）
-<span class="hljs-symbol">  Tracing:</span> <span class="hljs-string">"RAG 检索耗时 1.5s，ES 查询占 1.2s"</span>（定位范围）
-<span class="hljs-symbol">  Logging:</span> <span class="hljs-string">"ES 查询日志显示 shard failure"</span>（定位原因）
+<span class="hljs-symbol">  Metrics:</span> <span class="hljs-string">&quot;延迟 P99 从 200ms 飙升到 2s&quot;</span>（发现问题）
+<span class="hljs-symbol">  Tracing:</span> <span class="hljs-string">&quot;RAG 检索耗时 1.5s，ES 查询占 1.2s&quot;</span>（定位范围）
+<span class="hljs-symbol">  Logging:</span> <span class="hljs-string">&quot;ES 查询日志显示 shard failure&quot;</span>（定位原因）
 </code></pre></div><hr>
 <h2>二、OpenTelemetry 架构</h2>
 <h3>2.1 核心组件</h3>
@@ -86,13 +86,13 @@ W3C TraceContext 格式：
   例: <span class="hljs-number">00</span>-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01
 </code></pre></div><h3>2.3 Span 结构</h3>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-params">Trace:</span>
-├── Span <span class="hljs-params">A:</span> <span class="hljs-string">"POST /api/chat"</span>              [<span class="hljs-params">duration:</span> <span class="hljs-number">3.2</span>s]
-│   ├── Span <span class="hljs-params">B:</span> <span class="hljs-string">"llm request gpt-4"</span>       [<span class="hljs-params">duration:</span> <span class="hljs-number">3.0</span>s]
-│   │   └── Span <span class="hljs-params">C:</span> <span class="hljs-string">"openai.chat.completions"</span>  [<span class="hljs-params">duration:</span> <span class="hljs-number">2.9</span>s]
-│   ├── Span <span class="hljs-params">D:</span> <span class="hljs-string">"rag retrieve"</span>            [<span class="hljs-params">duration:</span> <span class="hljs-number">0.15</span>s]
-│   │   ├── Span <span class="hljs-params">E:</span> <span class="hljs-string">"embed query"</span>         [<span class="hljs-params">duration:</span> <span class="hljs-number">0.05</span>s]
-│   │   └── Span <span class="hljs-params">F:</span> <span class="hljs-string">"pgvector search"</span>     [<span class="hljs-params">duration:</span> <span class="hljs-number">0.10</span>s]
-│   └── Span <span class="hljs-params">G:</span> <span class="hljs-string">"prompt assemble"</span>         [<span class="hljs-params">duration:</span> <span class="hljs-number">0.02</span>s]
+├── Span <span class="hljs-params">A:</span> <span class="hljs-string">&quot;POST /api/chat&quot;</span>              [<span class="hljs-params">duration:</span> <span class="hljs-number">3.2</span>s]
+│   ├── Span <span class="hljs-params">B:</span> <span class="hljs-string">&quot;llm request gpt-4&quot;</span>       [<span class="hljs-params">duration:</span> <span class="hljs-number">3.0</span>s]
+│   │   └── Span <span class="hljs-params">C:</span> <span class="hljs-string">&quot;openai.chat.completions&quot;</span>  [<span class="hljs-params">duration:</span> <span class="hljs-number">2.9</span>s]
+│   ├── Span <span class="hljs-params">D:</span> <span class="hljs-string">&quot;rag retrieve&quot;</span>            [<span class="hljs-params">duration:</span> <span class="hljs-number">0.15</span>s]
+│   │   ├── Span <span class="hljs-params">E:</span> <span class="hljs-string">&quot;embed query&quot;</span>         [<span class="hljs-params">duration:</span> <span class="hljs-number">0.05</span>s]
+│   │   └── Span <span class="hljs-params">F:</span> <span class="hljs-string">&quot;pgvector search&quot;</span>     [<span class="hljs-params">duration:</span> <span class="hljs-number">0.10</span>s]
+│   └── Span <span class="hljs-params">G:</span> <span class="hljs-string">&quot;prompt assemble&quot;</span>         [<span class="hljs-params">duration:</span> <span class="hljs-number">0.02</span>s]
 </code></pre></div><hr>
 <h2>三、Java 集成</h2>
 <h3>3.1 OpenTelemetry Java Agent（零代码接入）</h3>
@@ -123,17 +123,17 @@ java -javaagent:opentelemetry-javaagent.jar \
     <span class="hljs-keyword">public</span> OpenTelemetry <span class="hljs-title function_">openTelemetry</span><span class="hljs-params">()</span> {
         <span class="hljs-type">var</span> <span class="hljs-variable">resource</span> <span class="hljs-operator">=</span> Resource.getDefault()
                 .merge(Resource.builder()
-                        .put(ResourceAttributes.SERVICE_NAME, <span class="hljs-string">"ai-rag-service"</span>)
-                        .put(ResourceAttributes.SERVICE_VERSION, <span class="hljs-string">"1.0.0"</span>)
+                        .put(ResourceAttributes.SERVICE_NAME, <span class="hljs-string">&quot;ai-rag-service&quot;</span>)
+                        .put(ResourceAttributes.SERVICE_VERSION, <span class="hljs-string">&quot;1.0.0&quot;</span>)
                         .put(ResourceAttributes.DEPLOYMENT_ENVIRONMENT,
-                                System.getenv().getOrDefault(<span class="hljs-string">"ENV"</span>, <span class="hljs-string">"dev"</span>))
+                                System.getenv().getOrDefault(<span class="hljs-string">&quot;ENV&quot;</span>, <span class="hljs-string">&quot;dev&quot;</span>))
                         .build());
 
         <span class="hljs-type">var</span> <span class="hljs-variable">sdkTracerProvider</span> <span class="hljs-operator">=</span> SdkTracerProvider.builder()
                 .setResource(resource)
                 .addSpanProcessor(BatchSpanProcessor
                         .builder(OtlpGrpcSpanExporter.builder()
-                                .setEndpoint(<span class="hljs-string">"http://otel-collector:4317"</span>)
+                                .setEndpoint(<span class="hljs-string">&quot;http://otel-collector:4317&quot;</span>)
                                 .build())
                         .build())
                 .build();
@@ -142,7 +142,7 @@ java -javaagent:opentelemetry-javaagent.jar \
                 .setResource(resource)
                 .registerMetricReader(PeriodicMetricReader
                         .builder(OtlpGrpcMetricExporter.builder()
-                                .setEndpoint(<span class="hljs-string">"http://otel-collector:4317"</span>)
+                                .setEndpoint(<span class="hljs-string">&quot;http://otel-collector:4317&quot;</span>)
                                 .build())
                         .setInterval(Duration.ofSeconds(<span class="hljs-number">30</span>))
                         .build())
@@ -187,18 +187,18 @@ java -javaagent:opentelemetry-javaagent.jar \
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Histogram retrievalResultCount;
 
     <span class="hljs-keyword">public</span> <span class="hljs-title function_">AiServiceMetrics</span><span class="hljs-params">(MeterRegistry meterRegistry)</span> {
-        <span class="hljs-built_in">this</span>.llmRequestCounter = Counter.builder(<span class="hljs-string">"ai.llm.requests"</span>)
-                .description(<span class="hljs-string">"LLM API call count"</span>)
-                .tag(<span class="hljs-string">"provider"</span>, <span class="hljs-string">"openai"</span>)
+        <span class="hljs-built_in">this</span>.llmRequestCounter = Counter.builder(<span class="hljs-string">&quot;ai.llm.requests&quot;</span>)
+                .description(<span class="hljs-string">&quot;LLM API call count&quot;</span>)
+                .tag(<span class="hljs-string">&quot;provider&quot;</span>, <span class="hljs-string">&quot;openai&quot;</span>)
                 .register(meterRegistry);
 
-        <span class="hljs-built_in">this</span>.llmRequestTimer = Timer.builder(<span class="hljs-string">"ai.llm.request.duration"</span>)
-                .description(<span class="hljs-string">"LLM API response time"</span>)
+        <span class="hljs-built_in">this</span>.llmRequestTimer = Timer.builder(<span class="hljs-string">&quot;ai.llm.request.duration&quot;</span>)
+                .description(<span class="hljs-string">&quot;LLM API response time&quot;</span>)
                 .publishPercentiles(<span class="hljs-number">0.5</span>, <span class="hljs-number">0.95</span>, <span class="hljs-number">0.99</span>)
                 .register(meterRegistry);
 
-        <span class="hljs-built_in">this</span>.retrievalResultCount = Histogram.builder(<span class="hljs-string">"ai.retrieval.results"</span>)
-                .description(<span class="hljs-string">"RAG retrieval result count"</span>)
+        <span class="hljs-built_in">this</span>.retrievalResultCount = Histogram.builder(<span class="hljs-string">&quot;ai.retrieval.results&quot;</span>)
+                .description(<span class="hljs-string">&quot;RAG retrieval result count&quot;</span>)
                 .serviceLevelObjectives(<span class="hljs-number">1</span>, <span class="hljs-number">5</span>, <span class="hljs-number">10</span>, <span class="hljs-number">20</span>, <span class="hljs-number">50</span>)
                 .register(meterRegistry);
     }
@@ -226,32 +226,32 @@ java -javaagent:opentelemetry-javaagent.jar \
 
     <span class="hljs-keyword">public</span> String <span class="hljs-title function_">chat</span><span class="hljs-params">(String prompt)</span> {
         <span class="hljs-comment">// 创建 LLM Span</span>
-        <span class="hljs-type">var</span> <span class="hljs-variable">span</span> <span class="hljs-operator">=</span> tracer.spanBuilder(<span class="hljs-string">"chat gpt-4o"</span>)
+        <span class="hljs-type">var</span> <span class="hljs-variable">span</span> <span class="hljs-operator">=</span> tracer.spanBuilder(<span class="hljs-string">&quot;chat gpt-4o&quot;</span>)
                 .setSpanKind(SpanKind.CLIENT)
-                .setAttribute(<span class="hljs-string">"gen_ai.system"</span>, <span class="hljs-string">"openai"</span>)           <span class="hljs-comment">// 提供商</span>
-                .setAttribute(<span class="hljs-string">"gen_ai.operation.name"</span>, <span class="hljs-string">"chat"</span>)     <span class="hljs-comment">// 操作类型</span>
-                .setAttribute(<span class="hljs-string">"gen_ai.request.model"</span>, <span class="hljs-string">"gpt-4o"</span>)    <span class="hljs-comment">// 模型名称</span>
-                .setAttribute(<span class="hljs-string">"gen_ai.request.max_tokens"</span>, <span class="hljs-number">4096</span>)
-                .setAttribute(<span class="hljs-string">"gen_ai.request.temperature"</span>, <span class="hljs-number">0.7</span>)
-                .setAttribute(<span class="hljs-string">"gen_ai.request.top_p"</span>, <span class="hljs-number">1.0</span>)
+                .setAttribute(<span class="hljs-string">&quot;gen_ai.system&quot;</span>, <span class="hljs-string">&quot;openai&quot;</span>)           <span class="hljs-comment">// 提供商</span>
+                .setAttribute(<span class="hljs-string">&quot;gen_ai.operation.name&quot;</span>, <span class="hljs-string">&quot;chat&quot;</span>)     <span class="hljs-comment">// 操作类型</span>
+                .setAttribute(<span class="hljs-string">&quot;gen_ai.request.model&quot;</span>, <span class="hljs-string">&quot;gpt-4o&quot;</span>)    <span class="hljs-comment">// 模型名称</span>
+                .setAttribute(<span class="hljs-string">&quot;gen_ai.request.max_tokens&quot;</span>, <span class="hljs-number">4096</span>)
+                .setAttribute(<span class="hljs-string">&quot;gen_ai.request.temperature&quot;</span>, <span class="hljs-number">0.7</span>)
+                .setAttribute(<span class="hljs-string">&quot;gen_ai.request.top_p&quot;</span>, <span class="hljs-number">1.0</span>)
                 <span class="hljs-comment">// Prompt 内容（可采样存储）</span>
-                .setAttribute(<span class="hljs-string">"gen_ai.prompt"</span>, prompt)
+                .setAttribute(<span class="hljs-string">&quot;gen_ai.prompt&quot;</span>, prompt)
                 .startSpan();
 
         <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">scope</span> <span class="hljs-operator">=</span> span.makeCurrent()) {
             <span class="hljs-comment">// 执行 LLM 调用</span>
-            <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> openAiClient.chatCompletion(<span class="hljs-keyword">new</span> <span class="hljs-title class_">ChatRequest</span>(prompt, <span class="hljs-string">"gpt-4o"</span>));
+            <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> openAiClient.chatCompletion(<span class="hljs-keyword">new</span> <span class="hljs-title class_">ChatRequest</span>(prompt, <span class="hljs-string">&quot;gpt-4o&quot;</span>));
 
             <span class="hljs-comment">// 记录响应属性</span>
-            span.setAttribute(<span class="hljs-string">"gen_ai.response.id"</span>, result.id());
-            span.setAttribute(<span class="hljs-string">"gen_ai.response.model"</span>, result.model());
-            span.setAttribute(<span class="hljs-string">"gen_ai.response.finish_reasons"</span>,
-                    String.join(<span class="hljs-string">","</span>, result.choices().getFirst().finishReason()));
-            span.setAttribute(<span class="hljs-string">"gen_ai.usage.input_tokens"</span>, result.usage().promptTokens());
-            span.setAttribute(<span class="hljs-string">"gen_ai.usage.output_tokens"</span>, result.usage().completionTokens());
-            span.setAttribute(<span class="hljs-string">"gen_ai.usage.total_tokens"</span>, result.usage().totalTokens());
+            span.setAttribute(<span class="hljs-string">&quot;gen_ai.response.id&quot;</span>, result.id());
+            span.setAttribute(<span class="hljs-string">&quot;gen_ai.response.model&quot;</span>, result.model());
+            span.setAttribute(<span class="hljs-string">&quot;gen_ai.response.finish_reasons&quot;</span>,
+                    String.join(<span class="hljs-string">&quot;,&quot;</span>, result.choices().getFirst().finishReason()));
+            span.setAttribute(<span class="hljs-string">&quot;gen_ai.usage.input_tokens&quot;</span>, result.usage().promptTokens());
+            span.setAttribute(<span class="hljs-string">&quot;gen_ai.usage.output_tokens&quot;</span>, result.usage().completionTokens());
+            span.setAttribute(<span class="hljs-string">&quot;gen_ai.usage.total_tokens&quot;</span>, result.usage().totalTokens());
             <span class="hljs-comment">// Content（可采样存储）</span>
-            span.setAttribute(<span class="hljs-string">"gen_ai.completion"</span>,
+            span.setAttribute(<span class="hljs-string">&quot;gen_ai.completion&quot;</span>,
                     result.choices().getFirst().message().content());
 
             <span class="hljs-keyword">return</span> result.choices().getFirst().message().content();
@@ -271,25 +271,25 @@ java -javaagent:opentelemetry-javaagent.jar \
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Tracer tracer;
 
     <span class="hljs-keyword">public</span> ToolResult <span class="hljs-title function_">executeTool</span><span class="hljs-params">(String toolName, Map&lt;String, Object&gt; params)</span> {
-        <span class="hljs-type">var</span> <span class="hljs-variable">span</span> <span class="hljs-operator">=</span> tracer.spanBuilder(<span class="hljs-string">"execute_tool "</span> + toolName)
+        <span class="hljs-type">var</span> <span class="hljs-variable">span</span> <span class="hljs-operator">=</span> tracer.spanBuilder(<span class="hljs-string">&quot;execute_tool &quot;</span> + toolName)
                 .setSpanKind(SpanKind.INTERNAL)
                 <span class="hljs-comment">// GenAI 工具调用约定</span>
-                .setAttribute(<span class="hljs-string">"gen_ai.tool.name"</span>, toolName)
-                .setAttribute(<span class="hljs-string">"gen_ai.tool.parameters"</span>,
+                .setAttribute(<span class="hljs-string">&quot;gen_ai.tool.name&quot;</span>, toolName)
+                .setAttribute(<span class="hljs-string">&quot;gen_ai.tool.parameters&quot;</span>,
                         JsonUtils.toJson(params))
-                .setAttribute(<span class="hljs-string">"gen_ai.tool.call.id"</span>,
+                .setAttribute(<span class="hljs-string">&quot;gen_ai.tool.call.id&quot;</span>,
                         UUID.randomUUID().toString())
                 .startSpan();
 
         <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">scope</span> <span class="hljs-operator">=</span> span.makeCurrent()) {
             <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> toolRegistry.execute(toolName, params);
-            span.setAttribute(<span class="hljs-string">"gen_ai.tool.result"</span>,
+            span.setAttribute(<span class="hljs-string">&quot;gen_ai.tool.result&quot;</span>,
                     JsonUtils.toJson(result));
-            span.setAttribute(<span class="hljs-string">"gen_ai.tool.success"</span>, <span class="hljs-literal">true</span>);
+            span.setAttribute(<span class="hljs-string">&quot;gen_ai.tool.success&quot;</span>, <span class="hljs-literal">true</span>);
             <span class="hljs-keyword">return</span> result;
         } <span class="hljs-keyword">catch</span> (Exception e) {
-            span.setAttribute(<span class="hljs-string">"gen_ai.tool.success"</span>, <span class="hljs-literal">false</span>);
-            span.setAttribute(<span class="hljs-string">"error.type"</span>, e.getClass().getSimpleName());
+            span.setAttribute(<span class="hljs-string">&quot;gen_ai.tool.success&quot;</span>, <span class="hljs-literal">false</span>);
+            span.setAttribute(<span class="hljs-string">&quot;error.type&quot;</span>, e.getClass().getSimpleName());
             span.recordException(e);
             <span class="hljs-keyword">throw</span> e;
         } <span class="hljs-keyword">finally</span> {
@@ -304,49 +304,49 @@ java -javaagent:opentelemetry-javaagent.jar \
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Tracer tracer;
 
     <span class="hljs-keyword">public</span> List&lt;Document&gt; <span class="hljs-title function_">retrieve</span><span class="hljs-params">(String query)</span> {
-        <span class="hljs-type">var</span> <span class="hljs-variable">span</span> <span class="hljs-operator">=</span> tracer.spanBuilder(<span class="hljs-string">"rag_retrieve"</span>)
+        <span class="hljs-type">var</span> <span class="hljs-variable">span</span> <span class="hljs-operator">=</span> tracer.spanBuilder(<span class="hljs-string">&quot;rag_retrieve&quot;</span>)
                 .setSpanKind(SpanKind.INTERNAL)
                 <span class="hljs-comment">// GenAI RAG 检索约定</span>
-                .setAttribute(<span class="hljs-string">"gen_ai.retrieval.query"</span>, query)
-                .setAttribute(<span class="hljs-string">"gen_ai.retrieval.strategy"</span>, <span class="hljs-string">"hybrid"</span>)  <span class="hljs-comment">// bm25/vector/hybrid</span>
-                .setAttribute(<span class="hljs-string">"gen_ai.retrieval.top_k"</span>, <span class="hljs-number">10</span>)
+                .setAttribute(<span class="hljs-string">&quot;gen_ai.retrieval.query&quot;</span>, query)
+                .setAttribute(<span class="hljs-string">&quot;gen_ai.retrieval.strategy&quot;</span>, <span class="hljs-string">&quot;hybrid&quot;</span>)  <span class="hljs-comment">// bm25/vector/hybrid</span>
+                .setAttribute(<span class="hljs-string">&quot;gen_ai.retrieval.top_k&quot;</span>, <span class="hljs-number">10</span>)
                 .startSpan();
 
         <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">scope</span> <span class="hljs-operator">=</span> span.makeCurrent()) {
             <span class="hljs-comment">// Embedding</span>
-            <span class="hljs-type">var</span> <span class="hljs-variable">embedSpan</span> <span class="hljs-operator">=</span> tracer.spanBuilder(<span class="hljs-string">"rag_embed_query"</span>)
-                    .setAttribute(<span class="hljs-string">"gen_ai.system"</span>, <span class="hljs-string">"openai"</span>)
-                    .setAttribute(<span class="hljs-string">"gen_ai.operation.name"</span>, <span class="hljs-string">"embeddings"</span>)
-                    .setAttribute(<span class="hljs-string">"gen_ai.request.model"</span>, <span class="hljs-string">"text-embedding-3-small"</span>)
+            <span class="hljs-type">var</span> <span class="hljs-variable">embedSpan</span> <span class="hljs-operator">=</span> tracer.spanBuilder(<span class="hljs-string">&quot;rag_embed_query&quot;</span>)
+                    .setAttribute(<span class="hljs-string">&quot;gen_ai.system&quot;</span>, <span class="hljs-string">&quot;openai&quot;</span>)
+                    .setAttribute(<span class="hljs-string">&quot;gen_ai.operation.name&quot;</span>, <span class="hljs-string">&quot;embeddings&quot;</span>)
+                    .setAttribute(<span class="hljs-string">&quot;gen_ai.request.model&quot;</span>, <span class="hljs-string">&quot;text-embedding-3-small&quot;</span>)
                     .startSpan();
             <span class="hljs-type">var</span> <span class="hljs-variable">embedding</span> <span class="hljs-operator">=</span> embedQuery(query);
-            embedSpan.setAttribute(<span class="hljs-string">"gen_ai.usage.total_tokens"</span>, embedding.tokenCount());
+            embedSpan.setAttribute(<span class="hljs-string">&quot;gen_ai.usage.total_tokens&quot;</span>, embedding.tokenCount());
             embedSpan.end();
 
             <span class="hljs-comment">// Vector Search</span>
-            <span class="hljs-type">var</span> <span class="hljs-variable">vectorSpan</span> <span class="hljs-operator">=</span> tracer.spanBuilder(<span class="hljs-string">"rag_vector_search"</span>)
-                    .setAttribute(<span class="hljs-string">"gen_ai.retrieval.search_type"</span>, <span class="hljs-string">"knn"</span>)
-                    .setAttribute(<span class="hljs-string">"db.system"</span>, <span class="hljs-string">"elasticsearch"</span>)
+            <span class="hljs-type">var</span> <span class="hljs-variable">vectorSpan</span> <span class="hljs-operator">=</span> tracer.spanBuilder(<span class="hljs-string">&quot;rag_vector_search&quot;</span>)
+                    .setAttribute(<span class="hljs-string">&quot;gen_ai.retrieval.search_type&quot;</span>, <span class="hljs-string">&quot;knn&quot;</span>)
+                    .setAttribute(<span class="hljs-string">&quot;db.system&quot;</span>, <span class="hljs-string">&quot;elasticsearch&quot;</span>)
                     .startSpan();
             <span class="hljs-type">var</span> <span class="hljs-variable">vectorResults</span> <span class="hljs-operator">=</span> vectorStore.similaritySearch(embedding.vector(), <span class="hljs-number">10</span>);
-            vectorSpan.setAttribute(<span class="hljs-string">"gen_ai.retrieval.document_count"</span>, vectorResults.size());
-            vectorSpan.setAttribute(<span class="hljs-string">"gen_ai.retrieval.duration_ms"</span>, vectorSpanDuration);
+            vectorSpan.setAttribute(<span class="hljs-string">&quot;gen_ai.retrieval.document_count&quot;</span>, vectorResults.size());
+            vectorSpan.setAttribute(<span class="hljs-string">&quot;gen_ai.retrieval.duration_ms&quot;</span>, vectorSpanDuration);
             vectorSpan.end();
 
             <span class="hljs-comment">// BM25 Search</span>
-            <span class="hljs-type">var</span> <span class="hljs-variable">bm25Span</span> <span class="hljs-operator">=</span> tracer.spanBuilder(<span class="hljs-string">"rag_bm25_search"</span>)
-                    .setAttribute(<span class="hljs-string">"gen_ai.retrieval.search_type"</span>, <span class="hljs-string">"keyword"</span>)
+            <span class="hljs-type">var</span> <span class="hljs-variable">bm25Span</span> <span class="hljs-operator">=</span> tracer.spanBuilder(<span class="hljs-string">&quot;rag_bm25_search&quot;</span>)
+                    .setAttribute(<span class="hljs-string">&quot;gen_ai.retrieval.search_type&quot;</span>, <span class="hljs-string">&quot;keyword&quot;</span>)
                     .startSpan();
             <span class="hljs-type">var</span> <span class="hljs-variable">bm25Results</span> <span class="hljs-operator">=</span> searchEngine.bm25Search(query, <span class="hljs-number">10</span>);
-            bm25Span.setAttribute(<span class="hljs-string">"gen_ai.retrieval.document_count"</span>, bm25Results.size());
+            bm25Span.setAttribute(<span class="hljs-string">&quot;gen_ai.retrieval.document_count&quot;</span>, bm25Results.size());
             bm25Span.end();
 
             <span class="hljs-comment">// RRF Fusion</span>
             <span class="hljs-type">var</span> <span class="hljs-variable">fused</span> <span class="hljs-operator">=</span> rrfFusion(vectorResults, bm25Results);
-            span.setAttribute(<span class="hljs-string">"gen_ai.retrieval.final_document_count"</span>, fused.size());
-            span.setAttribute(<span class="hljs-string">"gen_ai.retrieval.min_score"</span>,
+            span.setAttribute(<span class="hljs-string">&quot;gen_ai.retrieval.final_document_count&quot;</span>, fused.size());
+            span.setAttribute(<span class="hljs-string">&quot;gen_ai.retrieval.min_score&quot;</span>,
                     fused.stream().mapToDouble(Document::score).min().orElse(<span class="hljs-number">0</span>));
-            span.setAttribute(<span class="hljs-string">"gen_ai.retrieval.max_score"</span>,
+            span.setAttribute(<span class="hljs-string">&quot;gen_ai.retrieval.max_score&quot;</span>,
                     fused.stream().mapToDouble(Document::score).max().orElse(<span class="hljs-number">0</span>));
 
             <span class="hljs-keyword">return</span> fused;
@@ -532,19 +532,19 @@ java -javaagent:opentelemetry-javaagent.jar \
 <h2>五、Prometheus + Grafana</h2>
 <h3>5.1 Metric 类型</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// Counter: 只增不减（请求计数、错误计数）</span>
-<span class="hljs-type">Counter</span> <span class="hljs-variable">requestCounter</span> <span class="hljs-operator">=</span> Counter.builder(<span class="hljs-string">"http_requests_total"</span>)
-        .description(<span class="hljs-string">"Total HTTP requests"</span>)
-        .tag(<span class="hljs-string">"method"</span>, <span class="hljs-string">"GET"</span>)
+<span class="hljs-type">Counter</span> <span class="hljs-variable">requestCounter</span> <span class="hljs-operator">=</span> Counter.builder(<span class="hljs-string">&quot;http_requests_total&quot;</span>)
+        .description(<span class="hljs-string">&quot;Total HTTP requests&quot;</span>)
+        .tag(<span class="hljs-string">&quot;method&quot;</span>, <span class="hljs-string">&quot;GET&quot;</span>)
         .register(meterRegistry);
 requestCounter.increment();
 
 <span class="hljs-comment">// Gauge: 瞬时值（内存使用、活跃连接数）</span>
-<span class="hljs-type">Gauge</span> <span class="hljs-variable">memoryGauge</span> <span class="hljs-operator">=</span> Gauge.builder(<span class="hljs-string">"jvm_memory_used_bytes"</span>, () -&gt;
+<span class="hljs-type">Gauge</span> <span class="hljs-variable">memoryGauge</span> <span class="hljs-operator">=</span> Gauge.builder(<span class="hljs-string">&quot;jvm_memory_used_bytes&quot;</span>, () -&gt;
                 Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory())
         .register(meterRegistry);
 
 <span class="hljs-comment">// Histogram: 分布统计（请求延迟、响应大小）</span>
-<span class="hljs-type">Histogram</span> <span class="hljs-variable">latencyHistogram</span> <span class="hljs-operator">=</span> Histogram.builder(<span class="hljs-string">"http_request_duration_seconds"</span>)
+<span class="hljs-type">Histogram</span> <span class="hljs-variable">latencyHistogram</span> <span class="hljs-operator">=</span> Histogram.builder(<span class="hljs-string">&quot;http_request_duration_seconds&quot;</span>)
         .serviceLevelObjectives(<span class="hljs-number">0.01</span>, <span class="hljs-number">0.05</span>, <span class="hljs-number">0.1</span>, <span class="hljs-number">0.5</span>, <span class="hljs-number">1.0</span>, <span class="hljs-number">5.0</span>)
         .register(meterRegistry);
 latencyHistogram.record(<span class="hljs-number">0.25</span>);
@@ -565,7 +565,7 @@ histogram_quantile(<span class="hljs-number">0.95</span>, rate(ai_llm_request_du
 <span class="hljs-keyword">avg</span>(gen_ai_retrieval_duration_ms) <span class="hljs-keyword">by</span> (strategy)
 
 <span class="hljs-meta"># 错误率</span>
-rate(ai_llm_requests_total{status=<span class="hljs-string">"error"</span>}[<span class="hljs-number">5</span>m])
+rate(ai_llm_requests_total{status=<span class="hljs-string">&quot;error&quot;</span>}[<span class="hljs-number">5</span>m])
   / rate(ai_llm_requests_total[<span class="hljs-number">5</span>m]) * <span class="hljs-number">100</span>
 
 <span class="hljs-meta"># LLM 调用 QPS 按 Provider</span>
@@ -625,31 +625,31 @@ rate(ai_llm_requests_total{status=<span class="hljs-string">"error"</span>}[<spa
         <span class="hljs-attr">bucket:</span> <span class="hljs-string">tempo-traces</span>
 </code></pre></div><p><strong>Grafana TraceQL 查询：</strong></p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-meta"># 查找 P95 延迟的 LLM 调用</span>
-{ span.gen_ai.operation.name <span class="hljs-punctuation">=</span> <span class="hljs-string">"chat"</span> <span class="hljs-meta">&amp;&amp;</span>
+{ span.gen_ai.operation.name <span class="hljs-punctuation">=</span> <span class="hljs-string">&quot;chat&quot;</span> <span class="hljs-meta">&amp;&amp;</span>
   duration &gt; <span class="hljs-number">5</span>s }
 
 <span class="hljs-meta"># 查找包含错误的 Tool Call</span>
-{ span.gen_ai.tool.name <span class="hljs-punctuation">=</span> <span class="hljs-string">"database_query"</span> <span class="hljs-meta">&amp;&amp;</span>
+{ span.gen_ai.tool.name <span class="hljs-punctuation">=</span> <span class="hljs-string">&quot;database_query&quot;</span> <span class="hljs-meta">&amp;&amp;</span>
   status.code <span class="hljs-punctuation">=</span> ERROR }
 
 <span class="hljs-meta"># 查找特定用户的 RAG 检索</span>
-{ resource.service.name <span class="hljs-punctuation">=</span> <span class="hljs-string">"ai-rag-service"</span> <span class="hljs-meta">&amp;&amp;</span>
-  span.gen_ai.retrieval.strategy <span class="hljs-punctuation">=</span> <span class="hljs-string">"hybrid"</span> }
+{ resource.service.name <span class="hljs-punctuation">=</span> <span class="hljs-string">&quot;ai-rag-service&quot;</span> <span class="hljs-meta">&amp;&amp;</span>
+  span.gen_ai.retrieval.strategy <span class="hljs-punctuation">=</span> <span class="hljs-string">&quot;hybrid&quot;</span> }
 </code></pre></div><h3>6.2 Loki 日志聚合</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-comment"># application.yml — 日志输出格式设置为 JSON</span>
 <span class="hljs-attr">logging:</span>
   <span class="hljs-attr">pattern:</span>
-    <span class="hljs-attr">console:</span> <span class="hljs-string">'{"timestamp":"%d{ISO8601}","level":"%level","logger":"%logger","message":"%msg","traceId":"%mdc{traceId}","spanId":"%mdc{spanId}"}%n'</span>
+    <span class="hljs-attr">console:</span> <span class="hljs-string">&#x27;{&quot;timestamp&quot;:&quot;%d{ISO8601}&quot;,&quot;level&quot;:&quot;%level&quot;,&quot;logger&quot;:&quot;%logger&quot;,&quot;message&quot;:&quot;%msg&quot;,&quot;traceId&quot;:&quot;%mdc{traceId}&quot;,&quot;spanId&quot;:&quot;%mdc{spanId}&quot;}%n&#x27;</span>
 </code></pre></div><p><strong>LogQL 查询：</strong></p>
 <div class="code-block"><div class="code-header"><span class="code-lang">logql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-logql"><span class="hljs-meta"># 按 traceId 关联日志</span>
-{app<span class="hljs-punctuation">=</span><span class="hljs-string">"ai-rag-service"</span>} <span class="hljs-string">|= "</span>error<span class="hljs-string">" | json | traceId = `abc123`</span>
+{app<span class="hljs-punctuation">=</span><span class="hljs-string">&quot;ai-rag-service&quot;</span>} <span class="hljs-string">|= &quot;</span>error<span class="hljs-string">&quot; | json | traceId = `abc123`</span>
 
 <span class="hljs-meta"># 错误日志趋势</span>
-rate<span class="hljs-punctuation">(</span>{app<span class="hljs-punctuation">=</span><span class="hljs-string">"ai-rag-service"</span>} <span class="hljs-string">|= "</span>ERROR<span class="hljs-string">" [5m])</span>
+rate<span class="hljs-punctuation">(</span>{app<span class="hljs-punctuation">=</span><span class="hljs-string">&quot;ai-rag-service&quot;</span>} <span class="hljs-string">|= &quot;</span>ERROR<span class="hljs-string">&quot; [5m])</span>
 
 <span class="hljs-meta"># Token 使用日志</span>
-{app<span class="hljs-punctuation">=</span><span class="hljs-string">"ai-rag-service"</span>} <span class="hljs-string">| json</span>
-  <span class="hljs-string">| line_format "</span>{{.gen_ai_system}} {{.gen_ai_usage_total_tokens}}<span class="hljs-string">"</span>
+{app<span class="hljs-punctuation">=</span><span class="hljs-string">&quot;ai-rag-service&quot;</span>} <span class="hljs-string">| json</span>
+  <span class="hljs-string">| line_format &quot;</span>{{.gen_ai_system}} {{.gen_ai_usage_total_tokens}}<span class="hljs-string">&quot;</span>
 </code></pre></div><hr>
 <h2>七、告警设计</h2>
 <div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-comment"># Prometheus Alert Rules</span>
@@ -659,14 +659,14 @@ rate<span class="hljs-punctuation">(</span>{app<span class="hljs-punctuation">=<
       <span class="hljs-comment"># 1. 错误率告警</span>
       <span class="hljs-bullet">-</span> <span class="hljs-attr">alert:</span> <span class="hljs-string">HighLlmErrorRate</span>
         <span class="hljs-attr">expr:</span> <span class="hljs-string">|
-          rate(ai_llm_requests_total{status="error"}[5m])
+          rate(ai_llm_requests_total{status=&quot;error&quot;}[5m])
           / rate(ai_llm_requests_total[5m]) &gt; 0.05
 </span>        <span class="hljs-attr">for:</span> <span class="hljs-string">5m</span>
         <span class="hljs-attr">labels:</span>
           <span class="hljs-attr">severity:</span> <span class="hljs-string">critical</span>
         <span class="hljs-attr">annotations:</span>
-          <span class="hljs-attr">summary:</span> <span class="hljs-string">"LLM 错误率超过 5%"</span>
-          <span class="hljs-attr">description:</span> <span class="hljs-string">"当前错误率 <span class="hljs-template-variable">{{ $value | humanizePercentage }}</span>"</span>
+          <span class="hljs-attr">summary:</span> <span class="hljs-string">&quot;LLM 错误率超过 5%&quot;</span>
+          <span class="hljs-attr">description:</span> <span class="hljs-string">&quot;当前错误率 <span class="hljs-template-variable">{{ $value | humanizePercentage }}</span>&quot;</span>
 
       <span class="hljs-comment"># 2. P95 延迟告警</span>
       <span class="hljs-bullet">-</span> <span class="hljs-attr">alert:</span> <span class="hljs-string">HighLlmLatency</span>
@@ -677,7 +677,7 @@ rate<span class="hljs-punctuation">(</span>{app<span class="hljs-punctuation">=<
         <span class="hljs-attr">labels:</span>
           <span class="hljs-attr">severity:</span> <span class="hljs-string">warning</span>
         <span class="hljs-attr">annotations:</span>
-          <span class="hljs-attr">summary:</span> <span class="hljs-string">"LLM P95 延迟超过 10 秒"</span>
+          <span class="hljs-attr">summary:</span> <span class="hljs-string">&quot;LLM P95 延迟超过 10 秒&quot;</span>
 
       <span class="hljs-comment"># 3. Token 消耗异常</span>
       <span class="hljs-bullet">-</span> <span class="hljs-attr">alert:</span> <span class="hljs-string">TokenConsumptionAnomaly</span>
@@ -688,27 +688,27 @@ rate<span class="hljs-punctuation">(</span>{app<span class="hljs-punctuation">=<
         <span class="hljs-attr">labels:</span>
           <span class="hljs-attr">severity:</span> <span class="hljs-string">warning</span>
         <span class="hljs-attr">annotations:</span>
-          <span class="hljs-attr">summary:</span> <span class="hljs-string">"Token 消耗比昨天同时间增长 50%"</span>
+          <span class="hljs-attr">summary:</span> <span class="hljs-string">&quot;Token 消耗比昨天同时间增长 50%&quot;</span>
 
       <span class="hljs-comment"># 4. RAG 检索异常</span>
       <span class="hljs-bullet">-</span> <span class="hljs-attr">alert:</span> <span class="hljs-string">RagRetrievalZeroResults</span>
         <span class="hljs-attr">expr:</span> <span class="hljs-string">|
-          rate(gen_ai_retrieval_document_count_bucket{le="0"}[10m]) &gt; 0.1
+          rate(gen_ai_retrieval_document_count_bucket{le=&quot;0&quot;}[10m]) &gt; 0.1
 </span>        <span class="hljs-attr">for:</span> <span class="hljs-string">5m</span>
         <span class="hljs-attr">labels:</span>
           <span class="hljs-attr">severity:</span> <span class="hljs-string">warning</span>
         <span class="hljs-attr">annotations:</span>
-          <span class="hljs-attr">summary:</span> <span class="hljs-string">"RAG 无结果返回率超过 10%"</span>
+          <span class="hljs-attr">summary:</span> <span class="hljs-string">&quot;RAG 无结果返回率超过 10%&quot;</span>
 
       <span class="hljs-comment"># 5. 熔断器开启告警</span>
       <span class="hljs-bullet">-</span> <span class="hljs-attr">alert:</span> <span class="hljs-string">CircuitBreakerOpen</span>
         <span class="hljs-attr">expr:</span> <span class="hljs-string">|
-          resilience4j_circuitbreaker_state{state="open"} == 1
+          resilience4j_circuitbreaker_state{state=&quot;open&quot;} == 1
 </span>        <span class="hljs-attr">for:</span> <span class="hljs-string">1m</span>
         <span class="hljs-attr">labels:</span>
           <span class="hljs-attr">severity:</span> <span class="hljs-string">critical</span>
         <span class="hljs-attr">annotations:</span>
-          <span class="hljs-attr">summary:</span> <span class="hljs-string">"熔断器 <span class="hljs-template-variable">{{ $labels.name }}</span> 已开启"</span>
+          <span class="hljs-attr">summary:</span> <span class="hljs-string">&quot;熔断器 <span class="hljs-template-variable">{{ $labels.name }}</span> 已开启&quot;</span>
 </code></pre></div><hr>
 <h2>常见问题</h2>
 <p><strong>Q: 追踪采样率如何设置？</strong>
@@ -726,5 +726,5 @@ A: LLM Prompt 和 Completion 内容通常较大，建议通过自定义 SpanProc
 <li><a href="#/06-云原生与SRE/可观测性与CI/06-CICD与基础设施即代码" class="cross-ref">06-CICD与基础设施即代码</a> — CI/CD 中的可观测性</li>
 <li><a href="#/14-AI平台与LLMOps/14-模型网关与Prompt管理" class="cross-ref">14-模型网关与Prompt管理</a> — AI 平台可观测性</li>
 </ul>
-</body></html></div>
+</div>
 </article>

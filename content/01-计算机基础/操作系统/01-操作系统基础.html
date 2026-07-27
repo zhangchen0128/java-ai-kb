@@ -6,7 +6,7 @@
     <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#operating-system</span><span class="badge badge-tag">#linux</span><span class="badge badge-tag">#thread</span><span class="badge badge-tag">#virtual-memory</span><span class="badge badge-tag">#io-model</span></div>
     <div class="entry-sources"><small>📖 来源：<a href="https://docs.oracle.com/en/java/javase/25/core/process-api.html" target="_blank" rel="noopener" class="source-link" title="JDK 25 核心文档 — Process API 与线程管理">JDK 25 核心文档 — Process API 与线程管理</a><a href="https://github.com/openjdk/jdk/tree/jdk-25-ga/src/hotspot" target="_blank" rel="noopener" class="source-link" title="OpenJDK 25 HotSpot 源码 — 线程实现、GC、内存管理">OpenJDK 25 HotSpot 源码 — 线程实现、GC、内存管理</a><a href="https://www.kernel.org/doc/html/latest/" target="_blank" rel="noopener" class="source-link" title="Linux Kernel 官方文档">Linux Kernel 官方文档</a></small></div>
   </div>
-  <div class="entry-body"><html><head></head><body><h1>操作系统基础 — 与 Java 开发相关的 OS 知识</h1>
+  <div class="entry-body"><h1>操作系统基础 — 与 Java 开发相关的 OS 知识</h1>
 <h2>概述</h2>
 <p>Java 工程师通常通过 JVM 这一抽象层与操作系统交互，但在处理性能问题、并发调试、IO 优化、内存问题诊断时，理解操作系统层面的机制是不可或缺的。本文聚焦于与 Java 后端开发工作最密切相关的 OS 知识领域：进程/线程模型、虚拟内存、CPU 调度、同步机制、文件系统、IO 模型和内存管理。每一节都会将 OS 概念与 Java 中的具体表现相联系，让理论落地到日常开发实践。</p>
 <hr>
@@ -14,7 +14,7 @@
 <h3>一、进程与线程</h3>
 <h4>1.1 Linux 进程模型</h4>
 <p>Linux 内核中，进程（Process）和线程（Thread）统一为 <code>task_struct</code> 结构。两者的核心区别在于资源共享程度：进程拥有独立的虚拟地址空间、文件描述符表、信号处理等；而同一进程的多个线程共享虚拟地址空间和文件描述符表。</p>
-<p><code>fork()</code> 系统调用创建新进程（子进程是父进程的副本，采用 Copy-on-Write 策略优化性能），<code>clone()</code> 系统调用可以更精细地控制资源共享粒度——当指定 <code>CLONE_VM | CLONE_FS | CLONE_FILES</code> 等参数时，<code>clone()</code> 创建的就是"线程"。</p>
+<p><code>fork()</code> 系统调用创建新进程（子进程是父进程的副本，采用 Copy-on-Write 策略优化性能），<code>clone()</code> 系统调用可以更精细地控制资源共享粒度——当指定 <code>CLONE_VM | CLONE_FS | CLONE_FILES</code> 等参数时，<code>clone()</code> 创建的就是&quot;线程&quot;。</p>
 <h4>1.2 NPTL 线程实现</h4>
 <p>Linux 的线程库经历了 LinuxThreads → NPTL（Native POSIX Thread Library）的演进。NPTL 基于 1:1 模型实现——每个用户态线程对应一个内核态 <code>task_struct</code>。这意味着：</p>
 <ul>
@@ -27,7 +27,7 @@
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>JavaThread → OSThread → <span class="hljs-type">pthread_t</span> → kernel task_struct
 </code></pre></div><p><strong>Virtual Threads（JDK 25，JEP 444）</strong> 打破了这个 1:1 映射。Virtual Thread 是用户态的轻量级线程，由 JVM 内部的 <code>ForkJoinPool</code> 作为调度器，多个 Virtual Thread 被多路复用到一个 Carrier Thread（即一个 OS 线程）上执行。当 Virtual Thread 执行阻塞 I/O 操作时，JVM 会自动将其从 Carrier Thread 上卸载（unmount），释放 OS 线程去执行其他 Virtual Thread。</p>
 <p>这意味着数以百万计的 Virtual Thread 可以运行在少量 OS 线程之上，极大地减少了线程上下文切换的开销。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// JDK 25 Virtual Threads：可以轻松创建 100 万个"线程"</span>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// JDK 25 Virtual Threads：可以轻松创建 100 万个&quot;线程&quot;</span>
 <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">executor</span> <span class="hljs-operator">=</span> Executors.newVirtualThreadPerTaskExecutor()) {
     <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; <span class="hljs-number">1_000_000</span>; i++) {
         executor.submit(() -&gt; {
@@ -98,7 +98,7 @@
        ↓
    重新执行原指令，此次 <span class="hljs-variable">TLB</span> 命中
 </code></pre></div><p><strong>TLB 刷新（Flush）的性能影响：</strong></p>
-<p>每次进程/线程上下文切换，内核需要切换地址空间（切换 CR3 寄存器），这导致 <strong>TLB 全部失效</strong>（除非启用 PCID，Process Context Identifier）。这就是线程切换频繁时产生"TLB 冷启动"——上下文切换后的一段时间内 TLB miss 率飙升，每次 miss 需要 4 次内存访问，大幅拖慢执行速度。Java Virtual Threads 的关键优势之一就是：用户态切换不涉及 CR3 切换，已有的 TLB 内容全部保留。</p>
+<p>每次进程/线程上下文切换，内核需要切换地址空间（切换 CR3 寄存器），这导致 <strong>TLB 全部失效</strong>（除非启用 PCID，Process Context Identifier）。这就是线程切换频繁时产生&quot;TLB 冷启动&quot;——上下文切换后的一段时间内 TLB miss 率飙升，每次 miss 需要 4 次内存访问，大幅拖慢执行速度。Java Virtual Threads 的关键优势之一就是：用户态切换不涉及 CR3 切换，已有的 TLB 内容全部保留。</p>
 <p><strong>大页（Huge Pages / Transparent Huge Pages）深度分析：</strong></p>
 <table>
 <thead>
@@ -149,7 +149,7 @@
 <span class="hljs-comment"># [always] madvise never</span>
 
 <span class="hljs-comment"># 查看 JVM 进程的实际大页使用</span>
-grep -E <span class="hljs-string">"AnonHugePages|VmFlags"</span> /proc/&lt;pid&gt;/smaps | grep -A1 <span class="hljs-string">"thp"</span>
+grep -E <span class="hljs-string">&quot;AnonHugePages|VmFlags&quot;</span> /proc/&lt;pid&gt;/smaps | grep -A1 <span class="hljs-string">&quot;thp&quot;</span>
 </code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// JVM 启动参数示例 — 使用 2MB 大页优化大堆 TLB</span>
 <span class="hljs-comment">// java -Xms32g -Xmx32g -XX:+UseLargePages -XX:LargePageSizeInBytes=2m</span>
 <span class="hljs-comment">//       -XX:+AlwaysPreTouch -XX:+UseTransparentHugePages</span>
@@ -163,14 +163,14 @@ grep -E <span class="hljs-string">"AnonHugePages|VmFlags"</span> /proc/&lt;pid&g
 <p><strong>Java GC 与缺页的关系：</strong></p>
 <ul>
 <li>Full GC 后，存活对象被压缩到连续的内存区域，可能之前分散的页面被释放，留下空洞</li>
-<li>如果 GC 后访问已被 swap out 的页面，会触发 Major Page Fault，导致 GC 暂停后的"第二次暂停"</li>
+<li>如果 GC 后访问已被 swap out 的页面，会触发 Major Page Fault，导致 GC 暂停后的&quot;第二次暂停&quot;</li>
 <li>生产环境建议禁用 swap（<code>vm.swappiness=0</code>），或使用 <code>mlockall</code> 锁定 JVM 堆</li>
 </ul>
 <h4>2.4 mmap 与 Java DirectByteBuffer</h4>
 <p><code>mmap</code> 系统调用将文件映射到进程的虚拟地址空间，实现文件与内存的直接映射。读写映射区域等同于读写文件，由内核的 Page Cache 机制自动同步。</p>
 <p><strong>Java 中的对应：</strong></p>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 使用 FileChannel.map 进行内存映射 I/O</span>
-<span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">channel</span> <span class="hljs-operator">=</span> FileChannel.open(Path.of(<span class="hljs-string">"large.dat"</span>),
+<span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">channel</span> <span class="hljs-operator">=</span> FileChannel.open(Path.of(<span class="hljs-string">&quot;large.dat&quot;</span>),
         StandardOpenOption.READ)) {
     <span class="hljs-type">var</span> <span class="hljs-variable">buffer</span> <span class="hljs-operator">=</span> channel.map(
         FileChannel.MapMode.READ_ONLY, <span class="hljs-number">0</span>, channel.size());
@@ -218,7 +218,7 @@ grep -E <span class="hljs-string">"AnonHugePages|VmFlags"</span> /proc/&lt;pid&g
 <p><strong>DirectByteBuffer 释放机制与 Cleaner：</strong></p>
 <p><code>DirectByteBuffer</code> 的内存不由 GC 直接回收，而是通过 <code>java.lang.ref.Cleaner</code> 机制：当 <code>DirectByteBuffer</code> 对象本身被 GC 时，其关联的 <code>Cleaner</code> 被触发，调用 <code>Unsafe.freeMemory()</code> 释放堆外内存。这意味着：</p>
 <ol>
-<li><strong>堆外内存泄漏风险：</strong> 如果 DirectByteBuffer 被"遗忘"在 old generation 但未触发 GC，堆外内存持续占用</li>
+<li><strong>堆外内存泄漏风险：</strong> 如果 DirectByteBuffer 被&quot;遗忘&quot;在 old generation 但未触发 GC，堆外内存持续占用</li>
 <li><strong>显式释放：</strong> <code>((DirectBuffer) buffer).cleaner().clean()</code> 可主动释放（Netty 的 <code>PooledByteBufAllocator</code> 就是这样管理堆外内存池的）</li>
 <li><strong>监控：</strong> <code>jcmd &lt;pid&gt; VM.native_memory summary</code> 可追踪堆外内存使用量</li>
 </ol>
@@ -253,7 +253,7 @@ grep -E <span class="hljs-string">"AnonHugePages|VmFlags"</span> /proc/&lt;pid&g
 <li><strong>futex（Fast Userspace muTEX）：</strong> Linux 特有的混合锁机制。在无竞争时，完全在用户态完成（通过原子操作），不涉及系统调用；有竞争时，才通过 <code>futex()</code> 系统调用让线程进入内核等待队列。</li>
 </ul>
 <p><strong>futex 系统调用的完整工作流程：</strong></p>
-<p>futex 是一个 32 位整数的用户态地址，配合 <code>futex()</code> 系统调用实现高效率的锁。它的核心哲学是："无竞争，无事发生"（no contention, no kernel involvement）。</p>
+<p>futex 是一个 32 位整数的用户态地址，配合 <code>futex()</code> 系统调用实现高效率的锁。它的核心哲学是：&quot;无竞争，无事发生&quot;（no contention, no kernel involvement）。</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>futex 工作流程（以互斥锁为例）：
 
 【阶段 <span class="hljs-number">1</span>：快速路径 — 用户态获取（无竞争）】
@@ -434,8 +434,8 @@ PlatformEvent::park() {
 <p><strong>Java FileChannel 与零拷贝（Zero Copy）：</strong></p>
 <p><code>FileChannel.transferTo()</code> 利用 Linux 的 <code>sendfile()</code> 系统调用实现零拷贝——数据直接从 Page Cache 传输到 Socket Buffer，不经过用户态缓冲区。这是 Kafka 高性能的关键技术之一。</p>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 零拷贝：文件直接传输到网络，不经过用户空间</span>
-<span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">fileChannel</span> <span class="hljs-operator">=</span> FileChannel.open(Path.of(<span class="hljs-string">"large.file"</span>), READ);
-     <span class="hljs-type">var</span> <span class="hljs-variable">socketChannel</span> <span class="hljs-operator">=</span> SocketChannel.open(<span class="hljs-keyword">new</span> <span class="hljs-title class_">InetSocketAddress</span>(<span class="hljs-string">"host"</span>, <span class="hljs-number">8080</span>))) {
+<span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">fileChannel</span> <span class="hljs-operator">=</span> FileChannel.open(Path.of(<span class="hljs-string">&quot;large.file&quot;</span>), READ);
+     <span class="hljs-type">var</span> <span class="hljs-variable">socketChannel</span> <span class="hljs-operator">=</span> SocketChannel.open(<span class="hljs-keyword">new</span> <span class="hljs-title class_">InetSocketAddress</span>(<span class="hljs-string">&quot;host&quot;</span>, <span class="hljs-number">8080</span>))) {
     fileChannel.transferTo(<span class="hljs-number">0</span>, fileChannel.size(), socketChannel);
 }
 </code></pre></div><p>普通 I/O 的数据路径（4 次拷贝 + 4 次上下文切换）：</p>
@@ -555,7 +555,7 @@ PlatformEvent::park() {
 
 <span class="hljs-comment">// 如果不用循环读到 EAGAIN：</span>
 <span class="hljs-comment">// 下次 epoll_wait 不会再通知这个 fd！</span>
-<span class="hljs-comment">// 缓冲区中剩余的数据将永远被"忽略"，导致连接挂起</span>
+<span class="hljs-comment">// 缓冲区中剩余的数据将永远被&quot;忽略&quot;，导致连接挂起</span>
 </code></pre></div><p><strong>同一个 fd 边沿触发时只通知一次的含义：</strong></p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-built_in">Socket</span> <span class="hljs-variable">fd</span> 收到 <span class="hljs-number">4</span><span class="hljs-variable">KB</span> 数据，内核缓冲区从 <span class="hljs-number">0</span> → <span class="hljs-number">4</span><span class="hljs-variable">KB</span>（状态变化！）
 │
@@ -563,9 +563,9 @@ PlatformEvent::park() {
 │   用户 <span class="hljs-variable">read</span><span class="hljs-punctuation">(</span><span class="hljs-punctuation">)</span> 读到部分数据（因为用非阻塞 <span class="hljs-built_in">I</span><span class="hljs-operator">/</span><span class="hljs-built_in">O</span>）
 │   剩余数据还在内核缓冲区，但不会再触发 <span class="hljs-variable">epoll</span> 通知了！
 │
-├─ 下次 <span class="hljs-type">epoll_wait</span> → 不会返回 <span class="hljs-variable">fd</span>（因为没有新的<span class="hljs-string">"边缘"</span>事件）
-│   → 剩余数据永远等待，连接<span class="hljs-string">"挂死"</span>
-</code></pre></div><p>这便是 ET 模式要求"一次读完"的根本原因。使用 ET 模式的正确做法是<strong>一直 read 直到返回 EAGAIN</strong>。</p>
+├─ 下次 <span class="hljs-type">epoll_wait</span> → 不会返回 <span class="hljs-variable">fd</span>（因为没有新的<span class="hljs-string">&quot;边缘&quot;</span>事件）
+│   → 剩余数据永远等待，连接<span class="hljs-string">&quot;挂死&quot;</span>
+</code></pre></div><p>这便是 ET 模式要求&quot;一次读完&quot;的根本原因。使用 ET 模式的正确做法是<strong>一直 read 直到返回 EAGAIN</strong>。</p>
 <p><strong>Java NIO Selector 与 epoll 的关系：</strong></p>
 <p>Java NIO 的 <code>Selector</code> 在 Linux 上默认使用 <strong>EPollSelectorProvider → EPollSelectorImpl</strong>，它在 epoll 之上封装了一层：</p>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// JDK 源码简化示意</span>
@@ -584,7 +584,7 @@ PlatformEvent::park() {
         <span class="hljs-comment">// 4. 调用 action（处理就绪事件）</span>
     }
 }
-</code></pre></div><p><strong>关键点：</strong> Java <code>Selector</code> 默认使用 <strong>LT 模式</strong>。如果想使用 ET 模式来提高性能（如 Netty 的 <code>EpollEventLoop</code>），需要使用 Netty 的 <code>EpollSocketChannel</code>（直接绕过 JDK Selector，使用 JNI 调用 epoll），并在 Netty 的 pipeline 中实现"循环读"逻辑：</p>
+</code></pre></div><p><strong>关键点：</strong> Java <code>Selector</code> 默认使用 <strong>LT 模式</strong>。如果想使用 ET 模式来提高性能（如 Netty 的 <code>EpollEventLoop</code>），需要使用 Netty 的 <code>EpollSocketChannel</code>（直接绕过 JDK Selector，使用 JNI 调用 epoll），并在 Netty 的 pipeline 中实现&quot;循环读&quot;逻辑：</p>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// Netty 的 ET 模式读实现思路（简略）</span>
 <span class="hljs-comment">// io.netty.channel.epoll.EpollSocketChannel</span>
 <span class="hljs-comment">// 1. 将 Channel 注册到 epoll fd（EPOLLIN | EPOLLET）</span>
@@ -616,7 +616,7 @@ CQ（Completion Queue）：内核写入完成结果（CQE）
 <ol>
 <li><strong>系统调用次数：</strong> epoll 至少需要 <code>epoll_wait</code> + <code>read</code>/<code>write</code> 两次系统调用；io_uring 在 SQ 非空时可以通过 <code>io_uring_enter</code> 一次性提交+收割，甚至在 SQPOLL 模式下做到 <strong>零系统调用</strong>（内核线程持续轮询 SQ）</li>
 <li><strong>批量提交与收割：</strong> 一次 <code>io_uring_enter</code> 可以提交 N 个 I/O 请求、收割 M 个完成结果</li>
-<li><strong>文件 I/O 真正异步：</strong> epoll 只能监控网络 fd，对文件 I/O 无能为力（文件总是"就绪"的）。io_uring 对 文件 I/O（read/write 文件）也能做到真正的异步——内核在后台执行直接 I/O 或 buffered I/O</li>
+<li><strong>文件 I/O 真正异步：</strong> epoll 只能监控网络 fd，对文件 I/O 无能为力（文件总是&quot;就绪&quot;的）。io_uring 对 文件 I/O（read/write 文件）也能做到真正的异步——内核在后台执行直接 I/O 或 buffered I/O</li>
 <li><strong>Buffer Ring / Fixed Buffers：</strong> 预注册缓冲区，避免每次 I/O 的缓冲区映射开销</li>
 </ol>
 <p><strong>Java 中的 io_uring 现状与 Project Loom 的关系：</strong></p>
@@ -635,7 +635,7 @@ CQ（Completion Queue）：内核写入完成结果（CQE）
 <span class="hljs-type">io_uring</span> 时代：<span class="hljs-variable">VT</span> 挂起时直接提交异步请求，无需事件循环
               理论上 <span class="hljs-built_in">I</span><span class="hljs-operator">/</span><span class="hljs-built_in">O</span> 吞吐量和 <span class="hljs-variable">CPU</span> 利用率都能再上一个台阶
 </code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// Project Loom + io_uring 的理想未来（JDK 尚未实现，仅示意）</span>
-<span class="hljs-comment">// 每个 Virtual Thread 都可以做"真正的异步 I/O"</span>
+<span class="hljs-comment">// 每个 Virtual Thread 都可以做&quot;真正的异步 I/O&quot;</span>
 <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">server</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ServerSocketChannel</span>(...)) {
     <span class="hljs-keyword">while</span> (<span class="hljs-literal">true</span>) {
         <span class="hljs-comment">// accept 在 io_uring 中异步完成，VT park 不耗 OS 线程</span>
@@ -654,7 +654,7 @@ CQ（Completion Queue）：内核写入完成结果（CQE）
 </code></pre></div><hr>
 <h3>六、内存管理</h3>
 <h4>6.1 伙伴系统（Buddy System）</h4>
-<p>Linux 内核使用伙伴系统管理物理页面分配。它将空闲页面按 2^n 页（n = 0 到 10，即 1 页到 1024 页）组织为多个空闲链表。分配时找到第一个足够大的块，必要时分裂；释放时尝试与相邻的"伙伴"块合并。</p>
+<p>Linux 内核使用伙伴系统管理物理页面分配。它将空闲页面按 2^n 页（n = 0 到 10，即 1 页到 1024 页）组织为多个空闲链表。分配时找到第一个足够大的块，必要时分裂；释放时尝试与相邻的&quot;伙伴&quot;块合并。</p>
 <p><strong>对 Java 的影响：</strong> JVM 堆内存预分配时，<code>-Xms</code> 和 <code>-Xmx</code> 之间的差异可能导致内存碎片。将 <code>-Xms</code> 和 <code>-Xmx</code> 设为相同值可以减少堆增长带来的碎片化。</p>
 <h4>6.2 Slab 分配器</h4>
 <p>伙伴系统以页为单位分配（最小 4KB），但对于内核中频繁分配的小对象（如 inode、dentry、task_struct），4KB 的粒度太粗糙。Slab 分配器建立在伙伴系统之上，为每种常用大小的内核对象维护对象缓存（cache），实现高效的小对象分配。</p>
@@ -808,7 +808,7 @@ get_page_from_freelist(order, alloc_flags)
 <span class="hljs-comment"># OOMScoreAdjust=-500</span>
 
 <span class="hljs-comment"># 3. 配置 vm.overcommit_memory=2 + vm.overcommit_ratio，防止内存过度承诺</span>
-<span class="hljs-comment"># 避免"名义上内存充足，实际上已耗尽"</span>
+<span class="hljs-comment"># 避免&quot;名义上内存充足，实际上已耗尽&quot;</span>
 
 <span class="hljs-comment"># 4. 使用 cgroup v2 的 memory.high / memory.max 做软/硬限制</span>
 <span class="hljs-comment"># echo 8G &gt; /sys/fs/cgroup/&lt;group&gt;/memory.max</span>
@@ -816,7 +816,7 @@ get_page_from_freelist(order, alloc_flags)
 
 <span class="hljs-comment"># 5. 监控 slab 内存泄漏</span>
 <span class="hljs-comment"># slabtop -o  → 检查 dentry、inode、kmalloc 等内核 slab 是否异常增长</span>
-<span class="hljs-comment"># 这是常见的"应用内存正常但系统内存耗尽"的根因</span>
+<span class="hljs-comment"># 这是常见的&quot;应用内存正常但系统内存耗尽&quot;的根因</span>
 </code></pre></div><p><strong>Java 应用视角的水位线意义：</strong></p>
 <ul>
 <li>当系统空闲内存低于 low 水位线时，JVM 的任何内存分配（堆扩展、DirectByteBuffer 分配、线程栈分配）都可能触发直接回收，表现为 GC 暂停时间异常、请求延迟尖刺</li>
@@ -841,7 +841,7 @@ get_page_from_freelist(order, alloc_flags)
                 });
             }
         }
-        System.out.println(<span class="hljs-string">"All virtual threads completed."</span>);
+        System.out.println(<span class="hljs-string">&quot;All virtual threads completed.&quot;</span>);
     }
 }
 <span class="hljs-comment">// 运行时添加 JFR 参数：</span>
@@ -867,5 +867,5 @@ LT（水平触发，默认模式）：只要 fd 就绪，每次 <code>epoll_wait
 <li><a href="#/01-计算机基础/数据库原理/01-数据库原理" class="cross-ref">01-数据库原理</a> — 数据库原理</li>
 <li><a href="#/01-计算机基础/分布式理论/01-分布式系统理论" class="cross-ref">01-分布式系统理论</a> — 分布式理论</li>
 </ul>
-</body></html></div>
+</div>
 </article>

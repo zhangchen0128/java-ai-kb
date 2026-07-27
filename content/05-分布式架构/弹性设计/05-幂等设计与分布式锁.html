@@ -6,7 +6,7 @@
     <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#idempotency</span><span class="badge badge-tag">#distributed-lock</span><span class="badge badge-tag">#redisson</span><span class="badge badge-tag">#redis</span><span class="badge badge-tag">#zookeeper</span></div>
     <div class="entry-sources"><small>📖 来源：<a href="https://redis.io/docs/latest/develop/use/patterns/distributed-locks/" target="_blank" rel="noopener" class="source-link" title="Redis 官方分布式锁文档">Redis 官方分布式锁文档</a><a href="https://redisson.org/docs/" target="_blank" rel="noopener" class="source-link" title="Redisson 官方文档 — 分布式锁与看门狗">Redisson 官方文档 — 分布式锁与看门狗</a><a href="https://www.oreilly.com/library/view/designing-data-intensive-applications/" target="_blank" rel="noopener" class="source-link" title="《Designing Data-Intensive Applications》— 第8章分布式系统的挑战">《Designing Data-Intensive Applications》— 第8章分布式系统的挑战</a><a href="https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html" target="_blank" rel="noopener" class="source-link" title="Martin Kleppmann — How to do distributed locking（红锁争议）">Martin Kleppmann — How to do distributed locking（红锁争议）</a></small></div>
   </div>
-  <div class="entry-body"><html><head></head><body><h1>幂等设计与分布式锁</h1>
+  <div class="entry-body"><h1>幂等设计与分布式锁</h1>
 <h2>概述</h2>
 <p>在分布式系统中，网络重试、消息重复投递、用户重复点击都会导致同一操作被执行多次。幂等设计确保重复执行的结果与单次执行一致。分布式锁则提供跨节点的互斥访问能力。两者是构建可靠分布式系统的基石。</p>
 <p>本文覆盖幂等性的五种实现策略、三种分布式锁方案的深度对比、Redisson 源码级分析，以及支付、消息消费、定时任务三个实际案例。</p>
@@ -29,40 +29,40 @@
 <li>不存在 → 拒绝（重复请求）</li>
 </ol>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@RestController</span>
-<span class="hljs-meta">@RequestMapping("/api/orders")</span>
+<span class="hljs-meta">@RequestMapping(&quot;/api/orders&quot;)</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">OrderController</span> {
 
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> StringRedisTemplate redis;
 
     <span class="hljs-comment">// 1. 获取 Token</span>
-    <span class="hljs-meta">@PostMapping("/token")</span>
+    <span class="hljs-meta">@PostMapping(&quot;/token&quot;)</span>
     <span class="hljs-keyword">public</span> Map&lt;String, String&gt; <span class="hljs-title function_">getToken</span><span class="hljs-params">(<span class="hljs-meta">@RequestParam</span> String userId)</span> {
         <span class="hljs-type">var</span> <span class="hljs-variable">token</span> <span class="hljs-operator">=</span> UUID.randomUUID().toString();
-        redis.opsForValue().set(<span class="hljs-string">"idempotent:token:"</span> + token, userId,
+        redis.opsForValue().set(<span class="hljs-string">&quot;idempotent:token:&quot;</span> + token, userId,
                 Duration.ofMinutes(<span class="hljs-number">5</span>));
-        <span class="hljs-keyword">return</span> Map.of(<span class="hljs-string">"token"</span>, token);
+        <span class="hljs-keyword">return</span> Map.of(<span class="hljs-string">&quot;token&quot;</span>, token);
     }
 
     <span class="hljs-comment">// 2. 带 Token 提交</span>
     <span class="hljs-meta">@PostMapping</span>
-    <span class="hljs-keyword">public</span> ResponseEntity&lt;?&gt; createOrder(<span class="hljs-meta">@RequestHeader("X-Idempotent-Token")</span> String token,
+    <span class="hljs-keyword">public</span> ResponseEntity&lt;?&gt; createOrder(<span class="hljs-meta">@RequestHeader(&quot;X-Idempotent-Token&quot;)</span> String token,
                                          <span class="hljs-meta">@RequestBody</span> CreateOrderRequest request) {
         <span class="hljs-comment">// 原子删除 Token（Lua 脚本）</span>
-        <span class="hljs-type">var</span> <span class="hljs-variable">script</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
-            if redis.call('get', KEYS[1]) == ARGV[1] then
-                return redis.call('del', KEYS[1])
+        <span class="hljs-type">var</span> <span class="hljs-variable">script</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;&quot;&quot;
+            if redis.call(&#x27;get&#x27;, KEYS[1]) == ARGV[1] then
+                return redis.call(&#x27;del&#x27;, KEYS[1])
             else
                 return 0
             end
-            """</span>;
+            &quot;&quot;&quot;</span>;
 
         <span class="hljs-type">var</span> <span class="hljs-variable">deleted</span> <span class="hljs-operator">=</span> redis.execute(
                 <span class="hljs-keyword">new</span> <span class="hljs-title class_">DefaultRedisScript</span>&lt;&gt;(script, Long.class),
-                List.of(<span class="hljs-string">"idempotent:token:"</span> + token),
+                List.of(<span class="hljs-string">&quot;idempotent:token:&quot;</span> + token),
                 request.userId());
 
         <span class="hljs-keyword">if</span> (deleted == <span class="hljs-literal">null</span> || deleted == <span class="hljs-number">0</span>) {
-            <span class="hljs-keyword">return</span> ResponseEntity.status(<span class="hljs-number">409</span>).body(Map.of(<span class="hljs-string">"error"</span>, <span class="hljs-string">"重复请求"</span>));
+            <span class="hljs-keyword">return</span> ResponseEntity.status(<span class="hljs-number">409</span>).body(Map.of(<span class="hljs-string">&quot;error&quot;</span>, <span class="hljs-string">&quot;重复请求&quot;</span>));
         }
 
         <span class="hljs-comment">// 执行业务逻辑</span>
@@ -77,7 +77,7 @@
 <div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-sql"><span class="hljs-keyword">CREATE TABLE</span> orders (
     id BIGSERIAL <span class="hljs-keyword">PRIMARY KEY</span>,
     order_no <span class="hljs-type">VARCHAR</span>(<span class="hljs-number">32</span>) <span class="hljs-keyword">NOT NULL</span>,
-    status <span class="hljs-type">VARCHAR</span>(<span class="hljs-number">20</span>) <span class="hljs-keyword">NOT NULL</span> <span class="hljs-keyword">DEFAULT</span> <span class="hljs-string">'CREATED'</span>,
+    status <span class="hljs-type">VARCHAR</span>(<span class="hljs-number">20</span>) <span class="hljs-keyword">NOT NULL</span> <span class="hljs-keyword">DEFAULT</span> <span class="hljs-string">&#x27;CREATED&#x27;</span>,
     <span class="hljs-comment">-- ...</span>
     <span class="hljs-keyword">CONSTRAINT</span> uk_order_no <span class="hljs-keyword">UNIQUE</span> (order_no)
 );
@@ -87,12 +87,12 @@
 
     <span class="hljs-keyword">public</span> Order <span class="hljs-title function_">createOrder</span><span class="hljs-params">(OrderRequest request)</span> {
         <span class="hljs-keyword">try</span> {
-            <span class="hljs-type">var</span> <span class="hljs-variable">order</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Order</span>(request.getOrderNo(), <span class="hljs-string">"CREATED"</span>, ...);
+            <span class="hljs-type">var</span> <span class="hljs-variable">order</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Order</span>(request.getOrderNo(), <span class="hljs-string">&quot;CREATED&quot;</span>, ...);
             <span class="hljs-keyword">return</span> orderRepo.save(order);
         } <span class="hljs-keyword">catch</span> (DataIntegrityViolationException e) {
             <span class="hljs-comment">// 唯一键冲突 → 返回已有订单（幂等）</span>
             <span class="hljs-keyword">return</span> orderRepo.findByOrderNo(request.getOrderNo())
-                    .orElseThrow(() -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">IllegalStateException</span>(<span class="hljs-string">"订单已存在但无法查询"</span>));
+                    .orElseThrow(() -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">IllegalStateException</span>(<span class="hljs-string">&quot;订单已存在但无法查询&quot;</span>));
         }
     }
 }
@@ -137,8 +137,8 @@
 
 <span class="hljs-comment">// 或手动版本号</span>
 <span class="hljs-meta">@Modifying</span>
-<span class="hljs-meta">@Query("UPDATE Inventory i SET i.quantity = i.quantity - :qty, i.version = i.version + 1 " +
-       "WHERE i.productId = :productId AND i.quantity &gt;= :qty AND i.version = :version")</span>
+<span class="hljs-meta">@Query(&quot;UPDATE Inventory i SET i.quantity = i.quantity - :qty, i.version = i.version + 1 &quot; +
+       &quot;WHERE i.productId = :productId AND i.quantity &gt;= :qty AND i.version = :version&quot;)</span>
 <span class="hljs-type">int</span> <span class="hljs-title function_">deductWithVersion</span><span class="hljs-params">(Long productId, <span class="hljs-type">int</span> qty, Long version)</span>;
 <span class="hljs-comment">// 返回值 = 0 表示版本冲突（其他线程已修改），需要重试</span>
 </code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// CAS 重试循环</span>
@@ -147,7 +147,7 @@
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">deductInventory</span><span class="hljs-params">(Long productId, <span class="hljs-type">int</span> qty)</span> {
     <span class="hljs-type">int</span> <span class="hljs-variable">updated</span> <span class="hljs-operator">=</span> inventoryRepo.deductQuantity(productId, qty);
     <span class="hljs-keyword">if</span> (updated == <span class="hljs-number">0</span>) {
-        <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">OptimisticLockingFailureException</span>(<span class="hljs-string">"库存扣减冲突"</span>);
+        <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">OptimisticLockingFailureException</span>(<span class="hljs-string">&quot;库存扣减冲突&quot;</span>);
     }
 }
 </code></pre></div><h3>1.5 策略四：数据库去重表</h3>
@@ -155,7 +155,7 @@
     request_id <span class="hljs-type">VARCHAR</span>(<span class="hljs-number">64</span>) <span class="hljs-keyword">PRIMARY KEY</span>,
     handler_class <span class="hljs-type">VARCHAR</span>(<span class="hljs-number">200</span>),
     <span class="hljs-keyword">result</span> JSONB,
-    status <span class="hljs-type">VARCHAR</span>(<span class="hljs-number">20</span>) <span class="hljs-keyword">DEFAULT</span> <span class="hljs-string">'PROCESSING'</span>,
+    status <span class="hljs-type">VARCHAR</span>(<span class="hljs-number">20</span>) <span class="hljs-keyword">DEFAULT</span> <span class="hljs-string">&#x27;PROCESSING&#x27;</span>,
     created_at TIMESTAMPTZ <span class="hljs-keyword">DEFAULT</span> NOW(),
     completed_at TIMESTAMPTZ
 );
@@ -168,7 +168,7 @@
         <span class="hljs-comment">// 1. 尝试插入去重记录</span>
         <span class="hljs-keyword">try</span> {
             jdbc.update(
-                <span class="hljs-string">"INSERT INTO request_dedup (request_id, status) VALUES (?, 'PROCESSING')"</span>,
+                <span class="hljs-string">&quot;INSERT INTO request_dedup (request_id, status) VALUES (?, &#x27;PROCESSING&#x27;)&quot;</span>,
                 requestId);
         } <span class="hljs-keyword">catch</span> (DuplicateKeyException e) {
             <span class="hljs-comment">// 2. 已存在 → 等待结果</span>
@@ -179,12 +179,12 @@
         <span class="hljs-keyword">try</span> {
             <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> handler.get();
             jdbc.update(
-                <span class="hljs-string">"UPDATE request_dedup SET result = ?::jsonb, status = 'COMPLETED', completed_at = NOW() WHERE request_id = ?"</span>,
+                <span class="hljs-string">&quot;UPDATE request_dedup SET result = ?::jsonb, status = &#x27;COMPLETED&#x27;, completed_at = NOW() WHERE request_id = ?&quot;</span>,
                 toJson(result), requestId);
             <span class="hljs-keyword">return</span> result;
         } <span class="hljs-keyword">catch</span> (Exception e) {
             jdbc.update(
-                <span class="hljs-string">"UPDATE request_dedup SET status = 'FAILED' WHERE request_id = ?"</span>,
+                <span class="hljs-string">&quot;UPDATE request_dedup SET status = &#x27;FAILED&#x27; WHERE request_id = ?&quot;</span>,
                 requestId);
             <span class="hljs-keyword">throw</span> e;
         }
@@ -194,19 +194,19 @@
         <span class="hljs-comment">// 轮询等待处理完成（生产环境建议用 Redis pub/sub 通知）</span>
         <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; <span class="hljs-number">30</span>; i++) {
             <span class="hljs-type">var</span> <span class="hljs-variable">row</span> <span class="hljs-operator">=</span> jdbc.queryForMap(
-                <span class="hljs-string">"SELECT result, status FROM request_dedup WHERE request_id = ?"</span>,
+                <span class="hljs-string">&quot;SELECT result, status FROM request_dedup WHERE request_id = ?&quot;</span>,
                 requestId);
-            <span class="hljs-keyword">if</span> (<span class="hljs-string">"COMPLETED"</span>.equals(row.get(<span class="hljs-string">"status"</span>))) {
-                <span class="hljs-keyword">return</span> fromJson((String) row.get(<span class="hljs-string">"result"</span>));
+            <span class="hljs-keyword">if</span> (<span class="hljs-string">&quot;COMPLETED&quot;</span>.equals(row.get(<span class="hljs-string">&quot;status&quot;</span>))) {
+                <span class="hljs-keyword">return</span> fromJson((String) row.get(<span class="hljs-string">&quot;result&quot;</span>));
             }
             Thread.sleep(<span class="hljs-number">100</span>);
         }
-        <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ProcessingTimeoutException</span>(<span class="hljs-string">"处理超时: "</span> + requestId);
+        <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ProcessingTimeoutException</span>(<span class="hljs-string">&quot;处理超时: &quot;</span> + requestId);
     }
 }
 </code></pre></div><h3>1.6 策略五：Redis 计数器 + TTL</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">isDuplicate</span><span class="hljs-params">(String idempotentKey, Duration window)</span> {
-    <span class="hljs-type">var</span> <span class="hljs-variable">key</span> <span class="hljs-operator">=</span> <span class="hljs-string">"dedup:"</span> + idempotentKey;
+    <span class="hljs-type">var</span> <span class="hljs-variable">key</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;dedup:&quot;</span> + idempotentKey;
     <span class="hljs-type">var</span> <span class="hljs-variable">count</span> <span class="hljs-operator">=</span> redis.opsForValue().increment(key);
     <span class="hljs-keyword">if</span> (count == <span class="hljs-number">1</span>) {
         redis.expire(key, window); <span class="hljs-comment">// 仅首次设置过期</span>
@@ -262,14 +262,14 @@
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">RedisDistributedLock</span> {
 
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> StringRedisTemplate redis;
-    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">String</span> <span class="hljs-variable">LOCK_PREFIX</span> <span class="hljs-operator">=</span> <span class="hljs-string">"distributed_lock:"</span>;
-    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">String</span> <span class="hljs-variable">RELEASE_SCRIPT</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
-        if redis.call('get', KEYS[1]) == ARGV[1] then
-            return redis.call('del', KEYS[1])
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">String</span> <span class="hljs-variable">LOCK_PREFIX</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;distributed_lock:&quot;</span>;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">String</span> <span class="hljs-variable">RELEASE_SCRIPT</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;&quot;&quot;
+        if redis.call(&#x27;get&#x27;, KEYS[1]) == ARGV[1] then
+            return redis.call(&#x27;del&#x27;, KEYS[1])
         else
             return 0
         end
-        """</span>;
+        &quot;&quot;&quot;</span>;
 
     <span class="hljs-keyword">public</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">tryLock</span><span class="hljs-params">(String key, String value, <span class="hljs-type">long</span> expireMs)</span> {
         <span class="hljs-keyword">return</span> Boolean.TRUE.equals(
@@ -287,10 +287,10 @@
 </code></pre></div><p><strong>Redisson 看门狗深入：</strong></p>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// Redisson RLock 自动续期</span>
 <span class="hljs-type">var</span> <span class="hljs-variable">config</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Config</span>();
-config.useSingleServer().setAddress(<span class="hljs-string">"redis://localhost:6379"</span>);
+config.useSingleServer().setAddress(<span class="hljs-string">&quot;redis://localhost:6379&quot;</span>);
 <span class="hljs-type">var</span> <span class="hljs-variable">redisson</span> <span class="hljs-operator">=</span> (RedissonClient) Redisson.create(config);
 
-<span class="hljs-type">var</span> <span class="hljs-variable">lock</span> <span class="hljs-operator">=</span> redisson.getLock(<span class="hljs-string">"order:123"</span>);
+<span class="hljs-type">var</span> <span class="hljs-variable">lock</span> <span class="hljs-operator">=</span> redisson.getLock(<span class="hljs-string">&quot;order:123&quot;</span>);
 
 <span class="hljs-comment">// lock() 看门狗行为：</span>
 <span class="hljs-comment">// - 默认 leaseTime = 30s（internalLockLeaseTime）</span>
@@ -316,9 +316,9 @@ lock.lock(<span class="hljs-number">10</span>, TimeUnit.SECONDS);
 <span class="hljs-bullet">4.</span> 失败则释放所有已获取的锁
 
 Kleppmann 的质疑：
-<span class="hljs-bullet">1.</span> 锁用于"互斥"和"正确性"两种不同目的
-<span class="hljs-bullet">2.</span> 如果只用于"效率"（避免重复工作），单实例 + 看门狗足够
-<span class="hljs-bullet">3.</span> 如果用于"正确性"（只能有一个写入者），RedLock 依赖时钟同步，不可靠
+<span class="hljs-bullet">1.</span> 锁用于&quot;互斥&quot;和&quot;正确性&quot;两种不同目的
+<span class="hljs-bullet">2.</span> 如果只用于&quot;效率&quot;（避免重复工作），单实例 + 看门狗足够
+<span class="hljs-bullet">3.</span> 如果用于&quot;正确性&quot;（只能有一个写入者），RedLock 依赖时钟同步，不可靠
 <span class="hljs-bullet">4.</span> 正确性场景应使用 Fencing Token 或支持一致性的系统（ZooKeeper/etcd）
 </code></pre></div><p><strong>生产建议：</strong></p>
 <table>
@@ -355,7 +355,7 @@ Kleppmann 的质疑：
 
     <span class="hljs-keyword">public</span> <span class="hljs-title function_">ZkDistributedLock</span><span class="hljs-params">(CuratorFramework client, String lockName)</span> {
         <span class="hljs-built_in">this</span>.client = client;
-        <span class="hljs-built_in">this</span>.lockPath = <span class="hljs-string">"/locks/"</span> + lockName;
+        <span class="hljs-built_in">this</span>.lockPath = <span class="hljs-string">&quot;/locks/&quot;</span> + lockName;
     }
 
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">lock</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> Exception {
@@ -363,7 +363,7 @@ Kleppmann 的质疑：
         currentNodePath = client.create()
                 .creatingParentsIfNeeded()
                 .withMode(CreateMode.EPHEMERAL_SEQUENTIAL)
-                .forPath(lockPath + <span class="hljs-string">"/lock-"</span>);
+                .forPath(lockPath + <span class="hljs-string">&quot;/lock-&quot;</span>);
 
         <span class="hljs-keyword">while</span> (<span class="hljs-literal">true</span>) {
             <span class="hljs-comment">// 2. 获取所有子节点，按序号排序</span>
@@ -378,7 +378,7 @@ Kleppmann 的质疑：
                 <span class="hljs-keyword">return</span>;
             } <span class="hljs-keyword">else</span> {
                 <span class="hljs-comment">// 4. Watch 前一个节点</span>
-                <span class="hljs-type">var</span> <span class="hljs-variable">prevNodePath</span> <span class="hljs-operator">=</span> lockPath + <span class="hljs-string">"/"</span> + children.get(index - <span class="hljs-number">1</span>);
+                <span class="hljs-type">var</span> <span class="hljs-variable">prevNodePath</span> <span class="hljs-operator">=</span> lockPath + <span class="hljs-string">&quot;/&quot;</span> + children.get(index - <span class="hljs-number">1</span>);
                 <span class="hljs-type">var</span> <span class="hljs-variable">latch</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">CountDownLatch</span>(<span class="hljs-number">1</span>);
 
                 <span class="hljs-keyword">if</span> (client.checkExists().forPath(prevNodePath) != <span class="hljs-literal">null</span>) {
@@ -413,7 +413,7 @@ Kleppmann 的质疑：
 <span class="hljs-meta">@Transactional</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">processWithDbLock</span><span class="hljs-params">(Long resourceId)</span> {
     <span class="hljs-type">var</span> <span class="hljs-variable">resource</span> <span class="hljs-operator">=</span> jdbc.queryForObject(
-            <span class="hljs-string">"SELECT * FROM shared_resource WHERE id = ? FOR UPDATE"</span>,
+            <span class="hljs-string">&quot;SELECT * FROM shared_resource WHERE id = ? FOR UPDATE&quot;</span>,
             <span class="hljs-keyword">new</span> <span class="hljs-title class_">BeanPropertyRowMapper</span>&lt;&gt;(SharedResource.class), resourceId);
     <span class="hljs-comment">// 其他事务的 SELECT FOR UPDATE 会阻塞在此</span>
     process(resource);
@@ -487,10 +487,10 @@ Kleppmann 的质疑：
     <span class="hljs-meta">@Transactional</span>
     <span class="hljs-keyword">public</span> PaymentResult <span class="hljs-title function_">pay</span><span class="hljs-params">(String transactionId, PayRequest request)</span> {
         <span class="hljs-comment">// 1. 分布式锁（按交易ID）</span>
-        <span class="hljs-type">var</span> <span class="hljs-variable">lock</span> <span class="hljs-operator">=</span> redisson.getLock(<span class="hljs-string">"pay:"</span> + transactionId);
+        <span class="hljs-type">var</span> <span class="hljs-variable">lock</span> <span class="hljs-operator">=</span> redisson.getLock(<span class="hljs-string">&quot;pay:&quot;</span> + transactionId);
         <span class="hljs-keyword">try</span> {
             <span class="hljs-keyword">if</span> (!lock.tryLock(<span class="hljs-number">5</span>, <span class="hljs-number">30</span>, TimeUnit.SECONDS)) {
-                <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ConcurrentPaymentException</span>(<span class="hljs-string">"支付处理中"</span>);
+                <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ConcurrentPaymentException</span>(<span class="hljs-string">&quot;支付处理中&quot;</span>);
             }
 
             <span class="hljs-comment">// 2. 检查是否已支付（唯一索引 + 状态机）</span>
@@ -498,10 +498,10 @@ Kleppmann 的质疑：
             <span class="hljs-keyword">if</span> (existing.isPresent()) {
                 <span class="hljs-type">var</span> <span class="hljs-variable">payment</span> <span class="hljs-operator">=</span> existing.get();
                 <span class="hljs-keyword">if</span> (payment.getStatus() == PaymentStatus.SUCCESS) {
-                    <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">PaymentResult</span>(<span class="hljs-literal">true</span>, payment, <span class="hljs-string">"已支付"</span>);
+                    <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">PaymentResult</span>(<span class="hljs-literal">true</span>, payment, <span class="hljs-string">&quot;已支付&quot;</span>);
                 }
                 <span class="hljs-keyword">if</span> (payment.getStatus() == PaymentStatus.PROCESSING) {
-                    <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">PaymentResult</span>(<span class="hljs-literal">false</span>, payment, <span class="hljs-string">"处理中"</span>);
+                    <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">PaymentResult</span>(<span class="hljs-literal">false</span>, payment, <span class="hljs-string">&quot;处理中&quot;</span>);
                 }
             }
 
@@ -521,17 +521,17 @@ Kleppmann 的质疑：
 
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> StringRedisTemplate redis;
 
-    <span class="hljs-meta">@KafkaListener(topics = "orders")</span>
+    <span class="hljs-meta">@KafkaListener(topics = &quot;orders&quot;)</span>
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">onMessage</span><span class="hljs-params">(ConsumerRecord&lt;String, OrderEvent&gt; record, Acknowledgment ack)</span> {
         <span class="hljs-type">var</span> <span class="hljs-variable">msgKey</span> <span class="hljs-operator">=</span> record.key();
         <span class="hljs-type">var</span> <span class="hljs-variable">msgOffset</span> <span class="hljs-operator">=</span> record.offset();
 
         <span class="hljs-comment">// Kafka offset + partition 作为幂等键</span>
-        <span class="hljs-type">var</span> <span class="hljs-variable">idempotentKey</span> <span class="hljs-operator">=</span> STR.<span class="hljs-string">"msg:\{record.topic()}:\{record.partition()}:\{msgOffset}"</span>;
+        <span class="hljs-type">var</span> <span class="hljs-variable">idempotentKey</span> <span class="hljs-operator">=</span> STR.<span class="hljs-string">&quot;msg:\{record.topic()}:\{record.partition()}:\{msgOffset}&quot;</span>;
 
         <span class="hljs-comment">// Redis SET NX + TTL 去重</span>
         <span class="hljs-type">var</span> <span class="hljs-variable">success</span> <span class="hljs-operator">=</span> redis.opsForValue()
-                .setIfAbsent(idempotentKey, <span class="hljs-string">"processed"</span>, Duration.ofHours(<span class="hljs-number">24</span>));
+                .setIfAbsent(idempotentKey, <span class="hljs-string">&quot;processed&quot;</span>, Duration.ofHours(<span class="hljs-number">24</span>));
 
         <span class="hljs-keyword">if</span> (Boolean.FALSE.equals(success)) {
             <span class="hljs-comment">// 已处理过，直接 ACK</span>
@@ -555,19 +555,19 @@ Kleppmann 的质疑：
 
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> RedissonClient redisson;
 
-    <span class="hljs-meta">@Scheduled(cron = "0 0 2 * * ?")</span> <span class="hljs-comment">// 每天凌晨2点</span>
+    <span class="hljs-meta">@Scheduled(cron = &quot;0 0 2 * * ?&quot;)</span> <span class="hljs-comment">// 每天凌晨2点</span>
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">nightlyReindex</span><span class="hljs-params">()</span> {
-        <span class="hljs-type">var</span> <span class="hljs-variable">lock</span> <span class="hljs-operator">=</span> redisson.getLock(<span class="hljs-string">"scheduled:nightly-reindex"</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">lock</span> <span class="hljs-operator">=</span> redisson.getLock(<span class="hljs-string">&quot;scheduled:nightly-reindex&quot;</span>);
         <span class="hljs-keyword">if</span> (!lock.tryLock()) {
-            log.info(<span class="hljs-string">"Reindex already running on another instance, skipping"</span>);
+            log.info(<span class="hljs-string">&quot;Reindex already running on another instance, skipping&quot;</span>);
             <span class="hljs-keyword">return</span>;
         }
 
         <span class="hljs-keyword">try</span> {
-            log.info(<span class="hljs-string">"Starting nightly reindex..."</span>);
+            log.info(<span class="hljs-string">&quot;Starting nightly reindex...&quot;</span>);
             <span class="hljs-comment">// 可能运行很长时间，看门狗自动续期</span>
             reindexAllDocuments();
-            log.info(<span class="hljs-string">"Nightly reindex completed"</span>);
+            log.info(<span class="hljs-string">&quot;Nightly reindex completed&quot;</span>);
         } <span class="hljs-keyword">finally</span> {
             lock.unlock();
         }
@@ -590,5 +590,5 @@ A: Redis（微秒级）比 ZK（毫秒级）快约 10-100 倍。但在多数业�
 <li><a href="#/04-数据与中间件/数据库与缓存/04-Redis深度解析" class="cross-ref">04-Redis深度解析</a> — Redis 数据结构与 Redisson</li>
 <li><a href="#/05-分布式架构/事务与一致性/05-缓存策略与多级缓存架构" class="cross-ref">05-缓存策略与多级缓存架构</a> — 缓存与锁的联合使用</li>
 </ul>
-</body></html></div>
+</div>
 </article>

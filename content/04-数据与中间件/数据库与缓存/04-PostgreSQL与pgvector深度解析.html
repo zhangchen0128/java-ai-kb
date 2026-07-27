@@ -6,7 +6,7 @@
     <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#postgresql</span><span class="badge badge-tag">#pgvector</span><span class="badge badge-tag">#mvcc</span><span class="badge badge-tag">#vacuum</span><span class="badge badge-tag">#wal</span></div>
     <div class="entry-sources"><small>📖 来源：<a href="https://www.postgresql.org/docs/17/" target="_blank" rel="noopener" class="source-link" title="PostgreSQL 17 官方文档">PostgreSQL 17 官方文档</a><a href="https://github.com/pgvector/pgvector" target="_blank" rel="noopener" class="source-link" title="pgvector 官方仓库与文档">pgvector 官方仓库与文档</a><a href="https://github.com/postgres/postgres" target="_blank" rel="noopener" class="source-link" title="PostgreSQL 源码（MVCC、VACUUM、WAL）">PostgreSQL 源码（MVCC、VACUUM、WAL）</a><a href="https://www.interdb.jp/pg/" target="_blank" rel="noopener" class="source-link" title="《The Internals of PostgreSQL》— 铃木启修，PostgreSQL 内部机制权威参考">《The Internals of PostgreSQL》— 铃木启修，PostgreSQL 内部机制权威参考</a></small></div>
   </div>
-  <div class="entry-body"><html><head></head><body><h1>PostgreSQL 与 pgvector 深度解析</h1>
+  <div class="entry-body"><h1>PostgreSQL 与 pgvector 深度解析</h1>
 <h2>概述</h2>
 <p>PostgreSQL 是企业级开源关系数据库的标杆，以其对 SQL 标准的遵从性、扩展性和可靠性著称。在 AI 应用场景中，pgvector 扩展使得 PostgreSQL 成为最便捷的向量数据库选择——无需额外基础设施即可在同一数据库中完成业务数据和向量数据的存储与检索。</p>
 <p>本文深入 PostgreSQL 核心内部机制（MVCC、VACUUM、WAL、复制）、索引策略、SQL 优化方法论，以及 pgvector 扩展的完整使用指南，并提供 Spring AI + pgvector 混合检索的完整代码示例。</p>
@@ -48,13 +48,13 @@
 </code></pre></div><p>快照存储的是该时刻的活跃事务列表（<code>active_txids</code>）、最小活跃 XID（<code>xmin</code>）、下一个待分配 XID（<code>xmax</code>）。</p>
 <h3>1.3 UPDATE 操作的真实行为</h3>
 <p>PostgreSQL 的 UPDATE 不是原地修改，而是 <strong>插入新版本 + 标记旧版本删除</strong>：</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-sql"><span class="hljs-comment">-- 逻辑上：UPDATE users SET name = 'Bob' WHERE id = 1;</span>
+<div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-sql"><span class="hljs-comment">-- 逻辑上：UPDATE users SET name = &#x27;Bob&#x27; WHERE id = 1;</span>
 <span class="hljs-comment">-- 物理上等价于：</span>
-<span class="hljs-keyword">INSERT INTO</span> users (id, name) <span class="hljs-keyword">VALUES</span> (<span class="hljs-number">1</span>, <span class="hljs-string">'Bob'</span>);  <span class="hljs-comment">-- xmin = 当前事务ID</span>
+<span class="hljs-keyword">INSERT INTO</span> users (id, name) <span class="hljs-keyword">VALUES</span> (<span class="hljs-number">1</span>, <span class="hljs-string">&#x27;Bob&#x27;</span>);  <span class="hljs-comment">-- xmin = 当前事务ID</span>
 <span class="hljs-keyword">UPDATE</span> 旧元组 <span class="hljs-keyword">SET</span> xmax <span class="hljs-operator">=</span> 当前事务ID;
 </code></pre></div><p><strong>重要后果：</strong> 每次 UPDATE 都会产生死元组（dead tuple），需要 VACUUM 回收。</p>
 <h3>1.4 事务 ID 回卷（XID Wraparound）</h3>
-<p>XID 是 32 位无符号整数（约 4.3 亿），采用循环使用。当 XID 使用过半时，旧 XID 会因为比新 XID"大"而导致数据丢失。PostgreSQL 通过 **冻结（freeze）**机制处理：</p>
+<p>XID 是 32 位无符号整数（约 4.3 亿），采用循环使用。当 XID 使用过半时，旧 XID 会因为比新 XID&quot;大&quot;而导致数据丢失。PostgreSQL 通过 **冻结（freeze）**机制处理：</p>
 <div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-sql"><span class="hljs-comment">-- 查看各数据库的 XID 消耗情况</span>
 <span class="hljs-keyword">SELECT</span> datname, age(datfrozenxid), datfrozenxid
 <span class="hljs-keyword">FROM</span> pg_database
@@ -127,7 +127,7 @@
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>事务提交流程：
 <span class="hljs-bullet">1.</span> 生成 WAL Record
 <span class="hljs-bullet">2.</span> 写入 WAL Buffer → 触发条件后 fsync 到磁盘 WAL Segment 文件
-<span class="hljs-bullet">3.</span> 返回客户端"提交成功"
+<span class="hljs-bullet">3.</span> 返回客户端&quot;提交成功&quot;
 <span class="hljs-bullet">4.</span> Checkpointer 将脏页写入数据文件（异步）
 </code></pre></div><h3>3.2 WAL 调优</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-ini"><span class="hljs-comment"># 关键参数</span>
@@ -147,7 +147,7 @@
 <div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-sql"><span class="hljs-comment">-- 发布端</span>
 <span class="hljs-keyword">CREATE</span> PUBLICATION my_pub <span class="hljs-keyword">FOR</span> <span class="hljs-keyword">TABLE</span> users, orders;
 <span class="hljs-comment">-- 订阅端</span>
-<span class="hljs-keyword">CREATE</span> SUBSCRIPTION my_sub CONNECTION <span class="hljs-string">'host=master dbname=mydb'</span> PUBLICATION my_pub;
+<span class="hljs-keyword">CREATE</span> SUBSCRIPTION my_sub CONNECTION <span class="hljs-string">&#x27;host=master dbname=mydb&#x27;</span> PUBLICATION my_pub;
 </code></pre></div><p><strong>适用场景对比：</strong></p>
 <table>
 <thead>
@@ -230,17 +230,17 @@
 <p>只为满足条件的行创建索引，减小索引尺寸：</p>
 <div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-sql"><span class="hljs-comment">-- 只为活跃用户创建索引（假设80%数据是已归档的）</span>
 <span class="hljs-keyword">CREATE</span> INDEX idx_active_users <span class="hljs-keyword">ON</span> users (created_at)
-<span class="hljs-keyword">WHERE</span> status <span class="hljs-operator">=</span> <span class="hljs-string">'active'</span>;
+<span class="hljs-keyword">WHERE</span> status <span class="hljs-operator">=</span> <span class="hljs-string">&#x27;active&#x27;</span>;
 </code></pre></div><h3>4.3 表达式索引（Expression Index）</h3>
 <p>针对表达式的计算结果创建索引：</p>
 <div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-sql"><span class="hljs-comment">-- 大小写不敏感搜索</span>
 <span class="hljs-keyword">CREATE</span> INDEX idx_users_email_lower <span class="hljs-keyword">ON</span> users (<span class="hljs-built_in">LOWER</span>(email));
 
 <span class="hljs-comment">-- 查询时可使用该索引</span>
-<span class="hljs-keyword">SELECT</span> <span class="hljs-operator">*</span> <span class="hljs-keyword">FROM</span> users <span class="hljs-keyword">WHERE</span> <span class="hljs-built_in">LOWER</span>(email) <span class="hljs-operator">=</span> <span class="hljs-built_in">LOWER</span>(<span class="hljs-string">'User@Example.com'</span>);
+<span class="hljs-keyword">SELECT</span> <span class="hljs-operator">*</span> <span class="hljs-keyword">FROM</span> users <span class="hljs-keyword">WHERE</span> <span class="hljs-built_in">LOWER</span>(email) <span class="hljs-operator">=</span> <span class="hljs-built_in">LOWER</span>(<span class="hljs-string">&#x27;User@Example.com&#x27;</span>);
 </code></pre></div><h3>4.4 索引扫描类型</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-sql">EXPLAIN (ANALYZE, BUFFERS, FORMAT TEXT)
-<span class="hljs-keyword">SELECT</span> <span class="hljs-operator">*</span> <span class="hljs-keyword">FROM</span> orders <span class="hljs-keyword">WHERE</span> customer_id <span class="hljs-operator">=</span> <span class="hljs-number">123</span> <span class="hljs-keyword">AND</span> status <span class="hljs-operator">=</span> <span class="hljs-string">'pending'</span>;
+<span class="hljs-keyword">SELECT</span> <span class="hljs-operator">*</span> <span class="hljs-keyword">FROM</span> orders <span class="hljs-keyword">WHERE</span> customer_id <span class="hljs-operator">=</span> <span class="hljs-number">123</span> <span class="hljs-keyword">AND</span> status <span class="hljs-operator">=</span> <span class="hljs-string">&#x27;pending&#x27;</span>;
 </code></pre></div><p>EXPLAIN 解读关键字段：</p>
 <table>
 <thead>
@@ -284,7 +284,7 @@
 </tbody></table>
 <p><strong>快速诊断：</strong></p>
 <div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-sql"><span class="hljs-comment">-- 查找缺失索引</span>
-<span class="hljs-keyword">SELECT</span> schemaname <span class="hljs-operator">||</span> <span class="hljs-string">'.'</span> <span class="hljs-operator">||</span> relname <span class="hljs-keyword">AS</span> <span class="hljs-keyword">table</span>,
+<span class="hljs-keyword">SELECT</span> schemaname <span class="hljs-operator">||</span> <span class="hljs-string">&#x27;.&#x27;</span> <span class="hljs-operator">||</span> relname <span class="hljs-keyword">AS</span> <span class="hljs-keyword">table</span>,
        seq_scan, seq_tup_read,
        idx_scan, seq_tup_read <span class="hljs-operator">/</span> GREATEST(seq_scan, <span class="hljs-number">1</span>) <span class="hljs-keyword">AS</span> avg_seq_tup,
        n_live_tup
@@ -294,11 +294,11 @@
 LIMIT <span class="hljs-number">20</span>;
 
 <span class="hljs-comment">-- 查找未使用索引</span>
-<span class="hljs-keyword">SELECT</span> schemaname <span class="hljs-operator">||</span> <span class="hljs-string">'.'</span> <span class="hljs-operator">||</span> relname <span class="hljs-keyword">AS</span> <span class="hljs-keyword">table</span>,
+<span class="hljs-keyword">SELECT</span> schemaname <span class="hljs-operator">||</span> <span class="hljs-string">&#x27;.&#x27;</span> <span class="hljs-operator">||</span> relname <span class="hljs-keyword">AS</span> <span class="hljs-keyword">table</span>,
        indexrelname, idx_scan
 <span class="hljs-keyword">FROM</span> pg_stat_user_indexes
 <span class="hljs-keyword">WHERE</span> idx_scan <span class="hljs-operator">=</span> <span class="hljs-number">0</span>
-  <span class="hljs-keyword">AND</span> indexrelname <span class="hljs-keyword">NOT</span> <span class="hljs-keyword">LIKE</span> <span class="hljs-string">'%pkey'</span>
+  <span class="hljs-keyword">AND</span> indexrelname <span class="hljs-keyword">NOT</span> <span class="hljs-keyword">LIKE</span> <span class="hljs-string">&#x27;%pkey&#x27;</span>
 <span class="hljs-keyword">ORDER</span> <span class="hljs-keyword">BY</span> pg_relation_size(indexrelid) <span class="hljs-keyword">DESC</span>;
 </code></pre></div><hr>
 <h2>五、SQL 优化</h2>
@@ -341,21 +341,21 @@ EXPLAIN ANALYZE <span class="hljs-keyword">SELECT</span> ...
 <ol>
 <li><p><strong>隐式类型转换导致索引失效：</strong></p>
 <div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-sql"><span class="hljs-comment">-- 错误：id 是 int 类型但比较值用了字符串</span>
-<span class="hljs-keyword">SELECT</span> <span class="hljs-operator">*</span> <span class="hljs-keyword">FROM</span> users <span class="hljs-keyword">WHERE</span> id <span class="hljs-operator">=</span> <span class="hljs-string">'123'</span>;
+<span class="hljs-keyword">SELECT</span> <span class="hljs-operator">*</span> <span class="hljs-keyword">FROM</span> users <span class="hljs-keyword">WHERE</span> id <span class="hljs-operator">=</span> <span class="hljs-string">&#x27;123&#x27;</span>;
 <span class="hljs-comment">-- 正确的做法</span>
 <span class="hljs-keyword">SELECT</span> <span class="hljs-operator">*</span> <span class="hljs-keyword">FROM</span> users <span class="hljs-keyword">WHERE</span> id <span class="hljs-operator">=</span> <span class="hljs-number">123</span>;
 </code></pre></div></li>
 <li><p><strong>函数包裹索引列：</strong></p>
 <div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-sql"><span class="hljs-comment">-- 错误：索引失效</span>
-<span class="hljs-keyword">SELECT</span> <span class="hljs-operator">*</span> <span class="hljs-keyword">FROM</span> orders <span class="hljs-keyword">WHERE</span> <span class="hljs-type">DATE</span>(created_at) <span class="hljs-operator">=</span> <span class="hljs-string">'2026-01-01'</span>;
+<span class="hljs-keyword">SELECT</span> <span class="hljs-operator">*</span> <span class="hljs-keyword">FROM</span> orders <span class="hljs-keyword">WHERE</span> <span class="hljs-type">DATE</span>(created_at) <span class="hljs-operator">=</span> <span class="hljs-string">&#x27;2026-01-01&#x27;</span>;
 <span class="hljs-comment">-- 正确：使用范围查询</span>
-<span class="hljs-keyword">SELECT</span> <span class="hljs-operator">*</span> <span class="hljs-keyword">FROM</span> orders <span class="hljs-keyword">WHERE</span> created_at <span class="hljs-operator">&gt;=</span> <span class="hljs-string">'2026-01-01'</span> <span class="hljs-keyword">AND</span> created_at <span class="hljs-operator">&lt;</span> <span class="hljs-string">'2026-01-02'</span>;
+<span class="hljs-keyword">SELECT</span> <span class="hljs-operator">*</span> <span class="hljs-keyword">FROM</span> orders <span class="hljs-keyword">WHERE</span> created_at <span class="hljs-operator">&gt;=</span> <span class="hljs-string">&#x27;2026-01-01&#x27;</span> <span class="hljs-keyword">AND</span> created_at <span class="hljs-operator">&lt;</span> <span class="hljs-string">&#x27;2026-01-02&#x27;</span>;
 </code></pre></div></li>
 <li><p><strong>负向查询无法使用索引：</strong></p>
 <div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-sql"><span class="hljs-comment">-- 以下通常不走索引</span>
-<span class="hljs-keyword">SELECT</span> <span class="hljs-operator">*</span> <span class="hljs-keyword">FROM</span> users <span class="hljs-keyword">WHERE</span> status <span class="hljs-operator">!=</span> <span class="hljs-string">'deleted'</span>;
+<span class="hljs-keyword">SELECT</span> <span class="hljs-operator">*</span> <span class="hljs-keyword">FROM</span> users <span class="hljs-keyword">WHERE</span> status <span class="hljs-operator">!=</span> <span class="hljs-string">&#x27;deleted&#x27;</span>;
 <span class="hljs-comment">-- 如果 deleted 占比很小，用部分索引</span>
-<span class="hljs-keyword">SELECT</span> <span class="hljs-operator">*</span> <span class="hljs-keyword">FROM</span> users <span class="hljs-keyword">WHERE</span> status <span class="hljs-keyword">IN</span> (<span class="hljs-string">'active'</span>, <span class="hljs-string">'pending'</span>);
+<span class="hljs-keyword">SELECT</span> <span class="hljs-operator">*</span> <span class="hljs-keyword">FROM</span> users <span class="hljs-keyword">WHERE</span> status <span class="hljs-keyword">IN</span> (<span class="hljs-string">&#x27;active&#x27;</span>, <span class="hljs-string">&#x27;pending&#x27;</span>);
 </code></pre></div></li>
 <li><p><strong>大 OFFSET 分页：</strong></p>
 <div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-sql"><span class="hljs-comment">-- 错误：OFFSET 1000000 需要扫描并丢弃前100万行</span>
@@ -369,7 +369,7 @@ EXPLAIN ANALYZE <span class="hljs-keyword">SELECT</span> ...
 ANALYZE tablename;
 
 <span class="hljs-comment">-- 查看统计信息</span>
-<span class="hljs-keyword">SELECT</span> <span class="hljs-operator">*</span> <span class="hljs-keyword">FROM</span> pg_stats <span class="hljs-keyword">WHERE</span> tablename <span class="hljs-operator">=</span> <span class="hljs-string">'orders'</span> <span class="hljs-keyword">AND</span> attname <span class="hljs-operator">=</span> <span class="hljs-string">'customer_id'</span>;
+<span class="hljs-keyword">SELECT</span> <span class="hljs-operator">*</span> <span class="hljs-keyword">FROM</span> pg_stats <span class="hljs-keyword">WHERE</span> tablename <span class="hljs-operator">=</span> <span class="hljs-string">&#x27;orders&#x27;</span> <span class="hljs-keyword">AND</span> attname <span class="hljs-operator">=</span> <span class="hljs-string">&#x27;customer_id&#x27;</span>;
 <span class="hljs-comment">-- n_distinct: -1 表示唯一列；正值表示不同值数量</span>
 <span class="hljs-comment">-- most_common_vals / most_common_freqs: 最常见值及其频率</span>
 <span class="hljs-comment">-- correlation: 列值和物理存储顺序的相关性（1 理想，0 随机）</span>
@@ -420,7 +420,7 @@ ANALYZE tablename;
 <td>sum(|a-b|)</td>
 </tr>
 </tbody></table>
-<p><strong>注意：</strong> 所有操作符返回"距离"而非"相似度"。距离越小越相似。<code>&lt;=&gt;</code> 范围 [0, 2]。</p>
+<p><strong>注意：</strong> 所有操作符返回&quot;距离&quot;而非&quot;相似度&quot;。距离越小越相似。<code>&lt;=&gt;</code> 范围 [0, 2]。</p>
 <div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-sql"><span class="hljs-comment">-- L2 距离最近邻</span>
 <span class="hljs-keyword">SELECT</span> id, chunk_text, embedding <span class="hljs-operator">&lt;</span><span class="hljs-operator">-</span><span class="hljs-operator">&gt;</span> query_embedding <span class="hljs-keyword">AS</span> distance
 <span class="hljs-keyword">FROM</span> documents
@@ -527,7 +527,7 @@ LIMIT <span class="hljs-number">10</span>;
 <p>在实际 RAG 场景中，纯向量检索可能遗漏精确关键词匹配的文档。混合检索将全文检索（BM25 等价实现）与向量检索融合。</p>
 <div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-sql"><span class="hljs-comment">-- 1. 创建全文检索索引</span>
 <span class="hljs-keyword">ALTER TABLE</span> documents <span class="hljs-keyword">ADD</span> <span class="hljs-keyword">COLUMN</span> fts tsvector
-GENERATED ALWAYS <span class="hljs-keyword">AS</span> (to_tsvector(<span class="hljs-string">'english'</span>, chunk_text)) STORED;
+GENERATED ALWAYS <span class="hljs-keyword">AS</span> (to_tsvector(<span class="hljs-string">&#x27;english&#x27;</span>, chunk_text)) STORED;
 <span class="hljs-keyword">CREATE</span> INDEX idx_documents_fts <span class="hljs-keyword">ON</span> documents <span class="hljs-keyword">USING</span> GIN (fts);
 
 <span class="hljs-comment">-- 2. 混合检索函数（使用 RRF 融合）</span>
@@ -548,10 +548,10 @@ GENERATED ALWAYS <span class="hljs-keyword">AS</span> (to_tsvector(<span class="
     <span class="hljs-keyword">RETURN</span> QUERY
     <span class="hljs-keyword">WITH</span> fts_results <span class="hljs-keyword">AS</span> (
         <span class="hljs-keyword">SELECT</span> id, chunk_text,
-               ts_rank(fts, websearch_to_tsquery(<span class="hljs-string">'english'</span>, query_text)) <span class="hljs-keyword">AS</span> score,
-               <span class="hljs-built_in">row_number</span>() <span class="hljs-keyword">OVER</span> (<span class="hljs-keyword">ORDER</span> <span class="hljs-keyword">BY</span> ts_rank(fts, websearch_to_tsquery(<span class="hljs-string">'english'</span>, query_text)) <span class="hljs-keyword">DESC</span>) <span class="hljs-keyword">AS</span> rank
+               ts_rank(fts, websearch_to_tsquery(<span class="hljs-string">&#x27;english&#x27;</span>, query_text)) <span class="hljs-keyword">AS</span> score,
+               <span class="hljs-built_in">row_number</span>() <span class="hljs-keyword">OVER</span> (<span class="hljs-keyword">ORDER</span> <span class="hljs-keyword">BY</span> ts_rank(fts, websearch_to_tsquery(<span class="hljs-string">&#x27;english&#x27;</span>, query_text)) <span class="hljs-keyword">DESC</span>) <span class="hljs-keyword">AS</span> rank
         <span class="hljs-keyword">FROM</span> documents
-        <span class="hljs-keyword">WHERE</span> fts @@ websearch_to_tsquery(<span class="hljs-string">'english'</span>, query_text)
+        <span class="hljs-keyword">WHERE</span> fts @@ websearch_to_tsquery(<span class="hljs-string">&#x27;english&#x27;</span>, query_text)
         <span class="hljs-keyword">ORDER</span> <span class="hljs-keyword">BY</span> score <span class="hljs-keyword">DESC</span>
         LIMIT full_text_limit
     ),
@@ -598,8 +598,8 @@ $$ <span class="hljs-keyword">LANGUAGE</span> plpgsql;
                 .indexType(PgVectorStore.PgIndexType.HNSW)
                 .hnswM(<span class="hljs-number">16</span>)
                 .hnswEfConstruction(<span class="hljs-number">200</span>)
-                .vectorTableName(<span class="hljs-string">"document_embeddings"</span>)
-                .schemaName(<span class="hljs-string">"public"</span>)
+                .vectorTableName(<span class="hljs-string">&quot;document_embeddings&quot;</span>)
+                .schemaName(<span class="hljs-string">&quot;public&quot;</span>)
                 .build();
     }
 }
@@ -623,15 +623,15 @@ $$ <span class="hljs-keyword">LANGUAGE</span> plpgsql;
     <span class="hljs-keyword">public</span> List&lt;SearchResult&gt; <span class="hljs-title function_">hybridSearch</span><span class="hljs-params">(String query, <span class="hljs-type">int</span> limit)</span> {
         <span class="hljs-type">var</span> <span class="hljs-variable">embedding</span> <span class="hljs-operator">=</span> embeddingModel.embed(query);
         <span class="hljs-type">var</span> <span class="hljs-variable">vectorStr</span> <span class="hljs-operator">=</span> Arrays.toString(embedding)
-                .replace(<span class="hljs-string">'['</span>, <span class="hljs-string">'{'</span>).replace(<span class="hljs-string">']'</span>, <span class="hljs-string">'}'</span>);
+                .replace(<span class="hljs-string">&#x27;[&#x27;</span>, <span class="hljs-string">&#x27;{&#x27;</span>).replace(<span class="hljs-string">&#x27;]&#x27;</span>, <span class="hljs-string">&#x27;}&#x27;</span>);
 
-        <span class="hljs-type">var</span> <span class="hljs-variable">sql</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
+        <span class="hljs-type">var</span> <span class="hljs-variable">sql</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;&quot;&quot;
             WITH fts_results AS (
                 SELECT id, chunk_text,
-                       ts_rank(fts, websearch_to_tsquery('english', ?)) AS score,
-                       row_number() OVER (ORDER BY ts_rank(fts, websearch_to_tsquery('english', ?)) DESC) AS rank
+                       ts_rank(fts, websearch_to_tsquery(&#x27;english&#x27;, ?)) AS score,
+                       row_number() OVER (ORDER BY ts_rank(fts, websearch_to_tsquery(&#x27;english&#x27;, ?)) DESC) AS rank
                 FROM documents
-                WHERE fts @@ websearch_to_tsquery('english', ?)
+                WHERE fts @@ websearch_to_tsquery(&#x27;english&#x27;, ?)
                 ORDER BY score DESC
                 LIMIT ?
             ),
@@ -655,14 +655,14 @@ $$ <span class="hljs-keyword">LANGUAGE</span> plpgsql;
             FROM rrf
             ORDER BY rrf_score DESC
             LIMIT ?
-            """</span>;
+            &quot;&quot;&quot;</span>;
 
         <span class="hljs-keyword">return</span> jdbcTemplate.query(sql,
                 <span class="hljs-keyword">new</span> <span class="hljs-title class_">Object</span>[]{query, query, query, limit, vectorStr, vectorStr, vectorStr, limit, limit},
                 (rs, rowNum) -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">SearchResult</span>(
-                        rs.getLong(<span class="hljs-string">"id"</span>),
-                        rs.getString(<span class="hljs-string">"chunk_text"</span>),
-                        rs.getDouble(<span class="hljs-string">"rrf_score"</span>)
+                        rs.getLong(<span class="hljs-string">&quot;id&quot;</span>),
+                        rs.getString(<span class="hljs-string">&quot;chunk_text&quot;</span>),
+                        rs.getDouble(<span class="hljs-string">&quot;rrf_score&quot;</span>)
                 ));
     }
 }
@@ -743,11 +743,11 @@ $$ <span class="hljs-keyword">LANGUAGE</span> plpgsql;
         <span class="hljs-type">var</span> <span class="hljs-variable">embedding</span> <span class="hljs-operator">=</span> embeddingModel.embed(chunkText);
         <span class="hljs-type">var</span> <span class="hljs-variable">vectorStr</span> <span class="hljs-operator">=</span> toPgVector(embedding);
 
-        <span class="hljs-type">var</span> <span class="hljs-variable">sql</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
+        <span class="hljs-type">var</span> <span class="hljs-variable">sql</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;&quot;&quot;
             INSERT INTO documents (content, chunk_text, category, tags, embedding, created_at)
             VALUES (?, ?, ?, ?, ?::vector, NOW())
             RETURNING id
-            """</span>;
+            &quot;&quot;&quot;</span>;
 
         <span class="hljs-type">var</span> <span class="hljs-variable">id</span> <span class="hljs-operator">=</span> jdbcTemplate.queryForObject(sql, Long.class,
                 content, chunkText, category, tags, vectorStr);
@@ -776,19 +776,19 @@ $$ <span class="hljs-keyword">LANGUAGE</span> plpgsql;
         <span class="hljs-type">var</span> <span class="hljs-variable">hasTags</span> <span class="hljs-operator">=</span> tags != <span class="hljs-literal">null</span> &amp;&amp; !tags.isBlank();
 
         <span class="hljs-comment">// 动态构建元数据过滤子句</span>
-        <span class="hljs-type">var</span> <span class="hljs-variable">categoryClause</span> <span class="hljs-operator">=</span> hasCategory ? <span class="hljs-string">"AND d.category = ?"</span> : <span class="hljs-string">""</span>;
+        <span class="hljs-type">var</span> <span class="hljs-variable">categoryClause</span> <span class="hljs-operator">=</span> hasCategory ? <span class="hljs-string">&quot;AND d.category = ?&quot;</span> : <span class="hljs-string">&quot;&quot;</span>;
         <span class="hljs-type">var</span> <span class="hljs-variable">tagsClause</span> <span class="hljs-operator">=</span> hasTags
-                ? <span class="hljs-string">"AND string_to_array(d.tags, ',') &amp;&amp; string_to_array(?, ',')"</span> : <span class="hljs-string">""</span>;
+                ? <span class="hljs-string">&quot;AND string_to_array(d.tags, &#x27;,&#x27;) &amp;&amp; string_to_array(?, &#x27;,&#x27;)&quot;</span> : <span class="hljs-string">&quot;&quot;</span>;
 
-        <span class="hljs-type">var</span> <span class="hljs-variable">sql</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
+        <span class="hljs-type">var</span> <span class="hljs-variable">sql</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;&quot;&quot;
             WITH fts_results AS (
                 SELECT d.id, d.chunk_text, d.category, d.tags,
-                       ts_rank(d.fts, websearch_to_tsquery('english', ?)) AS score,
+                       ts_rank(d.fts, websearch_to_tsquery(&#x27;english&#x27;, ?)) AS score,
                        row_number() OVER (
-                           ORDER BY ts_rank(d.fts, websearch_to_tsquery('english', ?)) DESC
+                           ORDER BY ts_rank(d.fts, websearch_to_tsquery(&#x27;english&#x27;, ?)) DESC
                        ) AS rank
                 FROM documents d
-                WHERE d.fts @@ websearch_to_tsquery('english', ?)
+                WHERE d.fts @@ websearch_to_tsquery(&#x27;english&#x27;, ?)
                   %s
                   %s
                 ORDER BY score DESC
@@ -821,7 +821,7 @@ $$ <span class="hljs-keyword">LANGUAGE</span> plpgsql;
             FROM rrf
             ORDER BY rrf_score DESC
             LIMIT ?
-            """</span>.formatted(categoryClause, tagsClause, categoryClause, tagsClause);
+            &quot;&quot;&quot;</span>.formatted(categoryClause, tagsClause, categoryClause, tagsClause);
 
         <span class="hljs-comment">// 按占位符顺序构建参数</span>
         <span class="hljs-type">var</span> <span class="hljs-variable">params</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;&gt;();
@@ -841,13 +841,13 @@ $$ <span class="hljs-keyword">LANGUAGE</span> plpgsql;
 
         <span class="hljs-keyword">return</span> jdbcTemplate.query(sql, params.toArray(),
                 (rs, rowNum) -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">HybridSearchResult</span>(
-                        rs.getLong(<span class="hljs-string">"id"</span>),
-                        rs.getString(<span class="hljs-string">"chunk_text"</span>),
-                        rs.getDouble(<span class="hljs-string">"rrf_score"</span>),
-                        rs.getString(<span class="hljs-string">"category"</span>),
-                        rs.getString(<span class="hljs-string">"tags"</span>),
-                        rs.getDouble(<span class="hljs-string">"vector_score"</span>),
-                        rs.getDouble(<span class="hljs-string">"fts_score"</span>)
+                        rs.getLong(<span class="hljs-string">&quot;id&quot;</span>),
+                        rs.getString(<span class="hljs-string">&quot;chunk_text&quot;</span>),
+                        rs.getDouble(<span class="hljs-string">&quot;rrf_score&quot;</span>),
+                        rs.getString(<span class="hljs-string">&quot;category&quot;</span>),
+                        rs.getString(<span class="hljs-string">&quot;tags&quot;</span>),
+                        rs.getDouble(<span class="hljs-string">&quot;vector_score&quot;</span>),
+                        rs.getDouble(<span class="hljs-string">&quot;fts_score&quot;</span>)
                 ));
     }
 
@@ -878,10 +878,10 @@ $$ <span class="hljs-keyword">LANGUAGE</span> plpgsql;
         <span class="hljs-type">var</span> <span class="hljs-variable">texts</span> <span class="hljs-operator">=</span> documents.stream().map(DocumentInput::chunkText).toList();
         <span class="hljs-type">var</span> <span class="hljs-variable">embeddings</span> <span class="hljs-operator">=</span> batchEmbed(texts);
 
-        <span class="hljs-type">var</span> <span class="hljs-variable">sql</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
+        <span class="hljs-type">var</span> <span class="hljs-variable">sql</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;&quot;&quot;
             INSERT INTO documents (content, chunk_text, category, tags, embedding, created_at)
             VALUES (?, ?, ?, ?, ?::vector, NOW())
-            """</span>;
+            &quot;&quot;&quot;</span>;
 
         <span class="hljs-type">var</span> <span class="hljs-variable">batchArgs</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;Object[]&gt;();
         <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; documents.size(); i++) {
@@ -904,42 +904,42 @@ $$ <span class="hljs-keyword">LANGUAGE</span> plpgsql;
 
     <span class="hljs-comment">/** 按 category 过滤，返回最近创建的文档。 */</span>
     <span class="hljs-keyword">public</span> List&lt;DocumentRecord&gt; <span class="hljs-title function_">findByCategory</span><span class="hljs-params">(String category, <span class="hljs-type">int</span> limit)</span> {
-        <span class="hljs-type">var</span> <span class="hljs-variable">sql</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
+        <span class="hljs-type">var</span> <span class="hljs-variable">sql</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;&quot;&quot;
             SELECT id, content, chunk_text, category, tags, created_at
             FROM documents
             WHERE category = ?
             ORDER BY created_at DESC
             LIMIT ?
-            """</span>;
+            &quot;&quot;&quot;</span>;
         <span class="hljs-keyword">return</span> jdbcTemplate.query(sql,
                 (rs, rowNum) -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">DocumentRecord</span>(
-                        rs.getLong(<span class="hljs-string">"id"</span>),
-                        rs.getString(<span class="hljs-string">"content"</span>),
-                        rs.getString(<span class="hljs-string">"chunk_text"</span>),
-                        rs.getString(<span class="hljs-string">"category"</span>),
-                        rs.getString(<span class="hljs-string">"tags"</span>),
-                        rs.getTimestamp(<span class="hljs-string">"created_at"</span>).toLocalDateTime()
+                        rs.getLong(<span class="hljs-string">&quot;id&quot;</span>),
+                        rs.getString(<span class="hljs-string">&quot;content&quot;</span>),
+                        rs.getString(<span class="hljs-string">&quot;chunk_text&quot;</span>),
+                        rs.getString(<span class="hljs-string">&quot;category&quot;</span>),
+                        rs.getString(<span class="hljs-string">&quot;tags&quot;</span>),
+                        rs.getTimestamp(<span class="hljs-string">&quot;created_at&quot;</span>).toLocalDateTime()
                 ),
                 category, limit);
     }
 
     <span class="hljs-comment">/** 按 tags 过滤（包含任一标签即匹配）。 */</span>
     <span class="hljs-keyword">public</span> List&lt;DocumentRecord&gt; <span class="hljs-title function_">findByTags</span><span class="hljs-params">(String tags, <span class="hljs-type">int</span> limit)</span> {
-        <span class="hljs-type">var</span> <span class="hljs-variable">sql</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
+        <span class="hljs-type">var</span> <span class="hljs-variable">sql</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;&quot;&quot;
             SELECT id, content, chunk_text, category, tags, created_at
             FROM documents
-            WHERE string_to_array(tags, ',') &amp;&amp; string_to_array(?, ',')
+            WHERE string_to_array(tags, &#x27;,&#x27;) &amp;&amp; string_to_array(?, &#x27;,&#x27;)
             ORDER BY created_at DESC
             LIMIT ?
-            """</span>;
+            &quot;&quot;&quot;</span>;
         <span class="hljs-keyword">return</span> jdbcTemplate.query(sql,
                 (rs, rowNum) -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">DocumentRecord</span>(
-                        rs.getLong(<span class="hljs-string">"id"</span>),
-                        rs.getString(<span class="hljs-string">"content"</span>),
-                        rs.getString(<span class="hljs-string">"chunk_text"</span>),
-                        rs.getString(<span class="hljs-string">"category"</span>),
-                        rs.getString(<span class="hljs-string">"tags"</span>),
-                        rs.getTimestamp(<span class="hljs-string">"created_at"</span>).toLocalDateTime()
+                        rs.getLong(<span class="hljs-string">&quot;id&quot;</span>),
+                        rs.getString(<span class="hljs-string">&quot;content&quot;</span>),
+                        rs.getString(<span class="hljs-string">&quot;chunk_text&quot;</span>),
+                        rs.getString(<span class="hljs-string">&quot;category&quot;</span>),
+                        rs.getString(<span class="hljs-string">&quot;tags&quot;</span>),
+                        rs.getTimestamp(<span class="hljs-string">&quot;created_at&quot;</span>).toLocalDateTime()
                 ),
                 tags, limit);
     }
@@ -948,21 +948,21 @@ $$ <span class="hljs-keyword">LANGUAGE</span> plpgsql;
     <span class="hljs-keyword">public</span> List&lt;DocumentRecord&gt; <span class="hljs-title function_">findByCreatedAtRange</span><span class="hljs-params">(LocalDateTime from,
                                                       LocalDateTime to,
                                                       <span class="hljs-type">int</span> limit)</span> {
-        <span class="hljs-type">var</span> <span class="hljs-variable">sql</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
+        <span class="hljs-type">var</span> <span class="hljs-variable">sql</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;&quot;&quot;
             SELECT id, content, chunk_text, category, tags, created_at
             FROM documents
             WHERE created_at BETWEEN ? AND ?
             ORDER BY created_at DESC
             LIMIT ?
-            """</span>;
+            &quot;&quot;&quot;</span>;
         <span class="hljs-keyword">return</span> jdbcTemplate.query(sql,
                 (rs, rowNum) -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">DocumentRecord</span>(
-                        rs.getLong(<span class="hljs-string">"id"</span>),
-                        rs.getString(<span class="hljs-string">"content"</span>),
-                        rs.getString(<span class="hljs-string">"chunk_text"</span>),
-                        rs.getString(<span class="hljs-string">"category"</span>),
-                        rs.getString(<span class="hljs-string">"tags"</span>),
-                        rs.getTimestamp(<span class="hljs-string">"created_at"</span>).toLocalDateTime()
+                        rs.getLong(<span class="hljs-string">&quot;id&quot;</span>),
+                        rs.getString(<span class="hljs-string">&quot;content&quot;</span>),
+                        rs.getString(<span class="hljs-string">&quot;chunk_text&quot;</span>),
+                        rs.getString(<span class="hljs-string">&quot;category&quot;</span>),
+                        rs.getString(<span class="hljs-string">&quot;tags&quot;</span>),
+                        rs.getTimestamp(<span class="hljs-string">&quot;created_at&quot;</span>).toLocalDateTime()
                 ),
                 from, to, limit);
     }
@@ -971,14 +971,14 @@ $$ <span class="hljs-keyword">LANGUAGE</span> plpgsql;
     <span class="hljs-comment">// 工具方法</span>
     <span class="hljs-comment">// ============================================================</span>
 
-    <span class="hljs-comment">/** 将 float[] 转为 pgvector 兼容格式 "{v1,v2,...,vn}" */</span>
+    <span class="hljs-comment">/** 将 float[] 转为 pgvector 兼容格式 &quot;{v1,v2,...,vn}&quot; */</span>
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> String <span class="hljs-title function_">toPgVector</span><span class="hljs-params">(<span class="hljs-type">float</span>[] embedding)</span> {
-        <span class="hljs-type">var</span> <span class="hljs-variable">sb</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>(<span class="hljs-string">"{"</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">sb</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>(<span class="hljs-string">&quot;{&quot;</span>);
         <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; embedding.length; i++) {
-            <span class="hljs-keyword">if</span> (i &gt; <span class="hljs-number">0</span>) sb.append(<span class="hljs-string">","</span>);
+            <span class="hljs-keyword">if</span> (i &gt; <span class="hljs-number">0</span>) sb.append(<span class="hljs-string">&quot;,&quot;</span>);
             sb.append(embedding[i]);
         }
-        sb.append(<span class="hljs-string">"}"</span>);
+        sb.append(<span class="hljs-string">&quot;}&quot;</span>);
         <span class="hljs-keyword">return</span> sb.toString();
     }
 }
@@ -1011,13 +1011,13 @@ $$ <span class="hljs-keyword">LANGUAGE</span> plpgsql;
 <span class="hljs-meta">@SpringBootTest</span>
 <span class="hljs-meta">@Testcontainers</span>
 <span class="hljs-meta">@TestInstance(TestInstance.Lifecycle.PER_CLASS)</span>
-<span class="hljs-meta">@DisplayName("pgvector 混合检索集成测试")</span>
+<span class="hljs-meta">@DisplayName(&quot;pgvector 混合检索集成测试&quot;)</span>
 <span class="hljs-keyword">class</span> <span class="hljs-title class_">PgvectorHybridSearchIntegrationTest</span> {
 
     <span class="hljs-meta">@Container</span>
     <span class="hljs-meta">@ServiceConnection</span>
     <span class="hljs-keyword">static</span> PostgreSQLContainer&lt;?&gt; postgres = <span class="hljs-keyword">new</span> <span class="hljs-title class_">PostgreSQLContainer</span>&lt;&gt;(
-            <span class="hljs-string">"pgvector/pgvector:pg17"</span>
+            <span class="hljs-string">&quot;pgvector/pgvector:pg17&quot;</span>
     );
 
     <span class="hljs-meta">@Autowired</span>
@@ -1029,10 +1029,10 @@ $$ <span class="hljs-keyword">LANGUAGE</span> plpgsql;
     <span class="hljs-meta">@BeforeAll</span>
     <span class="hljs-keyword">void</span> <span class="hljs-title function_">setupDatabase</span><span class="hljs-params">()</span> {
         <span class="hljs-comment">// 启用 pgvector 扩展</span>
-        jdbcTemplate.execute(<span class="hljs-string">"CREATE EXTENSION IF NOT EXISTS vector"</span>);
+        jdbcTemplate.execute(<span class="hljs-string">&quot;CREATE EXTENSION IF NOT EXISTS vector&quot;</span>);
 
         <span class="hljs-comment">// 创建文档表（含全文检索列和向量列）</span>
-        jdbcTemplate.execute(<span class="hljs-string">"""
+        jdbcTemplate.execute(<span class="hljs-string">&quot;&quot;&quot;
             CREATE TABLE IF NOT EXISTS documents (
                 id BIGSERIAL PRIMARY KEY,
                 content TEXT NOT NULL,
@@ -1040,82 +1040,82 @@ $$ <span class="hljs-keyword">LANGUAGE</span> plpgsql;
                 category VARCHAR(100),
                 tags VARCHAR(500),
                 fts tsvector GENERATED ALWAYS AS (
-                    to_tsvector('english', chunk_text)
+                    to_tsvector(&#x27;english&#x27;, chunk_text)
                 ) STORED,
                 embedding VECTOR(1536),
                 created_at TIMESTAMPTZ DEFAULT NOW()
             )
-            """</span>);
+            &quot;&quot;&quot;</span>);
 
         <span class="hljs-comment">// 创建 GIN 全文检索索引</span>
-        jdbcTemplate.execute(<span class="hljs-string">"""
+        jdbcTemplate.execute(<span class="hljs-string">&quot;&quot;&quot;
             CREATE INDEX IF NOT EXISTS idx_documents_fts
             ON documents USING GIN (fts)
-            """</span>);
+            &quot;&quot;&quot;</span>);
 
         <span class="hljs-comment">// 创建 HNSW 向量索引</span>
-        jdbcTemplate.execute(<span class="hljs-string">"""
+        jdbcTemplate.execute(<span class="hljs-string">&quot;&quot;&quot;
             CREATE INDEX IF NOT EXISTS idx_documents_embedding
             ON documents USING hnsw (embedding vector_cosine_ops)
             WITH (m = 16, ef_construction = 200)
-            """</span>);
+            &quot;&quot;&quot;</span>);
     }
 
     <span class="hljs-meta">@BeforeEach</span>
     <span class="hljs-keyword">void</span> <span class="hljs-title function_">setUp</span><span class="hljs-params">()</span> {
-        jdbcTemplate.execute(<span class="hljs-string">"DELETE FROM documents"</span>);
+        jdbcTemplate.execute(<span class="hljs-string">&quot;DELETE FROM documents&quot;</span>);
     }
 
     <span class="hljs-meta">@Test</span>
-    <span class="hljs-meta">@DisplayName("插入文档并验证 embedding 已生成")</span>
+    <span class="hljs-meta">@DisplayName(&quot;插入文档并验证 embedding 已生成&quot;)</span>
     <span class="hljs-keyword">void</span> <span class="hljs-title function_">shouldInsertDocumentWithEmbedding</span><span class="hljs-params">()</span> {
         <span class="hljs-type">var</span> <span class="hljs-variable">id</span> <span class="hljs-operator">=</span> ragDocumentService.insertDocument(
-                <span class="hljs-string">"Spring AI 是 Spring 生态的 AI 集成框架，"</span>
-                + <span class="hljs-string">"提供了与多种 LLM 的集成能力。"</span>,
-                <span class="hljs-string">"Spring AI 框架概述"</span>,
-                <span class="hljs-string">"java-ai"</span>,
-                <span class="hljs-string">"spring,ai,framework"</span>
+                <span class="hljs-string">&quot;Spring AI 是 Spring 生态的 AI 集成框架，&quot;</span>
+                + <span class="hljs-string">&quot;提供了与多种 LLM 的集成能力。&quot;</span>,
+                <span class="hljs-string">&quot;Spring AI 框架概述&quot;</span>,
+                <span class="hljs-string">&quot;java-ai&quot;</span>,
+                <span class="hljs-string">&quot;spring,ai,framework&quot;</span>
         );
 
         assertThat(id).isGreaterThan(<span class="hljs-number">0</span>);
 
         <span class="hljs-comment">// 验证 embedding 列不为空</span>
         <span class="hljs-type">var</span> <span class="hljs-variable">count</span> <span class="hljs-operator">=</span> jdbcTemplate.queryForObject(
-                <span class="hljs-string">"SELECT COUNT(*) FROM documents WHERE id = ? AND embedding IS NOT NULL"</span>,
+                <span class="hljs-string">&quot;SELECT COUNT(*) FROM documents WHERE id = ? AND embedding IS NOT NULL&quot;</span>,
                 Integer.class, id);
         assertThat(count).isEqualTo(<span class="hljs-number">1</span>);
     }
 
     <span class="hljs-meta">@Test</span>
-    <span class="hljs-meta">@DisplayName("混合检索应返回与查询语义相关的文档")</span>
+    <span class="hljs-meta">@DisplayName(&quot;混合检索应返回与查询语义相关的文档&quot;)</span>
     <span class="hljs-keyword">void</span> <span class="hljs-title function_">shouldReturnRelevantDocumentsViaHybridSearch</span><span class="hljs-params">()</span> {
         <span class="hljs-comment">// 准备测试数据：覆盖不同主题的文档</span>
         ragDocumentService.batchInsertDocuments(List.of(
                 <span class="hljs-keyword">new</span> <span class="hljs-title class_">RAGDocumentService</span>.DocumentInput(
-                        <span class="hljs-string">"全文1"</span>, <span class="hljs-string">"Spring Boot makes it easy to create stand-alone applications"</span>,
-                        <span class="hljs-string">"java-ai"</span>, <span class="hljs-string">"spring,boot"</span>
+                        <span class="hljs-string">&quot;全文1&quot;</span>, <span class="hljs-string">&quot;Spring Boot makes it easy to create stand-alone applications&quot;</span>,
+                        <span class="hljs-string">&quot;java-ai&quot;</span>, <span class="hljs-string">&quot;spring,boot&quot;</span>
                 ),
                 <span class="hljs-keyword">new</span> <span class="hljs-title class_">RAGDocumentService</span>.DocumentInput(
-                        <span class="hljs-string">"全文2"</span>, <span class="hljs-string">"PostgreSQL pgvector enables vector similarity search"</span>,
-                        <span class="hljs-string">"database"</span>, <span class="hljs-string">"postgresql,pgvector"</span>
+                        <span class="hljs-string">&quot;全文2&quot;</span>, <span class="hljs-string">&quot;PostgreSQL pgvector enables vector similarity search&quot;</span>,
+                        <span class="hljs-string">&quot;database&quot;</span>, <span class="hljs-string">&quot;postgresql,pgvector&quot;</span>
                 ),
                 <span class="hljs-keyword">new</span> <span class="hljs-title class_">RAGDocumentService</span>.DocumentInput(
-                        <span class="hljs-string">"全文3"</span>, <span class="hljs-string">"Machine learning models require large datasets for training"</span>,
-                        <span class="hljs-string">"ai-ml"</span>, <span class="hljs-string">"machine-learning,training"</span>
+                        <span class="hljs-string">&quot;全文3&quot;</span>, <span class="hljs-string">&quot;Machine learning models require large datasets for training&quot;</span>,
+                        <span class="hljs-string">&quot;ai-ml&quot;</span>, <span class="hljs-string">&quot;machine-learning,training&quot;</span>
                 ),
                 <span class="hljs-keyword">new</span> <span class="hljs-title class_">RAGDocumentService</span>.DocumentInput(
-                        <span class="hljs-string">"全文4"</span>, <span class="hljs-string">"Vector databases store embeddings for semantic search in RAG pipelines"</span>,
-                        <span class="hljs-string">"database"</span>, <span class="hljs-string">"vector-db,rag,embeddings"</span>
+                        <span class="hljs-string">&quot;全文4&quot;</span>, <span class="hljs-string">&quot;Vector databases store embeddings for semantic search in RAG pipelines&quot;</span>,
+                        <span class="hljs-string">&quot;database&quot;</span>, <span class="hljs-string">&quot;vector-db,rag,embeddings&quot;</span>
                 ),
                 <span class="hljs-keyword">new</span> <span class="hljs-title class_">RAGDocumentService</span>.DocumentInput(
-                        <span class="hljs-string">"全文5"</span>, <span class="hljs-string">"Spring AI integrates with vector stores for RAG applications"</span>,
-                        <span class="hljs-string">"java-ai"</span>, <span class="hljs-string">"spring,ai,rag,vector-store"</span>
+                        <span class="hljs-string">&quot;全文5&quot;</span>, <span class="hljs-string">&quot;Spring AI integrates with vector stores for RAG applications&quot;</span>,
+                        <span class="hljs-string">&quot;java-ai&quot;</span>, <span class="hljs-string">&quot;spring,ai,rag,vector-store&quot;</span>
                 )
         ));
 
         <span class="hljs-comment">// 执行混合检索</span>
         <span class="hljs-type">var</span> <span class="hljs-variable">results</span> <span class="hljs-operator">=</span> ragDocumentService.hybridSearch(
-                <span class="hljs-string">"vector database semantic search"</span>, <span class="hljs-literal">null</span>, <span class="hljs-literal">null</span>, <span class="hljs-number">5</span>);
+                <span class="hljs-string">&quot;vector database semantic search&quot;</span>, <span class="hljs-literal">null</span>, <span class="hljs-literal">null</span>, <span class="hljs-number">5</span>);
 
         <span class="hljs-comment">// 验证返回了结果且分数合法</span>
         assertThat(results).isNotEmpty();
@@ -1124,86 +1124,86 @@ $$ <span class="hljs-keyword">LANGUAGE</span> plpgsql;
             assertThat(result.rrfScore()).isGreaterThan(<span class="hljs-number">0</span>);
         });
 
-        <span class="hljs-comment">// 验证 "Vector databases" 相关文档出现在 top 结果中</span>
+        <span class="hljs-comment">// 验证 &quot;Vector databases&quot; 相关文档出现在 top 结果中</span>
         <span class="hljs-type">var</span> <span class="hljs-variable">topChunks</span> <span class="hljs-operator">=</span> results.stream()
                 .map(RAGDocumentService.HybridSearchResult::chunkText)
                 .toList();
         assertThat(topChunks)
-                .anyMatch(chunk -&gt; chunk.toLowerCase().contains(<span class="hljs-string">"vector"</span>));
+                .anyMatch(chunk -&gt; chunk.toLowerCase().contains(<span class="hljs-string">&quot;vector&quot;</span>));
     }
 
     <span class="hljs-meta">@Test</span>
-    <span class="hljs-meta">@DisplayName("按 category 元数据过滤应仅返回匹配分类的文档")</span>
+    <span class="hljs-meta">@DisplayName(&quot;按 category 元数据过滤应仅返回匹配分类的文档&quot;)</span>
     <span class="hljs-keyword">void</span> <span class="hljs-title function_">shouldFilterByCategory</span><span class="hljs-params">()</span> {
         ragDocumentService.batchInsertDocuments(List.of(
                 <span class="hljs-keyword">new</span> <span class="hljs-title class_">RAGDocumentService</span>.DocumentInput(
-                        <span class="hljs-string">"c1"</span>, <span class="hljs-string">"Java virtual threads improve concurrency"</span>,
-                        <span class="hljs-string">"java-ai"</span>, <span class="hljs-string">"java"</span>),
+                        <span class="hljs-string">&quot;c1&quot;</span>, <span class="hljs-string">&quot;Java virtual threads improve concurrency&quot;</span>,
+                        <span class="hljs-string">&quot;java-ai&quot;</span>, <span class="hljs-string">&quot;java&quot;</span>),
                 <span class="hljs-keyword">new</span> <span class="hljs-title class_">RAGDocumentService</span>.DocumentInput(
-                        <span class="hljs-string">"c2"</span>, <span class="hljs-string">"PostgreSQL is a powerful relational database"</span>,
-                        <span class="hljs-string">"database"</span>, <span class="hljs-string">"postgresql"</span>),
+                        <span class="hljs-string">&quot;c2&quot;</span>, <span class="hljs-string">&quot;PostgreSQL is a powerful relational database&quot;</span>,
+                        <span class="hljs-string">&quot;database&quot;</span>, <span class="hljs-string">&quot;postgresql&quot;</span>),
                 <span class="hljs-keyword">new</span> <span class="hljs-title class_">RAGDocumentService</span>.DocumentInput(
-                        <span class="hljs-string">"c3"</span>, <span class="hljs-string">"Spring Boot simplifies application development"</span>,
-                        <span class="hljs-string">"java-ai"</span>, <span class="hljs-string">"spring"</span>)
+                        <span class="hljs-string">&quot;c3&quot;</span>, <span class="hljs-string">&quot;Spring Boot simplifies application development&quot;</span>,
+                        <span class="hljs-string">&quot;java-ai&quot;</span>, <span class="hljs-string">&quot;spring&quot;</span>)
         ));
 
         <span class="hljs-comment">// 按 database 分类检索</span>
-        <span class="hljs-type">var</span> <span class="hljs-variable">dbResults</span> <span class="hljs-operator">=</span> ragDocumentService.findByCategory(<span class="hljs-string">"database"</span>, <span class="hljs-number">10</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">dbResults</span> <span class="hljs-operator">=</span> ragDocumentService.findByCategory(<span class="hljs-string">&quot;database&quot;</span>, <span class="hljs-number">10</span>);
         assertThat(dbResults).hasSize(<span class="hljs-number">1</span>);
         assertThat(dbResults.getFirst().chunkText())
-                .contains(<span class="hljs-string">"PostgreSQL"</span>);
+                .contains(<span class="hljs-string">&quot;PostgreSQL&quot;</span>);
 
         <span class="hljs-comment">// 按 java-ai 分类检索</span>
-        <span class="hljs-type">var</span> <span class="hljs-variable">javaResults</span> <span class="hljs-operator">=</span> ragDocumentService.findByCategory(<span class="hljs-string">"java-ai"</span>, <span class="hljs-number">10</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">javaResults</span> <span class="hljs-operator">=</span> ragDocumentService.findByCategory(<span class="hljs-string">&quot;java-ai&quot;</span>, <span class="hljs-number">10</span>);
         assertThat(javaResults).hasSize(<span class="hljs-number">2</span>);
     }
 
     <span class="hljs-meta">@Test</span>
-    <span class="hljs-meta">@DisplayName("按 tags 元数据过滤应仅返回匹配标签的文档")</span>
+    <span class="hljs-meta">@DisplayName(&quot;按 tags 元数据过滤应仅返回匹配标签的文档&quot;)</span>
     <span class="hljs-keyword">void</span> <span class="hljs-title function_">shouldFilterByTags</span><span class="hljs-params">()</span> {
         ragDocumentService.batchInsertDocuments(List.of(
                 <span class="hljs-keyword">new</span> <span class="hljs-title class_">RAGDocumentService</span>.DocumentInput(
-                        <span class="hljs-string">"t1"</span>, <span class="hljs-string">"RAG pipeline design"</span>, <span class="hljs-string">"ai"</span>, <span class="hljs-string">"rag,pipeline"</span>),
+                        <span class="hljs-string">&quot;t1&quot;</span>, <span class="hljs-string">&quot;RAG pipeline design&quot;</span>, <span class="hljs-string">&quot;ai&quot;</span>, <span class="hljs-string">&quot;rag,pipeline&quot;</span>),
                 <span class="hljs-keyword">new</span> <span class="hljs-title class_">RAGDocumentService</span>.DocumentInput(
-                        <span class="hljs-string">"t2"</span>, <span class="hljs-string">"Agent memory management"</span>, <span class="hljs-string">"ai"</span>, <span class="hljs-string">"agent,memory"</span>),
+                        <span class="hljs-string">&quot;t2&quot;</span>, <span class="hljs-string">&quot;Agent memory management&quot;</span>, <span class="hljs-string">&quot;ai&quot;</span>, <span class="hljs-string">&quot;agent,memory&quot;</span>),
                 <span class="hljs-keyword">new</span> <span class="hljs-title class_">RAGDocumentService</span>.DocumentInput(
-                        <span class="hljs-string">"t3"</span>, <span class="hljs-string">"RAG evaluation metrics"</span>, <span class="hljs-string">"ai"</span>, <span class="hljs-string">"rag,evaluation"</span>)
+                        <span class="hljs-string">&quot;t3&quot;</span>, <span class="hljs-string">&quot;RAG evaluation metrics&quot;</span>, <span class="hljs-string">&quot;ai&quot;</span>, <span class="hljs-string">&quot;rag,evaluation&quot;</span>)
         ));
 
-        <span class="hljs-type">var</span> <span class="hljs-variable">ragDocs</span> <span class="hljs-operator">=</span> ragDocumentService.findByTags(<span class="hljs-string">"rag"</span>, <span class="hljs-number">10</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">ragDocs</span> <span class="hljs-operator">=</span> ragDocumentService.findByTags(<span class="hljs-string">&quot;rag&quot;</span>, <span class="hljs-number">10</span>);
         assertThat(ragDocs).hasSize(<span class="hljs-number">2</span>);
         assertThat(ragDocs).allSatisfy(doc -&gt;
-                assertThat(doc.tags()).contains(<span class="hljs-string">"rag"</span>));
+                assertThat(doc.tags()).contains(<span class="hljs-string">&quot;rag&quot;</span>));
     }
 
     <span class="hljs-meta">@Test</span>
-    <span class="hljs-meta">@DisplayName("混合检索 + category 过滤应同时生效")</span>
+    <span class="hljs-meta">@DisplayName(&quot;混合检索 + category 过滤应同时生效&quot;)</span>
     <span class="hljs-keyword">void</span> <span class="hljs-title function_">shouldCombineHybridSearchWithCategoryFilter</span><span class="hljs-params">()</span> {
         ragDocumentService.batchInsertDocuments(List.of(
                 <span class="hljs-keyword">new</span> <span class="hljs-title class_">RAGDocumentService</span>.DocumentInput(
-                        <span class="hljs-string">"d1"</span>, <span class="hljs-string">"Vector search with pgvector in PostgreSQL"</span>,
-                        <span class="hljs-string">"database"</span>, <span class="hljs-string">"vector"</span>),
+                        <span class="hljs-string">&quot;d1&quot;</span>, <span class="hljs-string">&quot;Vector search with pgvector in PostgreSQL&quot;</span>,
+                        <span class="hljs-string">&quot;database&quot;</span>, <span class="hljs-string">&quot;vector&quot;</span>),
                 <span class="hljs-keyword">new</span> <span class="hljs-title class_">RAGDocumentService</span>.DocumentInput(
-                        <span class="hljs-string">"d2"</span>, <span class="hljs-string">"Vector search applied in Java AI applications"</span>,
-                        <span class="hljs-string">"java-ai"</span>, <span class="hljs-string">"vector"</span>),
+                        <span class="hljs-string">&quot;d2&quot;</span>, <span class="hljs-string">&quot;Vector search applied in Java AI applications&quot;</span>,
+                        <span class="hljs-string">&quot;java-ai&quot;</span>, <span class="hljs-string">&quot;vector&quot;</span>),
                 <span class="hljs-keyword">new</span> <span class="hljs-title class_">RAGDocumentService</span>.DocumentInput(
-                        <span class="hljs-string">"d3"</span>, <span class="hljs-string">"Embedding generation with Spring AI framework"</span>,
-                        <span class="hljs-string">"java-ai"</span>, <span class="hljs-string">"spring,ai"</span>)
+                        <span class="hljs-string">&quot;d3&quot;</span>, <span class="hljs-string">&quot;Embedding generation with Spring AI framework&quot;</span>,
+                        <span class="hljs-string">&quot;java-ai&quot;</span>, <span class="hljs-string">&quot;spring,ai&quot;</span>)
         ));
 
         <span class="hljs-comment">// 混合检索 + category=java-ai 过滤</span>
         <span class="hljs-type">var</span> <span class="hljs-variable">results</span> <span class="hljs-operator">=</span> ragDocumentService.hybridSearch(
-                <span class="hljs-string">"vector search"</span>, <span class="hljs-string">"java-ai"</span>, <span class="hljs-literal">null</span>, <span class="hljs-number">5</span>);
+                <span class="hljs-string">&quot;vector search&quot;</span>, <span class="hljs-string">&quot;java-ai&quot;</span>, <span class="hljs-literal">null</span>, <span class="hljs-number">5</span>);
 
         assertThat(results).isNotEmpty();
         <span class="hljs-comment">// 所有返回结果应只属于 java-ai 分类</span>
         assertThat(results).allSatisfy(r -&gt;
-                assertThat(r.category()).isEqualTo(<span class="hljs-string">"java-ai"</span>));
+                assertThat(r.category()).isEqualTo(<span class="hljs-string">&quot;java-ai&quot;</span>));
     }
 
     <span class="hljs-meta">@AfterAll</span>
     <span class="hljs-keyword">void</span> <span class="hljs-title function_">tearDown</span><span class="hljs-params">()</span> {
-        jdbcTemplate.execute(<span class="hljs-string">"DROP TABLE IF EXISTS documents CASCADE"</span>);
+        jdbcTemplate.execute(<span class="hljs-string">&quot;DROP TABLE IF EXISTS documents CASCADE&quot;</span>);
     }
 }
 </code></pre></div><p>测试覆盖了以下场景：</p>
@@ -1246,7 +1246,7 @@ $$ <span class="hljs-keyword">LANGUAGE</span> plpgsql;
       <span class="hljs-attr">idle-timeout:</span> <span class="hljs-number">600000</span>        <span class="hljs-comment"># 空闲连接最大存活时间（10分钟）</span>
       <span class="hljs-attr">max-lifetime:</span> <span class="hljs-number">1800000</span>       <span class="hljs-comment"># 连接最大生命周期（30分钟，应小于数据库连接超时）</span>
       <span class="hljs-attr">connection-timeout:</span> <span class="hljs-number">30000</span>   <span class="hljs-comment"># 等待连接超时（30秒）</span>
-      <span class="hljs-attr">connection-test-query:</span> <span class="hljs-string">"SELECT 1"</span>
+      <span class="hljs-attr">connection-test-query:</span> <span class="hljs-string">&quot;SELECT 1&quot;</span>
       <span class="hljs-attr">leak-detection-threshold:</span> <span class="hljs-number">60000</span>  <span class="hljs-comment"># 连接泄漏检测（仅开发环境启用）</span>
 </code></pre></div><p><strong>连接池大小公式：</strong> <code>connections = ((core_count * 2) + effective_spindle_count)</code></p>
 <h3>7.2 PgBouncer</h3>
@@ -1297,20 +1297,20 @@ $$ <span class="hljs-keyword">LANGUAGE</span> plpgsql;
 ) <span class="hljs-keyword">PARTITION</span> <span class="hljs-keyword">BY</span> <span class="hljs-keyword">RANGE</span> (created_at);
 
 <span class="hljs-keyword">CREATE TABLE</span> events_2026_q1 <span class="hljs-keyword">PARTITION</span> <span class="hljs-keyword">OF</span> events
-<span class="hljs-keyword">FOR</span> <span class="hljs-keyword">VALUES</span> <span class="hljs-keyword">FROM</span> (<span class="hljs-string">'2026-01-01'</span>) <span class="hljs-keyword">TO</span> (<span class="hljs-string">'2026-04-01'</span>);
+<span class="hljs-keyword">FOR</span> <span class="hljs-keyword">VALUES</span> <span class="hljs-keyword">FROM</span> (<span class="hljs-string">&#x27;2026-01-01&#x27;</span>) <span class="hljs-keyword">TO</span> (<span class="hljs-string">&#x27;2026-04-01&#x27;</span>);
 
 <span class="hljs-keyword">CREATE TABLE</span> events_2026_q2 <span class="hljs-keyword">PARTITION</span> <span class="hljs-keyword">OF</span> events
-<span class="hljs-keyword">FOR</span> <span class="hljs-keyword">VALUES</span> <span class="hljs-keyword">FROM</span> (<span class="hljs-string">'2026-04-01'</span>) <span class="hljs-keyword">TO</span> (<span class="hljs-string">'2026-07-01'</span>);
+<span class="hljs-keyword">FOR</span> <span class="hljs-keyword">VALUES</span> <span class="hljs-keyword">FROM</span> (<span class="hljs-string">&#x27;2026-04-01&#x27;</span>) <span class="hljs-keyword">TO</span> (<span class="hljs-string">&#x27;2026-07-01&#x27;</span>);
 
 <span class="hljs-comment">-- 分区裁剪自动生效</span>
-<span class="hljs-keyword">SELECT</span> <span class="hljs-operator">*</span> <span class="hljs-keyword">FROM</span> events <span class="hljs-keyword">WHERE</span> created_at <span class="hljs-keyword">BETWEEN</span> <span class="hljs-string">'2026-02-01'</span> <span class="hljs-keyword">AND</span> <span class="hljs-string">'2026-02-28'</span>;
+<span class="hljs-keyword">SELECT</span> <span class="hljs-operator">*</span> <span class="hljs-keyword">FROM</span> events <span class="hljs-keyword">WHERE</span> created_at <span class="hljs-keyword">BETWEEN</span> <span class="hljs-string">&#x27;2026-02-01&#x27;</span> <span class="hljs-keyword">AND</span> <span class="hljs-string">&#x27;2026-02-28&#x27;</span>;
 <span class="hljs-comment">-- 只扫描 events_2026_q1 分区</span>
 
 <span class="hljs-comment">-- List 分区（按类型）</span>
 <span class="hljs-keyword">CREATE TABLE</span> orders <span class="hljs-keyword">PARTITION</span> <span class="hljs-keyword">BY</span> LIST (region);
 
-<span class="hljs-keyword">CREATE TABLE</span> orders_us <span class="hljs-keyword">PARTITION</span> <span class="hljs-keyword">OF</span> orders <span class="hljs-keyword">FOR</span> <span class="hljs-keyword">VALUES</span> <span class="hljs-keyword">IN</span> (<span class="hljs-string">'US'</span>, <span class="hljs-string">'CA'</span>);
-<span class="hljs-keyword">CREATE TABLE</span> orders_eu <span class="hljs-keyword">PARTITION</span> <span class="hljs-keyword">OF</span> orders <span class="hljs-keyword">FOR</span> <span class="hljs-keyword">VALUES</span> <span class="hljs-keyword">IN</span> (<span class="hljs-string">'UK'</span>, <span class="hljs-string">'DE'</span>, <span class="hljs-string">'FR'</span>);
+<span class="hljs-keyword">CREATE TABLE</span> orders_us <span class="hljs-keyword">PARTITION</span> <span class="hljs-keyword">OF</span> orders <span class="hljs-keyword">FOR</span> <span class="hljs-keyword">VALUES</span> <span class="hljs-keyword">IN</span> (<span class="hljs-string">&#x27;US&#x27;</span>, <span class="hljs-string">&#x27;CA&#x27;</span>);
+<span class="hljs-keyword">CREATE TABLE</span> orders_eu <span class="hljs-keyword">PARTITION</span> <span class="hljs-keyword">OF</span> orders <span class="hljs-keyword">FOR</span> <span class="hljs-keyword">VALUES</span> <span class="hljs-keyword">IN</span> (<span class="hljs-string">&#x27;UK&#x27;</span>, <span class="hljs-string">&#x27;DE&#x27;</span>, <span class="hljs-string">&#x27;FR&#x27;</span>);
 
 <span class="hljs-comment">-- Hash 分区（按 user_id 均匀分布）</span>
 <span class="hljs-keyword">CREATE TABLE</span> user_logs <span class="hljs-keyword">PARTITION</span> <span class="hljs-keyword">BY</span> HASH (user_id);
@@ -1336,7 +1336,7 @@ LIMIT <span class="hljs-number">10</span>;
 <span class="hljs-keyword">SELECT</span> pg_stat_statements_reset();
 </code></pre></div><h3>9.2 auto_explain</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">sql</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-sql"><span class="hljs-comment">-- postgresql.conf</span>
-shared_preload_libraries <span class="hljs-operator">=</span> <span class="hljs-string">'auto_explain'</span>
+shared_preload_libraries <span class="hljs-operator">=</span> <span class="hljs-string">&#x27;auto_explain&#x27;</span>
 auto_explain.log_min_duration <span class="hljs-operator">=</span> <span class="hljs-number">1000</span>  <span class="hljs-comment">-- 记录超过1秒的查询计划</span>
 auto_explain.log_analyze <span class="hljs-operator">=</span> <span class="hljs-keyword">on</span>
 auto_explain.log_buffers <span class="hljs-operator">=</span> <span class="hljs-keyword">on</span>
@@ -1346,16 +1346,16 @@ auto_explain.log_format <span class="hljs-operator">=</span> json
 
 <span class="hljs-comment">-- 每天凌晨3点清理过期会话</span>
 <span class="hljs-keyword">SELECT</span> cron.schedule(
-    <span class="hljs-string">'cleanup-expired-sessions'</span>,
-    <span class="hljs-string">'0 3 * * *'</span>,
+    <span class="hljs-string">&#x27;cleanup-expired-sessions&#x27;</span>,
+    <span class="hljs-string">&#x27;0 3 * * *&#x27;</span>,
     $$<span class="hljs-keyword">DELETE</span> <span class="hljs-keyword">FROM</span> user_sessions <span class="hljs-keyword">WHERE</span> expires_at <span class="hljs-operator">&lt;</span> NOW()$$
 );
 
 <span class="hljs-comment">-- 每小时 VACUUM 高频更新表</span>
 <span class="hljs-keyword">SELECT</span> cron.schedule(
-    <span class="hljs-string">'vacuum-high-traffic'</span>,
-    <span class="hljs-string">'0 * * * *'</span>,
-    <span class="hljs-string">'VACUUM ANALYZE high_traffic_events'</span>
+    <span class="hljs-string">&#x27;vacuum-high-traffic&#x27;</span>,
+    <span class="hljs-string">&#x27;0 * * * *&#x27;</span>,
+    <span class="hljs-string">&#x27;VACUUM ANALYZE high_traffic_events&#x27;</span>
 );
 </code></pre></div><hr>
 <h2>常见问题</h2>
@@ -1375,5 +1375,5 @@ A: 读写分离/灾备用流复制；CDC/跨版本升级/部分表同步用逻�
 <li><a href="#/04-数据与中间件/对象存储/04-对象存储与中间件扩展" class="cross-ref">04-对象存储与中间件扩展</a> — 对象存储与 AI 文件链路</li>
 <li><a href="#/05-分布式架构/事务与一致性/05-分布式一致性与事务方案" class="cross-ref">05-分布式一致性与事务方案</a> — 分布式事务（含 Outbox Pattern）</li>
 </ul>
-</body></html></div>
+</div>
 </article>

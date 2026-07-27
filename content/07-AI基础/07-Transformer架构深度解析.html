@@ -6,7 +6,7 @@
     <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#transformer</span><span class="badge badge-tag">#self-attention</span><span class="badge badge-tag">#multi-head-attention</span><span class="badge badge-tag">#positional-encoding</span><span class="badge badge-tag">#decoder-only</span></div>
     <div class="entry-sources"><small>📖 来源：<a href="https://arxiv.org/abs/1706.03762" target="_blank" rel="noopener" class="source-link" title="Attention Is All You Need (Vaswani et al., 2017)">Attention Is All You Need (Vaswani et al., 2017)</a><a href="https://arxiv.org/abs/1810.04805" target="_blank" rel="noopener" class="source-link" title="BERT: Pre-training of Deep Bidirectional Transformers">BERT: Pre-training of Deep Bidirectional Transformers</a><a href="https://arxiv.org/abs/2302.13971" target="_blank" rel="noopener" class="source-link" title="LLaMA: Open and Efficient Foundation Language Models">LLaMA: Open and Efficient Foundation Language Models</a><a href="https://arxiv.org/abs/2104.09864" target="_blank" rel="noopener" class="source-link" title="RoPE: Rotary Position Embedding (Su et al.)">RoPE: Rotary Position Embedding (Su et al.)</a><a href="https://jalammar.github.io/illustrated-transformer/" target="_blank" rel="noopener" class="source-link" title="The Illustrated Transformer — community reference">The Illustrated Transformer — community reference</a></small></div>
   </div>
-  <div class="entry-body"><html><head></head><body><h1>Transformer Architecture In Depth</h1>
+  <div class="entry-body"><h1>Transformer Architecture In Depth</h1>
 <h2>概述</h2>
 <p>Transformer 是当代大语言模型（LLM）的基石架构。从 2017 年 Vaswani 等人发表《Attention Is All You Need》至今，Transformer 已经完全重塑了 NLP 和 AI 的格局。本条目从数学原理、工程实现到现代变体，全面深入剖析 Transformer 架构。</p>
 <h2>背景：为什么需要 Transformer</h2>
@@ -19,12 +19,12 @@
 └──────────────┘ <span class="hljs-built_in">vector</span>  └──────────────┘
      ▲                        │
      │                        ▼
-  <span class="hljs-string">"I love AI"</span>            <span class="hljs-string">"我 爱 AI"</span>
+  <span class="hljs-string">&quot;I love AI&quot;</span>            <span class="hljs-string">&quot;我 爱 AI&quot;</span>
 </code></pre></div><p><strong>RNN 的根本缺陷：</strong></p>
 <ol>
 <li><strong>顺序计算瓶颈</strong>：RNN 必须逐步处理序列，t 时刻依赖 t-1 时刻的隐状态，无法并行。一个长度为 1000 的序列需要 1000 步才能完成前向传播。</li>
 <li><strong>长程依赖问题</strong>：尽管 LSTM/GRU 引入了门控机制，但梯度消失/爆炸依然限制了有效捕捉长距离依赖的能力。信息在第 1 个 token 要传播到第 500 个 token，路径极长。</li>
-<li><strong>注意力机制的早期形式受限</strong>：Bahdanau Attention（加性注意力）虽然缓解了部分问题，但仍是 RNN 的"附加组件"。</li>
+<li><strong>注意力机制的早期形式受限</strong>：Bahdanau Attention（加性注意力）虽然缓解了部分问题，但仍是 RNN 的&quot;附加组件&quot;。</li>
 </ol>
 <h3>Transformer 的突破</h3>
 <p>Transformer 的核心理念：<strong>完全抛弃循环结构，用 Self-Attention 机制处理序列中任意两个位置的关系。</strong></p>
@@ -35,21 +35,21 @@
 <li><strong>可扩展性</strong>：为 GPT-3/4、LLaMA 等千亿参数模型铺平道路</li>
 </ul>
 <h2>Self-Attention 机制详解</h2>
-<p>Self-Attention 是整个 Transformer 的心脏。它的核心直觉是：让序列中的每个 token "看到"所有其他 token，并根据它们之间的相关性（注意力权重）聚合信息。</p>
+<p>Self-Attention 是整个 Transformer 的心脏。它的核心直觉是：让序列中的每个 token &quot;看到&quot;所有其他 token，并根据它们之间的相关性（注意力权重）聚合信息。</p>
 <h3>Q(Query) / K(Key) / V(Value) 矩阵的物理含义</h3>
 <p>这三个矩阵来自信息检索的类比：</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>┌────────────────────────────────────────────────────────────┐
 │                    <span class="hljs-variable">Self</span><span class="hljs-operator">-</span><span class="hljs-variable">Attention</span> 直觉                      │
 │                                                            │
 │   数据库查询类比：                                          │
-│   <span class="hljs-built_in">Query</span> <span class="hljs-punctuation">(</span><span class="hljs-variable">Q</span><span class="hljs-punctuation">)</span><span class="hljs-operator">:</span> <span class="hljs-string">"我想找什么？"</span>    ← 当前 <span class="hljs-variable">token</span> 的<span class="hljs-string">"搜索意图"</span>    │
-│   <span class="hljs-built_in">Key</span> <span class="hljs-punctuation">(</span><span class="hljs-built_in">K</span><span class="hljs-punctuation">)</span><span class="hljs-operator">:</span>   <span class="hljs-string">"我有什么标签？"</span>  ← 每个 <span class="hljs-variable">token</span> 的<span class="hljs-string">"索引标识"</span>    │
-│   <span class="hljs-variable">Value</span> <span class="hljs-punctuation">(</span><span class="hljs-variable">V</span><span class="hljs-punctuation">)</span><span class="hljs-operator">:</span> <span class="hljs-string">"我的内容是什么？"</span> ← 每个 <span class="hljs-variable">token</span> 的<span class="hljs-string">"实际信息"</span>   │
+│   <span class="hljs-built_in">Query</span> <span class="hljs-punctuation">(</span><span class="hljs-variable">Q</span><span class="hljs-punctuation">)</span><span class="hljs-operator">:</span> <span class="hljs-string">&quot;我想找什么？&quot;</span>    ← 当前 <span class="hljs-variable">token</span> 的<span class="hljs-string">&quot;搜索意图&quot;</span>    │
+│   <span class="hljs-built_in">Key</span> <span class="hljs-punctuation">(</span><span class="hljs-built_in">K</span><span class="hljs-punctuation">)</span><span class="hljs-operator">:</span>   <span class="hljs-string">&quot;我有什么标签？&quot;</span>  ← 每个 <span class="hljs-variable">token</span> 的<span class="hljs-string">&quot;索引标识&quot;</span>    │
+│   <span class="hljs-variable">Value</span> <span class="hljs-punctuation">(</span><span class="hljs-variable">V</span><span class="hljs-punctuation">)</span><span class="hljs-operator">:</span> <span class="hljs-string">&quot;我的内容是什么？&quot;</span> ← 每个 <span class="hljs-variable">token</span> 的<span class="hljs-string">&quot;实际信息&quot;</span>   │
 │                                                            │
 │   计算过程：                                                │
-│   <span class="hljs-number">1.</span> <span class="hljs-variable">Q</span> 与每个 <span class="hljs-built_in">K</span> 做点积 → 得到<span class="hljs-string">"匹配度分数"</span>（注意力权重）      │
+│   <span class="hljs-number">1.</span> <span class="hljs-variable">Q</span> 与每个 <span class="hljs-built_in">K</span> 做点积 → 得到<span class="hljs-string">&quot;匹配度分数&quot;</span>（注意力权重）      │
 │   <span class="hljs-number">2.</span> <span class="hljs-variable">Softmax</span> 归一化 → 得到概率分布                          │
-│   <span class="hljs-number">3.</span> 用概率分布加权求和 <span class="hljs-variable">V</span> → 得到<span class="hljs-string">"这个位置应该关注什么"</span>       │
+│   <span class="hljs-number">3.</span> 用概率分布加权求和 <span class="hljs-variable">V</span> → 得到<span class="hljs-string">&quot;这个位置应该关注什么&quot;</span>       │
 └────────────────────────────────────────────────────────────┘
 </code></pre></div><p><strong>数学形式</strong>：对于输入序列 X ∈ R^{n × d_model}（n 个 token，每个 d_model 维）：</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-attr">Q</span> = X · W_Q      W_Q ∈ R^{d_model × d_k}
@@ -63,7 +63,7 @@
 
 Step <span class="hljs-symbol">1:</span> 计算注意力分数
     scores = Q @ K^<span class="hljs-built_in">T</span>          ← 形状<span class="hljs-symbol">:</span> (<span class="hljs-built_in">n</span>, <span class="hljs-built_in">n</span>)
-    scores[i][j] = Q_i · K_j  ← token i 对 token j 的<span class="hljs-string">"原始注意力"</span>
+    scores[i][j] = Q_i · K_j  ← token i 对 token j 的<span class="hljs-string">&quot;原始注意力&quot;</span>
 
 Step <span class="hljs-symbol">2:</span> 缩放
     scores = scores / <span class="hljs-built_in">sqrt</span>(d_k)
@@ -83,7 +83,7 @@ Step <span class="hljs-symbol">4:</span> 加权聚合
 所以 Q·K 的方差为 d_k（d_k 个无关项的方差求和）。</p>
 <p>因此点积的值为 N(0, d_k) 分布。随着 d_k 增大：</p>
 <ul>
-<li>点积的绝对值很大 → softmax 的输入进入"饱和区"</li>
+<li>点积的绝对值很大 → softmax 的输入进入&quot;饱和区&quot;</li>
 <li>softmax 输出极度尖锐（接近 one-hot）</li>
 <li>梯度 → 0，模型无法学习</li>
 </ul>
@@ -111,8 +111,8 @@ $$Var\left(\frac{QK^T}{\sqrt{d_k}}\right) = \frac{d_k}{d_k} = 1$$</p>
         }
 
         <span class="hljs-type">double</span> <span class="hljs-variable">variance</span> <span class="hljs-operator">=</span> sumSquared / trials;
-        System.out.println(<span class="hljs-string">"点积方差 (d_k="</span> + dk + <span class="hljs-string">"): "</span> + variance);
-        System.out.println(<span class="hljs-string">"理论值 d_k: "</span> + dk);
+        System.out.println(<span class="hljs-string">&quot;点积方差 (d_k=&quot;</span> + dk + <span class="hljs-string">&quot;): &quot;</span> + variance);
+        System.out.println(<span class="hljs-string">&quot;理论值 d_k: &quot;</span> + dk);
         <span class="hljs-comment">// 输出：点积方差 ≈ 64 = d_k</span>
 
         <span class="hljs-comment">// 缩放后方差</span>
@@ -127,8 +127,8 @@ $$Var\left(\frac{QK^T}{\sqrt{d_k}}\right) = \frac{d_k}{d_k} = 1$$</p>
             sumSquared += scaled * scaled;
         }
         variance = sumSquared / trials;
-        System.out.println(<span class="hljs-string">"缩放后点积方差: "</span> + variance);
-        System.out.println(<span class="hljs-string">"期望值 1.0: "</span> + (Math.abs(variance - <span class="hljs-number">1.0</span>) &lt; <span class="hljs-number">0.1</span>));
+        System.out.println(<span class="hljs-string">&quot;缩放后点积方差: &quot;</span> + variance);
+        System.out.println(<span class="hljs-string">&quot;期望值 1.0: &quot;</span> + (Math.abs(variance - <span class="hljs-number">1.0</span>) &lt; <span class="hljs-number">0.1</span>));
     }
 }
 </code></pre></div><p><strong>Softmax 梯度分析：</strong></p>
@@ -181,7 +181,7 @@ softmax(<span class="hljs-comment">[1.2, -0.5, 0.8]</span>) ≈ <span class="hlj
     }
 }
 </code></pre></div><h2>Multi-Head Attention</h2>
-<p>单头注意力的表达容量有限 -- 一个 token 只能以"一种视角"看待其他 token。Multi-Head Attention 让模型可以<strong>同时从多个不同的表示子空间</strong>学习注意力。</p>
+<p>单头注意力的表达容量有限 -- 一个 token 只能以&quot;一种视角&quot;看待其他 token。Multi-Head Attention 让模型可以<strong>同时从多个不同的表示子空间</strong>学习注意力。</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Multi-Head Attention 结构：
 
 输入 <span class="hljs-keyword">X</span> (n × d_model)
@@ -218,7 +218,7 @@ softmax(<span class="hljs-comment">[1.2, -0.5, 0.8]</span>) ≈ <span class="hlj
     <span class="hljs-keyword">public</span> MultiHeadAttention {
         <span class="hljs-keyword">if</span> (dModel % numHeads != <span class="hljs-number">0</span>) {
             <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">IllegalArgumentException</span>(
-                <span class="hljs-string">"dModel 必须能被 numHeads 整除"</span>);
+                <span class="hljs-string">&quot;dModel 必须能被 numHeads 整除&quot;</span>);
         }
     }
 
@@ -275,7 +275,7 @@ softmax(<span class="hljs-comment">[1.2, -0.5, 0.8]</span>) ≈ <span class="hlj
     }
 }
 </code></pre></div><h2>Positional Encoding</h2>
-<p>Transformer 自身没有循环结构，因此完全看不到 token 的顺序信息。"A loves B"和"B loves A"的 token 集合完全相同，但语义截然不同。Positional Encoding 就是为了向模型注入位置信息。</p>
+<p>Transformer 自身没有循环结构，因此完全看不到 token 的顺序信息。&quot;A loves B&quot;和&quot;B loves A&quot;的 token 集合完全相同，但语义截然不同。Positional Encoding 就是为了向模型注入位置信息。</p>
 <h3>正弦位置编码</h3>
 <p>原始 Transformer 使用正弦/余弦函数生成位置编码：</p>
 <p>$$PE_{(pos, 2i)} = \sin\left(\frac{pos}{10000^{2i/d_{model}}}\right)$$
@@ -289,7 +289,7 @@ $$\sin(pos+k) = \sin(pos)\cos(k) + \cos(pos)\sin(k)$$
 </li>
 <li><p><strong>外推能力</strong>：理论上可以推广到训练时未见过的序列长度。</p>
 </li>
-<li><p><strong>波长多样性</strong>：不同维度的正弦函数有不同频率（波长从 2π 到 10000·2π），类似不同粒度的"位置刻度尺"。</p>
+<li><p><strong>波长多样性</strong>：不同维度的正弦函数有不同频率（波长从 2π 到 10000·2π），类似不同粒度的&quot;位置刻度尺&quot;。</p>
 </li>
 </ol>
 <p><strong>Java 实现正弦位置编码：</strong></p>
@@ -355,7 +355,7 @@ RoPE(<span class="hljs-variable language_">x</span>, m)[<span class="hljs-number
 </code></pre></div><p><strong>RoPE 的核心优势：</strong></p>
 <ol>
 <li><strong>相对位置天然编码</strong>：attention 分数 q_m^T·k_n 只依赖于相对位置 (m - n)，而不是绝对位置。</li>
-<li><strong>远程衰减</strong>：随着相对距离增加，attention 分数自然衰减，这符合语言中"距离越远关系越弱"的直觉。</li>
+<li><strong>远程衰减</strong>：随着相对距离增加，attention 分数自然衰减，这符合语言中&quot;距离越远关系越弱&quot;的直觉。</li>
 <li><strong>外推友好</strong>：配合 NTK-aware 插值等技巧，可以在推理时扩展上下文窗口。</li>
 <li><strong>训练稳定性</strong>：不需要额外学习位置参数。</li>
 </ol>
@@ -427,7 +427,7 @@ RoPE(<span class="hljs-variable language_">x</span>, m)[<span class="hljs-number
 
         <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; seqLen; i++) {
             <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">j</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; j &lt; seqLen; j++) {
-                <span class="hljs-comment">// 对因果注意力：只惩罚"向前看"</span>
+                <span class="hljs-comment">// 对因果注意力：只惩罚&quot;向前看&quot;</span>
                 <span class="hljs-keyword">if</span> (j &lt;= i) {
                     biases[i][j] = slopes[<span class="hljs-number">0</span>] * (j - i);  <span class="hljs-comment">// 距离惩罚</span>
                 } <span class="hljs-keyword">else</span> {
@@ -658,7 +658,7 @@ Pre-<span class="hljs-built_in">LN</span> (GPT<span class="hljs-number">-2</span
 └──────────────────────┘
 </code></pre></div><p><strong>Decoder-only 成为主流的三个原因：</strong></p>
 <ol>
-<li><strong>统一性</strong>：任意 NLP 任务都可以表达为"给定前缀预测下一个 token"</li>
+<li><strong>统一性</strong>：任意 NLP 任务都可以表达为&quot;给定前缀预测下一个 token&quot;</li>
 <li><strong>缩放性</strong>：没有 Encoder-Decoder 的交互瓶颈，训练更高效</li>
 <li><strong>In-Context Learning</strong>：GPT-3 证明了 Decoder-only 模型的惊人 few-shot 能力</li>
 </ol>
@@ -715,8 +715,8 @@ Pre-<span class="hljs-built_in">LN</span> (GPT<span class="hljs-number">-2</span
 }
 </code></pre></div><h3>掩码语言模型 (MLM)</h3>
 <p>BERT 的训练目标：随机 mask 掉 15% 的输入 token，让模型预测被 mask 的 token：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>输入:  <span class="hljs-string">"The [MASK] sat on the [MASK]"</span>
-目标:  <span class="hljs-string">"cat"</span>            <span class="hljs-string">"mat"</span>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>输入:  <span class="hljs-string">&quot;The [MASK] sat on the [MASK]&quot;</span>
+目标:  <span class="hljs-string">&quot;cat&quot;</span>            <span class="hljs-string">&quot;mat&quot;</span>
 
 其中 <span class="hljs-number">15</span><span class="hljs-comment">% mask 的分解：</span>
   - <span class="hljs-number">80</span><span class="hljs-comment">% 替换为 [MASK]</span>
@@ -726,12 +726,12 @@ Pre-<span class="hljs-built_in">LN</span> (GPT<span class="hljs-number">-2</span
 <h3>RoPE 外推问题</h3>
 <p>标准 RoPE 在超出训练长度时表现急剧下降。原因：高频维度的 θ 值没有在训练中见过对应的角度。</p>
 <h3>NTK-aware 插值 (NTK-aware Interpolation)</h3>
-<p>核心思路：用"神经正切核"视角对 RoPE 的频率进行插值。</p>
+<p>核心思路：用&quot;神经正切核&quot;视角对 RoPE 的频率进行插值。</p>
 <p>不改变物理位置，而是<strong>缩放 θ 的基座</strong>：</p>
-<p>$$\theta_i' = \theta_i \cdot \left(\alpha \cdot \frac{\text{new_ctx}}{\text{orig_ctx}}\right)^{-2(i-1)/d}$$</p>
+<p>$$\theta_i&#39; = \theta_i \cdot \left(\alpha \cdot \frac{\text{new_ctx}}{\text{orig_ctx}}\right)^{-2(i-1)/d}$$</p>
 <p>其中 α 是缩放因子。NTK-aware 的巧妙之处：<strong>对高频维度少缩放，对低频维度多缩放</strong>，让高频保留局部信息，低频扩展远程信息。</p>
 <h3>YaRN (Yet another RoPE extensioN)</h3>
-<p>在 NTK-aware 基础上增加"温度"参数 t 控制注意力熵：</p>
+<p>在 NTK-aware 基础上增加&quot;温度&quot;参数 t 控制注意力熵：</p>
 <p>$$\text{Attention} = \text{softmax}\left(\frac{QK^T}{\sqrt{d_k} \cdot t} + \text{bias}\right)$$</p>
 <p>温度 t 控制注意力分布的尖锐程度：</p>
 <ul>
@@ -811,12 +811,12 @@ Pre-<span class="hljs-built_in">LN</span> (GPT<span class="hljs-number">-2</span
 <p><strong>Q: 为什么现在主流都是 Decoder-only？</strong></p>
 <p>A: 三个原因：(1) 统一性：所有任务都可以表达为 next-token prediction；(2) 高效性：比 Encoder-Decoder 少了交叉注意力的计算；(3) 涌现能力：GPT-3 证明了 Decoder-only 在足够大时展现出的 in-context learning 和推理能力。</p>
 <p><strong>Q: Multi-Head Attention 中不同头真的学到了不同模式吗？</strong></p>
-<p>A: 研究表明，虽然有些头确实有明确的"分工"（如语法 vs 语义），但很多头是可剪枝的（冗余）。这就是为什么出现了 GQA/MQA 等优化（在推理章节详述）。</p>
+<p>A: 研究表明，虽然有些头确实有明确的&quot;分工&quot;（如语法 vs 语义），但很多头是可剪枝的（冗余）。这就是为什么出现了 GQA/MQA 等优化（在推理章节详述）。</p>
 <p><strong>Q: RoPE 和 ALiBi 哪个更好？</strong></p>
 <p>A: 目前 RoPE 胜出——几乎所有顶级开源模型（LLaMA/Qwen/Mistral/DeepSeek）都用 RoPE。ALiBi 虽然简洁，但在长序列上的效果不如经过 NTK-aware 扩展的 RoPE。</p>
 <h2>反向传播与优化器</h2>
 <p>反向传播（Backpropagation）是训练 Transformer 的核心算法，基于链式法则（Chain Rule）逐层计算损失函数对各权重的梯度 ∂L/∂W。训练时，前向传播（Forward Pass）构建计算图（Computation Graph），反向传播沿计算图逆序遍历，从损失函数出发，将梯度逐层回传至输入层。每个算子（MatMul、LayerNorm、Softmax）都定义了对应的前向和反向计算。</p>
-<p>深度网络训练中，梯度消失（Gradient Vanishing）和梯度爆炸（Gradient Exploding）是经典问题。Sigmoid 和 Tanh 激活函数在饱和区梯度趋近于 0，导致深层参数几乎不更新。Transformer 中的残差连接（Residual Connection）提供了"梯度高速公路"：梯度可直接通过恒等映射路径回传，有效缓解了梯度消失。Layer Normalization 则通过稳定每层输入的分布来辅助梯度流动。</p>
+<p>深度网络训练中，梯度消失（Gradient Vanishing）和梯度爆炸（Gradient Exploding）是经典问题。Sigmoid 和 Tanh 激活函数在饱和区梯度趋近于 0，导致深层参数几乎不更新。Transformer 中的残差连接（Residual Connection）提供了&quot;梯度高速公路&quot;：梯度可直接通过恒等映射路径回传，有效缓解了梯度消失。Layer Normalization 则通过稳定每层输入的分布来辅助梯度流动。</p>
 <p>优化器方面，SGD+Momentum、Adam、AdamW 是主流选择：</p>
 <table>
 <thead>
@@ -890,5 +890,5 @@ Pre-<span class="hljs-built_in">LN</span> (GPT<span class="hljs-number">-2</span
 <li><a href="#/08-模型接入与推理/模型API/08-OpenAI兼容协议详解" class="cross-ref">08-OpenAI兼容协议详解</a> — 模型 API 协议</li>
 <li><a href="#/08-模型接入与推理/推理部署/08-模型能力矩阵与路由策略" class="cross-ref">08-模型能力矩阵与路由策略</a> — 模型能力矩阵</li>
 </ul>
-</body></html></div>
+</div>
 </article>

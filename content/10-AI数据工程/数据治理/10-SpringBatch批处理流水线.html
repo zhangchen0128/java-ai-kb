@@ -6,7 +6,7 @@
     <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#spring-batch</span><span class="badge badge-tag">#batch-processing</span><span class="badge badge-tag">#embedding</span><span class="badge badge-tag">#rate-limiting</span><span class="badge badge-tag">#partitioning</span></div>
     <div class="entry-sources"><small>📖 来源：<a href="https://docs.spring.io/spring-batch/reference/" target="_blank" rel="noopener" class="source-link" title="Spring Batch 官方参考文档">Spring Batch 官方参考文档</a><a href="https://docs.spring.io/spring-boot/reference/features/messaging.html" target="_blank" rel="noopener" class="source-link" title="Spring Boot 官方文档 — 批处理和异步">Spring Boot 官方文档 — 批处理和异步</a><a href="https://docs.spring.io/spring-ai/reference/api/etl-pipeline.html" target="_blank" rel="noopener" class="source-link" title="Spring AI ETL Pipeline 文档">Spring AI ETL Pipeline 文档</a></small></div>
   </div>
-  <div class="entry-body"><html><head></head><body><h1>Spring Batch在AI数据工程中的批处理流水线</h1>
+  <div class="entry-body"><h1>Spring Batch在AI数据工程中的批处理流水线</h1>
 <h2>概述</h2>
 <p>AI数据工程中的文档处理是一个典型的批处理场景：从文件系统/对象存储读取数千份文档，逐文档执行解析、清洗、切片、Embedding，最后写入向量数据库和搜索引擎。Spring Batch提供了经过生产验证的分区并行、错误处理、检查点和重启能力，是构建AI数据管道的理想基座。</p>
 <p>本文构建一个完整的6步骤AI数据批处理Job，覆盖Reader到Writer的全链路，包含Embedding API速率限制、分区并行和完整的错误处理策略。</p>
@@ -187,7 +187,7 @@
 
     <span class="hljs-meta">@Bean</span>
     <span class="hljs-keyword">public</span> Job <span class="hljs-title function_">documentIngestionJob</span><span class="hljs-params">()</span> {
-        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">JobBuilder</span>(<span class="hljs-string">"documentIngestionJob"</span>, jobRepository)
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">JobBuilder</span>(<span class="hljs-string">&quot;documentIngestionJob&quot;</span>, jobRepository)
             .start(parseStep())
             .next(chunkStep())
             .next(embedAndIndexStep())
@@ -200,7 +200,7 @@
      */</span>
     <span class="hljs-meta">@Bean</span>
     <span class="hljs-keyword">public</span> Step <span class="hljs-title function_">parseStep</span><span class="hljs-params">()</span> {
-        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StepBuilder</span>(<span class="hljs-string">"parseStep"</span>, jobRepository)
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StepBuilder</span>(<span class="hljs-string">&quot;parseStep&quot;</span>, jobRepository)
             .&lt;DocumentItem, DocumentItem&gt;chunk(<span class="hljs-number">10</span>, transactionManager) <span class="hljs-comment">// chunk=10个文档一批事务</span>
             .reader(documentReader)
             .processor(<span class="hljs-keyword">new</span> <span class="hljs-title class_">org</span>.springframework.batch.item.support.CompositeItemProcessor&lt;&gt;(
@@ -221,7 +221,7 @@
      */</span>
     <span class="hljs-meta">@Bean</span>
     <span class="hljs-keyword">public</span> Step <span class="hljs-title function_">chunkStep</span><span class="hljs-params">()</span> {
-        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StepBuilder</span>(<span class="hljs-string">"chunkStep"</span>, jobRepository)
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StepBuilder</span>(<span class="hljs-string">&quot;chunkStep&quot;</span>, jobRepository)
             .&lt;DocumentItem, DocumentItem&gt;chunk(<span class="hljs-number">10</span>, transactionManager)
             .reader(parsedDocumentReader())
             .processor(chunkingProcessor)
@@ -241,14 +241,14 @@
         <span class="hljs-comment">// 异步处理器：Embedding API 调用是 IO 密集型</span>
         <span class="hljs-type">var</span> <span class="hljs-variable">asyncProcessor</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">AsyncItemProcessor</span>&lt;ChunkItem, ChunkItem&gt;();
         asyncProcessor.setDelegate(embeddingProcessor);
-        <span class="hljs-type">var</span> <span class="hljs-variable">taskExecutor</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">VirtualThreadTaskExecutor</span>(<span class="hljs-string">"embedding-"</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">taskExecutor</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">VirtualThreadTaskExecutor</span>(<span class="hljs-string">&quot;embedding-&quot;</span>);
         asyncProcessor.setTaskExecutor(taskExecutor);
 
         <span class="hljs-comment">// 异步写入器</span>
         <span class="hljs-type">var</span> <span class="hljs-variable">asyncWriter</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">AsyncItemWriter</span>&lt;ChunkItem&gt;();
         asyncWriter.setDelegate(indexWriter);
 
-        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StepBuilder</span>(<span class="hljs-string">"embedAndIndexStep"</span>, jobRepository)
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StepBuilder</span>(<span class="hljs-string">&quot;embedAndIndexStep&quot;</span>, jobRepository)
             .&lt;ChunkItem, Future&lt;ChunkItem&gt;&gt;chunk(<span class="hljs-number">50</span>, transactionManager)
             .reader(chunkReader())
             .processor(asyncProcessor)
@@ -266,7 +266,7 @@
     <span class="hljs-meta">@Bean</span>
     <span class="hljs-keyword">public</span> ItemWriter&lt;DocumentItem&gt; <span class="hljs-title function_">parsedDocumentWriter</span><span class="hljs-params">()</span> {
         <span class="hljs-keyword">return</span> items -&gt; items.forEach(item -&gt;
-            System.out.println(<span class="hljs-string">"Parsed: "</span> + item.fileName())
+            System.out.println(<span class="hljs-string">&quot;Parsed: &quot;</span> + item.fileName())
         );
     }
 
@@ -278,7 +278,7 @@
     <span class="hljs-meta">@Bean</span>
     <span class="hljs-keyword">public</span> ItemWriter&lt;DocumentItem&gt; <span class="hljs-title function_">chunkedDocumentWriter</span><span class="hljs-params">()</span> {
         <span class="hljs-keyword">return</span> items -&gt; items.forEach(item -&gt;
-            System.out.println(<span class="hljs-string">"Chunked: "</span> + item.fileName() + <span class="hljs-string">" → "</span> + item.chunks().size() + <span class="hljs-string">" chunks"</span>)
+            System.out.println(<span class="hljs-string">&quot;Chunked: &quot;</span> + item.fileName() + <span class="hljs-string">&quot; → &quot;</span> + item.chunks().size() + <span class="hljs-string">&quot; chunks&quot;</span>)
         );
     }
 
@@ -330,7 +330,7 @@
                 UUID.randomUUID(),
                 filePath.toUri().toString(),
                 filePath.getFileName().toString(),
-                mimeType != <span class="hljs-literal">null</span> ? mimeType : <span class="hljs-string">"application/octet-stream"</span>,
+                mimeType != <span class="hljs-literal">null</span> ? mimeType : <span class="hljs-string">&quot;application/octet-stream&quot;</span>,
                 Files.size(filePath),
                 DocumentItem.DocumentStatus.PENDING,
                 <span class="hljs-literal">null</span>, <span class="hljs-literal">null</span>, <span class="hljs-literal">null</span>, <span class="hljs-literal">null</span>,
@@ -344,11 +344,11 @@
 
     <span class="hljs-keyword">private</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">isSupportedFormat</span><span class="hljs-params">(Path path)</span> {
         <span class="hljs-type">var</span> <span class="hljs-variable">name</span> <span class="hljs-operator">=</span> path.getFileName().toString().toLowerCase();
-        <span class="hljs-keyword">return</span> name.endsWith(<span class="hljs-string">".pdf"</span>) || name.endsWith(<span class="hljs-string">".docx"</span>) ||
-               name.endsWith(<span class="hljs-string">".xlsx"</span>) || name.endsWith(<span class="hljs-string">".pptx"</span>) ||
-               name.endsWith(<span class="hljs-string">".html"</span>) || name.endsWith(<span class="hljs-string">".htm"</span>) ||
-               name.endsWith(<span class="hljs-string">".txt"</span>) || name.endsWith(<span class="hljs-string">".md"</span>) ||
-               name.endsWith(<span class="hljs-string">".json"</span>) || name.endsWith(<span class="hljs-string">".csv"</span>);
+        <span class="hljs-keyword">return</span> name.endsWith(<span class="hljs-string">&quot;.pdf&quot;</span>) || name.endsWith(<span class="hljs-string">&quot;.docx&quot;</span>) ||
+               name.endsWith(<span class="hljs-string">&quot;.xlsx&quot;</span>) || name.endsWith(<span class="hljs-string">&quot;.pptx&quot;</span>) ||
+               name.endsWith(<span class="hljs-string">&quot;.html&quot;</span>) || name.endsWith(<span class="hljs-string">&quot;.htm&quot;</span>) ||
+               name.endsWith(<span class="hljs-string">&quot;.txt&quot;</span>) || name.endsWith(<span class="hljs-string">&quot;.md&quot;</span>) ||
+               name.endsWith(<span class="hljs-string">&quot;.json&quot;</span>) || name.endsWith(<span class="hljs-string">&quot;.csv&quot;</span>);
     }
 }
 </code></pre></div><h3>3.3 DocumentParserProcessor — 文档解析</h3>
@@ -372,7 +372,7 @@
 
             <span class="hljs-comment">// 将警告信息记录到元数据中</span>
             <span class="hljs-keyword">if</span> (!result.warnings().isEmpty()) {
-                <span class="hljs-comment">// log.warn("Parse warnings for {}: {}", item.fileName(), result.warnings());</span>
+                <span class="hljs-comment">// log.warn(&quot;Parse warnings for {}: {}&quot;, item.fileName(), result.warnings());</span>
             }
 
             <span class="hljs-keyword">return</span> item.withParsedContent(result.markdownContent());
@@ -398,14 +398,14 @@
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">PiiDetector</span> <span class="hljs-variable">piiDetector</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">PiiDetector</span>();
 
     <span class="hljs-comment">// 清洗模式</span>
-    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">Pattern</span> <span class="hljs-variable">MULTIPLE_NEWLINES</span> <span class="hljs-operator">=</span> Pattern.compile(<span class="hljs-string">"\n{4,}"</span>);
-    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">Pattern</span> <span class="hljs-variable">TRAILING_SPACES</span> <span class="hljs-operator">=</span> Pattern.compile(<span class="hljs-string">" +$"</span>, Pattern.MULTILINE);
-    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">Pattern</span> <span class="hljs-variable">PAGE_NUMBERS</span> <span class="hljs-operator">=</span> Pattern.compile(<span class="hljs-string">"^\\s*\\d+\\s*$"</span>, Pattern.MULTILINE);
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">Pattern</span> <span class="hljs-variable">MULTIPLE_NEWLINES</span> <span class="hljs-operator">=</span> Pattern.compile(<span class="hljs-string">&quot;\n{4,}&quot;</span>);
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">Pattern</span> <span class="hljs-variable">TRAILING_SPACES</span> <span class="hljs-operator">=</span> Pattern.compile(<span class="hljs-string">&quot; +$&quot;</span>, Pattern.MULTILINE);
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">Pattern</span> <span class="hljs-variable">PAGE_NUMBERS</span> <span class="hljs-operator">=</span> Pattern.compile(<span class="hljs-string">&quot;^\\s*\\d+\\s*$&quot;</span>, Pattern.MULTILINE);
 
     <span class="hljs-meta">@Override</span>
     <span class="hljs-keyword">public</span> DocumentItem <span class="hljs-title function_">process</span><span class="hljs-params">(DocumentItem item)</span> {
         <span class="hljs-keyword">if</span> (item.rawContent() == <span class="hljs-literal">null</span>) {
-            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">IllegalStateException</span>(<span class="hljs-string">"rawContent is null for "</span> + item.fileName());
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">IllegalStateException</span>(<span class="hljs-string">&quot;rawContent is null for &quot;</span> + item.fileName());
         }
 
         <span class="hljs-type">var</span> <span class="hljs-variable">cleaned</span> <span class="hljs-operator">=</span> item.rawContent();
@@ -429,37 +429,37 @@
 
     <span class="hljs-keyword">private</span> String <span class="hljs-title function_">normalizeNewlines</span><span class="hljs-params">(String text)</span> {
         <span class="hljs-comment">// Windows \r\n → \n，多余的连续换行合并</span>
-        text = text.replace(<span class="hljs-string">"\r\n"</span>, <span class="hljs-string">"\n"</span>);
-        text = MULTIPLE_NEWLINES.matcher(text).replaceAll(<span class="hljs-string">"\n\n\n"</span>);
+        text = text.replace(<span class="hljs-string">&quot;\r\n&quot;</span>, <span class="hljs-string">&quot;\n&quot;</span>);
+        text = MULTIPLE_NEWLINES.matcher(text).replaceAll(<span class="hljs-string">&quot;\n\n\n&quot;</span>);
         <span class="hljs-keyword">return</span> text;
     }
 
     <span class="hljs-keyword">private</span> String <span class="hljs-title function_">removeExcessiveWhitespace</span><span class="hljs-params">(String text)</span> {
-        text = TRAILING_SPACES.matcher(text).replaceAll(<span class="hljs-string">""</span>);
+        text = TRAILING_SPACES.matcher(text).replaceAll(<span class="hljs-string">&quot;&quot;</span>);
         <span class="hljs-keyword">return</span> text;
     }
 
     <span class="hljs-keyword">private</span> String <span class="hljs-title function_">removePageNumbers</span><span class="hljs-params">(String text)</span> {
-        <span class="hljs-keyword">return</span> PAGE_NUMBERS.matcher(text).replaceAll(<span class="hljs-string">""</span>);
+        <span class="hljs-keyword">return</span> PAGE_NUMBERS.matcher(text).replaceAll(<span class="hljs-string">&quot;&quot;</span>);
     }
 
     <span class="hljs-keyword">private</span> String <span class="hljs-title function_">normalizeUnicode</span><span class="hljs-params">(String text)</span> {
         <span class="hljs-comment">// 全角转半角、统一等号、统一引号等</span>
         <span class="hljs-keyword">return</span> text
-            .replace(<span class="hljs-string">'‘'</span>, <span class="hljs-string">'\''</span>)  <span class="hljs-comment">// 左单引号</span>
-            .replace(<span class="hljs-string">'’'</span>, <span class="hljs-string">'\''</span>)  <span class="hljs-comment">// 右单引号</span>
-            .replace(<span class="hljs-string">'“'</span>, <span class="hljs-string">'"'</span>)   <span class="hljs-comment">// 左双引号</span>
-            .replace(<span class="hljs-string">'”'</span>, <span class="hljs-string">'"'</span>)   <span class="hljs-comment">// 右双引号</span>
-            .replace(<span class="hljs-string">'–'</span>, <span class="hljs-string">'-'</span>)   <span class="hljs-comment">// en dash</span>
-            .replace(<span class="hljs-string">'—'</span>, <span class="hljs-string">'-'</span>)   <span class="hljs-comment">// em dash</span>
-            .replace(<span class="hljs-string">'&nbsp;'</span>, <span class="hljs-string">' '</span>)   <span class="hljs-comment">// non-breaking space</span>
-            .replace(<span class="hljs-string">"　"</span>, <span class="hljs-string">" "</span>);       <span class="hljs-comment">// 全角空格</span>
+            .replace(<span class="hljs-string">&#x27;‘&#x27;</span>, <span class="hljs-string">&#x27;\&#x27;&#x27;</span>)  <span class="hljs-comment">// 左单引号</span>
+            .replace(<span class="hljs-string">&#x27;’&#x27;</span>, <span class="hljs-string">&#x27;\&#x27;&#x27;</span>)  <span class="hljs-comment">// 右单引号</span>
+            .replace(<span class="hljs-string">&#x27;“&#x27;</span>, <span class="hljs-string">&#x27;&quot;&#x27;</span>)   <span class="hljs-comment">// 左双引号</span>
+            .replace(<span class="hljs-string">&#x27;”&#x27;</span>, <span class="hljs-string">&#x27;&quot;&#x27;</span>)   <span class="hljs-comment">// 右双引号</span>
+            .replace(<span class="hljs-string">&#x27;–&#x27;</span>, <span class="hljs-string">&#x27;-&#x27;</span>)   <span class="hljs-comment">// en dash</span>
+            .replace(<span class="hljs-string">&#x27;—&#x27;</span>, <span class="hljs-string">&#x27;-&#x27;</span>)   <span class="hljs-comment">// em dash</span>
+            .replace(<span class="hljs-string">&#x27; &#x27;</span>, <span class="hljs-string">&#x27; &#x27;</span>)   <span class="hljs-comment">// non-breaking space</span>
+            .replace(<span class="hljs-string">&quot;　&quot;</span>, <span class="hljs-string">&quot; &quot;</span>);       <span class="hljs-comment">// 全角空格</span>
     }
 
     <span class="hljs-keyword">private</span> String <span class="hljs-title function_">normalizeMarkdown</span><span class="hljs-params">(String text)</span> {
         <span class="hljs-comment">// 确保标题前后有空行</span>
-        text = text.replaceAll(<span class="hljs-string">"(?&lt;!\n\n)(#{1,6}\\s)"</span>, <span class="hljs-string">"\n\n$1"</span>);
-        text = text.replaceAll(<span class="hljs-string">"(#{1,6}\\s.+)(?!\n\n)"</span>, <span class="hljs-string">"$1\n\n"</span>);
+        text = text.replaceAll(<span class="hljs-string">&quot;(?&lt;!\n\n)(#{1,6}\\s)&quot;</span>, <span class="hljs-string">&quot;\n\n$1&quot;</span>);
+        text = text.replaceAll(<span class="hljs-string">&quot;(#{1,6}\\s.+)(?!\n\n)&quot;</span>, <span class="hljs-string">&quot;$1\n\n&quot;</span>);
         <span class="hljs-keyword">return</span> text;
     }
 
@@ -576,8 +576,8 @@
 
     <span class="hljs-keyword">public</span> <span class="hljs-title function_">EmbeddingProcessor</span><span class="hljs-params">(String embeddingApiUrl)</span> {
         <span class="hljs-built_in">this</span>.embeddingApiUrl = embeddingApiUrl != <span class="hljs-literal">null</span>
-            ? embeddingApiUrl : <span class="hljs-string">"http://localhost:11434/api/embeddings"</span>;
-        <span class="hljs-built_in">this</span>.apiKey = System.getenv(<span class="hljs-string">"EMBEDDING_API_KEY"</span>);
+            ? embeddingApiUrl : <span class="hljs-string">&quot;http://localhost:11434/api/embeddings&quot;</span>;
+        <span class="hljs-built_in">this</span>.apiKey = System.getenv(<span class="hljs-string">&quot;EMBEDDING_API_KEY&quot;</span>);
         <span class="hljs-built_in">this</span>.httpClient = HttpClient.newBuilder()
             .connectTimeout(java.time.Duration.ofSeconds(<span class="hljs-number">30</span>))
             .build();
@@ -601,46 +601,46 @@
                 <span class="hljs-type">var</span> <span class="hljs-variable">backoffMs</span> <span class="hljs-operator">=</span> (<span class="hljs-type">long</span>) Math.pow(<span class="hljs-number">2</span>, attempt) * <span class="hljs-number">1000</span>;
                 Thread.sleep(backoffMs);
                 <span class="hljs-keyword">if</span> (attempt == maxRetries - <span class="hljs-number">1</span>) {
-                    <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">EmbeddingException</span>(<span class="hljs-string">"Max retries exceeded for chunk "</span> + item.chunkId(), e);
+                    <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">EmbeddingException</span>(<span class="hljs-string">&quot;Max retries exceeded for chunk &quot;</span> + item.chunkId(), e);
                 }
             } <span class="hljs-keyword">catch</span> (java.io.IOException e) {
                 <span class="hljs-keyword">if</span> (attempt == maxRetries - <span class="hljs-number">1</span>) {
-                    <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">EmbeddingException</span>(<span class="hljs-string">"Network error, max retries exceeded"</span>, e);
+                    <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">EmbeddingException</span>(<span class="hljs-string">&quot;Network error, max retries exceeded&quot;</span>, e);
                 }
                 Thread.sleep(<span class="hljs-number">2000</span>);
             }
         }
-        <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">EmbeddingException</span>(<span class="hljs-string">"Unexpected: all retries exhausted"</span>);
+        <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">EmbeddingException</span>(<span class="hljs-string">&quot;Unexpected: all retries exhausted&quot;</span>);
     }
 
     <span class="hljs-keyword">private</span> <span class="hljs-type">float</span>[] callEmbeddingApi(String text) <span class="hljs-keyword">throws</span> Exception {
-        <span class="hljs-type">var</span> <span class="hljs-variable">jsonBody</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
+        <span class="hljs-type">var</span> <span class="hljs-variable">jsonBody</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;&quot;&quot;
             {
-                "model": "bge-large-zh-v1.5",
-                "input": "%s"
+                &quot;model&quot;: &quot;bge-large-zh-v1.5&quot;,
+                &quot;input&quot;: &quot;%s&quot;
             }
-            """</span>.formatted(escapeJson(text));
+            &quot;&quot;&quot;</span>.formatted(escapeJson(text));
 
         <span class="hljs-type">var</span> <span class="hljs-variable">request</span> <span class="hljs-operator">=</span> HttpRequest.newBuilder()
             .uri(URI.create(embeddingApiUrl))
-            .header(<span class="hljs-string">"Content-Type"</span>, <span class="hljs-string">"application/json"</span>)
-            .header(<span class="hljs-string">"Authorization"</span>, <span class="hljs-string">"Bearer "</span> + (apiKey != <span class="hljs-literal">null</span> ? apiKey : <span class="hljs-string">""</span>))
+            .header(<span class="hljs-string">&quot;Content-Type&quot;</span>, <span class="hljs-string">&quot;application/json&quot;</span>)
+            .header(<span class="hljs-string">&quot;Authorization&quot;</span>, <span class="hljs-string">&quot;Bearer &quot;</span> + (apiKey != <span class="hljs-literal">null</span> ? apiKey : <span class="hljs-string">&quot;&quot;</span>))
             .POST(HttpRequest.BodyPublishers.ofString(jsonBody))
             .build();
 
         <span class="hljs-type">var</span> <span class="hljs-variable">response</span> <span class="hljs-operator">=</span> httpClient.send(request, HttpResponse.BodyHandlers.ofString());
 
         <span class="hljs-keyword">if</span> (response.statusCode() == <span class="hljs-number">429</span>) {
-            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RateLimitException</span>(<span class="hljs-string">"Rate limited"</span>);
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RateLimitException</span>(<span class="hljs-string">&quot;Rate limited&quot;</span>);
         }
         <span class="hljs-keyword">if</span> (response.statusCode() != <span class="hljs-number">200</span>) {
-            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">EmbeddingException</span>(<span class="hljs-string">"API returned "</span> + response.statusCode());
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">EmbeddingException</span>(<span class="hljs-string">&quot;API returned &quot;</span> + response.statusCode());
         }
 
         <span class="hljs-comment">// 解析响应（假设Ollama格式）</span>
         <span class="hljs-type">var</span> <span class="hljs-variable">mapper</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">com</span>.fasterxml.jackson.databind.ObjectMapper();
         <span class="hljs-type">var</span> <span class="hljs-variable">root</span> <span class="hljs-operator">=</span> mapper.readTree(response.body());
-        <span class="hljs-type">var</span> <span class="hljs-variable">embeddingNode</span> <span class="hljs-operator">=</span> root.get(<span class="hljs-string">"embedding"</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">embeddingNode</span> <span class="hljs-operator">=</span> root.get(<span class="hljs-string">&quot;embedding&quot;</span>);
         <span class="hljs-type">var</span> <span class="hljs-variable">embedding</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">float</span>[embeddingNode.size()];
         <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; embedding.length; i++) {
             embedding[i] = embeddingNode.get(i).floatValue();
@@ -649,11 +649,11 @@
     }
 
     <span class="hljs-keyword">private</span> String <span class="hljs-title function_">escapeJson</span><span class="hljs-params">(String text)</span> {
-        <span class="hljs-keyword">return</span> text.replace(<span class="hljs-string">"\\"</span>, <span class="hljs-string">"\\\\"</span>)
-                   .replace(<span class="hljs-string">"\""</span>, <span class="hljs-string">"\\\""</span>)
-                   .replace(<span class="hljs-string">"\n"</span>, <span class="hljs-string">"\\n"</span>)
-                   .replace(<span class="hljs-string">"\r"</span>, <span class="hljs-string">"\\r"</span>)
-                   .replace(<span class="hljs-string">"\t"</span>, <span class="hljs-string">"\\t"</span>);
+        <span class="hljs-keyword">return</span> text.replace(<span class="hljs-string">&quot;\\&quot;</span>, <span class="hljs-string">&quot;\\\\&quot;</span>)
+                   .replace(<span class="hljs-string">&quot;\&quot;&quot;</span>, <span class="hljs-string">&quot;\\\&quot;&quot;</span>)
+                   .replace(<span class="hljs-string">&quot;\n&quot;</span>, <span class="hljs-string">&quot;\\n&quot;</span>)
+                   .replace(<span class="hljs-string">&quot;\r&quot;</span>, <span class="hljs-string">&quot;\\r&quot;</span>)
+                   .replace(<span class="hljs-string">&quot;\t&quot;</span>, <span class="hljs-string">&quot;\\t&quot;</span>);
     }
 }
 
@@ -688,12 +688,12 @@
     }
 
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">batchInsertPgVector</span><span class="hljs-params">(List&lt;? extends ChunkItem&gt; items)</span> {
-        <span class="hljs-type">var</span> <span class="hljs-variable">sql</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
+        <span class="hljs-type">var</span> <span class="hljs-variable">sql</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;&quot;&quot;
             INSERT INTO chunk_embeddings (chunk_id, embedding, model_name, model_version)
-            VALUES (?::uuid, ?::vector, 'bge-large-zh-v1.5', '1.5')
+            VALUES (?::uuid, ?::vector, &#x27;bge-large-zh-v1.5&#x27;, &#x27;1.5&#x27;)
             ON CONFLICT (chunk_id, model_name) DO UPDATE
             SET embedding = EXCLUDED.embedding, model_version = EXCLUDED.model_version
-            """</span>;
+            &quot;&quot;&quot;</span>;
 
         <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">conn</span> <span class="hljs-operator">=</span> dataSource.getConnection();
              <span class="hljs-type">var</span> <span class="hljs-variable">stmt</span> <span class="hljs-operator">=</span> conn.prepareStatement(sql)) {
@@ -702,10 +702,10 @@
                 <span class="hljs-keyword">if</span> (item.embedding() == <span class="hljs-literal">null</span>) <span class="hljs-keyword">continue</span>;
 
                 stmt.setObject(<span class="hljs-number">1</span>, item.chunkId());
-                <span class="hljs-comment">// 将float[]转换为pgvector格式：'[0.1, 0.2, ...]'</span>
+                <span class="hljs-comment">// 将float[]转换为pgvector格式：&#x27;[0.1, 0.2, ...]&#x27;</span>
                 <span class="hljs-type">var</span> <span class="hljs-variable">vectorStr</span> <span class="hljs-operator">=</span> java.util.Arrays.stream(item.embedding())
-                    .mapToObj(f -&gt; String.format(<span class="hljs-string">"%.6f"</span>, f))
-                    .collect(java.util.stream.Collectors.joining(<span class="hljs-string">","</span>, <span class="hljs-string">"["</span>, <span class="hljs-string">"]"</span>));
+                    .mapToObj(f -&gt; String.format(<span class="hljs-string">&quot;%.6f&quot;</span>, f))
+                    .collect(java.util.stream.Collectors.joining(<span class="hljs-string">&quot;,&quot;</span>, <span class="hljs-string">&quot;[&quot;</span>, <span class="hljs-string">&quot;]&quot;</span>));
                 stmt.setString(<span class="hljs-number">2</span>, vectorStr);
                 stmt.addBatch();
             }
@@ -713,7 +713,7 @@
             stmt.executeBatch();
 
         } <span class="hljs-keyword">catch</span> (java.sql.SQLException e) {
-            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RuntimeException</span>(<span class="hljs-string">"Failed to insert embeddings"</span>, e);
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RuntimeException</span>(<span class="hljs-string">&quot;Failed to insert embeddings&quot;</span>, e);
         }
     }
 }
@@ -752,12 +752,12 @@
             <span class="hljs-type">var</span> <span class="hljs-variable">end</span> <span class="hljs-operator">=</span> Math.min(start + partitionSize, totalFiles);
             <span class="hljs-type">var</span> <span class="hljs-variable">partitionFiles</span> <span class="hljs-operator">=</span> files.subList(start, end);
 
-            ctx.put(<span class="hljs-string">"files"</span>, partitionFiles);
-            ctx.putInt(<span class="hljs-string">"startIndex"</span>, start);
-            ctx.putInt(<span class="hljs-string">"endIndex"</span>, end);
-            ctx.putInt(<span class="hljs-string">"partitionNumber"</span>, i);
+            ctx.put(<span class="hljs-string">&quot;files&quot;</span>, partitionFiles);
+            ctx.putInt(<span class="hljs-string">&quot;startIndex&quot;</span>, start);
+            ctx.putInt(<span class="hljs-string">&quot;endIndex&quot;</span>, end);
+            ctx.putInt(<span class="hljs-string">&quot;partitionNumber&quot;</span>, i);
 
-            partitions.put(<span class="hljs-string">"partition"</span> + i, ctx);
+            partitions.put(<span class="hljs-string">&quot;partition&quot;</span> + i, ctx);
         }
 
         <span class="hljs-keyword">return</span> partitions;
@@ -776,11 +776,11 @@
 </code></pre></div><p>分区Step配置：</p>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Bean</span>
 <span class="hljs-keyword">public</span> Step <span class="hljs-title function_">partitionedParseStep</span><span class="hljs-params">()</span> {
-    <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StepBuilder</span>(<span class="hljs-string">"partitionedParseStep"</span>, jobRepository)
-        .partitioner(<span class="hljs-string">"parseStep"</span>, <span class="hljs-keyword">new</span> <span class="hljs-title class_">DocumentPartitioner</span>(documentRoot, <span class="hljs-number">500</span>))
+    <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StepBuilder</span>(<span class="hljs-string">&quot;partitionedParseStep&quot;</span>, jobRepository)
+        .partitioner(<span class="hljs-string">&quot;parseStep&quot;</span>, <span class="hljs-keyword">new</span> <span class="hljs-title class_">DocumentPartitioner</span>(documentRoot, <span class="hljs-number">500</span>))
         .step(parseStep())   <span class="hljs-comment">// 复用了之前定义的parseStep</span>
         .gridSize(<span class="hljs-number">4</span>)          <span class="hljs-comment">// 4个并发分区</span>
-        .taskExecutor(<span class="hljs-keyword">new</span> <span class="hljs-title class_">VirtualThreadTaskExecutor</span>(<span class="hljs-string">"partition-"</span>))
+        .taskExecutor(<span class="hljs-keyword">new</span> <span class="hljs-title class_">VirtualThreadTaskExecutor</span>(<span class="hljs-string">&quot;partition-&quot;</span>))
         .build();
 }
 </code></pre></div><hr>
@@ -793,20 +793,20 @@
     <span class="hljs-meta">@Override</span>
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">onSkipInRead</span><span class="hljs-params">(Throwable t)</span> {
         <span class="hljs-comment">// 读取失败（如文件被删除）—— 记录并继续</span>
-        <span class="hljs-comment">// log.error("Skip reading: {}", t.getMessage());</span>
+        <span class="hljs-comment">// log.error(&quot;Skip reading: {}&quot;, t.getMessage());</span>
     }
 
     <span class="hljs-meta">@Override</span>
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">onSkipInWrite</span><span class="hljs-params">(DocumentItem item, Throwable t)</span> {
         <span class="hljs-comment">// 写入失败 —— 记录失败的文档ID，供人工处理</span>
-        <span class="hljs-comment">// log.error("Skip writing document {}: {}", item.documentId(), t.getMessage());</span>
+        <span class="hljs-comment">// log.error(&quot;Skip writing document {}: {}&quot;, item.documentId(), t.getMessage());</span>
         <span class="hljs-comment">// failedDocumentRepository.save(item.documentId(), t.getMessage());</span>
     }
 
     <span class="hljs-meta">@Override</span>
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">onSkipInProcess</span><span class="hljs-params">(DocumentItem item, Throwable t)</span> {
         <span class="hljs-comment">// 处理失败 —— 记录错误详情</span>
-        <span class="hljs-comment">// log.error("Skip processing document {} ({}): {}",</span>
+        <span class="hljs-comment">// log.error(&quot;Skip processing document {} ({}): {}&quot;,</span>
         <span class="hljs-comment">//     item.fileName(), item.sourceUri(), t.getMessage());</span>
     }
 }
@@ -823,10 +823,10 @@
 <span class="hljs-meta">@Bean</span>
 <span class="hljs-keyword">public</span> JobParameters <span class="hljs-title function_">documentIngestionJobParameters</span><span class="hljs-params">()</span> {
     <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">JobParametersBuilder</span>()
-        .addString(<span class="hljs-string">"documentRoot"</span>, <span class="hljs-string">"/data/documents/"</span>)
-        .addString(<span class="hljs-string">"runMode"</span>, <span class="hljs-string">"INCREMENTAL"</span>)  <span class="hljs-comment">// FULL / INCREMENTAL</span>
-        .addString(<span class="hljs-string">"tenantId"</span>, <span class="hljs-string">"tenant_001"</span>)
-        .addLong(<span class="hljs-string">"run.id"</span>, System.currentTimeMillis()) <span class="hljs-comment">// 保证每次运行唯一</span>
+        .addString(<span class="hljs-string">&quot;documentRoot&quot;</span>, <span class="hljs-string">&quot;/data/documents/&quot;</span>)
+        .addString(<span class="hljs-string">&quot;runMode&quot;</span>, <span class="hljs-string">&quot;INCREMENTAL&quot;</span>)  <span class="hljs-comment">// FULL / INCREMENTAL</span>
+        .addString(<span class="hljs-string">&quot;tenantId&quot;</span>, <span class="hljs-string">&quot;tenant_001&quot;</span>)
+        .addLong(<span class="hljs-string">&quot;run.id&quot;</span>, System.currentTimeMillis()) <span class="hljs-comment">// 保证每次运行唯一</span>
         .toJobParameters();
 }
 </code></pre></div><hr>
@@ -891,12 +891,12 @@
 
     <span class="hljs-keyword">private</span> List&lt;<span class="hljs-type">float</span>[]&gt; batchEmbed(List&lt;String&gt; texts) <span class="hljs-keyword">throws</span> Exception {
         <span class="hljs-comment">// 调用支持batch的Embedding API</span>
-        <span class="hljs-type">var</span> <span class="hljs-variable">jsonBody</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
+        <span class="hljs-type">var</span> <span class="hljs-variable">jsonBody</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;&quot;&quot;
             {
-                "model": "bge-large-zh-v1.5",
-                "input": %s
+                &quot;model&quot;: &quot;bge-large-zh-v1.5&quot;,
+                &quot;input&quot;: %s
             }
-            """</span>.formatted(toJsonArray(texts));
+            &quot;&quot;&quot;</span>.formatted(toJsonArray(texts));
 
         <span class="hljs-comment">// ... HTTP调用解析 ...</span>
         <span class="hljs-keyword">return</span> List.of(); <span class="hljs-comment">// 实际实现</span>
@@ -936,7 +936,7 @@
 <span class="hljs-keyword">import</span> org.springframework.web.bind.annotation.*;
 
 <span class="hljs-meta">@RestController</span>
-<span class="hljs-meta">@RequestMapping("/api/batch")</span>
+<span class="hljs-meta">@RequestMapping(&quot;/api/batch&quot;)</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">BatchJobController</span> {
 
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> JobLauncher jobLauncher;
@@ -947,24 +947,24 @@
         <span class="hljs-built_in">this</span>.documentIngestionJob = documentIngestionJob;
     }
 
-    <span class="hljs-meta">@PostMapping("/ingest")</span>
+    <span class="hljs-meta">@PostMapping(&quot;/ingest&quot;)</span>
     <span class="hljs-keyword">public</span> String <span class="hljs-title function_">startIngestion</span><span class="hljs-params">(
             <span class="hljs-meta">@RequestParam</span> String documentRoot,
-            <span class="hljs-meta">@RequestParam(defaultValue = "INCREMENTAL")</span> String runMode,
+            <span class="hljs-meta">@RequestParam(defaultValue = &quot;INCREMENTAL&quot;)</span> String runMode,
             <span class="hljs-meta">@RequestParam</span> String tenantId)</span> {
 
         <span class="hljs-type">var</span> <span class="hljs-variable">params</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">JobParametersBuilder</span>()
-            .addString(<span class="hljs-string">"documentRoot"</span>, documentRoot)
-            .addString(<span class="hljs-string">"runMode"</span>, runMode)
-            .addString(<span class="hljs-string">"tenantId"</span>, tenantId)
-            .addLong(<span class="hljs-string">"run.id"</span>, System.currentTimeMillis())
+            .addString(<span class="hljs-string">&quot;documentRoot&quot;</span>, documentRoot)
+            .addString(<span class="hljs-string">&quot;runMode&quot;</span>, runMode)
+            .addString(<span class="hljs-string">&quot;tenantId&quot;</span>, tenantId)
+            .addLong(<span class="hljs-string">&quot;run.id&quot;</span>, System.currentTimeMillis())
             .toJobParameters();
 
         <span class="hljs-keyword">try</span> {
             <span class="hljs-type">JobExecution</span> <span class="hljs-variable">execution</span> <span class="hljs-operator">=</span> jobLauncher.run(documentIngestionJob, params);
-            <span class="hljs-keyword">return</span> <span class="hljs-string">"Job started: "</span> + execution.getJobId();
+            <span class="hljs-keyword">return</span> <span class="hljs-string">&quot;Job started: &quot;</span> + execution.getJobId();
         } <span class="hljs-keyword">catch</span> (Exception e) {
-            <span class="hljs-keyword">return</span> <span class="hljs-string">"Job failed to start: "</span> + e.getMessage();
+            <span class="hljs-keyword">return</span> <span class="hljs-string">&quot;Job failed to start: &quot;</span> + e.getMessage();
         }
     }
 }
@@ -985,29 +985,29 @@
 
     <span class="hljs-meta">@Override</span>
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">beforeJob</span><span class="hljs-params">(JobExecution jobExecution)</span> {
-        jobExecution.getExecutionContext().putLong(<span class="hljs-string">"startTime"</span>, System.nanoTime());
+        jobExecution.getExecutionContext().putLong(<span class="hljs-string">&quot;startTime&quot;</span>, System.nanoTime());
     }
 
     <span class="hljs-meta">@Override</span>
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">afterJob</span><span class="hljs-params">(JobExecution jobExecution)</span> {
-        <span class="hljs-type">var</span> <span class="hljs-variable">startTime</span> <span class="hljs-operator">=</span> jobExecution.getExecutionContext().getLong(<span class="hljs-string">"startTime"</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">startTime</span> <span class="hljs-operator">=</span> jobExecution.getExecutionContext().getLong(<span class="hljs-string">&quot;startTime&quot;</span>);
         <span class="hljs-type">var</span> <span class="hljs-variable">duration</span> <span class="hljs-operator">=</span> System.nanoTime() - startTime;
 
         <span class="hljs-comment">// 记录Job总耗时</span>
-        Timer.builder(<span class="hljs-string">"batch.ingestion.duration"</span>)
-            .description(<span class="hljs-string">"Document ingestion job duration"</span>)
+        Timer.builder(<span class="hljs-string">&quot;batch.ingestion.duration&quot;</span>)
+            .description(<span class="hljs-string">&quot;Document ingestion job duration&quot;</span>)
             .register(meterRegistry)
             .record(duration, TimeUnit.NANOSECONDS);
 
         <span class="hljs-comment">// 记录处理统计</span>
-        meterRegistry.counter(<span class="hljs-string">"batch.ingestion.documents.total"</span>,
-            <span class="hljs-string">"status"</span>, jobExecution.getStatus().name())
+        meterRegistry.counter(<span class="hljs-string">&quot;batch.ingestion.documents.total&quot;</span>,
+            <span class="hljs-string">&quot;status&quot;</span>, jobExecution.getStatus().name())
             .increment(jobExecution.getStepExecutions().stream()
                 .mapToInt(se -&gt; (<span class="hljs-type">int</span>) se.getReadCount())
                 .sum());
 
-        meterRegistry.counter(<span class="hljs-string">"batch.ingestion.documents.failed"</span>,
-            <span class="hljs-string">"status"</span>, <span class="hljs-string">"FAILED"</span>)
+        meterRegistry.counter(<span class="hljs-string">&quot;batch.ingestion.documents.failed&quot;</span>,
+            <span class="hljs-string">&quot;status&quot;</span>, <span class="hljs-string">&quot;FAILED&quot;</span>)
             .increment(jobExecution.getStepExecutions().stream()
                 .mapToInt(se -&gt; (<span class="hljs-type">int</span>) se.getSkipCount())
                 .sum());
@@ -1041,5 +1041,5 @@
 <li><a href="#/10-AI数据工程/数据治理/10-元数据管理与数据治理" class="cross-ref">10-元数据管理与数据治理</a> — 批处理的元数据和治理</li>
 <li><a href="#/11-检索与RAG/RAG实现/11-完整RAG流水线实现" class="cross-ref">11-完整RAG流水线实现</a> — 从批处理到在线RAG的完整链路</li>
 </ul>
-</body></html></div>
+</div>
 </article>

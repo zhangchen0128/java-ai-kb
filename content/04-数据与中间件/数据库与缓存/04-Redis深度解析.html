@@ -6,7 +6,7 @@
     <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#redis</span><span class="badge badge-tag">#sds</span><span class="badge badge-tag">#rdb</span><span class="badge badge-tag">#aof</span><span class="badge badge-tag">#sentinel</span></div>
     <div class="entry-sources"><small>📖 来源：<a href="https://redis.io/docs/latest/" target="_blank" rel="noopener" class="source-link" title="Redis 7.x 官方文档">Redis 7.x 官方文档</a><a href="https://github.com/redis/redis" target="_blank" rel="noopener" class="source-link" title="Redis 源码（SDS、quicklist、skiplist 实现）">Redis 源码（SDS、quicklist、skiplist 实现）</a><a href="https://redisbook.com/" target="_blank" rel="noopener" class="source-link" title="《Redis 设计与实现》— 黄健宏，Redis 内部数据结构与机制">《Redis 设计与实现》— 黄健宏，Redis 内部数据结构与机制</a></small></div>
   </div>
-  <div class="entry-body"><html><head></head><body><h1>Redis 深度解析</h1>
+  <div class="entry-body"><h1>Redis 深度解析</h1>
 <h2>概述</h2>
 <p>Redis 是高性能的内存键值存储，广泛用于缓存、分布式锁、消息队列、限流和实时数据场景。在 AI 应用中，Redis Vector Search 为实时语义缓存和低延迟向量检索提供了新可能。</p>
 <p>本文深入 Redis 内部数据结构实现、持久化机制、高可用架构、分布式锁原理、缓存策略模式，以及 Java 客户端选择和 AI 场景应用。</p>
@@ -237,16 +237,16 @@ Client</span>                         Node B (槽 <span class="hljs-number">5001
   | <span class="hljs-type">--- ASKING</span> → GET key ------&gt; | <span class="hljs-type">(Node</span> C)
 </code></pre></div><p><strong>客户端路由策略（Lettuce 实现）：</strong></p>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// Lettuce 集群客户端自动处理 MOVED/ASK</span>
-<span class="hljs-type">var</span> <span class="hljs-variable">client</span> <span class="hljs-operator">=</span> RedisClusterClient.create(<span class="hljs-string">"redis://localhost:7000,localhost:7001"</span>);
+<span class="hljs-type">var</span> <span class="hljs-variable">client</span> <span class="hljs-operator">=</span> RedisClusterClient.create(<span class="hljs-string">&quot;redis://localhost:7000,localhost:7001&quot;</span>);
 <span class="hljs-type">var</span> <span class="hljs-variable">connection</span> <span class="hljs-operator">=</span> client.connect();
 <span class="hljs-type">var</span> <span class="hljs-variable">commands</span> <span class="hljs-operator">=</span> connection.sync();
-commands.set(<span class="hljs-string">"key"</span>, <span class="hljs-string">"value"</span>); <span class="hljs-comment">// 自动路由到正确节点</span>
+commands.set(<span class="hljs-string">&quot;key&quot;</span>, <span class="hljs-string">&quot;value&quot;</span>); <span class="hljs-comment">// 自动路由到正确节点</span>
 </code></pre></div><hr>
 <h2>四、分布式锁</h2>
 <h3>4.1 Redisson 看门狗（Watchdog）</h3>
-<p>Redisson 解决了简单 SET NX PX 锁的"锁提前释放"问题：</p>
+<p>Redisson 解决了简单 SET NX PX 锁的&quot;锁提前释放&quot;问题：</p>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 1. 获取锁</span>
-<span class="hljs-type">RLock</span> <span class="hljs-variable">lock</span> <span class="hljs-operator">=</span> redisson.getLock(<span class="hljs-string">"order:123:lock"</span>);
+<span class="hljs-type">RLock</span> <span class="hljs-variable">lock</span> <span class="hljs-operator">=</span> redisson.getLock(<span class="hljs-string">&quot;order:123:lock&quot;</span>);
 
 <span class="hljs-comment">// 自动续期（看门狗每 10 秒检查，持锁超时 30 秒）</span>
 lock.lock();  <span class="hljs-comment">// 等价于 lock.lock(30, TimeUnit.SECONDS)</span>
@@ -266,19 +266,19 @@ lock.lock();  <span class="hljs-comment">// 等价于 lock.lock(30, TimeUnit.SEC
 <span class="hljs-number">3.</span> unlock() 时取消定时任务
 
 Lua 续期脚本（简化）：
-<span class="hljs-keyword">if</span> redis.<span class="hljs-keyword">call</span>(<span class="hljs-string">'hexists'</span>, KEYS[<span class="hljs-number">1</span>], ARGV[<span class="hljs-number">2</span>]) == <span class="hljs-number">1</span> <span class="hljs-keyword">then</span>
-    <span class="hljs-keyword">return</span> redis.<span class="hljs-keyword">call</span>(<span class="hljs-string">'pexpire'</span>, KEYS[<span class="hljs-number">1</span>], ARGV[<span class="hljs-number">1</span>])
+<span class="hljs-keyword">if</span> redis.<span class="hljs-keyword">call</span>(<span class="hljs-string">&#x27;hexists&#x27;</span>, KEYS[<span class="hljs-number">1</span>], ARGV[<span class="hljs-number">2</span>]) == <span class="hljs-number">1</span> <span class="hljs-keyword">then</span>
+    <span class="hljs-keyword">return</span> redis.<span class="hljs-keyword">call</span>(<span class="hljs-string">&#x27;pexpire&#x27;</span>, KEYS[<span class="hljs-number">1</span>], ARGV[<span class="hljs-number">1</span>])
 <span class="hljs-keyword">end</span>
 </code></pre></div><h3>4.2 红锁（RedLock）争议</h3>
 <p>Martin Kleppmann 在《How to do distributed locking》中指出红锁的问题：</p>
 <ol>
-<li><strong>时钟跳跃：</strong> 如果获取锁后 GC/时钟跳跃，锁可能在"还持有"的幻觉中过期</li>
+<li><strong>时钟跳跃：</strong> 如果获取锁后 GC/时钟跳跃，锁可能在&quot;还持有&quot;的幻觉中过期</li>
 <li><strong>Fencing Token：</strong> 应附带单调递增的 token，资源服务器需要校验</li>
 </ol>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// Redisson 的红锁实现</span>
-<span class="hljs-type">RLock</span> <span class="hljs-variable">lock1</span> <span class="hljs-operator">=</span> redisson1.getLock(<span class="hljs-string">"lock"</span>);
-<span class="hljs-type">RLock</span> <span class="hljs-variable">lock2</span> <span class="hljs-operator">=</span> redisson2.getLock(<span class="hljs-string">"lock"</span>);
-<span class="hljs-type">RLock</span> <span class="hljs-variable">lock3</span> <span class="hljs-operator">=</span> redisson3.getLock(<span class="hljs-string">"lock"</span>);
+<span class="hljs-type">RLock</span> <span class="hljs-variable">lock1</span> <span class="hljs-operator">=</span> redisson1.getLock(<span class="hljs-string">&quot;lock&quot;</span>);
+<span class="hljs-type">RLock</span> <span class="hljs-variable">lock2</span> <span class="hljs-operator">=</span> redisson2.getLock(<span class="hljs-string">&quot;lock&quot;</span>);
+<span class="hljs-type">RLock</span> <span class="hljs-variable">lock3</span> <span class="hljs-operator">=</span> redisson3.getLock(<span class="hljs-string">&quot;lock&quot;</span>);
 <span class="hljs-type">RedissonRedLock</span> <span class="hljs-variable">redLock</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RedissonRedLock</span>(lock1, lock2, lock3);
 
 redLock.lock();
@@ -290,20 +290,20 @@ redLock.lock();
 </code></pre></div><p><strong>生产建议：</strong> 在多数场景中，单 Redis 实例 + Redisson 看门狗 已足够。红锁仅在对一致性有极高要求且可接受复杂度和性能开销时使用。更严格的一致性场景应使用 ZooKeeper 或数据库锁。</p>
 <h3>4.3 SET NX PX 原子性</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// Jedis 方式（SET NX PX 原子命令）</span>
-<span class="hljs-type">String</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> jedis.set(<span class="hljs-string">"lock:key"</span>, <span class="hljs-string">"unique_value"</span>,
+<span class="hljs-type">String</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> jedis.set(<span class="hljs-string">&quot;lock:key&quot;</span>, <span class="hljs-string">&quot;unique_value&quot;</span>,
         SetParams.setParams().nx().px(<span class="hljs-number">30000</span>));
-<span class="hljs-keyword">if</span> (<span class="hljs-string">"OK"</span>.equals(result)) {
+<span class="hljs-keyword">if</span> (<span class="hljs-string">&quot;OK&quot;</span>.equals(result)) {
     <span class="hljs-keyword">try</span> {
         <span class="hljs-comment">// 业务逻辑</span>
     } <span class="hljs-keyword">finally</span> {
         <span class="hljs-comment">// Lua 脚本原子释放（确保释放的是自己持有的锁）</span>
-        <span class="hljs-type">String</span> <span class="hljs-variable">script</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
-            if redis.call('get', KEYS[1]) == ARGV[1] then
-                return redis.call('del', KEYS[1])
+        <span class="hljs-type">String</span> <span class="hljs-variable">script</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;&quot;&quot;
+            if redis.call(&#x27;get&#x27;, KEYS[1]) == ARGV[1] then
+                return redis.call(&#x27;del&#x27;, KEYS[1])
             else
                 return 0
-            end"""</span>;
-        jedis.eval(script, List.of(<span class="hljs-string">"lock:key"</span>), List.of(<span class="hljs-string">"unique_value"</span>));
+            end&quot;&quot;&quot;</span>;
+        jedis.eval(script, List.of(<span class="hljs-string">&quot;lock:key&quot;</span>), List.of(<span class="hljs-string">&quot;unique_value&quot;</span>));
     }
 }
 </code></pre></div><hr>
@@ -351,7 +351,7 @@ redLock.lock();
     <span class="hljs-comment">// 延迟双删策略</span>
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">updateUser</span><span class="hljs-params">(Long userId, UserDto dto)</span> {
         <span class="hljs-comment">// 1. 第一次删除缓存</span>
-        redis.delete(<span class="hljs-string">"user:"</span> + userId);
+        redis.delete(<span class="hljs-string">&quot;user:&quot;</span> + userId);
 
         <span class="hljs-comment">// 2. 更新数据库</span>
         userRepo.update(userId, dto);
@@ -363,7 +363,7 @@ redLock.lock();
             } <span class="hljs-keyword">catch</span> (InterruptedException e) {
                 Thread.currentThread().interrupt();
             }
-            redis.delete(<span class="hljs-string">"user:"</span> + userId);
+            redis.delete(<span class="hljs-string">&quot;user:&quot;</span> + userId);
         });
     }
 }
@@ -384,8 +384,8 @@ redLock.lock();
 
 <span class="hljs-comment">// 结合 Redis 模块布隆过滤器（更推荐，共享状态）</span>
 <span class="hljs-comment">// BF.RESERVE user:bloom 0.01 1000000</span>
-<span class="hljs-comment">// BF.ADD user:bloom "user_123"</span>
-<span class="hljs-comment">// BF.EXISTS user:bloom "user_123"</span>
+<span class="hljs-comment">// BF.ADD user:bloom &quot;user_123&quot;</span>
+<span class="hljs-comment">// BF.EXISTS user:bloom &quot;user_123&quot;</span>
 
 <span class="hljs-meta">@Service</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">UserQueryService</span> {
@@ -394,7 +394,7 @@ redLock.lock();
         <span class="hljs-comment">// 1. 布隆过滤器快速排除不存在的 key</span>
         <span class="hljs-type">Boolean</span> <span class="hljs-variable">exists</span> <span class="hljs-operator">=</span> redis.opsForValue()
                 .getOperations().execute((RedisCallback&lt;Boolean&gt;) conn -&gt;
-                        conn.execute(<span class="hljs-string">"BF.EXISTS"</span>, <span class="hljs-string">"user:bloom"</span>.getBytes(), userId.getBytes()));
+                        conn.execute(<span class="hljs-string">&quot;BF.EXISTS&quot;</span>, <span class="hljs-string">&quot;user:bloom&quot;</span>.getBytes(), userId.getBytes()));
 
         <span class="hljs-keyword">if</span> (Boolean.FALSE.equals(exists)) {
             <span class="hljs-keyword">return</span> <span class="hljs-literal">null</span>; <span class="hljs-comment">// 一定不存在，无需查 DB</span>
@@ -448,12 +448,12 @@ redLock.lock();
 </tbody></table>
 <p><strong>Lettuce 异步 API 示例：</strong></p>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 异步 API</span>
-<span class="hljs-type">var</span> <span class="hljs-variable">future</span> <span class="hljs-operator">=</span> redisAsyncCommands.get(<span class="hljs-string">"key"</span>);
-future.thenAccept(value -&gt; System.out.println(<span class="hljs-string">"Got: "</span> + value));
+<span class="hljs-type">var</span> <span class="hljs-variable">future</span> <span class="hljs-operator">=</span> redisAsyncCommands.get(<span class="hljs-string">&quot;key&quot;</span>);
+future.thenAccept(value -&gt; System.out.println(<span class="hljs-string">&quot;Got: &quot;</span> + value));
 
 <span class="hljs-comment">// 响应式 API</span>
-redisReactiveCommands.get(<span class="hljs-string">"key"</span>)
-        .map(value -&gt; <span class="hljs-string">"Processed: "</span> + value)
+redisReactiveCommands.get(<span class="hljs-string">&quot;key&quot;</span>)
+        .map(value -&gt; <span class="hljs-string">&quot;Processed: &quot;</span> + value)
         .subscribe(System.out::println);
 </code></pre></div><h3>6.2 Spring Data Redis 配置</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-attr">spring:</span>
@@ -489,10 +489,10 @@ FT.CREATE idx:docs ON HASH PREFIX 1 doc:
 
     <span class="hljs-comment">// 添加文档向量</span>
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">addDocument</span><span class="hljs-params">(String docId, String content, <span class="hljs-type">float</span>[] embedding)</span> {
-        <span class="hljs-type">var</span> <span class="hljs-variable">key</span> <span class="hljs-operator">=</span> <span class="hljs-string">"doc:"</span> + docId;
+        <span class="hljs-type">var</span> <span class="hljs-variable">key</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;doc:&quot;</span> + docId;
         <span class="hljs-type">var</span> <span class="hljs-variable">map</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">HashMap</span>&lt;String, Object&gt;();
-        map.put(<span class="hljs-string">"content"</span>, content);
-        map.put(<span class="hljs-string">"embedding"</span>, embeddingToBytes(embedding));
+        map.put(<span class="hljs-string">&quot;content&quot;</span>, content);
+        map.put(<span class="hljs-string">&quot;embedding&quot;</span>, embeddingToBytes(embedding));
         redisson.getMap(key).putAll(map);
     }
 
@@ -507,7 +507,7 @@ FT.CREATE idx:docs ON HASH PREFIX 1 doc:
 }
 </code></pre></div><h3>7.2 KNN 查询</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-comment"># KNN 搜索（返回最近 10 个）</span>
-FT.SEARCH idx:docs <span class="hljs-string">"*=&gt;[KNN 10 @embedding <span class="hljs-variable">$vec</span> AS dist]"</span>
+FT.SEARCH idx:docs <span class="hljs-string">&quot;*=&gt;[KNN 10 @embedding <span class="hljs-variable">$vec</span> AS dist]&quot;</span>
   SORTBY dist
   PARAMS 2 vec &lt;binary_blob&gt;
   RETURN 3 content dist
@@ -536,11 +536,11 @@ FT.SEARCH idx:docs <span class="hljs-string">"*=&gt;[KNN 10 @embedding <span cla
 <h3>8.1 热 Key / 大 Key</h3>
 <p><strong>热 Key 应对：</strong></p>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 1. 本地缓存前置（Caffeine + Redis）</span>
-<span class="hljs-meta">@Cacheable(cacheNames = "hot-products", key = "#productId")</span>
+<span class="hljs-meta">@Cacheable(cacheNames = &quot;hot-products&quot;, key = &quot;#productId&quot;)</span>
 <span class="hljs-keyword">public</span> Product <span class="hljs-title function_">getProduct</span><span class="hljs-params">(Long productId)</span> { ... }
 
 <span class="hljs-comment">// 2. key 分片（冗余多份 + 随机访问其一）</span>
-<span class="hljs-type">String</span> <span class="hljs-variable">key</span> <span class="hljs-operator">=</span> <span class="hljs-string">"product:"</span> + productId + <span class="hljs-string">":"</span> + ThreadLocalRandom.current().nextInt(<span class="hljs-number">10</span>);
+<span class="hljs-type">String</span> <span class="hljs-variable">key</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;product:&quot;</span> + productId + <span class="hljs-string">&quot;:&quot;</span> + ThreadLocalRandom.current().nextInt(<span class="hljs-number">10</span>);
 </code></pre></div><p><strong>大 Key 检测与处理：</strong></p>
 <div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-comment"># 检测</span>
 redis-cli --bigkeys
@@ -556,9 +556,9 @@ UNLINK big:<span class="hljs-built_in">hash</span>:key
     <span class="hljs-keyword">if</span> (value != <span class="hljs-literal">null</span>) <span class="hljs-keyword">return</span> value;
 
     <span class="hljs-comment">// 加互斥锁</span>
-    <span class="hljs-type">var</span> <span class="hljs-variable">lockKey</span> <span class="hljs-operator">=</span> <span class="hljs-string">"lock:"</span> + key;
+    <span class="hljs-type">var</span> <span class="hljs-variable">lockKey</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;lock:&quot;</span> + key;
     <span class="hljs-keyword">try</span> {
-        <span class="hljs-keyword">if</span> (redis.opsForValue().setIfAbsent(lockKey, <span class="hljs-string">"1"</span>, <span class="hljs-number">10</span>, TimeUnit.SECONDS)) {
+        <span class="hljs-keyword">if</span> (redis.opsForValue().setIfAbsent(lockKey, <span class="hljs-string">&quot;1&quot;</span>, <span class="hljs-number">10</span>, TimeUnit.SECONDS)) {
             <span class="hljs-comment">// 查 DB</span>
             value = db.query(key);
             redis.opsForValue().set(key, value, <span class="hljs-number">30</span>, TimeUnit.MINUTES);
@@ -589,5 +589,5 @@ redis-cli --cluster reshard 192.168.1.10:6379 \
 <li><a href="#/05-分布式架构/弹性设计/05-幂等设计与分布式锁" class="cross-ref">05-幂等设计与分布式锁</a> — 幂等性与分布式锁</li>
 <li><a href="#/04-数据与中间件/消息与搜索/04-Kafka深度解析" class="cross-ref">04-Kafka深度解析</a> — Kafka 消息队列</li>
 </ul>
-</body></html></div>
+</div>
 </article>

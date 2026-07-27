@@ -6,7 +6,7 @@
     <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#minio</span><span class="badge badge-tag">#s3</span><span class="badge badge-tag">#object-storage</span><span class="badge badge-tag">#rabbitmq</span><span class="badge badge-tag">#presigned-url</span></div>
     <div class="entry-sources"><small>📖 来源：<a href="https://min.io/docs/minio/linux/index.html" target="_blank" rel="noopener" class="source-link" title="MinIO 官方文档">MinIO 官方文档</a><a href="https://docs.aws.amazon.com/AmazonS3/latest/API/Type_API_Reference.html" target="_blank" rel="noopener" class="source-link" title="AWS S3 API 参考">AWS S3 API 参考</a><a href="https://www.rabbitmq.com/docs" target="_blank" rel="noopener" class="source-link" title="RabbitMQ 官方文档">RabbitMQ 官方文档</a><a href="https://www.oreilly.com/library/view/rabbitmq-in-depth/" target="_blank" rel="noopener" class="source-link" title="《RabbitMQ in Depth》— Gavin M. Roy">《RabbitMQ in Depth》— Gavin M. Roy</a></small></div>
   </div>
-  <div class="entry-body"><html><head></head><body><h1>对象存储、RabbitMQ 与中间件扩展</h1>
+  <div class="entry-body"><h1>对象存储、RabbitMQ 与中间件扩展</h1>
 <h2>概述</h2>
 <p>对象存储是 AI 数据工程的基础设施，承载着从原始文档上传到向量索引的完整文件链路。RabbitMQ 作为传统消息中间件，在轻量级消息路由、死信队列、延迟消息等场景仍不可替代。</p>
 <p>本文涵盖 MinIO 部署和集成、S3 兼容 API、AI 文档存储链路、RabbitMQ 核心概念与选型对比、对象存储安全最佳实践。</p>
@@ -17,10 +17,10 @@
 <span class="hljs-attr">services:</span>
   <span class="hljs-attr">minio:</span>
     <span class="hljs-attr">image:</span> <span class="hljs-string">quay.io/minio/minio:latest</span>
-    <span class="hljs-attr">command:</span> <span class="hljs-string">server</span> <span class="hljs-string">/data</span> <span class="hljs-string">--console-address</span> <span class="hljs-string">":9001"</span>
+    <span class="hljs-attr">command:</span> <span class="hljs-string">server</span> <span class="hljs-string">/data</span> <span class="hljs-string">--console-address</span> <span class="hljs-string">&quot;:9001&quot;</span>
     <span class="hljs-attr">ports:</span>
-      <span class="hljs-bullet">-</span> <span class="hljs-string">"9000:9000"</span>  <span class="hljs-comment"># API</span>
-      <span class="hljs-bullet">-</span> <span class="hljs-string">"9001:9001"</span>  <span class="hljs-comment"># Console</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-string">&quot;9000:9000&quot;</span>  <span class="hljs-comment"># API</span>
+      <span class="hljs-bullet">-</span> <span class="hljs-string">&quot;9001:9001&quot;</span>  <span class="hljs-comment"># Console</span>
     <span class="hljs-attr">environment:</span>
       <span class="hljs-attr">MINIO_ROOT_USER:</span> <span class="hljs-string">admin</span>
       <span class="hljs-attr">MINIO_ROOT_PASSWORD:</span> <span class="hljs-string">${MINIO_PASSWORD}</span>
@@ -28,7 +28,7 @@
     <span class="hljs-attr">volumes:</span>
       <span class="hljs-bullet">-</span> <span class="hljs-string">minio_data:/data</span>
     <span class="hljs-attr">healthcheck:</span>
-      <span class="hljs-attr">test:</span> [<span class="hljs-string">"CMD"</span>, <span class="hljs-string">"mc"</span>, <span class="hljs-string">"ready"</span>, <span class="hljs-string">"local"</span>]
+      <span class="hljs-attr">test:</span> [<span class="hljs-string">&quot;CMD&quot;</span>, <span class="hljs-string">&quot;mc&quot;</span>, <span class="hljs-string">&quot;ready&quot;</span>, <span class="hljs-string">&quot;local&quot;</span>]
       <span class="hljs-attr">interval:</span> <span class="hljs-string">5s</span>
       <span class="hljs-attr">timeout:</span> <span class="hljs-string">5s</span>
       <span class="hljs-attr">retries:</span> <span class="hljs-number">5</span>
@@ -36,7 +36,7 @@
   <span class="hljs-comment"># 分布式部署（4 节点，纠删码 EC:2）</span>
   <span class="hljs-attr">minio-distributed:</span>
     <span class="hljs-attr">image:</span> <span class="hljs-string">quay.io/minio/minio</span>
-    <span class="hljs-attr">command:</span> <span class="hljs-string">server</span> <span class="hljs-string">http://minio-{1...4}/data</span> <span class="hljs-string">--console-address</span> <span class="hljs-string">":9001"</span>
+    <span class="hljs-attr">command:</span> <span class="hljs-string">server</span> <span class="hljs-string">http://minio-{1...4}/data</span> <span class="hljs-string">--console-address</span> <span class="hljs-string">&quot;:9001&quot;</span>
     <span class="hljs-attr">environment:</span>
       <span class="hljs-attr">MINIO_ROOT_USER:</span> <span class="hljs-string">admin</span>
       <span class="hljs-attr">MINIO_ROOT_PASSWORD:</span> <span class="hljs-string">${MINIO_PASSWORD}</span>
@@ -45,22 +45,22 @@
   <span class="hljs-attr">minio_data:</span>
 </code></pre></div><h3>1.2 Bucket 策略</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-json"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">"Version"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"2012-10-17"</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">"Statement"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
+  <span class="hljs-attr">&quot;Version&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2012-10-17&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;Statement&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
     <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">"Effect"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"Allow"</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"Principal"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"AWS"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">"*"</span><span class="hljs-punctuation">]</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"Action"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">"s3:GetObject"</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"Resource"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">"arn:aws:s3:::public-docs/*"</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"Condition"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-        <span class="hljs-attr">"IpAddress"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"aws:SourceIp"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">"10.0.0.0/8"</span><span class="hljs-punctuation">,</span> <span class="hljs-string">"172.16.0.0/12"</span><span class="hljs-punctuation">]</span> <span class="hljs-punctuation">}</span>
+      <span class="hljs-attr">&quot;Effect&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Allow&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;Principal&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;AWS&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;*&quot;</span><span class="hljs-punctuation">]</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;Action&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;s3:GetObject&quot;</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;Resource&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;arn:aws:s3:::public-docs/*&quot;</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;Condition&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">&quot;IpAddress&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;aws:SourceIp&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;10.0.0.0/8&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;172.16.0.0/12&quot;</span><span class="hljs-punctuation">]</span> <span class="hljs-punctuation">}</span>
       <span class="hljs-punctuation">}</span>
     <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
     <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">"Effect"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"Allow"</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"Principal"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"AWS"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">"arn:aws:iam::app-user"</span><span class="hljs-punctuation">]</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"Action"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">"s3:GetObject"</span><span class="hljs-punctuation">,</span> <span class="hljs-string">"s3:PutObject"</span><span class="hljs-punctuation">,</span> <span class="hljs-string">"s3:DeleteObject"</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"Resource"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">"arn:aws:s3:::app-documents/*"</span><span class="hljs-punctuation">]</span>
+      <span class="hljs-attr">&quot;Effect&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Allow&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;Principal&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;AWS&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;arn:aws:iam::app-user&quot;</span><span class="hljs-punctuation">]</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;Action&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;s3:GetObject&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;s3:PutObject&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-string">&quot;s3:DeleteObject&quot;</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;Resource&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;arn:aws:s3:::app-documents/*&quot;</span><span class="hljs-punctuation">]</span>
     <span class="hljs-punctuation">}</span>
   <span class="hljs-punctuation">]</span>
 <span class="hljs-punctuation">}</span>
@@ -81,13 +81,13 @@ mc anonymous <span class="hljs-built_in">set</span> public <span class="hljs-bui
         <span class="hljs-keyword">try</span> {
             <span class="hljs-type">var</span> <span class="hljs-variable">args</span> <span class="hljs-operator">=</span> GetPresignedObjectUrlArgs.builder()
                     .method(Method.PUT)
-                    .bucket(<span class="hljs-string">"ai-documents"</span>)
+                    .bucket(<span class="hljs-string">&quot;ai-documents&quot;</span>)
                     .object(objectName)
                     .expiry((<span class="hljs-type">int</span>) expiry.getSeconds())
                     .build();
             <span class="hljs-keyword">return</span> minioClient.getPresignedObjectUrl(args);
         } <span class="hljs-keyword">catch</span> (Exception e) {
-            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StorageException</span>(<span class="hljs-string">"Failed to generate upload URL"</span>, e);
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StorageException</span>(<span class="hljs-string">&quot;Failed to generate upload URL&quot;</span>, e);
         }
     }
 
@@ -96,13 +96,13 @@ mc anonymous <span class="hljs-built_in">set</span> public <span class="hljs-bui
         <span class="hljs-keyword">try</span> {
             <span class="hljs-type">var</span> <span class="hljs-variable">args</span> <span class="hljs-operator">=</span> GetPresignedObjectUrlArgs.builder()
                     .method(Method.GET)
-                    .bucket(<span class="hljs-string">"ai-documents"</span>)
+                    .bucket(<span class="hljs-string">&quot;ai-documents&quot;</span>)
                     .object(objectName)
                     .expiry((<span class="hljs-type">int</span>) expiry.getSeconds())
                     .build();
             <span class="hljs-keyword">return</span> minioClient.getPresignedObjectUrl(args);
         } <span class="hljs-keyword">catch</span> (Exception e) {
-            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StorageException</span>(<span class="hljs-string">"Failed to generate download URL"</span>, e);
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StorageException</span>(<span class="hljs-string">&quot;Failed to generate download URL&quot;</span>, e);
         }
     }
 
@@ -111,19 +111,19 @@ mc anonymous <span class="hljs-built_in">set</span> public <span class="hljs-bui
                                                   String contentDisposition)</span> {
         <span class="hljs-keyword">try</span> {
             <span class="hljs-type">var</span> <span class="hljs-variable">reqParams</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">HashMap</span>&lt;String, String&gt;();
-            reqParams.put(<span class="hljs-string">"response-content-disposition"</span>,
-                    <span class="hljs-string">"attachment; filename=\""</span> + contentDisposition + <span class="hljs-string">"\""</span>);
+            reqParams.put(<span class="hljs-string">&quot;response-content-disposition&quot;</span>,
+                    <span class="hljs-string">&quot;attachment; filename=\&quot;&quot;</span> + contentDisposition + <span class="hljs-string">&quot;\&quot;&quot;</span>);
 
             <span class="hljs-type">var</span> <span class="hljs-variable">args</span> <span class="hljs-operator">=</span> GetPresignedObjectUrlArgs.builder()
                     .method(Method.GET)
-                    .bucket(<span class="hljs-string">"ai-documents"</span>)
+                    .bucket(<span class="hljs-string">&quot;ai-documents&quot;</span>)
                     .object(objectName)
                     .expiry(<span class="hljs-number">3600</span>)
                     .extraQueryParams(reqParams)
                     .build();
             <span class="hljs-keyword">return</span> minioClient.getPresignedObjectUrl(args);
         } <span class="hljs-keyword">catch</span> (Exception e) {
-            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StorageException</span>(<span class="hljs-string">"Failed to generate download URL"</span>, e);
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StorageException</span>(<span class="hljs-string">&quot;Failed to generate download URL&quot;</span>, e);
         }
     }
 }
@@ -131,23 +131,23 @@ mc anonymous <span class="hljs-built_in">set</span> public <span class="hljs-bui
 <p>MinIO 支持将对象变更事件推送到 Webhook、Kafka、Redis、NATS 等。</p>
 <div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-comment"># Kafka 事件通知配置</span>
 mc admin config <span class="hljs-built_in">set</span> <span class="hljs-built_in">local</span> notify_kafka:doc-events \
-  brokers=<span class="hljs-string">"kafka:9092"</span> \
-  topic=<span class="hljs-string">"minio-events"</span>
+  brokers=<span class="hljs-string">&quot;kafka:9092&quot;</span> \
+  topic=<span class="hljs-string">&quot;minio-events&quot;</span>
 
 mc event add <span class="hljs-built_in">local</span>/ai-documents arn:minio:sqs::doc-events:kafka \
   --event put,delete
 </code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-json"><span class="hljs-comment">// MinIO 事件格式（发送到 Kafka）</span>
 <span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">"EventName"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"s3:ObjectCreated:Put"</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">"Key"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"ai-documents/user-123/report.pdf"</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">"Records"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-punctuation">{</span>
-    <span class="hljs-attr">"s3"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">"bucket"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"name"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"ai-documents"</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"object"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-        <span class="hljs-attr">"key"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"user-123/report.pdf"</span><span class="hljs-punctuation">,</span>
-        <span class="hljs-attr">"size"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1048576</span><span class="hljs-punctuation">,</span>
-        <span class="hljs-attr">"eTag"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"d41d8cd98f00b204e9800998ecf8427e"</span><span class="hljs-punctuation">,</span>
-        <span class="hljs-attr">"contentType"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"application/pdf"</span>
+  <span class="hljs-attr">&quot;EventName&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;s3:ObjectCreated:Put&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;Key&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;ai-documents/user-123/report.pdf&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;Records&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-punctuation">{</span>
+    <span class="hljs-attr">&quot;s3&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+      <span class="hljs-attr">&quot;bucket&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;ai-documents&quot;</span> <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;object&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">&quot;key&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;user-123/report.pdf&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;size&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">1048576</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;eTag&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;d41d8cd98f00b204e9800998ecf8427e&quot;</span><span class="hljs-punctuation">,</span>
+        <span class="hljs-attr">&quot;contentType&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;application/pdf&quot;</span>
       <span class="hljs-punctuation">}</span>
     <span class="hljs-punctuation">}</span>
   <span class="hljs-punctuation">}</span><span class="hljs-punctuation">]</span>
@@ -167,7 +167,7 @@ mc version <span class="hljs-built_in">enable</span> <span class="hljs-built_in"
 mc <span class="hljs-built_in">ls</span> --versions <span class="hljs-built_in">local</span>/ai-documents/user-123/report.pdf
 
 <span class="hljs-comment"># 回退到指定版本</span>
-mc <span class="hljs-built_in">cp</span> --version-id <span class="hljs-string">"xxx"</span> <span class="hljs-built_in">local</span>/ai-documents/user-123/report.pdf .
+mc <span class="hljs-built_in">cp</span> --version-id <span class="hljs-string">&quot;xxx&quot;</span> <span class="hljs-built_in">local</span>/ai-documents/user-123/report.pdf .
 
 <span class="hljs-comment"># 对象锁定（WORM，合规场景）</span>
 mc retention <span class="hljs-built_in">set</span> --default COMPLIANCE 30d <span class="hljs-built_in">local</span>/compliance-docs
@@ -178,7 +178,7 @@ mc retention <span class="hljs-built_in">set</span> --default COMPLIANCE 30d <sp
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">S3DocumentService</span> {
 
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> MinioClient minio;
-    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">String</span> <span class="hljs-variable">BUCKET</span> <span class="hljs-operator">=</span> <span class="hljs-string">"ai-documents"</span>;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">String</span> <span class="hljs-variable">BUCKET</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;ai-documents&quot;</span>;
 
     <span class="hljs-comment">// PutObject</span>
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">uploadDocument</span><span class="hljs-params">(String key, InputStream data, <span class="hljs-type">long</span> size,
@@ -192,7 +192,7 @@ mc retention <span class="hljs-built_in">set</span> --default COMPLIANCE 30d <sp
                     .userMetadata(metadata)  <span class="hljs-comment">// 自定义元数据</span>
                     .build());
         } <span class="hljs-keyword">catch</span> (Exception e) {
-            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StorageException</span>(<span class="hljs-string">"Upload failed: "</span> + key, e);
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StorageException</span>(<span class="hljs-string">&quot;Upload failed: &quot;</span> + key, e);
         }
     }
 
@@ -204,7 +204,7 @@ mc retention <span class="hljs-built_in">set</span> --default COMPLIANCE 30d <sp
                     .object(key)
                     .build());
         } <span class="hljs-keyword">catch</span> (Exception e) {
-            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StorageException</span>(<span class="hljs-string">"Download failed: "</span> + key, e);
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StorageException</span>(<span class="hljs-string">&quot;Download failed: &quot;</span> + key, e);
         }
     }
 
@@ -216,7 +216,7 @@ mc retention <span class="hljs-built_in">set</span> --default COMPLIANCE 30d <sp
                     .object(key)
                     .build());
         } <span class="hljs-keyword">catch</span> (Exception e) {
-            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StorageException</span>(<span class="hljs-string">"Delete failed: "</span> + key, e);
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StorageException</span>(<span class="hljs-string">&quot;Delete failed: &quot;</span> + key, e);
         }
     }
 
@@ -229,7 +229,7 @@ mc retention <span class="hljs-built_in">set</span> --default COMPLIANCE 30d <sp
                     .build());
             <span class="hljs-keyword">return</span> stat.userMetadata();
         } <span class="hljs-keyword">catch</span> (Exception e) {
-            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StorageException</span>(<span class="hljs-string">"Stat failed: "</span> + key, e);
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StorageException</span>(<span class="hljs-string">&quot;Stat failed: &quot;</span> + key, e);
         }
     }
 
@@ -245,7 +245,7 @@ mc retention <span class="hljs-built_in">set</span> --default COMPLIANCE 30d <sp
             <span class="hljs-keyword">try</span> {
                 keys.add(item.get().objectName());
             } <span class="hljs-keyword">catch</span> (Exception e) {
-                <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StorageException</span>(<span class="hljs-string">"List failed"</span>, e);
+                <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StorageException</span>(<span class="hljs-string">&quot;List failed&quot;</span>, e);
             }
         });
         <span class="hljs-keyword">return</span> keys;
@@ -284,9 +284,9 @@ mc retention <span class="hljs-built_in">set</span> --default COMPLIANCE 30d <sp
         <span class="hljs-keyword">try</span> {
             minio.abortMultipartUpload(BUCKET, <span class="hljs-literal">null</span>, key, uploadId);
         } <span class="hljs-keyword">catch</span> (Exception ex) {
-            log.error(<span class="hljs-string">"Abort multipart upload failed"</span>, ex);
+            log.error(<span class="hljs-string">&quot;Abort multipart upload failed&quot;</span>, ex);
         }
-        <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StorageException</span>(<span class="hljs-string">"Large file upload failed: "</span> + key, e);
+        <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StorageException</span>(<span class="hljs-string">&quot;Large file upload failed: &quot;</span> + key, e);
     }
 }
 </code></pre></div><h3>2.3 生命周期策略</h3>
@@ -337,9 +337,9 @@ mc retention <span class="hljs-built_in">set</span> --default COMPLIANCE 30d <sp
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Service</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">DocumentPipelineService</span> {
 
-    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">String</span> <span class="hljs-variable">RAW_PREFIX</span> <span class="hljs-operator">=</span> <span class="hljs-string">"raw/"</span>;
-    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">String</span> <span class="hljs-variable">PROCESSED_PREFIX</span> <span class="hljs-operator">=</span> <span class="hljs-string">"processed/"</span>;
-    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">String</span> <span class="hljs-variable">CHUNK_PREFIX</span> <span class="hljs-operator">=</span> <span class="hljs-string">"chunks/"</span>;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">String</span> <span class="hljs-variable">RAW_PREFIX</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;raw/&quot;</span>;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">String</span> <span class="hljs-variable">PROCESSED_PREFIX</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;processed/&quot;</span>;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">String</span> <span class="hljs-variable">CHUNK_PREFIX</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;chunks/&quot;</span>;
 
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> MinioClient minio;
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> DocumentParser parser;      <span class="hljs-comment">// Apache Tika</span>
@@ -353,19 +353,19 @@ mc retention <span class="hljs-built_in">set</span> --default COMPLIANCE 30d <sp
                                               InputStream content,
                                               String originalFilename)</span> {
         <span class="hljs-comment">// 1. 存储原始文件</span>
-        <span class="hljs-type">var</span> <span class="hljs-variable">rawKey</span> <span class="hljs-operator">=</span> RAW_PREFIX + tenantId + <span class="hljs-string">"/"</span> + docId + <span class="hljs-string">"/"</span> + originalFilename;
+        <span class="hljs-type">var</span> <span class="hljs-variable">rawKey</span> <span class="hljs-operator">=</span> RAW_PREFIX + tenantId + <span class="hljs-string">&quot;/&quot;</span> + docId + <span class="hljs-string">&quot;/&quot;</span> + originalFilename;
         storeObject(rawKey, content);
 
         <span class="hljs-comment">// 2. 解析为标准 Markdown</span>
         <span class="hljs-type">var</span> <span class="hljs-variable">markdown</span> <span class="hljs-operator">=</span> parser.parseToMarkdown(content, originalFilename);
-        <span class="hljs-type">var</span> <span class="hljs-variable">processedKey</span> <span class="hljs-operator">=</span> PROCESSED_PREFIX + tenantId + <span class="hljs-string">"/"</span> + docId + <span class="hljs-string">"/content.md"</span>;
+        <span class="hljs-type">var</span> <span class="hljs-variable">processedKey</span> <span class="hljs-operator">=</span> PROCESSED_PREFIX + tenantId + <span class="hljs-string">&quot;/&quot;</span> + docId + <span class="hljs-string">&quot;/content.md&quot;</span>;
         storeObject(processedKey, <span class="hljs-keyword">new</span> <span class="hljs-title class_">ByteArrayInputStream</span>(markdown.getBytes(UTF_8)));
 
         <span class="hljs-comment">// 3. 语义切片</span>
         <span class="hljs-type">var</span> <span class="hljs-variable">chunks</span> <span class="hljs-operator">=</span> chunker.chunk(markdown, Map.of(
-                <span class="hljs-string">"tenantId"</span>, tenantId,
-                <span class="hljs-string">"docId"</span>, docId,
-                <span class="hljs-string">"source"</span>, originalFilename
+                <span class="hljs-string">&quot;tenantId&quot;</span>, tenantId,
+                <span class="hljs-string">&quot;docId&quot;</span>, docId,
+                <span class="hljs-string">&quot;source&quot;</span>, originalFilename
         ));
 
         <span class="hljs-comment">// 4. 存储切片文件 + 写入向量索引</span>
@@ -375,7 +375,7 @@ mc retention <span class="hljs-built_in">set</span> --default COMPLIANCE 30d <sp
             totalTokens += chunk.tokenCount();
 
             <span class="hljs-comment">// 存储切片</span>
-            <span class="hljs-type">var</span> <span class="hljs-variable">chunkKey</span> <span class="hljs-operator">=</span> CHUNK_PREFIX + tenantId + <span class="hljs-string">"/"</span> + docId + <span class="hljs-string">"/chunk_"</span> + i + <span class="hljs-string">".txt"</span>;
+            <span class="hljs-type">var</span> <span class="hljs-variable">chunkKey</span> <span class="hljs-operator">=</span> CHUNK_PREFIX + tenantId + <span class="hljs-string">&quot;/&quot;</span> + docId + <span class="hljs-string">&quot;/chunk_&quot;</span> + i + <span class="hljs-string">&quot;.txt&quot;</span>;
             storeObject(chunkKey,
                     <span class="hljs-keyword">new</span> <span class="hljs-title class_">ByteArrayInputStream</span>(chunk.text().getBytes(UTF_8)));
 
@@ -383,15 +383,15 @@ mc retention <span class="hljs-built_in">set</span> --default COMPLIANCE 30d <sp
             <span class="hljs-type">var</span> <span class="hljs-variable">embedding</span> <span class="hljs-operator">=</span> embedder.embed(chunk.text());
             vectorStore.add(List.of(
                     Document.builder()
-                            .id(docId + <span class="hljs-string">"_chunk_"</span> + i)
+                            .id(docId + <span class="hljs-string">&quot;_chunk_&quot;</span> + i)
                             .text(chunk.text())
                             .embedding(embedding)
                             .metadata(Map.of(
-                                    <span class="hljs-string">"tenantId"</span>, tenantId,
-                                    <span class="hljs-string">"docId"</span>, docId,
-                                    <span class="hljs-string">"chunkIndex"</span>, String.valueOf(i),
-                                    <span class="hljs-string">"sourceFile"</span>, originalFilename,
-                                    <span class="hljs-string">"storageKey"</span>, chunkKey
+                                    <span class="hljs-string">&quot;tenantId&quot;</span>, tenantId,
+                                    <span class="hljs-string">&quot;docId&quot;</span>, docId,
+                                    <span class="hljs-string">&quot;chunkIndex&quot;</span>, String.valueOf(i),
+                                    <span class="hljs-string">&quot;sourceFile&quot;</span>, originalFilename,
+                                    <span class="hljs-string">&quot;storageKey&quot;</span>, chunkKey
                             ))
                             .build()
             ));
@@ -403,12 +403,12 @@ mc retention <span class="hljs-built_in">set</span> --default COMPLIANCE 30d <sp
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">storeObject</span><span class="hljs-params">(String key, InputStream data)</span> {
         <span class="hljs-keyword">try</span> {
             minio.putObject(PutObjectArgs.builder()
-                    .bucket(<span class="hljs-string">"ai-documents"</span>)
+                    .bucket(<span class="hljs-string">&quot;ai-documents&quot;</span>)
                     .object(key)
                     .stream(data, data.available(), -<span class="hljs-number">1</span>)
                     .build());
         } <span class="hljs-keyword">catch</span> (Exception e) {
-            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StorageException</span>(<span class="hljs-string">"Store failed: "</span> + key, e);
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StorageException</span>(<span class="hljs-string">&quot;Store failed: &quot;</span> + key, e);
         }
     }
 }
@@ -425,15 +425,15 @@ mc retention <span class="hljs-built_in">set</span> --default COMPLIANCE 30d <sp
         <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">files</span> <span class="hljs-operator">=</span> Files.walk(modelDir)) {
             files.filter(Files::isRegularFile).forEach(file -&gt; {
                 <span class="hljs-type">var</span> <span class="hljs-variable">relative</span> <span class="hljs-operator">=</span> modelDir.relativize(file).toString();
-                <span class="hljs-type">var</span> <span class="hljs-variable">key</span> <span class="hljs-operator">=</span> STR.<span class="hljs-string">"models/\{modelName}/\{version}/\{relative}"</span>;
+                <span class="hljs-type">var</span> <span class="hljs-variable">key</span> <span class="hljs-operator">=</span> STR.<span class="hljs-string">&quot;models/\{modelName}/\{version}/\{relative}&quot;</span>;
                 <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">in</span> <span class="hljs-operator">=</span> Files.newInputStream(file)) {
                     minio.putObject(PutObjectArgs.builder()
-                            .bucket(<span class="hljs-string">"model-repository"</span>)
+                            .bucket(<span class="hljs-string">&quot;model-repository&quot;</span>)
                             .object(key)
                             .stream(in, Files.size(file), -<span class="hljs-number">1</span>)
                             .build());
                 } <span class="hljs-keyword">catch</span> (Exception e) {
-                    <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StorageException</span>(<span class="hljs-string">"Model upload failed: "</span> + key, e);
+                    <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StorageException</span>(<span class="hljs-string">&quot;Model upload failed: &quot;</span> + key, e);
                 }
             });
         }
@@ -476,14 +476,14 @@ mc retention <span class="hljs-built_in">set</span> --default COMPLIANCE 30d <sp
 
     <span class="hljs-meta">@Bean</span>
     <span class="hljs-keyword">public</span> TopicExchange <span class="hljs-title function_">orderExchange</span><span class="hljs-params">()</span> {
-        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">TopicExchange</span>(<span class="hljs-string">"order.exchange"</span>);
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">TopicExchange</span>(<span class="hljs-string">&quot;order.exchange&quot;</span>);
     }
 
     <span class="hljs-meta">@Bean</span>
     <span class="hljs-keyword">public</span> Queue <span class="hljs-title function_">orderCreatedQueue</span><span class="hljs-params">()</span> {
-        <span class="hljs-keyword">return</span> QueueBuilder.durable(<span class="hljs-string">"order.created.queue"</span>)
-                .deadLetterExchange(<span class="hljs-string">"order.dlx.exchange"</span>)
-                .deadLetterRoutingKey(<span class="hljs-string">"order.dlq"</span>)
+        <span class="hljs-keyword">return</span> QueueBuilder.durable(<span class="hljs-string">&quot;order.created.queue&quot;</span>)
+                .deadLetterExchange(<span class="hljs-string">&quot;order.dlx.exchange&quot;</span>)
+                .deadLetterRoutingKey(<span class="hljs-string">&quot;order.dlq&quot;</span>)
                 .ttl(<span class="hljs-number">30000</span>)
                 .maxLength(<span class="hljs-number">10000</span>)
                 .build();
@@ -493,7 +493,7 @@ mc retention <span class="hljs-built_in">set</span> --default COMPLIANCE 30d <sp
     <span class="hljs-keyword">public</span> Binding <span class="hljs-title function_">orderCreatedBinding</span><span class="hljs-params">()</span> {
         <span class="hljs-keyword">return</span> BindingBuilder.bind(orderCreatedQueue())
                 .to(orderExchange())
-                .with(<span class="hljs-string">"order.created"</span>);
+                .with(<span class="hljs-string">&quot;order.created&quot;</span>);
     }
 }
 </code></pre></div><h3>4.2 死信队列（DLQ）</h3>
@@ -502,36 +502,36 @@ mc retention <span class="hljs-built_in">set</span> --default COMPLIANCE 30d <sp
 
     <span class="hljs-meta">@Bean</span>
     <span class="hljs-keyword">public</span> DirectExchange <span class="hljs-title function_">dlxExchange</span><span class="hljs-params">()</span> {
-        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">DirectExchange</span>(<span class="hljs-string">"order.dlx.exchange"</span>);
+        <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">DirectExchange</span>(<span class="hljs-string">&quot;order.dlx.exchange&quot;</span>);
     }
 
     <span class="hljs-meta">@Bean</span>
     <span class="hljs-keyword">public</span> Queue <span class="hljs-title function_">deadLetterQueue</span><span class="hljs-params">()</span> {
-        <span class="hljs-keyword">return</span> QueueBuilder.durable(<span class="hljs-string">"order.dlq"</span>).build();
+        <span class="hljs-keyword">return</span> QueueBuilder.durable(<span class="hljs-string">&quot;order.dlq&quot;</span>).build();
     }
 
     <span class="hljs-meta">@Bean</span>
     <span class="hljs-keyword">public</span> Binding <span class="hljs-title function_">dlqBinding</span><span class="hljs-params">()</span> {
         <span class="hljs-keyword">return</span> BindingBuilder.bind(deadLetterQueue())
                 .to(dlxExchange())
-                .with(<span class="hljs-string">"order.dlq"</span>);
+                .with(<span class="hljs-string">&quot;order.dlq&quot;</span>);
     }
 }
 
 <span class="hljs-comment">// DLQ 消费者：记录失败消息并发送告警</span>
-<span class="hljs-meta">@RabbitListener(queues = "order.dlq")</span>
+<span class="hljs-meta">@RabbitListener(queues = &quot;order.dlq&quot;)</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">handleDeadLetter</span><span class="hljs-params">(Message failedMessage)</span> {
     <span class="hljs-type">var</span> <span class="hljs-variable">headers</span> <span class="hljs-operator">=</span> failedMessage.getMessageProperties().getHeaders();
-    <span class="hljs-type">var</span> <span class="hljs-variable">deathReason</span> <span class="hljs-operator">=</span> headers.get(<span class="hljs-string">"x-death"</span>);
+    <span class="hljs-type">var</span> <span class="hljs-variable">deathReason</span> <span class="hljs-operator">=</span> headers.get(<span class="hljs-string">&quot;x-death&quot;</span>);
 
-    log.error(<span class="hljs-string">"""
+    log.error(<span class="hljs-string">&quot;&quot;&quot;
             Dead letter received:
             Original Queue: {}
             Reason: {}
             Body: {}
-            """</span>,
-            headers.get(<span class="hljs-string">"x-first-death-queue"</span>),
-            headers.get(<span class="hljs-string">"x-first-death-reason"</span>),
+            &quot;&quot;&quot;</span>,
+            headers.get(<span class="hljs-string">&quot;x-first-death-queue&quot;</span>),
+            headers.get(<span class="hljs-string">&quot;x-first-death-reason&quot;</span>),
             <span class="hljs-keyword">new</span> <span class="hljs-title class_">String</span>(failedMessage.getBody()));
 
     <span class="hljs-comment">// 存储到数据库供后续排查</span>
@@ -547,17 +547,17 @@ mc retention <span class="hljs-built_in">set</span> --default COMPLIANCE 30d <sp
 <span class="hljs-meta">@Bean</span>
 <span class="hljs-keyword">public</span> CustomExchange <span class="hljs-title function_">delayedExchange</span><span class="hljs-params">()</span> {
     <span class="hljs-type">var</span> <span class="hljs-variable">args</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">HashMap</span>&lt;String, Object&gt;();
-    args.put(<span class="hljs-string">"x-delayed-type"</span>, <span class="hljs-string">"direct"</span>);
-    <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">CustomExchange</span>(<span class="hljs-string">"order.delayed.exchange"</span>, <span class="hljs-string">"x-delayed-message"</span>,
+    args.put(<span class="hljs-string">&quot;x-delayed-type&quot;</span>, <span class="hljs-string">&quot;direct&quot;</span>);
+    <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">CustomExchange</span>(<span class="hljs-string">&quot;order.delayed.exchange&quot;</span>, <span class="hljs-string">&quot;x-delayed-message&quot;</span>,
             <span class="hljs-literal">true</span>, <span class="hljs-literal">false</span>, args);
 }
 
 <span class="hljs-comment">// 发送延迟消息</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">sendDelayed</span><span class="hljs-params">(String orderId, <span class="hljs-type">long</span> delayMs)</span> {
     <span class="hljs-type">var</span> <span class="hljs-variable">message</span> <span class="hljs-operator">=</span> MessageBuilder.withBody(orderId.getBytes())
-            .setHeader(<span class="hljs-string">"x-delay"</span>, delayMs)
+            .setHeader(<span class="hljs-string">&quot;x-delay&quot;</span>, delayMs)
             .build();
-    rabbitTemplate.send(<span class="hljs-string">"order.delayed.exchange"</span>, <span class="hljs-string">"order.timeout"</span>, message);
+    rabbitTemplate.send(<span class="hljs-string">&quot;order.delayed.exchange&quot;</span>, <span class="hljs-string">&quot;order.timeout&quot;</span>, message);
 }
 </code></pre></div><h3>4.4 消息确认</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-attr">spring:</span>
@@ -575,14 +575,14 @@ mc retention <span class="hljs-built_in">set</span> --default COMPLIANCE 30d <sp
 </code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// Publisher Confirms（确保消息到达 Broker）</span>
 rabbitTemplate.setConfirmCallback((correlationData, ack, cause) -&gt; {
     <span class="hljs-keyword">if</span> (!ack) {
-        log.error(<span class="hljs-string">"Message not confirmed: id={}, cause={}"</span>,
+        log.error(<span class="hljs-string">&quot;Message not confirmed: id={}, cause={}&quot;</span>,
                 correlationData.getId(), cause);
         <span class="hljs-comment">// 写入 outbox 表重试</span>
     }
 });
 
 <span class="hljs-comment">// Consumer Manual Ack</span>
-<span class="hljs-meta">@RabbitListener(queues = "order.created.queue")</span>
+<span class="hljs-meta">@RabbitListener(queues = &quot;order.created.queue&quot;)</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">onOrderCreated</span><span class="hljs-params">(OrderEvent event, Channel channel,
                             <span class="hljs-meta">@Header(AmqpHeaders.DELIVERY_TAG)</span> <span class="hljs-type">long</span> tag)</span> {
     <span class="hljs-keyword">try</span> {
@@ -686,32 +686,32 @@ minioClient.getObject(GetObjectArgs.builder()
 mc anonymous <span class="hljs-built_in">set</span> none <span class="hljs-built_in">local</span>/ai-documents
 
 <span class="hljs-comment"># 检查公开访问的 Bucket</span>
-mc <span class="hljs-built_in">ls</span> --json <span class="hljs-built_in">local</span> | jq <span class="hljs-string">'select(.access == "public")'</span>
+mc <span class="hljs-built_in">ls</span> --json <span class="hljs-built_in">local</span> | jq <span class="hljs-string">&#x27;select(.access == &quot;public&quot;)&#x27;</span>
 
 <span class="hljs-comment"># 阻止公开策略的设置（MInIO 策略）</span>
 mc admin policy <span class="hljs-built_in">set</span> <span class="hljs-built_in">local</span> block-public-policy
 </code></pre></div><h3>5.4 访问策略最小化</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-json"><span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">"Version"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"2012-10-17"</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">"Statement"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
+  <span class="hljs-attr">&quot;Version&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;2012-10-17&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;Statement&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
     <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">"Effect"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"Allow"</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"Action"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">"s3:GetObject"</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"Resource"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">"arn:aws:s3:::ai-documents/users/${aws:username}/*"</span><span class="hljs-punctuation">]</span>
+      <span class="hljs-attr">&quot;Effect&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Allow&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;Action&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;s3:GetObject&quot;</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;Resource&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;arn:aws:s3:::ai-documents/users/${aws:username}/*&quot;</span><span class="hljs-punctuation">]</span>
     <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
     <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">"Effect"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"Allow"</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"Action"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">"s3:PutObject"</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"Resource"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">"arn:aws:s3:::ai-documents/upload/${aws:username}/*"</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"Condition"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-        <span class="hljs-attr">"NumericLessThan"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"s3:content-length"</span><span class="hljs-punctuation">:</span> <span class="hljs-number">104857600</span> <span class="hljs-punctuation">}</span>
+      <span class="hljs-attr">&quot;Effect&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Allow&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;Action&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;s3:PutObject&quot;</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;Resource&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;arn:aws:s3:::ai-documents/upload/${aws:username}/*&quot;</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;Condition&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+        <span class="hljs-attr">&quot;NumericLessThan&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;s3:content-length&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-number">104857600</span> <span class="hljs-punctuation">}</span>
       <span class="hljs-punctuation">}</span>
     <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
     <span class="hljs-punctuation">{</span>
-      <span class="hljs-attr">"Effect"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"Deny"</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"Action"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">"s3:*"</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"Resource"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">"arn:aws:s3:::ai-documents/admin/*"</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
-      <span class="hljs-attr">"Condition"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"StringNotEquals"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">"aws:username"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"admin"</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span>
+      <span class="hljs-attr">&quot;Effect&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Deny&quot;</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;Action&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;s3:*&quot;</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;Resource&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-string">&quot;arn:aws:s3:::ai-documents/admin/*&quot;</span><span class="hljs-punctuation">]</span><span class="hljs-punctuation">,</span>
+      <span class="hljs-attr">&quot;Condition&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;StringNotEquals&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span> <span class="hljs-attr">&quot;aws:username&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;admin&quot;</span> <span class="hljs-punctuation">}</span> <span class="hljs-punctuation">}</span>
     <span class="hljs-punctuation">}</span>
   <span class="hljs-punctuation">]</span>
 <span class="hljs-punctuation">}</span>
@@ -731,7 +731,7 @@ A: 模型文件动辄数GB，打包进镜像会导致镜像臃肿、部署慢、
 <li><a href="#/04-数据与中间件/数据库与缓存/04-PostgreSQL与pgvector深度解析" class="cross-ref">04-PostgreSQL与pgvector深度解析</a> — 向量索引存储</li>
 <li><a href="#/04-数据与中间件/消息与搜索/04-Elasticsearch深度解析" class="cross-ref">04-Elasticsearch深度解析</a> — 全文检索索引</li>
 <li><a href="#/04-数据与中间件/消息与搜索/04-Kafka深度解析" class="cross-ref">04-Kafka深度解析</a> — Kafka 与 RabbitMQ 选型对比</li>
-<li><span class="broken-ref" title="未找到: 10-AI数据工程/README">10-AI数据工程/README</span> — AI 数据工程完整流水线</li>
+<li><a href="#/10-AI数据工程/文档处理/10-Java文档解析全景" class="cross-ref">10-Java文档解析全景</a> — AI 数据工程完整流水线</li>
 </ul>
-</body></html></div>
+</div>
 </article>

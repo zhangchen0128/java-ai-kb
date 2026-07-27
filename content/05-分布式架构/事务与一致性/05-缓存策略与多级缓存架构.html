@@ -6,7 +6,7 @@
     <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#cache-aside</span><span class="badge badge-tag">#read-through</span><span class="badge badge-tag">#write-behind</span><span class="badge badge-tag">#multi-level-cache</span><span class="badge badge-tag">#caffeine</span></div>
     <div class="entry-sources"><small>📖 来源：<a href="https://docs.spring.io/spring-cache/docs/current/reference/htmlsingle/" target="_blank" rel="noopener" class="source-link" title="Spring Cache 官方参考文档">Spring Cache 官方参考文档</a><a href="https://github.com/ben-manes/caffeine/wiki" target="_blank" rel="noopener" class="source-link" title="Caffeine 缓存官方 Wiki">Caffeine 缓存官方 Wiki</a><a href="https://www.oreilly.com/library/view/designing-data-intensive-applications/" target="_blank" rel="noopener" class="source-link" title="《Designing Data-Intensive Applications》— 第2章数据模型、第7章事务">《Designing Data-Intensive Applications》— 第2章数据模型、第7章事务</a><a href="https://docs.aws.amazon.com/AmazonElastiCache/latest/mem-ug/Strategies.html" target="_blank" rel="noopener" class="source-link" title="AWS ElastiCache — 缓存策略最佳实践">AWS ElastiCache — 缓存策略最佳实践</a></small></div>
   </div>
-  <div class="entry-body"><html><head></head><body><h1>缓存策略与多级缓存架构</h1>
+  <div class="entry-body"><h1>缓存策略与多级缓存架构</h1>
 <h2>概述</h2>
 <p>缓存是提升分布式系统性能的核心手段。合理的缓存策略可以降低数据库负载、减少响应延迟、提高系统吞吐量。在 AI 应用中，语义缓存（Semantic Cache）作为新兴模式，通过相似度匹配复用 LLM 响应，显著降低 API 调用成本。</p>
 <p>本文深入四大缓存模式原理、五大缓存问题的系统性解决方案、Caffeine + Redis 多级缓存架构、缓存一致性方案，以及 AI 语义缓存的实现。</p>
@@ -42,18 +42,18 @@
 
     <span class="hljs-keyword">public</span> User <span class="hljs-title function_">getUser</span><span class="hljs-params">(Long userId)</span> {
         <span class="hljs-comment">// 1. 查缓存</span>
-        <span class="hljs-type">var</span> <span class="hljs-variable">cached</span> <span class="hljs-operator">=</span> redis.opsForValue().get(<span class="hljs-string">"user:"</span> + userId);
+        <span class="hljs-type">var</span> <span class="hljs-variable">cached</span> <span class="hljs-operator">=</span> redis.opsForValue().get(<span class="hljs-string">&quot;user:&quot;</span> + userId);
         <span class="hljs-keyword">if</span> (cached != <span class="hljs-literal">null</span>) {
             <span class="hljs-keyword">return</span> JsonUtils.fromJson(cached, User.class);
         }
 
         <span class="hljs-comment">// 2. 查数据库</span>
         <span class="hljs-type">var</span> <span class="hljs-variable">user</span> <span class="hljs-operator">=</span> userRepo.findById(userId)
-                .orElseThrow(() -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">NotFoundException</span>(<span class="hljs-string">"用户不存在"</span>));
+                .orElseThrow(() -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">NotFoundException</span>(<span class="hljs-string">&quot;用户不存在&quot;</span>));
 
         <span class="hljs-comment">// 3. 写缓存（设置随机 TTL 防止雪崩）</span>
         <span class="hljs-type">var</span> <span class="hljs-variable">ttl</span> <span class="hljs-operator">=</span> Duration.ofMinutes(<span class="hljs-number">30</span> + ThreadLocalRandom.current().nextInt(<span class="hljs-number">10</span>));
-        redis.opsForValue().set(<span class="hljs-string">"user:"</span> + userId,
+        redis.opsForValue().set(<span class="hljs-string">&quot;user:&quot;</span> + userId,
                 JsonUtils.toJson(user), ttl);
 
         <span class="hljs-keyword">return</span> user;
@@ -64,7 +64,7 @@
         userRepo.update(userId, dto);
 
         <span class="hljs-comment">// 2. 删除缓存（而非更新，避免并发时序问题）</span>
-        redis.delete(<span class="hljs-string">"user:"</span> + userId);
+        redis.delete(<span class="hljs-string">&quot;user:&quot;</span> + userId);
     }
 }
 </code></pre></div><h3>1.2 Read/Write Through</h3>
@@ -75,20 +75,20 @@
 <span class="hljs-meta">@Service</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ReadThroughUserService</span> {
 
-    <span class="hljs-meta">@Cacheable(value = "users", key = "#userId",
-               unless = "#result == null")</span>
+    <span class="hljs-meta">@Cacheable(value = &quot;users&quot;, key = &quot;#userId&quot;,
+               unless = &quot;#result == null&quot;)</span>
     <span class="hljs-keyword">public</span> User <span class="hljs-title function_">getUser</span><span class="hljs-params">(Long userId)</span> {
         <span class="hljs-comment">// 缓存未命中时此方法被调用，结果自动写入缓存</span>
         <span class="hljs-keyword">return</span> userRepo.findById(userId).orElse(<span class="hljs-literal">null</span>);
     }
 
-    <span class="hljs-meta">@CachePut(value = "users", key = "#user.id")</span>
+    <span class="hljs-meta">@CachePut(value = &quot;users&quot;, key = &quot;#user.id&quot;)</span>
     <span class="hljs-keyword">public</span> User <span class="hljs-title function_">updateUser</span><span class="hljs-params">(User user)</span> {
         userRepo.save(user);
         <span class="hljs-keyword">return</span> user;
     }
 
-    <span class="hljs-meta">@CacheEvict(value = "users", key = "#userId")</span>
+    <span class="hljs-meta">@CacheEvict(value = &quot;users&quot;, key = &quot;#userId&quot;)</span>
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">deleteUser</span><span class="hljs-params">(Long userId)</span> {
         userRepo.deleteById(userId);
     }
@@ -111,7 +111,7 @@
 
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">updateUser</span><span class="hljs-params">(User user)</span> {
         <span class="hljs-comment">// 1. 立即更新缓存</span>
-        redis.opsForValue().set(<span class="hljs-string">"user:"</span> + user.getId(),
+        redis.opsForValue().set(<span class="hljs-string">&quot;user:&quot;</span> + user.getId(),
                 JsonUtils.toJson(user), Duration.ofHours(<span class="hljs-number">1</span>));
 
         <span class="hljs-comment">// 2. 加入写缓冲（异步批量刷 DB）</span>
@@ -157,7 +157,7 @@
 <span class="hljs-meta">@Service</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">HotDataService</span> {
 
-    <span class="hljs-meta">@Cacheable(value = "hot-products", key = "#productId")</span>
+    <span class="hljs-meta">@Cacheable(value = &quot;hot-products&quot;, key = &quot;#productId&quot;)</span>
     <span class="hljs-keyword">public</span> Product <span class="hljs-title function_">getHotProduct</span><span class="hljs-params">(Long productId)</span> {
         <span class="hljs-keyword">return</span> productRepo.findById(productId).orElse(<span class="hljs-literal">null</span>);
     }
@@ -168,7 +168,7 @@
                 .expireAfterWrite(<span class="hljs-number">30</span>, TimeUnit.MINUTES)
                 .refreshAfterWrite(<span class="hljs-number">25</span>, TimeUnit.MINUTES)
                 .build(productIdKey -&gt; {
-                    log.info(<span class="hljs-string">"Async refreshing product: {}"</span>, productIdKey);
+                    log.info(<span class="hljs-string">&quot;Async refreshing product: {}&quot;</span>, productIdKey);
                     <span class="hljs-keyword">return</span> productRepo.findById((Long) productIdKey).orElse(<span class="hljs-literal">null</span>);
                 });
 
@@ -200,8 +200,8 @@
         <span class="hljs-comment">// 1. 布隆过滤器快速判断（不存在则 100% 确定不存在）</span>
         <span class="hljs-type">var</span> <span class="hljs-variable">exists</span> <span class="hljs-operator">=</span> redis.opsForValue()
                 .getOperations().execute((RedisCallback&lt;Boolean&gt;) conn -&gt;
-                        conn.execute(<span class="hljs-string">"BF.EXISTS"</span>,
-                                <span class="hljs-string">"user:bloom"</span>.getBytes(), userId.getBytes()));
+                        conn.execute(<span class="hljs-string">&quot;BF.EXISTS&quot;</span>,
+                                <span class="hljs-string">&quot;user:bloom&quot;</span>.getBytes(), userId.getBytes()));
 
         <span class="hljs-keyword">if</span> (Boolean.FALSE.equals(exists)) {
             <span class="hljs-keyword">return</span> <span class="hljs-literal">null</span>; <span class="hljs-comment">// 一定不存在</span>
@@ -216,8 +216,8 @@
         userRepo.save(user);
         redis.opsForValue()
                 .getOperations().execute((RedisCallback&lt;Void&gt;) conn -&gt; {
-                    conn.execute(<span class="hljs-string">"BF.ADD"</span>,
-                            <span class="hljs-string">"user:bloom"</span>.getBytes(),
+                    conn.execute(<span class="hljs-string">&quot;BF.ADD&quot;</span>,
+                            <span class="hljs-string">&quot;user:bloom&quot;</span>.getBytes(),
                             String.valueOf(user.getId()).getBytes());
                     <span class="hljs-keyword">return</span> <span class="hljs-literal">null</span>;
                 });
@@ -225,17 +225,17 @@
 }
 </code></pre></div><p><strong>空对象缓存（简单方案）：</strong></p>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> User <span class="hljs-title function_">getUserWithNullCache</span><span class="hljs-params">(Long userId)</span> {
-    <span class="hljs-type">var</span> <span class="hljs-variable">key</span> <span class="hljs-operator">=</span> <span class="hljs-string">"user:"</span> + userId;
+    <span class="hljs-type">var</span> <span class="hljs-variable">key</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;user:&quot;</span> + userId;
     <span class="hljs-type">var</span> <span class="hljs-variable">cached</span> <span class="hljs-operator">=</span> redis.opsForValue().get(key);
     <span class="hljs-keyword">if</span> (cached != <span class="hljs-literal">null</span>) {
-        <span class="hljs-keyword">return</span> <span class="hljs-string">"NULL"</span>.equals(cached) ? <span class="hljs-literal">null</span> : JsonUtils.fromJson(cached, User.class);
+        <span class="hljs-keyword">return</span> <span class="hljs-string">&quot;NULL&quot;</span>.equals(cached) ? <span class="hljs-literal">null</span> : JsonUtils.fromJson(cached, User.class);
     }
 
     <span class="hljs-type">var</span> <span class="hljs-variable">user</span> <span class="hljs-operator">=</span> userRepo.findById(userId).orElse(<span class="hljs-literal">null</span>);
 
     <span class="hljs-keyword">if</span> (user == <span class="hljs-literal">null</span>) {
         <span class="hljs-comment">// 缓存空对象（短 TTL）</span>
-        redis.opsForValue().set(key, <span class="hljs-string">"NULL"</span>, Duration.ofMinutes(<span class="hljs-number">5</span>));
+        redis.opsForValue().set(key, <span class="hljs-string">&quot;NULL&quot;</span>, Duration.ofMinutes(<span class="hljs-number">5</span>));
         <span class="hljs-keyword">return</span> <span class="hljs-literal">null</span>;
     }
 
@@ -246,21 +246,21 @@
 <p><strong>问题：</strong> 热点 Key 在过期瞬间，大量请求穿透到数据库。</p>
 <p><strong>方案一：互斥锁</strong></p>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> User <span class="hljs-title function_">getHotUserWithMutex</span><span class="hljs-params">(Long userId)</span> {
-    <span class="hljs-type">var</span> <span class="hljs-variable">key</span> <span class="hljs-operator">=</span> <span class="hljs-string">"user:"</span> + userId;
+    <span class="hljs-type">var</span> <span class="hljs-variable">key</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;user:&quot;</span> + userId;
     <span class="hljs-type">var</span> <span class="hljs-variable">cached</span> <span class="hljs-operator">=</span> redis.opsForValue().get(key);
     <span class="hljs-keyword">if</span> (cached != <span class="hljs-literal">null</span>) <span class="hljs-keyword">return</span> JsonUtils.fromJson(cached, User.class);
 
-    <span class="hljs-type">var</span> <span class="hljs-variable">lockKey</span> <span class="hljs-operator">=</span> <span class="hljs-string">"lock:user:"</span> + userId;
+    <span class="hljs-type">var</span> <span class="hljs-variable">lockKey</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;lock:user:&quot;</span> + userId;
     <span class="hljs-keyword">try</span> {
         <span class="hljs-comment">// 尝试获取锁（SET NX PX）</span>
-        <span class="hljs-keyword">if</span> (redis.opsForValue().setIfAbsent(lockKey, <span class="hljs-string">"1"</span>, Duration.ofSeconds(<span class="hljs-number">10</span>))) {
+        <span class="hljs-keyword">if</span> (redis.opsForValue().setIfAbsent(lockKey, <span class="hljs-string">&quot;1&quot;</span>, Duration.ofSeconds(<span class="hljs-number">10</span>))) {
             <span class="hljs-comment">// Double Check</span>
             cached = redis.opsForValue().get(key);
             <span class="hljs-keyword">if</span> (cached != <span class="hljs-literal">null</span>) <span class="hljs-keyword">return</span> JsonUtils.fromJson(cached, User.class);
 
             <span class="hljs-comment">// 查 DB 并写缓存</span>
             <span class="hljs-type">var</span> <span class="hljs-variable">user</span> <span class="hljs-operator">=</span> userRepo.findById(userId)
-                    .orElseThrow(() -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">NotFoundException</span>(<span class="hljs-string">"用户不存在"</span>));
+                    .orElseThrow(() -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">NotFoundException</span>(<span class="hljs-string">&quot;用户不存在&quot;</span>));
             redis.opsForValue().set(key, JsonUtils.toJson(user), Duration.ofMinutes(<span class="hljs-number">30</span>));
             <span class="hljs-keyword">return</span> user;
         } <span class="hljs-keyword">else</span> {
@@ -279,7 +279,7 @@
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">CachedValue</span>&lt;T&gt;(T data, LocalDateTime expireAt) {}
 
 <span class="hljs-keyword">public</span> User <span class="hljs-title function_">getHotUserWithLogicalExpire</span><span class="hljs-params">(Long userId)</span> {
-    <span class="hljs-type">var</span> <span class="hljs-variable">key</span> <span class="hljs-operator">=</span> <span class="hljs-string">"user:"</span> + userId;
+    <span class="hljs-type">var</span> <span class="hljs-variable">key</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;user:&quot;</span> + userId;
     <span class="hljs-type">var</span> <span class="hljs-variable">cached</span> <span class="hljs-operator">=</span> redis.opsForValue().get(key);
     <span class="hljs-keyword">if</span> (cached == <span class="hljs-literal">null</span>) {
         <span class="hljs-keyword">return</span> queryAndCache(userId);
@@ -292,8 +292,8 @@
     }
 
     <span class="hljs-comment">// 已逻辑过期 → 获取互斥锁，异步更新</span>
-    <span class="hljs-type">var</span> <span class="hljs-variable">lockKey</span> <span class="hljs-operator">=</span> <span class="hljs-string">"lock:user:"</span> + userId;
-    <span class="hljs-keyword">if</span> (redis.opsForValue().setIfAbsent(lockKey, <span class="hljs-string">"1"</span>, Duration.ofSeconds(<span class="hljs-number">10</span>))) {
+    <span class="hljs-type">var</span> <span class="hljs-variable">lockKey</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;lock:user:&quot;</span> + userId;
+    <span class="hljs-keyword">if</span> (redis.opsForValue().setIfAbsent(lockKey, <span class="hljs-string">&quot;1&quot;</span>, Duration.ofSeconds(<span class="hljs-number">10</span>))) {
         <span class="hljs-keyword">try</span> {
             Thread.startVirtualThread(() -&gt; { <span class="hljs-comment">// Virtual Thread 异步更新</span>
                 <span class="hljs-type">var</span> <span class="hljs-variable">user</span> <span class="hljs-operator">=</span> userRepo.findById(userId).orElse(<span class="hljs-literal">null</span>);
@@ -337,11 +337,11 @@
         <span class="hljs-comment">// 启动时预加载热点数据</span>
         <span class="hljs-type">var</span> <span class="hljs-variable">hotUsers</span> <span class="hljs-operator">=</span> userRepo.findHotUsers(<span class="hljs-number">1000</span>);
         <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> user : hotUsers) {
-            redis.opsForValue().set(<span class="hljs-string">"user:"</span> + user.getId(),
+            redis.opsForValue().set(<span class="hljs-string">&quot;user:&quot;</span> + user.getId(),
                     JsonUtils.toJson(user),
                     Duration.ofMinutes(<span class="hljs-number">30</span> + ThreadLocalRandom.current().nextInt(<span class="hljs-number">5</span>)));
         }
-        log.info(<span class="hljs-string">"Cache warmup: loaded {} hot users"</span>, hotUsers.size());
+        log.info(<span class="hljs-string">&quot;Cache warmup: loaded {} hot users&quot;</span>, hotUsers.size());
     }
 }
 </code></pre></div><h3>2.4 热点 Key 发现</h3>
@@ -371,7 +371,7 @@
 
         <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> entry : topN) {
             <span class="hljs-keyword">if</span> (entry.getValue().get() &gt; <span class="hljs-number">1000</span>) { <span class="hljs-comment">// 阈值 1000 QPS</span>
-                log.warn(<span class="hljs-string">"Hot key detected: {}, QPS: {}"</span>, entry.getKey(), entry.getValue());
+                log.warn(<span class="hljs-string">&quot;Hot key detected: {}, QPS: {}&quot;</span>, entry.getKey(), entry.getValue());
                 <span class="hljs-comment">// 触发自动降级：本地缓存副本 + 异步更新</span>
                 promoteToLocalCache(entry.getKey());
             }
@@ -436,7 +436,7 @@ redis-cli MEMORY USAGE big:<span class="hljs-built_in">hash</span>:key
 
         <span class="hljs-type">var</span> <span class="hljs-variable">cacheManager</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">SimpleCacheManager</span>();
         cacheManager.setCaches(List.of(
-                <span class="hljs-keyword">new</span> <span class="hljs-title class_">CaffeineCache</span>(<span class="hljs-string">"products"</span>, caffeine)
+                <span class="hljs-keyword">new</span> <span class="hljs-title class_">CaffeineCache</span>(<span class="hljs-string">&quot;products&quot;</span>, caffeine)
         ));
         <span class="hljs-keyword">return</span> cacheManager;
     }
@@ -450,7 +450,7 @@ redis-cli MEMORY USAGE big:<span class="hljs-built_in">hash</span>:key
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> ProductRepository productRepo;
 
     <span class="hljs-keyword">public</span> Product <span class="hljs-title function_">getProduct</span><span class="hljs-params">(Long productId)</span> {
-        <span class="hljs-type">var</span> <span class="hljs-variable">cacheName</span> <span class="hljs-operator">=</span> <span class="hljs-string">"products"</span>;
+        <span class="hljs-type">var</span> <span class="hljs-variable">cacheName</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;products&quot;</span>;
 
         <span class="hljs-comment">// L1: Caffeine</span>
         <span class="hljs-type">var</span> <span class="hljs-variable">l1Cache</span> <span class="hljs-operator">=</span> cacheManager.getCache(cacheName);
@@ -460,7 +460,7 @@ redis-cli MEMORY USAGE big:<span class="hljs-built_in">hash</span>:key
         }
 
         <span class="hljs-comment">// L2: Redis</span>
-        <span class="hljs-type">var</span> <span class="hljs-variable">redisKey</span> <span class="hljs-operator">=</span> <span class="hljs-string">"product:"</span> + productId;
+        <span class="hljs-type">var</span> <span class="hljs-variable">redisKey</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;product:&quot;</span> + productId;
         <span class="hljs-type">var</span> <span class="hljs-variable">redisValue</span> <span class="hljs-operator">=</span> redis.opsForValue().get(redisKey);
         <span class="hljs-keyword">if</span> (redisValue != <span class="hljs-literal">null</span>) {
             <span class="hljs-type">var</span> <span class="hljs-variable">product</span> <span class="hljs-operator">=</span> JsonUtils.fromJson(redisValue, Product.class);
@@ -470,11 +470,11 @@ redis-cli MEMORY USAGE big:<span class="hljs-built_in">hash</span>:key
         }
 
         <span class="hljs-comment">// L3: PostgreSQL + 互斥锁防击穿</span>
-        <span class="hljs-type">var</span> <span class="hljs-variable">lockKey</span> <span class="hljs-operator">=</span> <span class="hljs-string">"lock:product:"</span> + productId;
+        <span class="hljs-type">var</span> <span class="hljs-variable">lockKey</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;lock:product:&quot;</span> + productId;
         <span class="hljs-keyword">try</span> {
-            <span class="hljs-keyword">if</span> (redis.opsForValue().setIfAbsent(lockKey, <span class="hljs-string">"1"</span>, Duration.ofSeconds(<span class="hljs-number">10</span>))) {
+            <span class="hljs-keyword">if</span> (redis.opsForValue().setIfAbsent(lockKey, <span class="hljs-string">&quot;1&quot;</span>, Duration.ofSeconds(<span class="hljs-number">10</span>))) {
                 <span class="hljs-type">var</span> <span class="hljs-variable">product</span> <span class="hljs-operator">=</span> productRepo.findById(productId)
-                        .orElseThrow(() -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">NotFoundException</span>(<span class="hljs-string">"商品不存在"</span>));
+                        .orElseThrow(() -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">NotFoundException</span>(<span class="hljs-string">&quot;商品不存在&quot;</span>));
 
                 <span class="hljs-comment">// 写 L2 + L1</span>
                 redis.opsForValue().set(redisKey,
@@ -513,7 +513,7 @@ redis-cli MEMORY USAGE big:<span class="hljs-built_in">hash</span>:key
     <span class="hljs-comment">// 发布失效消息</span>
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">broadcastEvict</span><span class="hljs-params">(String cacheName, Object key)</span> {
         <span class="hljs-type">var</span> <span class="hljs-variable">message</span> <span class="hljs-operator">=</span> JsonUtils.toJson(<span class="hljs-keyword">new</span> <span class="hljs-title class_">CacheEvictEvent</span>(cacheName, key));
-        redis.convertAndSend(<span class="hljs-string">"cache-sync"</span>, message);
+        redis.convertAndSend(<span class="hljs-string">&quot;cache-sync&quot;</span>, message);
     }
 }
 </code></pre></div><hr>
@@ -526,24 +526,24 @@ redis-cli MEMORY USAGE big:<span class="hljs-built_in">hash</span>:key
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> StringRedisTemplate redis;
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> CacheManager localCache;
 
-    <span class="hljs-meta">@KafkaListener(topics = "canal-product-changes", groupId = "cache-sync")</span>
+    <span class="hljs-meta">@KafkaListener(topics = &quot;canal-product-changes&quot;, groupId = &quot;cache-sync&quot;)</span>
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">onProductChanged</span><span class="hljs-params">(CanalMessage msg)</span> {
         <span class="hljs-type">var</span> <span class="hljs-variable">productId</span> <span class="hljs-operator">=</span> extractProductId(msg);
         <span class="hljs-type">var</span> <span class="hljs-variable">operation</span> <span class="hljs-operator">=</span> msg.getType();
 
         <span class="hljs-keyword">switch</span> (operation) {
-            <span class="hljs-keyword">case</span> <span class="hljs-string">"INSERT"</span>, <span class="hljs-string">"UPDATE"</span> -&gt; {
+            <span class="hljs-keyword">case</span> <span class="hljs-string">&quot;INSERT&quot;</span>, <span class="hljs-string">&quot;UPDATE&quot;</span> -&gt; {
                 <span class="hljs-comment">// 更新 Redis</span>
-                redis.opsForValue().set(<span class="hljs-string">"product:"</span> + productId,
+                redis.opsForValue().set(<span class="hljs-string">&quot;product:&quot;</span> + productId,
                         JsonUtils.toJson(msg.getAfter()),
                         Duration.ofMinutes(<span class="hljs-number">30</span>));
                 <span class="hljs-comment">// 失效本地缓存</span>
-                <span class="hljs-type">var</span> <span class="hljs-variable">cache</span> <span class="hljs-operator">=</span> localCache.getCache(<span class="hljs-string">"products"</span>);
+                <span class="hljs-type">var</span> <span class="hljs-variable">cache</span> <span class="hljs-operator">=</span> localCache.getCache(<span class="hljs-string">&quot;products&quot;</span>);
                 <span class="hljs-keyword">if</span> (cache != <span class="hljs-literal">null</span>) cache.evict(productId);
             }
-            <span class="hljs-keyword">case</span> <span class="hljs-string">"DELETE"</span> -&gt; {
-                redis.delete(<span class="hljs-string">"product:"</span> + productId);
-                <span class="hljs-type">var</span> <span class="hljs-variable">cache</span> <span class="hljs-operator">=</span> localCache.getCache(<span class="hljs-string">"products"</span>);
+            <span class="hljs-keyword">case</span> <span class="hljs-string">&quot;DELETE&quot;</span> -&gt; {
+                redis.delete(<span class="hljs-string">&quot;product:&quot;</span> + productId);
+                <span class="hljs-type">var</span> <span class="hljs-variable">cache</span> <span class="hljs-operator">=</span> localCache.getCache(<span class="hljs-string">&quot;products&quot;</span>);
                 <span class="hljs-keyword">if</span> (cache != <span class="hljs-literal">null</span>) cache.evict(productId);
             }
         }
@@ -571,7 +571,7 @@ redis-cli MEMORY USAGE big:<span class="hljs-built_in">hash</span>:key
         <span class="hljs-comment">// Redis 向量搜索查找语义相似的已缓存查询</span>
         <span class="hljs-type">var</span> <span class="hljs-variable">results</span> <span class="hljs-operator">=</span> redis.opsForValue()
                 .getOperations().execute((RedisCallback&lt;List&lt;<span class="hljs-type">byte</span>[]&gt;&gt;) conn -&gt; {
-                    <span class="hljs-comment">// FT.SEARCH idx:semantic-cache "*=&gt;[KNN 5 @embedding $vec AS dist]"</span>
+                    <span class="hljs-comment">// FT.SEARCH idx:semantic-cache &quot;*=&gt;[KNN 5 @embedding $vec AS dist]&quot;</span>
                     <span class="hljs-comment">//   SORTBY dist RETURN 2 response dist PARAMS 2 vec &lt;bytes&gt; DIALECT 2</span>
                     <span class="hljs-comment">// ...</span>
                     <span class="hljs-keyword">return</span> <span class="hljs-literal">null</span>;
@@ -588,7 +588,7 @@ redis-cli MEMORY USAGE big:<span class="hljs-built_in">hash</span>:key
 
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">cacheQueryResponse</span><span class="hljs-params">(String query, String response)</span> {
         <span class="hljs-type">var</span> <span class="hljs-variable">embedding</span> <span class="hljs-operator">=</span> embeddingModel.embed(query);
-        <span class="hljs-comment">// HSET semantic:cache:{id} query "..." response "..." embedding &lt;bytes&gt;</span>
+        <span class="hljs-comment">// HSET semantic:cache:{id} query &quot;...&quot; response &quot;...&quot; embedding &lt;bytes&gt;</span>
         <span class="hljs-comment">// ...</span>
     }
 }
@@ -597,7 +597,7 @@ redis-cli MEMORY USAGE big:<span class="hljs-built_in">hash</span>:key
 <p><strong>Q: 数据更新后，删缓存还是更新缓存？</strong>
 A: 删除缓存。更新缓存可能导致并发时序问题，惰性加载（下次查询再写）更安全。</p>
 <p><strong>Q: 缓存和数据不一致怎么办？</strong>
-A: 设计阶段就接受"最终一致性窗口"。通过 TTL 限制不一致持续时间。金融关键数据不依赖缓存。</p>
+A: 设计阶段就接受&quot;最终一致性窗口&quot;。通过 TTL 限制不一致持续时间。金融关键数据不依赖缓存。</p>
 <p><strong>Q: Caffeine 和 Guava Cache 选哪个？</strong>
 A: Caffeine 是 Guava Cache 的后继者，使用 W-TinyLFU 淘汰策略，命中率更高。推荐 Caffeine。</p>
 <p><strong>Q: 多级缓存的管理复杂度值得吗？</strong>
@@ -612,5 +612,5 @@ A: 如果模型 API 调用成本高（如 GPT-4），语义缓存可节省 20-40
 <li><a href="#/05-分布式架构/弹性设计/05-幂等设计与分布式锁" class="cross-ref">05-幂等设计与分布式锁</a> — 缓存击穿的互斥锁方案</li>
 <li><a href="#/04-数据与中间件/数据库与缓存/04-PostgreSQL与pgvector深度解析" class="cross-ref">04-PostgreSQL与pgvector深度解析</a> — pgvector 向量检索</li>
 </ul>
-</body></html></div>
+</div>
 </article>

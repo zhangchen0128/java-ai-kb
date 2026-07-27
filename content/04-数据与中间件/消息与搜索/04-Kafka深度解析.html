@@ -6,7 +6,7 @@
     <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#kafka</span><span class="badge badge-tag">#partition</span><span class="badge badge-tag">#consumer-group</span><span class="badge badge-tag">#isr</span><span class="badge badge-tag">#kraft</span></div>
     <div class="entry-sources"><small>📖 来源：<a href="https://kafka.apache.org/documentation/" target="_blank" rel="noopener" class="source-link" title="Apache Kafka 4.x 官方文档">Apache Kafka 4.x 官方文档</a><a href="https://github.com/apache/kafka" target="_blank" rel="noopener" class="source-link" title="Kafka 源码（日志存储、副本、Controller）">Kafka 源码（日志存储、副本、Controller）</a><a href="https://www.oreilly.com/library/view/kafka-the-definitive/" target="_blank" rel="noopener" class="source-link" title="《Kafka: The Definitive Guide》— Confluent 官方指南">《Kafka: The Definitive Guide》— Confluent 官方指南</a></small></div>
   </div>
-  <div class="entry-body"><html><head></head><body><h1>Kafka 深度解析</h1>
+  <div class="entry-body"><h1>Kafka 深度解析</h1>
 <h2>概述</h2>
 <p>Apache Kafka 是分布式流处理平台，同时承担消息队列、事件存储和流处理三种角色。在 AI 应用中，Kafka 常用于数据管道（CDC 捕获数据变更触发 Embedding 更新）、Agent 间事件驱动通信、异步推理结果回调等场景。</p>
 <p>本文深入 Kafka 架构、日志存储、生产者和消费者机制、副本一致性、KRaft 共识层和 Spring Kafka 集成。</p>
@@ -59,7 +59,7 @@
 </tr>
 </tbody></table>
 <h3>1.2 Controller 选举</h3>
-<p>Controller 是集群的"大脑"，负责：</p>
+<p>Controller 是集群的&quot;大脑&quot;，负责：</p>
 <ul>
 <li>分区 Leader 选举</li>
 <li>副本分配</li>
@@ -177,7 +177,7 @@ spring:
 spring:
   kafka:
     producer:
-      transaction-id-prefix: <span class="hljs-string">"tx-"</span>
+      transaction-id-prefix: <span class="hljs-string">&quot;tx-&quot;</span>
 
 <span class="hljs-comment">// 使用</span>
 <span class="hljs-meta">@Service</span>
@@ -186,16 +186,16 @@ spring:
 
     <span class="hljs-meta">@Transactional</span>
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">createOrder</span><span class="hljs-params">(Order order)</span> {
-        kafkaTemplate.send(<span class="hljs-string">"orders"</span>, order);            <span class="hljs-comment">// 1. 发送订单事件</span>
-        kafkaTemplate.send(<span class="hljs-string">"inventory"</span>, order.getItems()); <span class="hljs-comment">// 2. 发送库存事件</span>
+        kafkaTemplate.send(<span class="hljs-string">&quot;orders&quot;</span>, order);            <span class="hljs-comment">// 1. 发送订单事件</span>
+        kafkaTemplate.send(<span class="hljs-string">&quot;inventory&quot;</span>, order.getItems()); <span class="hljs-comment">// 2. 发送库存事件</span>
         <span class="hljs-comment">// 两个操作原子性：要么都提交，要么都不发</span>
     }
 
     <span class="hljs-comment">// 使用 executeInTransaction 手动控制</span>
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">manualTx</span><span class="hljs-params">()</span> {
         kafkaTemplate.executeInTransaction(kt -&gt; {
-            kt.send(<span class="hljs-string">"topic1"</span>, <span class="hljs-string">"msg1"</span>);
-            kt.send(<span class="hljs-string">"topic2"</span>, <span class="hljs-string">"msg2"</span>);
+            kt.send(<span class="hljs-string">&quot;topic1&quot;</span>, <span class="hljs-string">&quot;msg1&quot;</span>);
+            kt.send(<span class="hljs-string">&quot;topic2&quot;</span>, <span class="hljs-string">&quot;msg2&quot;</span>);
             <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
         });
     }
@@ -265,7 +265,7 @@ spring:
 spring.kafka.consumer.enable-auto-commit: <span class="hljs-literal">false</span>
 
 <span class="hljs-comment">// 手动提交</span>
-<span class="hljs-meta">@KafkaListener(topics = "orders")</span>
+<span class="hljs-meta">@KafkaListener(topics = &quot;orders&quot;)</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">consume</span><span class="hljs-params">(ConsumerRecord&lt;String, Order&gt; record,
                     Acknowledgment ack)</span> {
     <span class="hljs-keyword">try</span> {
@@ -273,7 +273,7 @@ spring.kafka.consumer.enable-auto-commit: <span class="hljs-literal">false</span
         ack.acknowledge(); <span class="hljs-comment">// 处理成功后提交</span>
     } <span class="hljs-keyword">catch</span> (Exception e) {
         <span class="hljs-comment">// 不 ack → 下次 poll 会重新消费</span>
-        log.error(<span class="hljs-string">"Order processing failed: {}"</span>, record.key(), e);
+        log.error(<span class="hljs-string">&quot;Order processing failed: {}&quot;</span>, record.key(), e);
         <span class="hljs-keyword">throw</span> e; <span class="hljs-comment">// 触发重试</span>
     }
 }
@@ -317,7 +317,7 @@ spring.kafka.consumer.enable-auto-commit: <span class="hljs-literal">false</span
 - 过去 <span class="hljs-number">30</span> 秒内追上了 Leader 的 LEO
 </code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-ini"><span class="hljs-attr">min.insync.replicas</span> = <span class="hljs-number">2</span>   <span class="hljs-comment"># ISR 至少 2 个副本时才能写入</span>
 </code></pre></div><h3>5.2 Leader Epoch</h3>
-<p>解决副本恢复时的"日志截断不一致"问题：</p>
+<p>解决副本恢复时的&quot;日志截断不一致&quot;问题：</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>无 Leader Epoch 时的问题：
 <span class="hljs-bullet">1.</span> Leader 写入 [m1, m2]，follower1 同步到 m2
 <span class="hljs-bullet">2.</span> Leader 宕机，follower1 成为新 Leader，写入 m3
@@ -405,13 +405,13 @@ KRaft 架构：
 
     <span class="hljs-comment">// 异步发送</span>
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">sendEvent</span><span class="hljs-params">(String key, Object event)</span> {
-        <span class="hljs-type">var</span> <span class="hljs-variable">future</span> <span class="hljs-operator">=</span> kafkaTemplate.send(<span class="hljs-string">"ai-events"</span>, key, event);
+        <span class="hljs-type">var</span> <span class="hljs-variable">future</span> <span class="hljs-operator">=</span> kafkaTemplate.send(<span class="hljs-string">&quot;ai-events&quot;</span>, key, event);
         future.whenComplete((result, ex) -&gt; {
             <span class="hljs-keyword">if</span> (ex != <span class="hljs-literal">null</span>) {
-                log.error(<span class="hljs-string">"Failed to send event: key={}"</span>, key, ex);
+                log.error(<span class="hljs-string">&quot;Failed to send event: key={}&quot;</span>, key, ex);
                 <span class="hljs-comment">// 记录到 outbox 表供后续重试</span>
             } <span class="hljs-keyword">else</span> {
-                log.debug(<span class="hljs-string">"Event sent: topic={}, partition={}, offset={}"</span>,
+                log.debug(<span class="hljs-string">&quot;Event sent: topic={}, partition={}, offset={}&quot;</span>,
                         result.getRecordMetadata().topic(),
                         result.getRecordMetadata().partition(),
                         result.getRecordMetadata().offset());
@@ -461,14 +461,14 @@ KRaft 架构：
     <span class="hljs-keyword">public</span> DeadLetterPublishingRecoverer <span class="hljs-title function_">recoverer</span><span class="hljs-params">(KafkaTemplate&lt;String, Object&gt; template)</span> {
         <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">DeadLetterPublishingRecoverer</span>(template,
                 (record, ex) -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">TopicPartition</span>(
-                        record.topic() + <span class="hljs-string">".DLT"</span>, record.partition()));
+                        record.topic() + <span class="hljs-string">&quot;.DLT&quot;</span>, record.partition()));
     }
 }
 
 <span class="hljs-meta">@Component</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">OrderConsumer</span> {
 
-    <span class="hljs-meta">@KafkaListener(topics = "orders", groupId = "order-processor")</span>
+    <span class="hljs-meta">@KafkaListener(topics = &quot;orders&quot;, groupId = &quot;order-processor&quot;)</span>
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">onMessage</span><span class="hljs-params">(ConsumerRecord&lt;String, Order&gt; record, Acknowledgment ack)</span> {
         <span class="hljs-keyword">try</span> {
             orderProcessor.process(record.value());
@@ -489,21 +489,21 @@ KRaft 架构：
 
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> VectorStore vectorStore;
 
-    <span class="hljs-meta">@KafkaListener(topics = "pg.public.documents", groupId = "embedding-updater")</span>
+    <span class="hljs-meta">@KafkaListener(topics = &quot;pg.public.documents&quot;, groupId = &quot;embedding-updater&quot;)</span>
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">onDocumentChange</span><span class="hljs-params">(String changeEvent, Acknowledgment ack)</span> {
         <span class="hljs-type">var</span> <span class="hljs-variable">payload</span> <span class="hljs-operator">=</span> parseDebeziumEvent(changeEvent);
         <span class="hljs-keyword">switch</span> (payload.operation()) {
-            <span class="hljs-keyword">case</span> <span class="hljs-string">"c"</span>, <span class="hljs-string">"u"</span> -&gt; { <span class="hljs-comment">// create/update</span>
+            <span class="hljs-keyword">case</span> <span class="hljs-string">&quot;c&quot;</span>, <span class="hljs-string">&quot;u&quot;</span> -&gt; { <span class="hljs-comment">// create/update</span>
                 <span class="hljs-type">var</span> <span class="hljs-variable">doc</span> <span class="hljs-operator">=</span> payload.after();
                 vectorStore.add(List.of(
                     Document.builder()
                         .id(doc.getId())
                         .text(doc.getContent())
-                        .metadata(Map.of(<span class="hljs-string">"source"</span>, <span class="hljs-string">"cdc"</span>, <span class="hljs-string">"timestamp"</span>, doc.getUpdatedAt()))
+                        .metadata(Map.of(<span class="hljs-string">&quot;source&quot;</span>, <span class="hljs-string">&quot;cdc&quot;</span>, <span class="hljs-string">&quot;timestamp&quot;</span>, doc.getUpdatedAt()))
                         .build()
                 ));
             }
-            <span class="hljs-keyword">case</span> <span class="hljs-string">"d"</span> -&gt; vectorStore.delete(List.of(payload.before().getId()));
+            <span class="hljs-keyword">case</span> <span class="hljs-string">&quot;d&quot;</span> -&gt; vectorStore.delete(List.of(payload.before().getId()));
         }
         ack.acknowledge();
     }
@@ -512,7 +512,7 @@ KRaft 架构：
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// Agent 间的异步工具调用结果通知</span>
 <span class="hljs-comment">// Agent A 调用耗时推理工具 → 中间状态发 Kafka → Agent B 订阅结果</span>
 
-<span class="hljs-meta">@KafkaListener(topics = "agent-tool-results", groupId = "agent-b")</span>
+<span class="hljs-meta">@KafkaListener(topics = &quot;agent-tool-results&quot;, groupId = &quot;agent-b&quot;)</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">onToolResult</span><span class="hljs-params">(ToolResultEvent event, Acknowledgment ack)</span> {
     <span class="hljs-comment">// 根据 workflowId 关联到具体的 Agent 会话</span>
     agentSessionManager.deliverToolResult(event.getWorkflowId(), event.getResult());
@@ -537,5 +537,5 @@ A: Kafka 4.x 不再支持 ZooKeeper，所有新集群应使用 KRaft 模式。�
 <li><a href="#/04-数据与中间件/消息与搜索/04-Elasticsearch深度解析" class="cross-ref">04-Elasticsearch深度解析</a> — ES 与 Kafka 的 CDC 联动</li>
 <li><a href="#/05-分布式架构/弹性设计/05-幂等设计与分布式锁" class="cross-ref">05-幂等设计与分布式锁</a> — 消息重复消费的幂等处理</li>
 </ul>
-</body></html></div>
+</div>
 </article>

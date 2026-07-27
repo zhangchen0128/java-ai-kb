@@ -6,22 +6,22 @@
     <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#tokenization</span><span class="badge badge-tag">#bpe</span><span class="badge badge-tag">#wordpiece</span><span class="badge badge-tag">#sentencepiece</span><span class="badge badge-tag">#embedding</span></div>
     <div class="entry-sources"><small>📖 来源：<a href="https://arxiv.org/abs/1508.07909" target="_blank" rel="noopener" class="source-link" title="Neural Machine Translation of Rare Words with Subword Units (Sennrich et al., BPE for NLP)">Neural Machine Translation of Rare Words with Subword Units (Sennrich et al., BPE for NLP)</a><a href="https://arxiv.org/abs/1609.08144" target="_blank" rel="noopener" class="source-link" title="Google's Neural Machine Translation System (WordPiece)">Google's Neural Machine Translation System (WordPiece)</a><a href="https://arxiv.org/abs/1804.10959" target="_blank" rel="noopener" class="source-link" title="SentencePiece (Kudo &amp; Richardson)">SentencePiece (Kudo &amp; Richardson)</a><a href="https://arxiv.org/abs/2201.12023" target="_blank" rel="noopener" class="source-link" title="Matryoshka Representation Learning (Kusupati et al.)">Matryoshka Representation Learning (Kusupati et al.)</a><a href="https://platform.openai.com/tokenizer" target="_blank" rel="noopener" class="source-link" title="OpenAI Tokenizer — 在线 Token 计数工具">OpenAI Tokenizer — 在线 Token 计数工具</a><a href="https://arxiv.org/abs/2103.00020" target="_blank" rel="noopener" class="source-link" title="CLIP: Learning Transferable Visual Models (Radford et al.)">CLIP: Learning Transferable Visual Models (Radford et al.)</a></small></div>
   </div>
-  <div class="entry-body"><html><head></head><body><h1>Embeddings and Tokenization</h1>
+  <div class="entry-body"><h1>Embeddings and Tokenization</h1>
 <h2>概述</h2>
-<p>Tokenization（分词）和 Embedding（嵌入）是 LLM 的"入口"和"感知层"。Tokenization 决定了模型如何看待文本的最小单位，Embedding 决定了模型如何将离散的符号转换为可计算的连续向量。本条目深入两方面的原理、算法和工程实践。</p>
+<p>Tokenization（分词）和 Embedding（嵌入）是 LLM 的&quot;入口&quot;和&quot;感知层&quot;。Tokenization 决定了模型如何看待文本的最小单位，Embedding 决定了模型如何将离散的符号转换为可计算的连续向量。本条目深入两方面的原理、算法和工程实践。</p>
 <h2>Tokenization 深入</h2>
 <h3>为什么需要子词分词</h3>
 <p>直接将原始文本输入模型是不可行的。需要将文本转换为离散的 token ID。最简单的方案——按单词或按字符分词——都有致命缺陷：</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>按单词分词：
-<span class="hljs-string">"I love NLP"</span> → <span class="hljs-punctuation">[</span><span class="hljs-built_in">I</span><span class="hljs-operator">,</span> <span class="hljs-variable">love</span><span class="hljs-operator">,</span> <span class="hljs-variable">NLP</span><span class="hljs-punctuation">]</span>
+<span class="hljs-string">&quot;I love NLP&quot;</span> → <span class="hljs-punctuation">[</span><span class="hljs-built_in">I</span><span class="hljs-operator">,</span> <span class="hljs-variable">love</span><span class="hljs-operator">,</span> <span class="hljs-variable">NLP</span><span class="hljs-punctuation">]</span>
 问题：词汇表爆炸（英语<span class="hljs-number">50</span>万<span class="hljs-operator">+</span>词，中文<span class="hljs-operator">/</span>日语无天然分词边界），<span class="hljs-variable">OOV</span>（<span class="hljs-built_in">Out</span><span class="hljs-operator">-</span><span class="hljs-variable">of</span><span class="hljs-operator">-</span><span class="hljs-variable">Vocabulary</span>）问题
 
 按字符分词：
-<span class="hljs-string">"I love NLP"</span> → <span class="hljs-punctuation">[</span><span class="hljs-built_in">I</span><span class="hljs-operator">,</span> <span class="hljs-operator">'</span> <span class="hljs-operator">',</span> <span class="hljs-variable">l</span><span class="hljs-operator">,</span> <span class="hljs-variable">o</span><span class="hljs-operator">,</span> <span class="hljs-variable">v</span><span class="hljs-operator">,</span> <span class="hljs-variable">e</span><span class="hljs-operator">,</span> <span class="hljs-operator">'</span> <span class="hljs-operator">',</span> <span class="hljs-built_in">N</span><span class="hljs-operator">,</span> <span class="hljs-variable">L</span><span class="hljs-operator">,</span> <span class="hljs-variable">P</span><span class="hljs-punctuation">]</span>
+<span class="hljs-string">&quot;I love NLP&quot;</span> → <span class="hljs-punctuation">[</span><span class="hljs-built_in">I</span><span class="hljs-operator">,</span> <span class="hljs-operator">&#x27;</span> <span class="hljs-operator">&#x27;,</span> <span class="hljs-variable">l</span><span class="hljs-operator">,</span> <span class="hljs-variable">o</span><span class="hljs-operator">,</span> <span class="hljs-variable">v</span><span class="hljs-operator">,</span> <span class="hljs-variable">e</span><span class="hljs-operator">,</span> <span class="hljs-operator">&#x27;</span> <span class="hljs-operator">&#x27;,</span> <span class="hljs-built_in">N</span><span class="hljs-operator">,</span> <span class="hljs-variable">L</span><span class="hljs-operator">,</span> <span class="hljs-variable">P</span><span class="hljs-punctuation">]</span>
 问题：序列过长（同等语义内容需要<span class="hljs-number">5</span><span class="hljs-operator">-</span><span class="hljs-number">10</span>倍长度），单个字符语义密度极低
 
 子词分词（最优平衡）：
-<span class="hljs-string">"I love NLP"</span> → <span class="hljs-punctuation">[</span><span class="hljs-built_in">I</span><span class="hljs-operator">,</span> <span class="hljs-type">_love</span><span class="hljs-operator">,</span> <span class="hljs-type">_N</span><span class="hljs-operator">,</span> <span class="hljs-variable">LP</span><span class="hljs-punctuation">]</span>  （<span class="hljs-variable">BPE</span>示例）
+<span class="hljs-string">&quot;I love NLP&quot;</span> → <span class="hljs-punctuation">[</span><span class="hljs-built_in">I</span><span class="hljs-operator">,</span> <span class="hljs-type">_love</span><span class="hljs-operator">,</span> <span class="hljs-type">_N</span><span class="hljs-operator">,</span> <span class="hljs-variable">LP</span><span class="hljs-punctuation">]</span>  （<span class="hljs-variable">BPE</span>示例）
 优势：常见词不拆分（<span class="hljs-built_in">I</span><span class="hljs-operator">,</span> <span class="hljs-variable">love</span>），罕见词拆分为有意义的子词单元（<span class="hljs-variable">NLP</span>→<span class="hljs-built_in">N</span><span class="hljs-operator">+</span><span class="hljs-variable">LP</span>）
 </code></pre></div><h3>BPE (Byte-Pair Encoding)</h3>
 <p>BPE 是最广泛使用的子词分词算法，GPT 系列采用。</p>
@@ -81,7 +81,7 @@
             <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> text : corpus) {
                 <span class="hljs-type">var</span> <span class="hljs-variable">tokens</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;&gt;(tokenizeToChars(text));
                 <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; tokens.size() - <span class="hljs-number">1</span>; i++) {
-                    <span class="hljs-type">var</span> <span class="hljs-variable">pair</span> <span class="hljs-operator">=</span> tokens.get(i) + <span class="hljs-string">" "</span> + tokens.get(i + <span class="hljs-number">1</span>);
+                    <span class="hljs-type">var</span> <span class="hljs-variable">pair</span> <span class="hljs-operator">=</span> tokens.get(i) + <span class="hljs-string">&quot; &quot;</span> + tokens.get(i + <span class="hljs-number">1</span>);
                     pairFreq.merge(pair, <span class="hljs-number">1</span>, Integer::sum);
                 }
             }
@@ -91,16 +91,16 @@
             <span class="hljs-comment">// 找最高频的 pair</span>
             <span class="hljs-type">var</span> <span class="hljs-variable">bestPair</span> <span class="hljs-operator">=</span> Collections.max(
                 pairFreq.entrySet(), Map.Entry.comparingByValue());
-            <span class="hljs-type">var</span> <span class="hljs-variable">parts</span> <span class="hljs-operator">=</span> bestPair.getKey().split(<span class="hljs-string">" "</span>);
+            <span class="hljs-type">var</span> <span class="hljs-variable">parts</span> <span class="hljs-operator">=</span> bestPair.getKey().split(<span class="hljs-string">&quot; &quot;</span>);
             <span class="hljs-type">String</span> <span class="hljs-variable">left</span> <span class="hljs-operator">=</span> parts[<span class="hljs-number">0</span>], right = parts[<span class="hljs-number">1</span>];
-            <span class="hljs-type">String</span> <span class="hljs-variable">merged</span> <span class="hljs-operator">=</span> left + right.replace(<span class="hljs-string">"##"</span>, <span class="hljs-string">""</span>);  <span class="hljs-comment">// 简化</span>
+            <span class="hljs-type">String</span> <span class="hljs-variable">merged</span> <span class="hljs-operator">=</span> left + right.replace(<span class="hljs-string">&quot;##&quot;</span>, <span class="hljs-string">&quot;&quot;</span>);  <span class="hljs-comment">// 简化</span>
 
             <span class="hljs-comment">// 创建合并规则</span>
             mergeRules.add(<span class="hljs-keyword">new</span> <span class="hljs-title class_">MergeRule</span>(left, right, merged));
             addToken(merged);
 
-            System.out.println(<span class="hljs-string">"Add token: "</span> + merged +
-                <span class="hljs-string">" (vocab size: "</span> + tokenToId.size() + <span class="hljs-string">")"</span>);
+            System.out.println(<span class="hljs-string">&quot;Add token: &quot;</span> + merged +
+                <span class="hljs-string">&quot; (vocab size: &quot;</span> + tokenToId.size() + <span class="hljs-string">&quot;)&quot;</span>);
         }
     }
 
@@ -147,22 +147,22 @@
      */</span>
     <span class="hljs-keyword">public</span> String <span class="hljs-title function_">decode</span><span class="hljs-params">(List&lt;Integer&gt; ids)</span> {
         <span class="hljs-keyword">return</span> ids.stream()
-            .map(id -&gt; idToToken.getOrDefault(id, <span class="hljs-string">"&lt;?&gt;"</span>))
+            .map(id -&gt; idToToken.getOrDefault(id, <span class="hljs-string">&quot;&lt;?&gt;&quot;</span>))
             .collect(Collectors.joining())
-            .replace(<span class="hljs-string">"##"</span>, <span class="hljs-string">""</span>);
+            .replace(<span class="hljs-string">&quot;##&quot;</span>, <span class="hljs-string">&quot;&quot;</span>);
     }
 
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">main</span><span class="hljs-params">(String[] args)</span> {
         <span class="hljs-type">var</span> <span class="hljs-variable">bpe</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">BPETokenizer</span>(<span class="hljs-number">300</span>);
         bpe.train(List.of(
-            <span class="hljs-string">"low lower lowest"</span>,
-            <span class="hljs-string">"new newer newest"</span>,
-            <span class="hljs-string">"wide wider widest"</span>
+            <span class="hljs-string">&quot;low lower lowest&quot;</span>,
+            <span class="hljs-string">&quot;new newer newest&quot;</span>,
+            <span class="hljs-string">&quot;wide wider widest&quot;</span>
         ));
-        <span class="hljs-type">var</span> <span class="hljs-variable">encoded</span> <span class="hljs-operator">=</span> bpe.encode(<span class="hljs-string">"lowest"</span>);
-        System.out.println(<span class="hljs-string">"Input: lowest"</span>);
-        System.out.println(<span class="hljs-string">"Tokens: "</span> + encoded);
-        System.out.println(<span class="hljs-string">"Decoded: "</span> + bpe.decode(encoded));
+        <span class="hljs-type">var</span> <span class="hljs-variable">encoded</span> <span class="hljs-operator">=</span> bpe.encode(<span class="hljs-string">&quot;lowest&quot;</span>);
+        System.out.println(<span class="hljs-string">&quot;Input: lowest&quot;</span>);
+        System.out.println(<span class="hljs-string">&quot;Tokens: &quot;</span> + encoded);
+        System.out.println(<span class="hljs-string">&quot;Decoded: &quot;</span> + bpe.decode(encoded));
     }
 }
 </code></pre></div><h3>WordPiece</h3>
@@ -173,10 +173,10 @@
 WordPiece 合并策略：
   选分数最高的 pair
   分数 = pair_freq / (left_freq × right_freq)
-  目的：优先合并<span class="hljs-string">"互相依赖"</span>的 pair，而非频率最高的
+  目的：优先合并<span class="hljs-string">&quot;互相依赖&quot;</span>的 pair，而非频率最高的
 </code></pre></div><p><strong>与 BPE 的关键区别 — <code>##</code> 前缀：</strong></p>
 <p>WordPiece 使用 <code>##</code> 标记非词首的 token。这解决了歧义问题：</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-string">"unbelievable"</span> →
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-string">&quot;unbelievable&quot;</span> →
   BPE:      [un, bel, ie, vable]      ← 无法区分词首
   WordPiece: [un, ##bel, ##ie, ##vable] ← 明确区分词首/非词首
 </code></pre></div><p><strong>为什么 <code>##</code> 重要</strong>：在预训练时，同一个子词在词首和词中位置可能含义不同。<code>##</code> 标记让模型学习不同的 embedding。</p>
@@ -193,7 +193,7 @@ WordPiece 合并策略：
         <span class="hljs-type">Candidate</span> <span class="hljs-variable">bestCandidate</span> <span class="hljs-operator">=</span> <span class="hljs-literal">null</span>;
 
         <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> entry : pairFreq.entrySet()) {
-            <span class="hljs-type">var</span> <span class="hljs-variable">parts</span> <span class="hljs-operator">=</span> entry.getKey().split(<span class="hljs-string">" "</span>);
+            <span class="hljs-type">var</span> <span class="hljs-variable">parts</span> <span class="hljs-operator">=</span> entry.getKey().split(<span class="hljs-string">&quot; &quot;</span>);
             <span class="hljs-type">String</span> <span class="hljs-variable">left</span> <span class="hljs-operator">=</span> parts[<span class="hljs-number">0</span>], right = parts[<span class="hljs-number">1</span>];
             <span class="hljs-type">int</span> <span class="hljs-variable">pairCount</span> <span class="hljs-operator">=</span> entry.getValue();
             <span class="hljs-type">int</span> <span class="hljs-variable">leftCount</span> <span class="hljs-operator">=</span> tokenFreq.getOrDefault(left, <span class="hljs-number">1</span>);
@@ -204,7 +204,7 @@ WordPiece 合并策略：
 
             <span class="hljs-keyword">if</span> (score &gt; bestScore) {
                 bestScore = score;
-                <span class="hljs-type">String</span> <span class="hljs-variable">merged</span> <span class="hljs-operator">=</span> left + right.replace(<span class="hljs-string">"##"</span>, <span class="hljs-string">""</span>);
+                <span class="hljs-type">String</span> <span class="hljs-variable">merged</span> <span class="hljs-operator">=</span> left + right.replace(<span class="hljs-string">&quot;##&quot;</span>, <span class="hljs-string">&quot;&quot;</span>);
                 bestCandidate = <span class="hljs-keyword">new</span> <span class="hljs-title class_">Candidate</span>(left, right, merged, score);
             }
         }
@@ -213,7 +213,7 @@ WordPiece 合并策略：
 
     <span class="hljs-comment">// 词首 token 不加 ##，非词首 token 加 ##</span>
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">isWordStart</span><span class="hljs-params">(String token)</span> {
-        <span class="hljs-keyword">return</span> !token.startsWith(<span class="hljs-string">"##"</span>);
+        <span class="hljs-keyword">return</span> !token.startsWith(<span class="hljs-string">&quot;##&quot;</span>);
     }
 }
 </code></pre></div><h3>SentencePiece / Unigram</h3>
@@ -224,13 +224,13 @@ WordPiece 合并策略：
 <li><strong>将空格视为普通字符</strong>：用 <code>_</code> (U+2581) 代表空格，实现可逆分词</li>
 <li><strong>Unigram 语言模型</strong>：不是贪心合并，而是通过概率模型选择最优分词</li>
 </ol>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>输入: <span class="hljs-string">"Hello World"</span>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>输入: <span class="hljs-string">&quot;Hello World&quot;</span>
 SentencePiece: <span class="hljs-selector-attr">[▁Hello, ▁World]</span>
               （▁ 是空格占位符）
 
 可逆性：
-  <span class="hljs-built_in">encode</span>(<span class="hljs-string">"Hello World"</span>) → <span class="hljs-selector-attr">[▁Hello, ▁World]</span>
-  <span class="hljs-built_in">decode</span>(<span class="hljs-selector-attr">[▁Hello, ▁World]</span>) → <span class="hljs-string">"Hello World"</span>
+  <span class="hljs-built_in">encode</span>(<span class="hljs-string">&quot;Hello World&quot;</span>) → <span class="hljs-selector-attr">[▁Hello, ▁World]</span>
+  <span class="hljs-built_in">decode</span>(<span class="hljs-selector-attr">[▁Hello, ▁World]</span>) → <span class="hljs-string">&quot;Hello World&quot;</span>
   （空格完美恢复，因为空格被编码为▁）
 </code></pre></div><p><strong>Unigram 算法核心：</strong></p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-number">1.</span> 从一个大的种子词汇表开始（如所有子串）
@@ -372,10 +372,10 @@ SentencePiece: <span class="hljs-selector-attr">[▁Hello, ▁World]</span>
     )</span> {}
 
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> Map&lt;String, ModelPricing&gt; PRICING = Map.of(
-        <span class="hljs-string">"gpt-4o"</span>, <span class="hljs-keyword">new</span> <span class="hljs-title class_">ModelPricing</span>(<span class="hljs-string">"gpt-4o"</span>, <span class="hljs-number">2.50</span>, <span class="hljs-number">10.00</span>, <span class="hljs-number">128_000</span>),
-        <span class="hljs-string">"gpt-4o-mini"</span>, <span class="hljs-keyword">new</span> <span class="hljs-title class_">ModelPricing</span>(<span class="hljs-string">"gpt-4o-mini"</span>, <span class="hljs-number">0.15</span>, <span class="hljs-number">0.60</span>, <span class="hljs-number">128_000</span>),
-        <span class="hljs-string">"claude-3.5-sonnet"</span>, <span class="hljs-keyword">new</span> <span class="hljs-title class_">ModelPricing</span>(<span class="hljs-string">"claude-3.5-sonnet"</span>, <span class="hljs-number">3.00</span>, <span class="hljs-number">15.00</span>, <span class="hljs-number">200_000</span>),
-        <span class="hljs-string">"deepseek-v3"</span>, <span class="hljs-keyword">new</span> <span class="hljs-title class_">ModelPricing</span>(<span class="hljs-string">"deepseek-v3"</span>, <span class="hljs-number">0.27</span>, <span class="hljs-number">1.10</span>, <span class="hljs-number">128_000</span>)
+        <span class="hljs-string">&quot;gpt-4o&quot;</span>, <span class="hljs-keyword">new</span> <span class="hljs-title class_">ModelPricing</span>(<span class="hljs-string">&quot;gpt-4o&quot;</span>, <span class="hljs-number">2.50</span>, <span class="hljs-number">10.00</span>, <span class="hljs-number">128_000</span>),
+        <span class="hljs-string">&quot;gpt-4o-mini&quot;</span>, <span class="hljs-keyword">new</span> <span class="hljs-title class_">ModelPricing</span>(<span class="hljs-string">&quot;gpt-4o-mini&quot;</span>, <span class="hljs-number">0.15</span>, <span class="hljs-number">0.60</span>, <span class="hljs-number">128_000</span>),
+        <span class="hljs-string">&quot;claude-3.5-sonnet&quot;</span>, <span class="hljs-keyword">new</span> <span class="hljs-title class_">ModelPricing</span>(<span class="hljs-string">&quot;claude-3.5-sonnet&quot;</span>, <span class="hljs-number">3.00</span>, <span class="hljs-number">15.00</span>, <span class="hljs-number">200_000</span>),
+        <span class="hljs-string">&quot;deepseek-v3&quot;</span>, <span class="hljs-keyword">new</span> <span class="hljs-title class_">ModelPricing</span>(<span class="hljs-string">&quot;deepseek-v3&quot;</span>, <span class="hljs-number">0.27</span>, <span class="hljs-number">1.10</span>, <span class="hljs-number">128_000</span>)
     );
 
     <span class="hljs-comment">/**
@@ -405,7 +405,7 @@ SentencePiece: <span class="hljs-selector-attr">[▁Hello, ▁World]</span>
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">CostEstimate</span><span class="hljs-params">(<span class="hljs-type">double</span> inputCost, <span class="hljs-type">double</span> outputCost, <span class="hljs-type">double</span> totalCost)</span> {
         <span class="hljs-meta">@Override</span>
         <span class="hljs-keyword">public</span> String <span class="hljs-title function_">toString</span><span class="hljs-params">()</span> {
-            <span class="hljs-keyword">return</span> String.format(<span class="hljs-string">"Input: $%.6f | Output: $%.6f | Total: $%.6f"</span>,
+            <span class="hljs-keyword">return</span> String.format(<span class="hljs-string">&quot;Input: $%.6f | Output: $%.6f | Total: $%.6f&quot;</span>,
                 inputCost, outputCost, totalCost);
         }
     }
@@ -422,17 +422,17 @@ SentencePiece: <span class="hljs-selector-attr">[▁Hello, ▁World]</span>
     }
 
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">main</span><span class="hljs-params">(String[] args)</span> {
-        <span class="hljs-type">var</span> <span class="hljs-variable">prompt</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
+        <span class="hljs-type">var</span> <span class="hljs-variable">prompt</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;&quot;&quot;
             你是一位资深Java架构师。请详细解释Virtual Threads的工作原理，
             包括调度机制、与平台线程的区别、以及在实际项目中的最佳实践。
-            """</span>;
+            &quot;&quot;&quot;</span>;
 
         <span class="hljs-type">int</span> <span class="hljs-variable">tokens</span> <span class="hljs-operator">=</span> estimateTokens(prompt);
-        System.out.println(<span class="hljs-string">"Prompt token 估算: "</span> + tokens);
+        System.out.println(<span class="hljs-string">&quot;Prompt token 估算: &quot;</span> + tokens);
 
         <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> entry : PRICING.entrySet()) {
             <span class="hljs-type">var</span> <span class="hljs-variable">cost</span> <span class="hljs-operator">=</span> estimateCost(entry.getKey(), tokens, <span class="hljs-number">500</span>);
-            System.out.println(entry.getKey() + <span class="hljs-string">": "</span> + cost);
+            System.out.println(entry.getKey() + <span class="hljs-string">&quot;: &quot;</span> + cost);
         }
     }
 }
@@ -474,7 +474,7 @@ Batch 内的每个 sentence 都有：
 <p>$$\mathcal{L} = -\log \frac{\exp(\text{sim}(h_i, h_i^+) / \tau)}{\exp(\text{sim}(h_i, h_i^+) / \tau) + \sum_{j=1}^{K} \exp(\text{sim}(h_i, h_j^-) / \tau)}$$</p>
 <p>其中 τ 是温度参数（temperature）。</p>
 <p><strong>温度参数的作用：</strong></p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>温度 τ 控制模型对"困难负样本"的敏感度：
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>温度 τ 控制模型对&quot;困难负样本&quot;的敏感度：
   τ → <span class="hljs-number">0</span> (低温)：模型更关注最相似的负样本（hard negatives）
   τ → ∞ (高温)：所有负样本权重均匀
   τ ≈ <span class="hljs-number">0.05</span>-<span class="hljs-number">0.1</span>：实践经验中的常用值
@@ -595,7 +595,7 @@ Batch 内的每个 sentence 都有：
     │
     ├──► <span class="hljs-symbol">Sparse</span> <span class="hljs-symbol">Embedding</span> (词表大小维)
     │    每个 token 的权重（类 <span class="hljs-symbol">BM25</span>）
-    │    输出: {<span class="hljs-string">"虚拟"</span>: <span class="hljs-number">1.2</span>, <span class="hljs-string">"线程"</span>: <span class="hljs-number">2.1</span>, <span class="hljs-string">"并发"</span>: <span class="hljs-number">0.8</span>, ...}
+    │    输出: {<span class="hljs-string">&quot;虚拟&quot;</span>: <span class="hljs-number">1.2</span>, <span class="hljs-string">&quot;线程&quot;</span>: <span class="hljs-number">2.1</span>, <span class="hljs-string">&quot;并发&quot;</span>: <span class="hljs-number">0.8</span>, ...}
     │    用于关键词检索，可解释性强
     │
     └──► <span class="hljs-symbol">ColBERT</span> <span class="hljs-symbol">Embedding</span> (token序列 × 维度)
@@ -628,7 +628,7 @@ Matryoshka Embedding：
             → 也可以用<span class="hljs-number">256</span>维（精度再降，存储再减半）
             → ...
 
-  就像一个俄罗斯套娃，外层包含内层，内层是外层的<span class="hljs-string">"粗粒度摘要"</span>
+  就像一个俄罗斯套娃，外层包含内层，内层是外层的<span class="hljs-string">&quot;粗粒度摘要&quot;</span>
 </code></pre></div><p><strong>训练方法</strong>：在训练时不仅计算全维度的 Loss，还同时计算截断到各种维度的 Loss：</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>ℒ_total = ℒ_1024 + ℒ_512 + ℒ_256 + ℒ_128 + ℒ_64 + ...
 
@@ -657,7 +657,7 @@ Matryoshka Embedding：
     <span class="hljs-keyword">public</span> <span class="hljs-type">float</span>[] getEmbedding(<span class="hljs-type">int</span> matryoshkaDim) {
         <span class="hljs-keyword">if</span> (matryoshkaDim &gt; fullDim) {
             <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">IllegalArgumentException</span>(
-                <span class="hljs-string">"matryoshkaDim "</span> + matryoshkaDim + <span class="hljs-string">" exceeds fullDim "</span> + fullDim);
+                <span class="hljs-string">&quot;matryoshkaDim &quot;</span> + matryoshkaDim + <span class="hljs-string">&quot; exceeds fullDim &quot;</span> + fullDim);
         }
         <span class="hljs-keyword">return</span> Arrays.copyOf(fullEmbedding, matryoshkaDim);
     }
@@ -707,8 +707,8 @@ Transformer Encoder          ViT / ResNet
 对比学习：正样本对的余弦相似度最大化
 </code></pre></div><div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>使用场景：
 
-<span class="hljs-number">1</span>. 图像搜索："<span class="hljs-selector-tag">a</span> dog playing in the park" → 搜索图片库
-<span class="hljs-number">2</span>. 零样本分类：图片 → 计算与 <span class="hljs-selector-attr">[<span class="hljs-string">"cat"</span>, <span class="hljs-string">"dog"</span>, <span class="hljs-string">"car"</span>]</span> 的相似度 → 最高者为类别
+<span class="hljs-number">1</span>. 图像搜索：&quot;<span class="hljs-selector-tag">a</span> dog playing in the park&quot; → 搜索图片库
+<span class="hljs-number">2</span>. 零样本分类：图片 → 计算与 <span class="hljs-selector-attr">[<span class="hljs-string">&quot;cat&quot;</span>, <span class="hljs-string">&quot;dog&quot;</span>, <span class="hljs-string">&quot;car&quot;</span>]</span> 的相似度 → 最高者为类别
 <span class="hljs-number">3</span>. 多模态 RAG：文本 Query 可以检索相关图片，反之亦然
 </code></pre></div><h2>Embedding 质量评估：MTEB 基准</h2>
 <p>MTEB (Massive Text Embedding Benchmark) 是 Embedding 模型的标准评测基准，涵盖 7 大类任务：</p>
@@ -785,7 +785,7 @@ Transformer Encoder          ViT / ResNet
 <li><strong>选择 Tokenizer</strong>：中文为主选 LLaMA 3 tokenizer 或 Qwen tokenizer，英文为主选 GPT-4 tokenizer（cl100k_base），不要混用</li>
 <li><strong>成本预估</strong>：开发阶段就建立 cost estimator，给每个 API 调用预估 token 消耗，避免月底账单爆炸</li>
 <li><strong>Embedding 模型选择</strong>：中文场景首选 BGE-M3，英文场景可选 text-embedding-3-large（支持 Matryoshka），超长文本选 GTE-Qwen2</li>
-<li><strong>Matryoshka 实践</strong>：生产环境建议存储全维度（1024/3072），查询时按需截取，这是"不增加存储、降低检索延迟"的免费午餐</li>
+<li><strong>Matryoshka 实践</strong>：生产环境建议存储全维度（1024/3072），查询时按需截取，这是&quot;不增加存储、降低检索延迟&quot;的免费午餐</li>
 <li><strong>对比学习的温度参数</strong>：如果用对比学习微调 embedding，温度参数 τ 通常取 0.05-0.1，太大会让模型学不到区分度</li>
 </ol>
 <h2>常见问题</h2>
@@ -799,8 +799,8 @@ Transformer Encoder          ViT / ResNet
 <ul>
 <li><a href="#/07-AI基础/07-Transformer架构深度解析" class="cross-ref">07-Transformer架构深度解析</a> — Transformer 架构深入</li>
 <li><a href="#/07-AI基础/07-推理策略与评估方法" class="cross-ref">07-推理策略与评估方法</a> — 推理和评估</li>
-<li><span class="broken-ref" title="未找到: 11-检索与RAG/README">11-检索与RAG/README</span> — 检索与 RAG（Embedding 在 RAG 中的应用）</li>
-<li><span class="broken-ref" title="未找到: 10-AI数据工程/README">10-AI数据工程/README</span> — 文档切片和 Embedding 索引流水线</li>
+<li><a href="#/11-检索与RAG/检索技术/11-向量检索与混合检索" class="cross-ref">11-向量检索与混合检索</a> — 检索与 RAG（Embedding 在 RAG 中的应用）</li>
+<li><a href="#/10-AI数据工程/文档处理/10-Java文档解析全景" class="cross-ref">10-Java文档解析全景</a> — 文档切片和 Embedding 索引流水线</li>
 </ul>
-</body></html></div>
+</div>
 </article>

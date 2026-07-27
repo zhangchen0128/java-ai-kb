@@ -6,13 +6,13 @@
     <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#jvm</span><span class="badge badge-tag">#gc</span><span class="badge badge-tag">#jit</span><span class="badge badge-tag">#graalvm</span><span class="badge badge-tag">#zgc</span></div>
     <div class="entry-sources"><small>📖 来源：<a href="https://docs.oracle.com/javase/specs/jvms/se25/html/index.html" target="_blank" rel="noopener" class="source-link" title="The Java Virtual Machine Specification, Java SE 25 Edition">The Java Virtual Machine Specification, Java SE 25 Edition</a><a href="https://openjdk.org/jeps/0" target="_blank" rel="noopener" class="source-link" title="OpenJDK JEP Index — all JEPs related to GC, JIT, and runtime">OpenJDK JEP Index — all JEPs related to GC, JIT, and runtime</a><a href="https://wiki.openjdk.org/display/zgc" target="_blank" rel="noopener" class="source-link" title="OpenJDK Wiki: ZGC">OpenJDK Wiki: ZGC</a><a href="https://wiki.openjdk.org/display/shenandoah" target="_blank" rel="noopener" class="source-link" title="OpenJDK Wiki: Shenandoah">OpenJDK Wiki: Shenandoah</a><a href="https://docs.oracle.com/en/java/javase/25/gctuning/" target="_blank" rel="noopener" class="source-link" title="HotSpot Virtual Machine Garbage Collection Tuning Guide">HotSpot Virtual Machine Garbage Collection Tuning Guide</a><a href="https://www.oreilly.com/library/view/optimizing-java/9781492039259/" target="_blank" rel="noopener" class="source-link" title="Optimizing Java — Benjamin J. Evans, James Gough, Chris Newland">Optimizing Java — Benjamin J. Evans, James Gough, Chris Newland</a><a href="https://www.oreilly.com/library/view/java-performance-2nd/9781492056102/" target="_blank" rel="noopener" class="source-link" title="Java Performance, 2nd Edition — Scott Oaks">Java Performance, 2nd Edition — Scott Oaks</a><a href="https://github.com/openjdk/jdk" target="_blank" rel="noopener" class="source-link" title="OpenJDK source code (HotSpot)">OpenJDK source code (HotSpot)</a></small></div>
   </div>
-  <div class="entry-body"><html><head></head><body><h1>JVM 内部原理与调优</h1>
+  <div class="entry-body"><h1>JVM 内部原理与调优</h1>
 <h2>概述</h2>
 <p>本文深入剖析 HotSpot JVM 的内部架构与核心子系统，涵盖类加载机制、运行时数据区、垃圾收集器（G1、ZGC、Shenandoah）、JIT 编译（C1/C2/Graal）以及 GraalVM 原生镜像。重点放在 JDK 25 LTS 中的最新发展，包括 ZGC 的分代模式、Shenandoah 的分代支持和 JEP 483（提前类加载与链接）。</p>
 <p>目标读者是需要在生产环境中诊断 JVM 性能问题、配置 GC 策略、解读 GC 日志并编写 GC 友好代码的 Java 后端工程师。</p>
 <hr>
 <h2>一、JVM 架构全景</h2>
-<p>HotSpot JVM 由三大子系统构成，它们协同工作完成"加载字节码—管理内存—执行指令"的完整生命周期：</p>
+<p>HotSpot JVM 由三大子系统构成，它们协同工作完成&quot;加载字节码—管理内存—执行指令&quot;的完整生命周期：</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>源文件(.java) → javac → 字节码(.<span class="hljs-built_in">class</span>) → ClassLoader → 运行时数据区 → 执行引擎
                                               ↑                                ↓
                                         方法区/元空间                      解释器 + JIT
@@ -137,24 +137,24 @@ Thread Context <span class="hljs-title function_">ClassLoader</span> <span class
 
     <span class="hljs-meta">@Override</span>
     <span class="hljs-keyword">protected</span> Class&lt;?&gt; findClass(String name) <span class="hljs-keyword">throws</span> ClassNotFoundException {
-        <span class="hljs-type">var</span> <span class="hljs-variable">fileName</span> <span class="hljs-operator">=</span> name.replace(<span class="hljs-string">'.'</span>, <span class="hljs-string">'/'</span>) + <span class="hljs-string">".class"</span>;
+        <span class="hljs-type">var</span> <span class="hljs-variable">fileName</span> <span class="hljs-operator">=</span> name.replace(<span class="hljs-string">&#x27;.&#x27;</span>, <span class="hljs-string">&#x27;/&#x27;</span>) + <span class="hljs-string">&quot;.class&quot;</span>;
         <span class="hljs-type">var</span> <span class="hljs-variable">classFile</span> <span class="hljs-operator">=</span> classDir.resolve(fileName);
 
         <span class="hljs-keyword">try</span> {
             <span class="hljs-type">var</span> <span class="hljs-variable">bytes</span> <span class="hljs-operator">=</span> Files.readAllBytes(classFile);
             <span class="hljs-keyword">return</span> defineClass(name, bytes, <span class="hljs-number">0</span>, bytes.length);
         } <span class="hljs-keyword">catch</span> (IOException e) {
-            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ClassNotFoundException</span>(<span class="hljs-string">"Failed to load: "</span> + name, e);
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ClassNotFoundException</span>(<span class="hljs-string">&quot;Failed to load: &quot;</span> + name, e);
         }
     }
 
     <span class="hljs-comment">// Usage demonstration</span>
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">main</span><span class="hljs-params">(String[] args)</span> <span class="hljs-keyword">throws</span> Exception {
-        <span class="hljs-type">var</span> <span class="hljs-variable">loader</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">DirectoryClassLoader</span>(Path.of(<span class="hljs-string">"/tmp/classes"</span>));
-        <span class="hljs-type">var</span> <span class="hljs-variable">clazz</span> <span class="hljs-operator">=</span> loader.loadClass(<span class="hljs-string">"com.example.MyDynamicClass"</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">loader</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">DirectoryClassLoader</span>(Path.of(<span class="hljs-string">&quot;/tmp/classes&quot;</span>));
+        <span class="hljs-type">var</span> <span class="hljs-variable">clazz</span> <span class="hljs-operator">=</span> loader.loadClass(<span class="hljs-string">&quot;com.example.MyDynamicClass&quot;</span>);
         <span class="hljs-type">var</span> <span class="hljs-variable">instance</span> <span class="hljs-operator">=</span> clazz.getDeclaredConstructor().newInstance();
-        System.out.println(<span class="hljs-string">"Loaded: "</span> + instance.getClass().getName());
-        System.out.println(<span class="hljs-string">"Loader: "</span> + instance.getClass().getClassLoader());
+        System.out.println(<span class="hljs-string">&quot;Loaded: &quot;</span> + instance.getClass().getName());
+        System.out.println(<span class="hljs-string">&quot;Loader: &quot;</span> + instance.getClass().getClassLoader());
     }
 }
 </code></pre></div><h3>2.5 运行时类加载的常见陷阱</h3>
@@ -165,8 +165,8 @@ Thread Context <span class="hljs-title function_">ClassLoader</span> <span class
 </ul>
 <p><strong>场景二：同一个类被不同 ClassLoader 加载</strong></p>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 两个不同的 ClassLoader 实例加载同一个 .class 文件</span>
-<span class="hljs-comment">// 结果是 JVM 中的两个不同"类"，cast 会抛出 ClassCastException</span>
-<span class="hljs-comment">// 这就是"命名空间隔离"——OSGi 和 Tomcat 利用这一机制隔离应用</span>
+<span class="hljs-comment">// 结果是 JVM 中的两个不同&quot;类&quot;，cast 会抛出 ClassCastException</span>
+<span class="hljs-comment">// 这就是&quot;命名空间隔离&quot;——OSGi 和 Tomcat 利用这一机制隔离应用</span>
 </code></pre></div><p><strong>JPMS 模式下的安全反射访问：</strong></p>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// JDK 25 中，未 opens 的包无法通过反射访问</span>
 <span class="hljs-comment">// setAccessible(true) 直接被拒绝，除非添加 JVM 参数</span>
@@ -252,7 +252,7 @@ java.nio:<span class="hljs-built_in">type</span>=BufferPool,name=direct
 <li><strong>黑色：</strong> 已访问且所有引用已扫描</li>
 </ul>
 <h4>分代假说 (Generational Hypothesis)</h4>
-<p>大多数对象"朝生夕死"（Weak Generational Hypothesis），少数对象存活很长时间（Strong Generational Hypothesis）。基于此，分代 GC 将堆分为年轻代和老年代，对不同代采用不同的收集算法。</p>
+<p>大多数对象&quot;朝生夕死&quot;（Weak Generational Hypothesis），少数对象存活很长时间（Strong Generational Hypothesis）。基于此，分代 GC 将堆分为年轻代和老年代，对不同代采用不同的收集算法。</p>
 <ul>
 <li><strong>年轻代：</strong> Minor GC / Young GC，频繁、快速（Stop-The-World 通常在毫秒级）</li>
 <li><strong>老年代：</strong> Major GC / Full GC，低频但代价高（可能秒级甚至分钟级 STW）</li>
@@ -262,7 +262,7 @@ java.nio:<span class="hljs-built_in">type</span>=BufferPool,name=direct
 <h4>核心概念</h4>
 <p><strong>Region (区域)：</strong> G1 将堆划分为大小相等的 Region（大小由 <code>-XX:G1HeapRegionSize</code> 控制，或自动计算）。Region 数量为 2048<del>4095，大小在 1MB</del>32MB 之间。</p>
 <p><strong>RSet (Remembered Set)：</strong> 每个 Region 维护一个 RSet，记录了其他 Region 中指向本 Region 内对象的引用。RSet 避免了 Minor GC 时扫描整个老年代。RSet 是 G1 的内存开销主要来源（通常占堆的 1%~5%）。</p>
-<p><strong>SATB (Snapshot-At-The-Beginning)：</strong> G1 的并发标记算法。在并发标记开始前拍一个"快照"（通过写前屏障记录 SATB 队列），标记过程中新创建的对象默认存活。这保证了并发标记的正确性，代价是一些浮动垃圾。</p>
+<p><strong>SATB (Snapshot-At-The-Beginning)：</strong> G1 的并发标记算法。在并发标记开始前拍一个&quot;快照&quot;（通过写前屏障记录 SATB 队列），标记过程中新创建的对象默认存活。这保证了并发标记的正确性，代价是一些浮动垃圾。</p>
 <p><strong>CSet (Collection Set)：</strong> 一次 GC 中将被回收的 Region 集合。Young GC 的 CSet 包含所有 Eden 和 Survivor Region；Mixed GC 还包含候选的老年代 Region。</p>
 <h4>GC 周期</h4>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Young-only Phase:     <span class="hljs-comment">[Young GC]</span> → <span class="hljs-comment">[Young GC]</span> → ... → <span class="hljs-comment">[Concurrent Start (Young GC)]</span>
@@ -298,7 +298,7 @@ Space Reclamation 结束后 → 回到 Young-only Phase
 -<span class="hljs-variable constant_">XX</span><span class="hljs-symbol">:+G1UseAdaptiveIHOP</span>                <span class="hljs-comment"># 自适应调整 IHOP（默认开启）</span>
 -<span class="hljs-variable constant_">XX</span><span class="hljs-symbol">:G1HeapWastePercent=&lt;N&gt;</span>            <span class="hljs-comment"># 可容忍的浪费堆空间（默认 5）</span>
 </code></pre></div><h4>调优策略</h4>
-<p><strong>"不要过度调优，设定暂停目标就够了"</strong> 是 G1 设计的核心哲学。通常只需要：</p>
+<p><strong>&quot;不要过度调优，设定暂停目标就够了&quot;</strong> 是 G1 设计的核心哲学。通常只需要：</p>
 <div class="code-block"><div class="code-header"><span class="code-lang">bash</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-bash"><span class="hljs-comment"># 最基本的 G1 配置</span>
 java -Xms4g -Xmx4g -XX:MaxGCPauseMillis=100 -jar app.jar
 </code></pre></div><p><strong>进阶调优：</strong></p>
@@ -347,7 +347,7 @@ oop <span class="hljs-title function_">ZBarrier::load_barrier</span><span class=
     <span class="hljs-keyword">return</span> o;
 }
 </code></pre></div><h4>Multi-Mapping（多映射）</h4>
-<p>由于染色指针使用了虚拟地址的高位，操作系统可能不识别这些"有色"地址。ZGC 使用 Multi-Mapping 技术：将同一块物理内存映射到多个虚拟地址范围（每种颜色一个），这样即使指针带有颜色标记，CPU 也能正确访问内存。</p>
+<p>由于染色指针使用了虚拟地址的高位，操作系统可能不识别这些&quot;有色&quot;地址。ZGC 使用 Multi-Mapping 技术：将同一块物理内存映射到多个虚拟地址范围（每种颜色一个），这样即使指针带有颜色标记，CPU 也能正确访问内存。</p>
 <p>在 JDK 21+，ZGC 在支持的平台上使用了更高效的方案，减少了 Multi-Mapping 带来的 TLB 压力。</p>
 <h4>ZGC 的阶段</h4>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code><span class="hljs-selector-attr">[STW: Mark Start]</span> → <span class="hljs-selector-attr">[Concurrent: Mark]</span> → <span class="hljs-selector-attr">[STW: Mark End]</span>
@@ -683,7 +683,7 @@ java -Xlog:gc*,gc+heap=info,gc+age=trace:file=gc.log:<span class="hljs-keyword">
 
     <span class="hljs-keyword">static</span> {
         <span class="hljs-keyword">try</span> {
-            METHOD = ReflectionBench.class.getDeclaredMethod(<span class="hljs-string">"targetMethod"</span>);
+            METHOD = ReflectionBench.class.getDeclaredMethod(<span class="hljs-string">&quot;targetMethod&quot;</span>);
         } <span class="hljs-keyword">catch</span> (NoSuchMethodException e) {
             <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RuntimeException</span>(e);
         }
@@ -802,15 +802,15 @@ mvn -Pnative native:compile
 
 <span class="hljs-keyword">void</span> <span class="hljs-title function_">runJavaScript</span><span class="hljs-params">()</span> {
     <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">context</span> <span class="hljs-operator">=</span> Context.create()) {
-        <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> context.eval(<span class="hljs-string">"js"</span>,
-            <span class="hljs-string">"""
+        <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> context.eval(<span class="hljs-string">&quot;js&quot;</span>,
+            <span class="hljs-string">&quot;&quot;&quot;
             function fibonacci(n) {
                 if (n &lt;= 1) return n;
                 return fibonacci(n - 1) + fibonacci(n - 2);
             }
             fibonacci(10)
-            """</span>);
-        System.out.println(<span class="hljs-string">"Fibonacci(10) = "</span> + result.asInt()); <span class="hljs-comment">// 55</span>
+            &quot;&quot;&quot;</span>);
+        System.out.println(<span class="hljs-string">&quot;Fibonacci(10) = &quot;</span> + result.asInt()); <span class="hljs-comment">// 55</span>
     }
 }
 </code></pre></div><hr>
@@ -841,13 +841,13 @@ mvn -Pnative native:compile
 <span class="hljs-meta">@Fork(1)</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">GCPressureBenchmark</span> {
 
-    <span class="hljs-meta">@Param({"1024", "4096", "16384"})</span>
+    <span class="hljs-meta">@Param({&quot;1024&quot;, &quot;4096&quot;, &quot;16384&quot;})</span>
     <span class="hljs-type">int</span> allocationSize;
 
-    <span class="hljs-meta">@Param({"100", "1000"})</span>
+    <span class="hljs-meta">@Param({&quot;100&quot;, &quot;1000&quot;})</span>
     <span class="hljs-type">int</span> lifetime;
 
-    <span class="hljs-comment">// 模拟缓存：持有对象一定的"生命周期"</span>
+    <span class="hljs-comment">// 模拟缓存：持有对象一定的&quot;生命周期&quot;</span>
     <span class="hljs-keyword">private</span> Object[] cache;
     <span class="hljs-keyword">private</span> <span class="hljs-type">int</span> index;
 
@@ -932,16 +932,16 @@ jcmd &lt;pid&gt; JFR.check
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">main</span><span class="hljs-params">(String[] args)</span> <span class="hljs-keyword">throws</span> Exception {
         <span class="hljs-comment">// 创建录制配置</span>
         <span class="hljs-type">var</span> <span class="hljs-variable">config</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Recording</span>();
-        config.setName(<span class="hljs-string">"HeapAnalysis"</span>);
+        config.setName(<span class="hljs-string">&quot;HeapAnalysis&quot;</span>);
 
         <span class="hljs-comment">// 启用特定事件</span>
-        config.enable(<span class="hljs-string">"jdk.GarbageCollection"</span>);
-        config.enable(<span class="hljs-string">"jdk.GCPhaseParallel"</span>);       <span class="hljs-comment">// GC 各阶段详情</span>
-        config.enable(<span class="hljs-string">"jdk.ObjectAllocationInNewTLAB"</span>);
-        config.enable(<span class="hljs-string">"jdk.ObjectAllocationOutsideTLAB"</span>);
-        config.enable(<span class="hljs-string">"jdk.ThreadAllocationStatistics"</span>);
-        config.enable(<span class="hljs-string">"jdk.HeapSummary"</span>);
-        config.enable(<span class="hljs-string">"jdk.MetaspaceSummary"</span>);
+        config.enable(<span class="hljs-string">&quot;jdk.GarbageCollection&quot;</span>);
+        config.enable(<span class="hljs-string">&quot;jdk.GCPhaseParallel&quot;</span>);       <span class="hljs-comment">// GC 各阶段详情</span>
+        config.enable(<span class="hljs-string">&quot;jdk.ObjectAllocationInNewTLAB&quot;</span>);
+        config.enable(<span class="hljs-string">&quot;jdk.ObjectAllocationOutsideTLAB&quot;</span>);
+        config.enable(<span class="hljs-string">&quot;jdk.ThreadAllocationStatistics&quot;</span>);
+        config.enable(<span class="hljs-string">&quot;jdk.HeapSummary&quot;</span>);
+        config.enable(<span class="hljs-string">&quot;jdk.MetaspaceSummary&quot;</span>);
 
         config.start();
 
@@ -951,21 +951,21 @@ jcmd &lt;pid&gt; JFR.check
         config.stop();
 
         <span class="hljs-comment">// 保存到文件</span>
-        config.dump(Path.of(<span class="hljs-string">"heap-profile.jfr"</span>));
+        config.dump(Path.of(<span class="hljs-string">&quot;heap-profile.jfr&quot;</span>));
         config.close();
 
-        System.out.println(<span class="hljs-string">"JFR recording saved to heap-profile.jfr"</span>);
+        System.out.println(<span class="hljs-string">&quot;JFR recording saved to heap-profile.jfr&quot;</span>);
     }
 
     <span class="hljs-comment">// 自定义 JFR 事件</span>
-    <span class="hljs-meta">@Name("com.example.AllocationEvent")</span>
-    <span class="hljs-meta">@Label("Allocation Event")</span>
-    <span class="hljs-meta">@Description("Tracks large allocations for diagnostics")</span>
+    <span class="hljs-meta">@Name(&quot;com.example.AllocationEvent&quot;)</span>
+    <span class="hljs-meta">@Label(&quot;Allocation Event&quot;)</span>
+    <span class="hljs-meta">@Description(&quot;Tracks large allocations for diagnostics&quot;)</span>
     <span class="hljs-keyword">static</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">AllocationEvent</span> <span class="hljs-keyword">extends</span> <span class="hljs-title class_">Event</span> {
-        <span class="hljs-meta">@Label("Allocation Size")</span>
+        <span class="hljs-meta">@Label(&quot;Allocation Size&quot;)</span>
         <span class="hljs-type">long</span> size;
 
-        <span class="hljs-meta">@Label("Allocation Type")</span>
+        <span class="hljs-meta">@Label(&quot;Allocation Type&quot;)</span>
         String type;
     }
 
@@ -978,7 +978,7 @@ jcmd &lt;pid&gt; JFR.check
             <span class="hljs-comment">// 发送自定义事件</span>
             <span class="hljs-type">var</span> <span class="hljs-variable">event</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">AllocationEvent</span>();
             event.size = size;
-            event.type = <span class="hljs-string">"byte[]"</span>;
+            event.type = <span class="hljs-string">&quot;byte[]&quot;</span>;
             event.commit();
         }
     }
@@ -1107,15 +1107,15 @@ List&lt;Integer&gt; numbers = <span class="hljs-keyword">new</span> <span class=
 <span class="hljs-type">var</span> <span class="hljs-variable">buffer</span> <span class="hljs-operator">=</span> ByteBuffer.allocateDirect(<span class="hljs-number">10</span> * <span class="hljs-number">1024</span> * <span class="hljs-number">1024</span>);
 </code></pre></div><h3>10.4 StringBuilder / String 优化</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 不好：循环中字符串拼接产生大量中间 String 对象</span>
-<span class="hljs-type">String</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> <span class="hljs-string">""</span>;
+<span class="hljs-type">String</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;&quot;</span>;
 <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; <span class="hljs-number">10000</span>; i++) {
-    result += <span class="hljs-string">"item"</span> + i;  <span class="hljs-comment">// 每次迭代创建多个对象</span>
+    result += <span class="hljs-string">&quot;item&quot;</span> + i;  <span class="hljs-comment">// 每次迭代创建多个对象</span>
 }
 
 <span class="hljs-comment">// 好：使用 StringBuilder 预分配</span>
 <span class="hljs-type">var</span> <span class="hljs-variable">sb</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>(<span class="hljs-number">10000</span> * <span class="hljs-number">10</span>);
 <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; <span class="hljs-number">10000</span>; i++) {
-    sb.append(<span class="hljs-string">"item"</span>).append(i);
+    sb.append(<span class="hljs-string">&quot;item&quot;</span>).append(i);
 }
 <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> sb.toString();
 </code></pre></div><hr>
@@ -1155,5 +1155,5 @@ List&lt;Integer&gt; numbers = <span class="hljs-keyword">new</span> <span class=
 <li><a href="#/02-Java平台/语言特性/02-现代Java25深度解析" class="cross-ref">02-现代Java25深度解析</a> — JDK 25 新特性详解</li>
 <li><a href="#/01-计算机基础/数据结构与算法/01-数据结构与算法" class="cross-ref">01-数据结构与算法</a> — 数据结构基础（前置知识）</li>
 </ul>
-</body></html></div>
+</div>
 </article>

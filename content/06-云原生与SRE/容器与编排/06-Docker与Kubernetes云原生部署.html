@@ -6,7 +6,7 @@
     <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#docker</span><span class="badge badge-tag">#kubernetes</span><span class="badge badge-tag">#helm</span><span class="badge badge-tag">#java-container</span><span class="badge badge-tag">#distroless</span></div>
     <div class="entry-sources"><small>📖 来源：<a href="https://docs.docker.com/reference/" target="_blank" rel="noopener" class="source-link" title="Docker 官方文档">Docker 官方文档</a><a href="https://kubernetes.io/docs/home/" target="_blank" rel="noopener" class="source-link" title="Kubernetes 官方文档">Kubernetes 官方文档</a><a href="https://helm.sh/docs/" target="_blank" rel="noopener" class="source-link" title="Helm 官方文档">Helm 官方文档</a><a href="https://www.oreilly.com/library/view/kubernetes-up-and/" target="_blank" rel="noopener" class="source-link" title="《Kubernetes: Up and Running》— Brendan Burns 等">《Kubernetes: Up and Running》— Brendan Burns 等</a></small></div>
   </div>
-  <div class="entry-body"><html><head></head><body><h1>Docker 与 Kubernetes — Java 应用云原生部署</h1>
+  <div class="entry-body"><h1>Docker 与 Kubernetes — Java 应用云原生部署</h1>
 <h2>概述</h2>
 <p>容器化和编排是现代 Java 应用部署的标准方式。对于 AI 应用，容器化还涉及 GPU 资源调度、模型推理服务的 K8s 集成、大镜像优化等额外挑战。</p>
 <p>本文覆盖 Docker 核心原理与 Java 镜像最佳实践、Kubernetes 核心资源、Java 应用 K8s 部署策略、Helm 包管理，以及 AI 服务部署的特殊考量。</p>
@@ -70,11 +70,11 @@
 <span class="hljs-keyword">COPY</span><span class="language-bash"> --from=builder /extracted/application/ ./</span>
 
 <span class="hljs-comment"># JVM 容器感知参数</span>
-<span class="hljs-keyword">ENV</span> JAVA_OPTS=<span class="hljs-string">"-XX:+UseZGC \
+<span class="hljs-keyword">ENV</span> JAVA_OPTS=<span class="hljs-string">&quot;-XX:+UseZGC \
  -XX:MaxRAMPercentage=75.0 \
  -XX:+ExitOnOutOfMemoryError \
  -XX:+HeapDumpOnOutOfMemoryError \
- -XX:HeapDumpPath=/tmp/heapdump.hprof"</span>
+ -XX:HeapDumpPath=/tmp/heapdump.hprof&quot;</span>
 
 <span class="hljs-keyword">USER</span> appuser
 <span class="hljs-keyword">EXPOSE</span> <span class="hljs-number">8080</span>
@@ -82,7 +82,7 @@
 <span class="hljs-keyword">HEALTHCHECK</span><span class="language-bash"> --interval=30s --<span class="hljs-built_in">timeout</span>=3s --retries=3 \
   CMD wget -qO- http://localhost:8080/actuator/health/liveness || <span class="hljs-built_in">exit</span> 1</span>
 
-<span class="hljs-keyword">ENTRYPOINT</span><span class="language-bash"> [<span class="hljs-string">"sh"</span>, <span class="hljs-string">"-c"</span>, <span class="hljs-string">"java <span class="hljs-variable">$JAVA_OPTS</span> org.springframework.boot.loader.launch.JarLauncher"</span>]</span>
+<span class="hljs-keyword">ENTRYPOINT</span><span class="language-bash"> [<span class="hljs-string">&quot;sh&quot;</span>, <span class="hljs-string">&quot;-c&quot;</span>, <span class="hljs-string">&quot;java <span class="hljs-variable">$JAVA_OPTS</span> org.springframework.boot.loader.launch.JarLauncher&quot;</span>]</span>
 </code></pre></div><h3>1.3 JVM 容器感知配置</h3>
 <p>JDK 10+ 默认启用 <code>UseContainerSupport</code>，JVM 自动读取 cgroup 限制而非宿主机配置。</p>
 <div class="code-block"><div class="code-header"><span class="code-lang">ini</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-ini"><span class="hljs-comment"># 核心参数</span>
@@ -100,11 +100,11 @@
 </code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-comment"># K8s 资源配置（与 JVM 参数匹配）</span>
 <span class="hljs-attr">resources:</span>
   <span class="hljs-attr">requests:</span>
-    <span class="hljs-attr">memory:</span> <span class="hljs-string">"1Gi"</span>
-    <span class="hljs-attr">cpu:</span> <span class="hljs-string">"500m"</span>
+    <span class="hljs-attr">memory:</span> <span class="hljs-string">&quot;1Gi&quot;</span>
+    <span class="hljs-attr">cpu:</span> <span class="hljs-string">&quot;500m&quot;</span>
   <span class="hljs-attr">limits:</span>
-    <span class="hljs-attr">memory:</span> <span class="hljs-string">"2Gi"</span>    <span class="hljs-comment"># JVM 检测到 limits=2Gi</span>
-    <span class="hljs-attr">cpu:</span> <span class="hljs-string">"2000m"</span>     <span class="hljs-comment"># MaxRAMPercentage=75 → max heap = 1.5Gi</span>
+    <span class="hljs-attr">memory:</span> <span class="hljs-string">&quot;2Gi&quot;</span>    <span class="hljs-comment"># JVM 检测到 limits=2Gi</span>
+    <span class="hljs-attr">cpu:</span> <span class="hljs-string">&quot;2000m&quot;</span>     <span class="hljs-comment"># MaxRAMPercentage=75 → max heap = 1.5Gi</span>
 </code></pre></div><h3>1.4 最小化基础镜像选择</h3>
 <table>
 <thead>
@@ -154,7 +154,7 @@
 <span class="hljs-keyword">COPY</span><span class="language-bash"> --from=builder /app /app</span>
 <span class="hljs-keyword">WORKDIR</span><span class="language-bash"> /app</span>
 <span class="hljs-keyword">USER</span> <span class="hljs-number">65532</span>:<span class="hljs-number">65532</span>
-<span class="hljs-keyword">CMD</span><span class="language-bash"> [<span class="hljs-string">"Main.jar"</span>]</span>
+<span class="hljs-keyword">CMD</span><span class="language-bash"> [<span class="hljs-string">&quot;Main.jar&quot;</span>]</span>
 </code></pre></div><h3>1.5 Docker Compose 本地开发</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-comment"># docker-compose.yml</span>
 <span class="hljs-attr">services:</span>
@@ -164,25 +164,25 @@
       <span class="hljs-attr">POSTGRES_DB:</span> <span class="hljs-string">ai_knowledge</span>
       <span class="hljs-attr">POSTGRES_USER:</span> <span class="hljs-string">app</span>
       <span class="hljs-attr">POSTGRES_PASSWORD:</span> <span class="hljs-string">${DB_PASSWORD}</span>
-    <span class="hljs-attr">ports:</span> [<span class="hljs-string">"5432:5432"</span>]
+    <span class="hljs-attr">ports:</span> [<span class="hljs-string">&quot;5432:5432&quot;</span>]
     <span class="hljs-attr">volumes:</span>
       <span class="hljs-bullet">-</span> <span class="hljs-string">pgdata:/var/lib/postgresql/data</span>
     <span class="hljs-attr">healthcheck:</span>
-      <span class="hljs-attr">test:</span> [<span class="hljs-string">"CMD-SHELL"</span>, <span class="hljs-string">"pg_isready -U app -d ai_knowledge"</span>]
+      <span class="hljs-attr">test:</span> [<span class="hljs-string">&quot;CMD-SHELL&quot;</span>, <span class="hljs-string">&quot;pg_isready -U app -d ai_knowledge&quot;</span>]
       <span class="hljs-attr">interval:</span> <span class="hljs-string">5s</span>
       <span class="hljs-attr">timeout:</span> <span class="hljs-string">5s</span>
       <span class="hljs-attr">retries:</span> <span class="hljs-number">5</span>
 
   <span class="hljs-attr">redis:</span>
     <span class="hljs-attr">image:</span> <span class="hljs-string">redis:7.4-alpine</span>
-    <span class="hljs-attr">ports:</span> [<span class="hljs-string">"6379:6379"</span>]
+    <span class="hljs-attr">ports:</span> [<span class="hljs-string">&quot;6379:6379&quot;</span>]
     <span class="hljs-attr">command:</span> <span class="hljs-string">redis-server</span> <span class="hljs-string">--appendonly</span> <span class="hljs-literal">yes</span> <span class="hljs-string">--requirepass</span> <span class="hljs-string">${REDIS_PASSWORD}</span>
     <span class="hljs-attr">volumes:</span>
       <span class="hljs-bullet">-</span> <span class="hljs-string">redisdata:/data</span>
 
   <span class="hljs-attr">ollama:</span>
     <span class="hljs-attr">image:</span> <span class="hljs-string">ollama/ollama:latest</span>
-    <span class="hljs-attr">ports:</span> [<span class="hljs-string">"11434:11434"</span>]
+    <span class="hljs-attr">ports:</span> [<span class="hljs-string">&quot;11434:11434&quot;</span>]
     <span class="hljs-attr">volumes:</span>
       <span class="hljs-bullet">-</span> <span class="hljs-string">ollama_data:/root/.ollama</span>
     <span class="hljs-attr">deploy:</span>
@@ -197,7 +197,7 @@
     <span class="hljs-attr">build:</span>
       <span class="hljs-attr">context:</span> <span class="hljs-string">.</span>
       <span class="hljs-attr">dockerfile:</span> <span class="hljs-string">Dockerfile</span>
-    <span class="hljs-attr">ports:</span> [<span class="hljs-string">"8080:8080"</span>]
+    <span class="hljs-attr">ports:</span> [<span class="hljs-string">&quot;8080:8080&quot;</span>]
     <span class="hljs-attr">environment:</span>
       <span class="hljs-attr">SPRING_DATASOURCE_URL:</span> <span class="hljs-string">jdbc:postgresql://postgres:5432/ai_knowledge</span>
       <span class="hljs-attr">SPRING_DATASOURCE_USERNAME:</span> <span class="hljs-string">app</span>
@@ -205,7 +205,7 @@
       <span class="hljs-attr">SPRING_DATA_REDIS_HOST:</span> <span class="hljs-string">redis</span>
       <span class="hljs-attr">SPRING_DATA_REDIS_PASSWORD:</span> <span class="hljs-string">${REDIS_PASSWORD}</span>
       <span class="hljs-attr">SPRING_AI_OLLAMA_BASE_URL:</span> <span class="hljs-string">http://ollama:11434</span>
-      <span class="hljs-attr">JAVA_OPTS:</span> <span class="hljs-string">"-XX:+UseZGC -XX:MaxRAMPercentage=75.0"</span>
+      <span class="hljs-attr">JAVA_OPTS:</span> <span class="hljs-string">&quot;-XX:+UseZGC -XX:MaxRAMPercentage=75.0&quot;</span>
     <span class="hljs-attr">depends_on:</span>
       <span class="hljs-attr">postgres:</span>
         <span class="hljs-attr">condition:</span> <span class="hljs-string">service_healthy</span>
@@ -291,22 +291,22 @@
     <span class="hljs-attr">lifecycle:</span>
       <span class="hljs-attr">preStop:</span>
         <span class="hljs-attr">exec:</span>
-          <span class="hljs-attr">command:</span> [<span class="hljs-string">"/bin/sh"</span>, <span class="hljs-string">"-c"</span>, <span class="hljs-string">"sleep 10"</span>] <span class="hljs-comment"># 等待 Endpoints 更新传播</span>
+          <span class="hljs-attr">command:</span> [<span class="hljs-string">&quot;/bin/sh&quot;</span>, <span class="hljs-string">&quot;-c&quot;</span>, <span class="hljs-string">&quot;sleep 10&quot;</span>] <span class="hljs-comment"># 等待 Endpoints 更新传播</span>
 
     <span class="hljs-attr">env:</span>
     <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">SERVER_SHUTDOWN</span>
-      <span class="hljs-attr">value:</span> <span class="hljs-string">"graceful"</span>
+      <span class="hljs-attr">value:</span> <span class="hljs-string">&quot;graceful&quot;</span>
     <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">SPRING_LIFECYCLE_TIMEOUT_PER_SHUTDOWN_PHASE</span>
-      <span class="hljs-attr">value:</span> <span class="hljs-string">"30s"</span>
+      <span class="hljs-attr">value:</span> <span class="hljs-string">&quot;30s&quot;</span>
 
     <span class="hljs-comment"># 资源限制</span>
     <span class="hljs-attr">resources:</span>
       <span class="hljs-attr">requests:</span>           <span class="hljs-comment"># 调度保证</span>
-        <span class="hljs-attr">memory:</span> <span class="hljs-string">"1Gi"</span>
-        <span class="hljs-attr">cpu:</span> <span class="hljs-string">"500m"</span>
+        <span class="hljs-attr">memory:</span> <span class="hljs-string">&quot;1Gi&quot;</span>
+        <span class="hljs-attr">cpu:</span> <span class="hljs-string">&quot;500m&quot;</span>
       <span class="hljs-attr">limits:</span>             <span class="hljs-comment"># 硬限制</span>
-        <span class="hljs-attr">memory:</span> <span class="hljs-string">"2Gi"</span>
-        <span class="hljs-attr">cpu:</span> <span class="hljs-string">"2000m"</span>
+        <span class="hljs-attr">memory:</span> <span class="hljs-string">&quot;2Gi&quot;</span>
+        <span class="hljs-attr">cpu:</span> <span class="hljs-string">&quot;2000m&quot;</span>
 </code></pre></div><h3>2.3 Deployment 与滚动更新</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">apps/v1</span>
 <span class="hljs-attr">kind:</span> <span class="hljs-string">Deployment</span>
@@ -330,7 +330,7 @@
     <span class="hljs-attr">metadata:</span>
       <span class="hljs-attr">labels:</span>
         <span class="hljs-attr">app:</span> <span class="hljs-string">ai-rag-service</span>
-        <span class="hljs-attr">version:</span> <span class="hljs-string">"1.0.0"</span>
+        <span class="hljs-attr">version:</span> <span class="hljs-string">&quot;1.0.0&quot;</span>
     <span class="hljs-attr">spec:</span>
       <span class="hljs-comment"># Pod 反亲和：尽量分布到不同节点</span>
       <span class="hljs-attr">affinity:</span>
@@ -370,9 +370,9 @@
 <span class="hljs-attr">metadata:</span>
   <span class="hljs-attr">name:</span> <span class="hljs-string">ai-api-ingress</span>
   <span class="hljs-attr">annotations:</span>
-    <span class="hljs-attr">nginx.ingress.kubernetes.io/proxy-body-size:</span> <span class="hljs-string">"50m"</span>
-    <span class="hljs-attr">nginx.ingress.kubernetes.io/proxy-read-timeout:</span> <span class="hljs-string">"300"</span>
-    <span class="hljs-attr">nginx.ingress.kubernetes.io/proxy-send-timeout:</span> <span class="hljs-string">"300"</span>
+    <span class="hljs-attr">nginx.ingress.kubernetes.io/proxy-body-size:</span> <span class="hljs-string">&quot;50m&quot;</span>
+    <span class="hljs-attr">nginx.ingress.kubernetes.io/proxy-read-timeout:</span> <span class="hljs-string">&quot;300&quot;</span>
+    <span class="hljs-attr">nginx.ingress.kubernetes.io/proxy-send-timeout:</span> <span class="hljs-string">&quot;300&quot;</span>
     <span class="hljs-attr">cert-manager.io/cluster-issuer:</span> <span class="hljs-string">letsencrypt-prod</span>
 <span class="hljs-attr">spec:</span>
   <span class="hljs-attr">ingressClassName:</span> <span class="hljs-string">nginx</span>
@@ -430,8 +430,8 @@
   <span class="hljs-attr">name:</span> <span class="hljs-string">ai-service-secrets</span>
 <span class="hljs-attr">type:</span> <span class="hljs-string">Opaque</span>
 <span class="hljs-attr">stringData:</span>
-  <span class="hljs-attr">openai-api-key:</span> <span class="hljs-string">"sk-..."</span>        <span class="hljs-comment"># 生产环境使用 External Secrets Operator</span>
-  <span class="hljs-attr">db-password:</span> <span class="hljs-string">"secure-password"</span>
+  <span class="hljs-attr">openai-api-key:</span> <span class="hljs-string">&quot;sk-...&quot;</span>        <span class="hljs-comment"># 生产环境使用 External Secrets Operator</span>
+  <span class="hljs-attr">db-password:</span> <span class="hljs-string">&quot;secure-password&quot;</span>
 </code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-comment"># Deployment 中使用</span>
 <span class="hljs-attr">spec:</span>
   <span class="hljs-attr">containers:</span>
@@ -477,7 +477,7 @@
         <span class="hljs-attr">name:</span> <span class="hljs-string">http_request_duration_milliseconds_p95</span>
       <span class="hljs-attr">target:</span>
         <span class="hljs-attr">type:</span> <span class="hljs-string">AverageValue</span>
-        <span class="hljs-attr">averageValue:</span> <span class="hljs-string">"500"</span>   <span class="hljs-comment"># P95 延迟超过 500ms 时扩展</span>
+        <span class="hljs-attr">averageValue:</span> <span class="hljs-string">&quot;500&quot;</span>   <span class="hljs-comment"># P95 延迟超过 500ms 时扩展</span>
 
   <span class="hljs-attr">behavior:</span>
     <span class="hljs-attr">scaleDown:</span>
@@ -518,15 +518,15 @@
 <span class="hljs-attr">description:</span> <span class="hljs-string">AI</span> <span class="hljs-string">RAG</span> <span class="hljs-string">Knowledge</span> <span class="hljs-string">Service</span>
 <span class="hljs-attr">type:</span> <span class="hljs-string">application</span>
 <span class="hljs-attr">version:</span> <span class="hljs-number">1.0</span><span class="hljs-number">.0</span>
-<span class="hljs-attr">appVersion:</span> <span class="hljs-string">"1.0.0"</span>
+<span class="hljs-attr">appVersion:</span> <span class="hljs-string">&quot;1.0.0&quot;</span>
 <span class="hljs-attr">dependencies:</span>
   <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">postgresql</span>
-    <span class="hljs-attr">version:</span> <span class="hljs-string">"15.x.x"</span>
-    <span class="hljs-attr">repository:</span> <span class="hljs-string">"https://charts.bitnami.com/bitnami"</span>
+    <span class="hljs-attr">version:</span> <span class="hljs-string">&quot;15.x.x&quot;</span>
+    <span class="hljs-attr">repository:</span> <span class="hljs-string">&quot;https://charts.bitnami.com/bitnami&quot;</span>
     <span class="hljs-attr">condition:</span> <span class="hljs-string">postgresql.enabled</span>
   <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">redis</span>
-    <span class="hljs-attr">version:</span> <span class="hljs-string">"19.x.x"</span>
-    <span class="hljs-attr">repository:</span> <span class="hljs-string">"https://charts.bitnami.com/bitnami"</span>
+    <span class="hljs-attr">version:</span> <span class="hljs-string">&quot;19.x.x&quot;</span>
+    <span class="hljs-attr">repository:</span> <span class="hljs-string">&quot;https://charts.bitnami.com/bitnami&quot;</span>
     <span class="hljs-attr">condition:</span> <span class="hljs-string">redis.enabled</span>
 </code></pre></div><h3>3.3 values.yaml 模板</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-comment"># values.yaml</span>
@@ -534,7 +534,7 @@
 
 <span class="hljs-attr">image:</span>
   <span class="hljs-attr">repository:</span> <span class="hljs-string">registry.example.com/ai-rag-service</span>
-  <span class="hljs-attr">tag:</span> <span class="hljs-string">"1.0.0"</span>
+  <span class="hljs-attr">tag:</span> <span class="hljs-string">&quot;1.0.0&quot;</span>
   <span class="hljs-attr">pullPolicy:</span> <span class="hljs-string">IfNotPresent</span>
 
 <span class="hljs-attr">service:</span>
@@ -552,11 +552,11 @@
 
 <span class="hljs-attr">resources:</span>
   <span class="hljs-attr">limits:</span>
-    <span class="hljs-attr">memory:</span> <span class="hljs-string">"2Gi"</span>
-    <span class="hljs-attr">cpu:</span> <span class="hljs-string">"2000m"</span>
+    <span class="hljs-attr">memory:</span> <span class="hljs-string">&quot;2Gi&quot;</span>
+    <span class="hljs-attr">cpu:</span> <span class="hljs-string">&quot;2000m&quot;</span>
   <span class="hljs-attr">requests:</span>
-    <span class="hljs-attr">memory:</span> <span class="hljs-string">"1Gi"</span>
-    <span class="hljs-attr">cpu:</span> <span class="hljs-string">"500m"</span>
+    <span class="hljs-attr">memory:</span> <span class="hljs-string">&quot;1Gi&quot;</span>
+    <span class="hljs-attr">cpu:</span> <span class="hljs-string">&quot;500m&quot;</span>
 
 <span class="hljs-attr">autoscaling:</span>
   <span class="hljs-attr">enabled:</span> <span class="hljs-literal">true</span>
@@ -565,18 +565,18 @@
   <span class="hljs-attr">targetCPUUtilizationPercentage:</span> <span class="hljs-number">70</span>
 
 <span class="hljs-attr">jvm:</span>
-  <span class="hljs-attr">gc:</span> <span class="hljs-string">"ZGC"</span>
+  <span class="hljs-attr">gc:</span> <span class="hljs-string">&quot;ZGC&quot;</span>
   <span class="hljs-attr">maxRAMPercentage:</span> <span class="hljs-number">75.0</span>
 
 <span class="hljs-comment"># 模型服务和 Embedding 配置</span>
 <span class="hljs-attr">ai:</span>
   <span class="hljs-attr">openai:</span>
-    <span class="hljs-attr">apiKeySecretName:</span> <span class="hljs-string">"ai-service-secrets"</span>
-    <span class="hljs-attr">apiKeySecretKey:</span> <span class="hljs-string">"openai-api-key"</span>
+    <span class="hljs-attr">apiKeySecretName:</span> <span class="hljs-string">&quot;ai-service-secrets&quot;</span>
+    <span class="hljs-attr">apiKeySecretKey:</span> <span class="hljs-string">&quot;openai-api-key&quot;</span>
   <span class="hljs-attr">ollama:</span>
-    <span class="hljs-attr">baseUrl:</span> <span class="hljs-string">"http://ollama-service:11434"</span>
+    <span class="hljs-attr">baseUrl:</span> <span class="hljs-string">&quot;http://ollama-service:11434&quot;</span>
   <span class="hljs-attr">embedding:</span>
-    <span class="hljs-attr">model:</span> <span class="hljs-string">"text-embedding-3-small"</span>
+    <span class="hljs-attr">model:</span> <span class="hljs-string">&quot;text-embedding-3-small&quot;</span>
     <span class="hljs-attr">dimensions:</span> <span class="hljs-number">1536</span>
 
 <span class="hljs-comment"># 依赖服务配置</span>
@@ -616,11 +616,11 @@
         <span class="hljs-bullet">-</span> <span class="hljs-string">--model</span>
         <span class="hljs-bullet">-</span> <span class="hljs-string">Qwen/Qwen3-14B</span>
         <span class="hljs-bullet">-</span> <span class="hljs-string">--tensor-parallel-size</span>
-        <span class="hljs-bullet">-</span> <span class="hljs-string">"1"</span>
+        <span class="hljs-bullet">-</span> <span class="hljs-string">&quot;1&quot;</span>
         <span class="hljs-bullet">-</span> <span class="hljs-string">--max-model-len</span>
-        <span class="hljs-bullet">-</span> <span class="hljs-string">"32768"</span>
+        <span class="hljs-bullet">-</span> <span class="hljs-string">&quot;32768&quot;</span>
         <span class="hljs-bullet">-</span> <span class="hljs-string">--gpu-memory-utilization</span>
-        <span class="hljs-bullet">-</span> <span class="hljs-string">"0.90"</span>
+        <span class="hljs-bullet">-</span> <span class="hljs-string">&quot;0.90&quot;</span>
         <span class="hljs-attr">ports:</span>
         <span class="hljs-bullet">-</span> <span class="hljs-attr">containerPort:</span> <span class="hljs-number">8000</span>
         <span class="hljs-attr">resources:</span>
@@ -644,9 +644,9 @@
   <span class="hljs-attr">nodeSelector:</span>
     <span class="hljs-attr">accelerator:</span> <span class="hljs-string">nvidia-tesla-t4</span>
   <span class="hljs-attr">tolerations:</span>
-  <span class="hljs-bullet">-</span> <span class="hljs-attr">key:</span> <span class="hljs-string">"nvidia.com/gpu"</span>
-    <span class="hljs-attr">operator:</span> <span class="hljs-string">"Exists"</span>
-    <span class="hljs-attr">effect:</span> <span class="hljs-string">"NoSchedule"</span>
+  <span class="hljs-bullet">-</span> <span class="hljs-attr">key:</span> <span class="hljs-string">&quot;nvidia.com/gpu&quot;</span>
+    <span class="hljs-attr">operator:</span> <span class="hljs-string">&quot;Exists&quot;</span>
+    <span class="hljs-attr">effect:</span> <span class="hljs-string">&quot;NoSchedule&quot;</span>
 </code></pre></div><h3>4.3 KServe（Serverless 模型推理）</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-attr">apiVersion:</span> <span class="hljs-string">serving.kserve.io/v1beta1</span>
 <span class="hljs-attr">kind:</span> <span class="hljs-string">InferenceService</span>
@@ -655,7 +655,7 @@
 <span class="hljs-attr">spec:</span>
   <span class="hljs-attr">predictor:</span>
     <span class="hljs-attr">pytorch:</span>
-      <span class="hljs-attr">storageUri:</span> <span class="hljs-string">"s3://models/qwen3-14b"</span>
+      <span class="hljs-attr">storageUri:</span> <span class="hljs-string">&quot;s3://models/qwen3-14b&quot;</span>
       <span class="hljs-attr">resources:</span>
         <span class="hljs-attr">limits:</span>
           <span class="hljs-attr">nvidia.com/gpu:</span> <span class="hljs-number">1</span>
@@ -683,5 +683,5 @@ A: 攻击面最小（无 Shell、无包管理器、无系统工具），CVE 少�
 <li><a href="#/06-云原生与SRE/可观测性与CI/06-CICD与基础设施即代码" class="cross-ref">06-CICD与基础设施即代码</a> — CI/CD 流水线和 GitOps</li>
 <li><a href="#/05-分布式架构/弹性设计/05-熔断限流与弹性设计" class="cross-ref">05-熔断限流与弹性设计</a> — K8s 中的弹性设计</li>
 </ul>
-</body></html></div>
+</div>
 </article>

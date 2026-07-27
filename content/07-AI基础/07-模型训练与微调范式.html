@@ -6,10 +6,10 @@
     <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#pre-training</span><span class="badge badge-tag">#sft</span><span class="badge badge-tag">#rlhf</span><span class="badge badge-tag">#dpo</span><span class="badge badge-tag">#lora</span></div>
     <div class="entry-sources"><small>📖 来源：<a href="https://arxiv.org/abs/2001.08361" target="_blank" rel="noopener" class="source-link" title="Scaling Laws for Neural Language Models (Kaplan et al., OpenAI, 2020)">Scaling Laws for Neural Language Models (Kaplan et al., OpenAI, 2020)</a><a href="https://arxiv.org/abs/2203.15556" target="_blank" rel="noopener" class="source-link" title="Training Compute-Optimal Large Language Models — Chinchilla Scaling Law (Hoffmann et al., DeepMind, 2022)">Training Compute-Optimal Large Language Models — Chinchilla Scaling Law (Hoffmann et al., DeepMind, 2022)</a><a href="https://arxiv.org/abs/2106.09685" target="_blank" rel="noopener" class="source-link" title="LoRA: Low-Rank Adaptation of Large Language Models (Hu et al., 2021)">LoRA: Low-Rank Adaptation of Large Language Models (Hu et al., 2021)</a><a href="https://arxiv.org/abs/2305.14314" target="_blank" rel="noopener" class="source-link" title="QLoRA: Efficient Finetuning of Quantized LLMs (Dettmers et al., 2023)">QLoRA: Efficient Finetuning of Quantized LLMs (Dettmers et al., 2023)</a><a href="https://arxiv.org/abs/2305.18290" target="_blank" rel="noopener" class="source-link" title="Direct Preference Optimization (Rafailov et al., Stanford, 2023)">Direct Preference Optimization (Rafailov et al., Stanford, 2023)</a></small></div>
   </div>
-  <div class="entry-body"><html><head></head><body><h1>模型训练与微调范式</h1>
+  <div class="entry-body"><h1>模型训练与微调范式</h1>
 <h2>概述</h2>
 <p>面向 Java 应用开发者的模型训练与微调全景知识。核心目标不是让 Java 开发者亲自训练模型，而是理解训练流程，从而在应用层做出正确的模型选择、推理框架选型和 Embedding 迁移决策。</p>
-<p>从 Java 应用层视角看，你只需要"用"模型，不需要"训"模型。但"用好"的前提是理解模型是怎么来的：</p>
+<p>从 Java 应用层视角看，你只需要&quot;用&quot;模型，不需要&quot;训&quot;模型。但&quot;用好&quot;的前提是理解模型是怎么来的：</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>应用层的三个关键决策：
 ┌─────────────────────────────────────────────────────────────┐
 │  1. 模型选择：选多大的模型？选哪个家族的模型？               │
@@ -21,25 +21,25 @@
 </code></pre></div><p>本文从 Pre-training 开始，经过 SFT、RLHF/DPO、PEFT、量化，一直到评估基准，最后落到 Java 开发者的实际操作指南。</p>
 <hr>
 <h2>一、Pre-training（预训练）</h2>
-<p>预训练是 LLM 的第一阶段：在海量无标注文本上，通过自监督学习让模型掌握语言的统计规律、世界知识和推理能力。预训练决定了模型的"智商天花板"。</p>
+<p>预训练是 LLM 的第一阶段：在海量无标注文本上，通过自监督学习让模型掌握语言的统计规律、世界知识和推理能力。预训练决定了模型的&quot;智商天花板&quot;。</p>
 <h3>1.1 自监督学习 (Self-Supervised Learning)</h3>
 <p>预训练不需要人工标注，而是从文本本身构造监督信号。三种核心范式：</p>
 <h4>MLM（掩码语言模型 / Masked Language Model）</h4>
 <p>BERT 系列使用的训练目标。随机 mask 掉输入中 15% 的 token，让模型预测被 mask 的 token。</p>
-<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>输入:  <span class="hljs-string">"The [MASK] sat on the [MASK]"</span>
-目标:  预测 <span class="hljs-string">"cat"</span>        预测 <span class="hljs-string">"mat"</span>
+<div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>输入:  <span class="hljs-string">&quot;The [MASK] sat on the [MASK]&quot;</span>
+目标:  预测 <span class="hljs-string">&quot;cat&quot;</span>        预测 <span class="hljs-string">&quot;mat&quot;</span>
 
 关键设计（BERT 的 <span class="hljs-number">80</span>/<span class="hljs-number">10</span>/<span class="hljs-number">10</span> 规则）：
-  - <span class="hljs-number">80</span><span class="hljs-comment">% 替换为 [MASK]     → 训练模型学会"填空"</span>
+  - <span class="hljs-number">80</span><span class="hljs-comment">% 替换为 [MASK]     → 训练模型学会&quot;填空&quot;</span>
   - <span class="hljs-number">10</span><span class="hljs-comment">% 保持原 token       → 防止训练-推理 mismatch</span>
   - <span class="hljs-number">10</span><span class="hljs-comment">% 替换为随机 token   → 防止模型只依赖 [MASK] 标记</span>
 </code></pre></div><p>MLM 的核心优势是<strong>双向上下文</strong>：每个 token 可以同时看到左边和右边的信息。这使它特别适合理解类任务（分类、NER、问答），但不适合自回归生成。</p>
 <h4>CLM（因果语言模型 / Causal Language Model）</h4>
-<p>GPT 系列的标准训练目标。给定前 N 个 token，预测第 N+1 个。模型只能看到"左边"的上下文（单向），通过自回归逐个生成 token。</p>
+<p>GPT 系列的标准训练目标。给定前 N 个 token，预测第 N+1 个。模型只能看到&quot;左边&quot;的上下文（单向），通过自回归逐个生成 token。</p>
 <p>$$\mathcal{L}<em>{\text{CLM}} = -\sum</em>{t=1}^{T} \log P(x_t | x_{&lt;t}; \theta)$$</p>
 <p>CLM 是当今 LLM 的主流范式。原因：</p>
 <ol>
-<li><strong>统一性</strong>：任何 NLP 任务都可以表达为"给定前缀预测下一个 token"</li>
+<li><strong>统一性</strong>：任何 NLP 任务都可以表达为&quot;给定前缀预测下一个 token&quot;</li>
 <li><strong>生成能力</strong>：天然支持自回归文本生成</li>
 <li><strong>扩展性</strong>：GPT-3 证明 CLM 在足够大时涌现出 in-context learning</li>
 </ol>
@@ -62,7 +62,7 @@
 <ul>
 <li><strong>正样本构造</strong>：同文档的不同片段、同一段落的两个句子、query-answer 对</li>
 <li><strong>负样本选择</strong>：in-batch negatives（同一 batch 中的其他样本）、hard negatives（相似但无关的样本）</li>
-<li><strong>温度 τ</strong>：控制分布的尖锐程度，τ 越小对正负样本区分越"严格"</li>
+<li><strong>温度 τ</strong>：控制分布的尖锐程度，τ 越小对正负样本区分越&quot;严格&quot;</li>
 </ul>
 <p>这对 Java 开发者的启示：当你在 SaaS 应用中切换 Embedding 模型时，新模型的对比学习策略决定了它在你的数据上的表现是否一致。</p>
 <h3>1.2 数据规模与质量</h3>
@@ -76,7 +76,7 @@
 │  多语言数据                          ~<span class="hljs-number">5</span><span class="hljs-comment">%     │  ← 多语言能力</span>
 └──────────────────────────────────────────────┘
 </code></pre></div><p><strong>去重（Deduplication）：</strong></p>
-<p>重复数据会导致模型"记忆"而非"泛化"。三个层级：</p>
+<p>重复数据会导致模型&quot;记忆&quot;而非&quot;泛化&quot;。三个层级：</p>
 <table>
 <thead>
 <tr>
@@ -108,7 +108,7 @@
 <li>人工审核高风险样本</li>
 </ul>
 <p><strong>数据质量 &gt; 数据数量：</strong></p>
-<p>Chinchilla Scaling Law（见下一节）的核心结论：对于给定的计算预算，<strong>更多高质量数据比更大模型更划算</strong>。这改变了"堆参数"的惯性思维。</p>
+<p>Chinchilla Scaling Law（见下一节）的核心结论：对于给定的计算预算，<strong>更多高质量数据比更大模型更划算</strong>。这改变了&quot;堆参数&quot;的惯性思维。</p>
 <h3>1.3 Scaling Law（缩放定律）</h3>
 <p>Scaling Law 是预训练阶段最重要的理论发现之一，它揭示了模型性能与参数量、数据量、计算量之间的数学关系。</p>
 <h4>Kaplan (OpenAI, 2020)</h4>
@@ -132,29 +132,29 @@ Chinchilla 的另一个重要发现：大多数大模型都是 Undertrained（�
 </code></pre></div><p><strong>对 Java 开发者的应用层启示：</strong></p>
 <ol>
 <li><strong>模型选择时</strong>：不要只看参数量。一个充分训练的 7B 模型可能比训练不足的 13B 模型更好</li>
-<li><strong>关注"训练 token 数"</strong>：查看模型卡上的训练数据量，判断模型是否训练充分</li>
+<li><strong>关注&quot;训练 token 数&quot;</strong>：查看模型卡上的训练数据量，判断模型是否训练充分</li>
 <li><strong>小模型 + 多数据 &gt; 大模型 + 少数据</strong>：这对成本敏感的应用场景是利好</li>
 </ol>
 <hr>
 <h2>二、SFT（监督微调 / Supervised Fine-Tuning）</h2>
-<p>预训练后的模型是一个"什么都懂但不太会聊天"的基座。SFT 通过高质量的指令-回答对，让模型学会遵循指令、保持对话格式、输出符合人类期望的内容。</p>
+<p>预训练后的模型是一个&quot;什么都懂但不太会聊天&quot;的基座。SFT 通过高质量的指令-回答对，让模型学会遵循指令、保持对话格式、输出符合人类期望的内容。</p>
 <h3>2.1 指令数据构建</h3>
 <p>SFT 数据的标准格式是 <strong>(Instruction, Input, Output)</strong> 三元组：</p>
 <div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-json"><span class="hljs-comment">// 典型 SFT 数据格式</span>
 <span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">"instruction"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"将以下文本翻译成英文"</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">"input"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"人工智能正在改变世界"</span><span class="hljs-punctuation">,</span>
-  <span class="hljs-attr">"output"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"Artificial intelligence is changing the world"</span>
+  <span class="hljs-attr">&quot;instruction&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;将以下文本翻译成英文&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;input&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;人工智能正在改变世界&quot;</span><span class="hljs-punctuation">,</span>
+  <span class="hljs-attr">&quot;output&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;Artificial intelligence is changing the world&quot;</span>
 <span class="hljs-punctuation">}</span>
 
 <span class="hljs-comment">// 多轮对话格式（Chat Template）</span>
 <span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">"messages"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
-    <span class="hljs-punctuation">{</span><span class="hljs-attr">"role"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"system"</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">"content"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"你是一个专业的编程助手"</span><span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-punctuation">{</span><span class="hljs-attr">"role"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"user"</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">"content"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"用 Java 写一个二分查找"</span><span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-punctuation">{</span><span class="hljs-attr">"role"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"assistant"</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">"content"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"public static int binarySearch..."</span><span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-punctuation">{</span><span class="hljs-attr">"role"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"user"</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">"content"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"加上输入校验"</span><span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-punctuation">{</span><span class="hljs-attr">"role"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"assistant"</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">"content"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"加上边界检查后..."</span><span class="hljs-punctuation">}</span>
+  <span class="hljs-attr">&quot;messages&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
+    <span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;system&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;你是一个专业的编程助手&quot;</span><span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;user&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;用 Java 写一个二分查找&quot;</span><span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;assistant&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;public static int binarySearch...&quot;</span><span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;user&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;加上输入校验&quot;</span><span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;assistant&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;加上边界检查后...&quot;</span><span class="hljs-punctuation">}</span>
   <span class="hljs-punctuation">]</span>
 <span class="hljs-punctuation">}</span>
 </code></pre></div><p><strong>数据来源的三条路径：</strong></p>
@@ -211,7 +211,7 @@ Chinchilla 的另一个重要发现：大多数大模型都是 Undertrained（�
 <ol>
 <li><strong>多样性</strong>：覆盖不同任务类型（翻译、摘要、推理、代码、创意写作），避免同质化</li>
 <li><strong>复杂性</strong>：包含多步推理任务，而非简单的单步回答</li>
-<li><strong>正确性</strong>：答案准确无误。错误答案的毒害远大于"不回答"</li>
+<li><strong>正确性</strong>：答案准确无误。错误答案的毒害远大于&quot;不回答&quot;</li>
 </ol>
 <p><strong>对 Java 开发者的启示：</strong> 如果你需要为特定业务场景微调模型（如保险条款解读），把精力放在打磨 500-1000 条高质量的 instruction-output 对上，而不是收集 10 万条低质量数据。</p>
 <h3>2.3 格式遵循训练</h3>
@@ -229,26 +229,26 @@ Chinchilla 的另一个重要发现：大多数大模型都是 Undertrained（�
 <p>对于支持 Function Calling 的模型，SFT 阶段需要训练 JSON 格式的 function call 输出：</p>
 <div class="code-block"><div class="code-header"><span class="code-lang">json</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-json"><span class="hljs-comment">// 训练数据中的 function call 示例</span>
 <span class="hljs-punctuation">{</span>
-  <span class="hljs-attr">"messages"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
-    <span class="hljs-punctuation">{</span><span class="hljs-attr">"role"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"user"</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">"content"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"北京今天天气怎么样？"</span><span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-punctuation">{</span><span class="hljs-attr">"role"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"assistant"</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">"content"</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">null</span></span><span class="hljs-punctuation">,</span>
-     <span class="hljs-attr">"tool_calls"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-punctuation">{</span>
-       <span class="hljs-attr">"id"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"call_xxx"</span><span class="hljs-punctuation">,</span>
-       <span class="hljs-attr">"type"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"function"</span><span class="hljs-punctuation">,</span>
-       <span class="hljs-attr">"function"</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
-         <span class="hljs-attr">"name"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"get_weather"</span><span class="hljs-punctuation">,</span>
-         <span class="hljs-attr">"arguments"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"{\"city\": \"北京\", \"date\": \"today\"}"</span>
+  <span class="hljs-attr">&quot;messages&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span>
+    <span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;user&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;北京今天天气怎么样？&quot;</span><span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;assistant&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-literal"><span class="hljs-keyword">null</span></span><span class="hljs-punctuation">,</span>
+     <span class="hljs-attr">&quot;tool_calls&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">[</span><span class="hljs-punctuation">{</span>
+       <span class="hljs-attr">&quot;id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;call_xxx&quot;</span><span class="hljs-punctuation">,</span>
+       <span class="hljs-attr">&quot;type&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;function&quot;</span><span class="hljs-punctuation">,</span>
+       <span class="hljs-attr">&quot;function&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-punctuation">{</span>
+         <span class="hljs-attr">&quot;name&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;get_weather&quot;</span><span class="hljs-punctuation">,</span>
+         <span class="hljs-attr">&quot;arguments&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;{\&quot;city\&quot;: \&quot;北京\&quot;, \&quot;date\&quot;: \&quot;today\&quot;}&quot;</span>
        <span class="hljs-punctuation">}</span>
      <span class="hljs-punctuation">}</span><span class="hljs-punctuation">]</span>
     <span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-punctuation">{</span><span class="hljs-attr">"role"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"tool"</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">"tool_call_id"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"call_xxx"</span><span class="hljs-punctuation">,</span>
-     <span class="hljs-attr">"content"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"{\"temperature\": 28, \"condition\": \"晴\"}"</span><span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
-    <span class="hljs-punctuation">{</span><span class="hljs-attr">"role"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"assistant"</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">"content"</span><span class="hljs-punctuation">:</span> <span class="hljs-string">"北京今天晴天，气温28度。"</span><span class="hljs-punctuation">}</span>
+    <span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;tool&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;tool_call_id&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;call_xxx&quot;</span><span class="hljs-punctuation">,</span>
+     <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;{\&quot;temperature\&quot;: 28, \&quot;condition\&quot;: \&quot;晴\&quot;}&quot;</span><span class="hljs-punctuation">}</span><span class="hljs-punctuation">,</span>
+    <span class="hljs-punctuation">{</span><span class="hljs-attr">&quot;role&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;assistant&quot;</span><span class="hljs-punctuation">,</span> <span class="hljs-attr">&quot;content&quot;</span><span class="hljs-punctuation">:</span> <span class="hljs-string">&quot;北京今天晴天，气温28度。&quot;</span><span class="hljs-punctuation">}</span>
   <span class="hljs-punctuation">]</span>
 <span class="hljs-punctuation">}</span>
 </code></pre></div><hr>
 <h2>三、RLHF（人类反馈强化学习）</h2>
-<p>RLHF 是让模型输出"符合人类偏好"的关键阶段。预训练让模型"知道很多"，SFT 让模型"会回答问题"，RLHF 让模型"回答得让人喜欢"。</p>
+<p>RLHF 是让模型输出&quot;符合人类偏好&quot;的关键阶段。预训练让模型&quot;知道很多&quot;，SFT 让模型&quot;会回答问题&quot;，RLHF 让模型&quot;回答得让人喜欢&quot;。</p>
 <h3>3.1 完整流程</h3>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>RLHF 的三个阶段：
 ┌─────────────────────────────────────────────────────────┐
@@ -258,27 +258,27 @@ Chinchilla 的另一个重要发现：大多数大模型都是 Undertrained（�
 │  Stage <span class="hljs-number">2</span>: Reward <span class="hljs-keyword">Model</span> 训练                             │
 │    同一 prompt → Policy <span class="hljs-keyword">Model</span> 生成多个回答               │
 │    → 人工标注排序（A &gt; B &gt; C &gt; D）                      │
-│    → 训练 Reward <span class="hljs-keyword">Model</span> 学习<span class="hljs-string">"什么回答更好"</span>               │
+│    → 训练 Reward <span class="hljs-keyword">Model</span> 学习<span class="hljs-string">&quot;什么回答更好&quot;</span>               │
 │                                                         │
 │  Stage <span class="hljs-number">3</span>: PPO 强化学习优化                              │
 │    Policy <span class="hljs-keyword">Model</span> 生成回答 → Reward <span class="hljs-keyword">Model</span> 打分            │
 │    → PPO 算法更新 Policy（约束不偏离 SFT 太远）         │
 └─────────────────────────────────────────────────────────┘
 </code></pre></div><h3>3.2 Reward Model 训练</h3>
-<p>Reward Model 是一个"打分器"：输入一个 prompt + response，输出一个标量奖励值（越高越好）。</p>
+<p>Reward Model 是一个&quot;打分器&quot;：输入一个 prompt + response，输出一个标量奖励值（越高越好）。</p>
 <p><strong>偏好数据的构造：</strong></p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>同一 <span class="hljs-variable">prompt</span> 下生成 <span class="hljs-built_in">K</span> 个不同回答（<span class="hljs-built_in">K</span><span class="hljs-operator">=</span><span class="hljs-number">4</span> 或 <span class="hljs-number">8</span> 常见）：
-  <span class="hljs-variable">prompt</span><span class="hljs-operator">:</span> <span class="hljs-string">"解释什么是量子计算"</span>
+  <span class="hljs-variable">prompt</span><span class="hljs-operator">:</span> <span class="hljs-string">&quot;解释什么是量子计算&quot;</span>
   
-  <span class="hljs-variable">Response</span> <span class="hljs-variable">A</span><span class="hljs-operator">:</span> <span class="hljs-string">"量子计算是利用量子力学原理..."</span>     ← 人工排序第 <span class="hljs-number">1</span>
-  <span class="hljs-variable">Response</span> <span class="hljs-variable">B</span><span class="hljs-operator">:</span> <span class="hljs-string">"量子计算是一种新型计算方式..."</span>     ← 人工排序第 <span class="hljs-number">2</span>
-  <span class="hljs-variable">Response</span> <span class="hljs-built_in">C</span><span class="hljs-operator">:</span> <span class="hljs-string">"量子计算就是用量子..."</span>             ← 人工排序第 <span class="hljs-number">3</span>
-  <span class="hljs-variable">Response</span> <span class="hljs-built_in">D</span><span class="hljs-operator">:</span> <span class="hljs-string">"量子计算很难解释..."</span>               ← 人工排序第 <span class="hljs-number">4</span>
+  <span class="hljs-variable">Response</span> <span class="hljs-variable">A</span><span class="hljs-operator">:</span> <span class="hljs-string">&quot;量子计算是利用量子力学原理...&quot;</span>     ← 人工排序第 <span class="hljs-number">1</span>
+  <span class="hljs-variable">Response</span> <span class="hljs-variable">B</span><span class="hljs-operator">:</span> <span class="hljs-string">&quot;量子计算是一种新型计算方式...&quot;</span>     ← 人工排序第 <span class="hljs-number">2</span>
+  <span class="hljs-variable">Response</span> <span class="hljs-built_in">C</span><span class="hljs-operator">:</span> <span class="hljs-string">&quot;量子计算就是用量子...&quot;</span>             ← 人工排序第 <span class="hljs-number">3</span>
+  <span class="hljs-variable">Response</span> <span class="hljs-built_in">D</span><span class="hljs-operator">:</span> <span class="hljs-string">&quot;量子计算很难解释...&quot;</span>               ← 人工排序第 <span class="hljs-number">4</span>
 
   偏好对： <span class="hljs-punctuation">(</span><span class="hljs-variable">A</span><span class="hljs-operator">,</span> <span class="hljs-variable">B</span><span class="hljs-punctuation">)</span> <span class="hljs-punctuation">(</span><span class="hljs-variable">A</span><span class="hljs-operator">,</span> <span class="hljs-built_in">C</span><span class="hljs-punctuation">)</span> <span class="hljs-punctuation">(</span><span class="hljs-variable">A</span><span class="hljs-operator">,</span> <span class="hljs-built_in">D</span><span class="hljs-punctuation">)</span> <span class="hljs-punctuation">(</span><span class="hljs-variable">B</span><span class="hljs-operator">,</span> <span class="hljs-built_in">C</span><span class="hljs-punctuation">)</span> <span class="hljs-punctuation">(</span><span class="hljs-variable">B</span><span class="hljs-operator">,</span> <span class="hljs-built_in">D</span><span class="hljs-punctuation">)</span> <span class="hljs-punctuation">(</span><span class="hljs-built_in">C</span><span class="hljs-operator">,</span> <span class="hljs-built_in">D</span><span class="hljs-punctuation">)</span>
 </code></pre></div><p><strong>Bradley-Terry 排序损失：</strong></p>
 <p>$$P(A &gt; B) = \frac{\exp(r_A)}{\exp(r_A) + \exp(r_B)} = \sigma(r_A - r_B)$$</p>
-<p>优化目标：最大化所有偏好对中"好回答得分高于差回答"的概率。</p>
+<p>优化目标：最大化所有偏好对中&quot;好回答得分高于差回答&quot;的概率。</p>
 <p>关键数据集：</p>
 <ul>
 <li>Anthropic hh-rlhf：helpful + harmless 偏好数据</li>
@@ -295,7 +295,7 @@ Chinchilla 的另一个重要发现：大多数大模型都是 Undertrained（�
 │                                                     │
 │  四个模型 → <span class="hljs-number">4</span>× 原模型显存 → 只有大规模 GPU 集群可行  │
 └─────────────────────────────────────────────────────┘
-</code></pre></div><p><strong>KL 散度约束：</strong> 限制优化后的策略不要偏离 SFT 策略太远，防止 Reward Hacking（模型学会使用"看起来很合理但实际错误"的回答来获取高分）。</p>
+</code></pre></div><p><strong>KL 散度约束：</strong> 限制优化后的策略不要偏离 SFT 策略太远，防止 Reward Hacking（模型学会使用&quot;看起来很合理但实际错误&quot;的回答来获取高分）。</p>
 <p>$$\max_\theta \mathbb{E}\left[r(x, y)\right] - \beta \cdot D_{KL}\left(\pi_\theta(y|x) | \pi_{\text{SFT}}(y|x)\right)$$</p>
 <ul>
 <li>β 越小：越追求高奖励，但可能偏离原有能力</li>
@@ -354,7 +354,7 @@ Chinchilla 的另一个重要发现：大多数大模型都是 Undertrained（�
 <p><strong>DPO 的变体：</strong></p>
 <ul>
 <li><strong>IPO</strong>（Identity Preference Optimization）：解决 DPO 对偏好强度不敏感的问题</li>
-<li><strong>KTO</strong>（Kahneman-Tversky Optimization）：不需要偏好对，只需要单条数据的"好/坏"标签</li>
+<li><strong>KTO</strong>（Kahneman-Tversky Optimization）：不需要偏好对，只需要单条数据的&quot;好/坏&quot;标签</li>
 <li><strong>ORPO</strong>（Odds Ratio Preference Optimization）：将 SFT 和偏好对齐合并到一个阶段</li>
 </ul>
 <hr>
@@ -439,7 +439,7 @@ NF4（非均匀量化）：
 </code></pre></div><p><strong>2. 双重量化（Double Quantization）：</strong></p>
 <p>对量化常数再进行一次量化——将 32-bit 的量化常数（scale + zero-point）压缩为 8-bit。这在模型很大时能节省约 0.5GB 显存。</p>
 <p><strong>3. 分页优化器（Paged Optimizers）：</strong></p>
-<p>利用 CPU 的统一内存（Unified Memory）机制：当 GPU 显存不足时，自动将优化器状态换出到 CPU 内存，需要时再换回。这防止了 OOM，让训练可以"勉强但能跑"。</p>
+<p>利用 CPU 的统一内存（Unified Memory）机制：当 GPU 显存不足时，自动将优化器状态换出到 CPU 内存，需要时再换回。这防止了 OOM，让训练可以&quot;勉强但能跑&quot;。</p>
 <p><strong>QLoRA 的效果：</strong></p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>场景：微调 LLaMA 65B 模型
   Full Fine-Tuning：    ~<span class="hljs-number">780</span> GB 显存  → 需要多卡 A100
@@ -537,7 +537,7 @@ K-quant（智能混合精度）：
   • 最小化逐层输出误差 → 质量好
   • 面向 GPU 推理优化 → 推理速度快（可以用 CUDA kernel）
 </code></pre></div><h3>5.3 AWQ（Activation-Aware Weight Quantization）</h3>
-<p>AWQ 的一个精妙发现：<strong>不是所有权重同等重要，约 1% 的"显著权重"贡献了大部分输出</strong>。</p>
+<p>AWQ 的一个精妙发现：<strong>不是所有权重同等重要，约 1% 的&quot;显著权重&quot;贡献了大部分输出</strong>。</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>AWQ 的核心洞察：
 
 正常的 LLM 权重分布：
@@ -545,7 +545,7 @@ K-quant（智能混合精度）：
   少数权重：值很大（绝对值），显著影响输出
 
 传统 GPTQ 均匀量化的问题：
-  对所有权重同等对待 → 显著权重的信息被大量"不重要权重"稀释
+  对所有权重同等对待 → 显著权重的信息被大量&quot;不重要权重&quot;稀释
   → 量化误差集中在显著权重上 → 模型质量下降明显
 
 AWQ 的解决方案：
@@ -696,15 +696,15 @@ AWQ 的解决方案：
 <p>HumanEval 的每个题目包括函数签名、docstring 和单元测试。模型需要生成完整的函数体。评估指标是 pass@k（生成 k 个候选答案，至少有一个通过所有测试的题目比例）。</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>HumanEval 示例题目：
 <span class="hljs-keyword">def</span> <span class="hljs-title function_">has_close_elements</span>(<span class="hljs-params">numbers: <span class="hljs-type">List</span>[<span class="hljs-built_in">float</span>], threshold: <span class="hljs-built_in">float</span></span>) -&gt; <span class="hljs-built_in">bool</span>:
-    <span class="hljs-string">"""检查列表中是否存在两个数的差的绝对值小于 threshold。
+    <span class="hljs-string">&quot;&quot;&quot;检查列表中是否存在两个数的差的绝对值小于 threshold。
     &gt;&gt;&gt; has_close_elements([1.0, 2.0, 3.0], 0.5)
     False
     &gt;&gt;&gt; has_close_elements([1.0, 2.8, 3.0, 4.0, 5.0, 2.0], 0.3)
     True
-    """</span>
+    &quot;&quot;&quot;</span>
     <span class="hljs-comment"># 模型需要在这里生成代码</span>
 </code></pre></div><p><strong>Chatbot Arena（LMSYS）：</strong></p>
-<p>这是目前最"真实"的评估方式。系统匿名展示两个模型的输出，用户投票选择哪个更好，通过 Elo 评分体系排名。优势是：</p>
+<p>这是目前最&quot;真实&quot;的评估方式。系统匿名展示两个模型的输出，用户投票选择哪个更好，通过 Elo 评分体系排名。优势是：</p>
 <ul>
 <li>不容易被刷榜（不知道哪两个模型在对比）</li>
 <li>反映真实用户偏好而非自动指标</li>
@@ -721,7 +721,7 @@ AWQ 的解决方案：
 </thead>
 <tbody><tr>
 <td><strong>训练数据污染</strong></td>
-<td>测试集泄露到训练数据中，模型"见过"考题</td>
+<td>测试集泄露到训练数据中，模型&quot;见过&quot;考题</td>
 <td>关注 Chatbot Arena Elo 而非 paper benchmark</td>
 </tr>
 <tr>
@@ -807,14 +807,14 @@ AWQ 的解决方案：
 
 <span class="hljs-comment">// Ollama 本地开发示例</span>
 <span class="hljs-type">var</span> <span class="hljs-variable">chatModel</span> <span class="hljs-operator">=</span> OllamaChatModel.builder()
-    .withBaseUrl(<span class="hljs-string">"http://localhost:11434"</span>)
-    .withModel(<span class="hljs-string">"qwen2.5:7b-q5_k_m"</span>)  <span class="hljs-comment">// GGUF Q5_K_M 量化版</span>
+    .withBaseUrl(<span class="hljs-string">&quot;http://localhost:11434&quot;</span>)
+    .withModel(<span class="hljs-string">&quot;qwen2.5:7b-q5_k_m&quot;</span>)  <span class="hljs-comment">// GGUF Q5_K_M 量化版</span>
     .build();
 
 <span class="hljs-comment">// 生产环境 vLLM 示例</span>
 <span class="hljs-type">var</span> <span class="hljs-variable">chatModel</span> <span class="hljs-operator">=</span> OpenAiChatModel.builder()
-    .withBaseUrl(<span class="hljs-string">"https://inference.internal/api/v1"</span>)
-    .withModel(<span class="hljs-string">"Qwen2.5-72B-Instruct-AWQ"</span>)  <span class="hljs-comment">// AWQ 4-bit 量化</span>
+    .withBaseUrl(<span class="hljs-string">&quot;https://inference.internal/api/v1&quot;</span>)
+    .withModel(<span class="hljs-string">&quot;Qwen2.5-72B-Instruct-AWQ&quot;</span>)  <span class="hljs-comment">// AWQ 4-bit 量化</span>
     .withApiKey(apiKey)
     .build();
 <span class="hljs-comment">// 两个示例使用相同的 ChatModel 接口，业务代码零改动</span>
@@ -849,14 +849,14 @@ AWQ 的解决方案：
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">main</span><span class="hljs-params">(String[] args)</span> <span class="hljs-keyword">throws</span> Exception {
         <span class="hljs-type">var</span> <span class="hljs-variable">criteria</span> <span class="hljs-operator">=</span> Criteria.builder()
             .setTypes(Sentence.class, <span class="hljs-type">float</span>[].class)
-            .optModelPath(Paths.get(<span class="hljs-string">"/models/bge-small-zh-v1.5.onnx"</span>))
-            .optEngine(<span class="hljs-string">"OnnxRuntime"</span>)
+            .optModelPath(Paths.get(<span class="hljs-string">&quot;/models/bge-small-zh-v1.5.onnx&quot;</span>))
+            .optEngine(<span class="hljs-string">&quot;OnnxRuntime&quot;</span>)
             .build();
 
         <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">model</span> <span class="hljs-operator">=</span> criteria.loadModel();
              <span class="hljs-type">var</span> <span class="hljs-variable">predictor</span> <span class="hljs-operator">=</span> model.newPredictor()) {
-            <span class="hljs-type">var</span> <span class="hljs-variable">embedding</span> <span class="hljs-operator">=</span> predictor.predict(<span class="hljs-keyword">new</span> <span class="hljs-title class_">Sentence</span>(<span class="hljs-string">"人工智能"</span>));
-            System.out.println(<span class="hljs-string">"Embedding 维度: "</span> + embedding.length);
+            <span class="hljs-type">var</span> <span class="hljs-variable">embedding</span> <span class="hljs-operator">=</span> predictor.predict(<span class="hljs-keyword">new</span> <span class="hljs-title class_">Sentence</span>(<span class="hljs-string">&quot;人工智能&quot;</span>));
+            System.out.println(<span class="hljs-string">&quot;Embedding 维度: &quot;</span> + embedding.length);
         }
     }
 }
@@ -912,10 +912,10 @@ AWQ 的解决方案：
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> VectorStore newStore;
 
     <span class="hljs-keyword">public</span> <span class="hljs-title function_">EmbeddingMigrationService</span><span class="hljs-params">(
-            <span class="hljs-meta">@Qualifier("bgeSmall")</span> EmbeddingModel oldModel,
-            <span class="hljs-meta">@Qualifier("bgeLarge")</span> EmbeddingModel newModel,
-            <span class="hljs-meta">@Qualifier("oldVectorStore")</span> VectorStore oldStore,
-            <span class="hljs-meta">@Qualifier("newVectorStore")</span> VectorStore newStore)</span> {
+            <span class="hljs-meta">@Qualifier(&quot;bgeSmall&quot;)</span> EmbeddingModel oldModel,
+            <span class="hljs-meta">@Qualifier(&quot;bgeLarge&quot;)</span> EmbeddingModel newModel,
+            <span class="hljs-meta">@Qualifier(&quot;oldVectorStore&quot;)</span> VectorStore oldStore,
+            <span class="hljs-meta">@Qualifier(&quot;newVectorStore&quot;)</span> VectorStore newStore)</span> {
         <span class="hljs-built_in">this</span>.oldModel = oldModel;
         <span class="hljs-built_in">this</span>.newModel = newModel;
         <span class="hljs-built_in">this</span>.oldStore = oldStore;
@@ -941,7 +941,7 @@ AWQ 的解决方案：
                     <span class="hljs-type">var</span> <span class="hljs-variable">embedding</span> <span class="hljs-operator">=</span> oldModel.embed(doc);
                     oldStore.add(List.of(<span class="hljs-keyword">new</span> <span class="hljs-title class_">Document</span>(doc.getId(), embedding)));
                 } <span class="hljs-keyword">catch</span> (Exception e) {
-                    log.warn(<span class="hljs-string">"旧索引写入失败（可以容忍）"</span>, e);
+                    log.warn(<span class="hljs-string">&quot;旧索引写入失败（可以容忍）&quot;</span>, e);
                 }
                 <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
             });
@@ -949,7 +949,7 @@ AWQ 的解决方案：
             scope.join();
             scope.throwIfFailed();
         } <span class="hljs-keyword">catch</span> (Exception e) {
-            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RuntimeException</span>(<span class="hljs-string">"新索引写入失败，终止操作"</span>, e);
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RuntimeException</span>(<span class="hljs-string">&quot;新索引写入失败，终止操作&quot;</span>, e);
         }
     }
 
@@ -1024,11 +1024,11 @@ AWQ 的解决方案：
  */</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">QuantizationComparisonTest</span> {
 
-    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">String</span> <span class="hljs-variable">BASE_URL</span> <span class="hljs-operator">=</span> <span class="hljs-string">"http://localhost:11434"</span>;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">String</span> <span class="hljs-variable">BASE_URL</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;http://localhost:11434&quot;</span>;
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> List&lt;String&gt; TEST_PROMPTS = List.of(
-        <span class="hljs-string">"用 100 字解释什么是 Java Virtual Threads"</span>,
-        <span class="hljs-string">"写一个使用 JDK 25 Record 的示例"</span>,
-        <span class="hljs-string">"解释 PostgreSQL pgvector 的 HNSW 索引原理"</span>
+        <span class="hljs-string">&quot;用 100 字解释什么是 Java Virtual Threads&quot;</span>,
+        <span class="hljs-string">&quot;写一个使用 JDK 25 Record 的示例&quot;</span>,
+        <span class="hljs-string">&quot;解释 PostgreSQL pgvector 的 HNSW 索引原理&quot;</span>
     );
 
     <span class="hljs-keyword">record</span> <span class="hljs-title class_">BenchmarkResult</span><span class="hljs-params">(
@@ -1041,21 +1041,21 @@ AWQ 的解决方案：
 
     <span class="hljs-meta">@Test</span>
     <span class="hljs-keyword">void</span> <span class="hljs-title function_">compareQ4KMvsQ8</span><span class="hljs-params">()</span> {
-        <span class="hljs-type">var</span> <span class="hljs-variable">q4Model</span> <span class="hljs-operator">=</span> createModel(<span class="hljs-string">"qwen2.5:7b-q4_k_m"</span>);
-        <span class="hljs-type">var</span> <span class="hljs-variable">q8Model</span> <span class="hljs-operator">=</span> createModel(<span class="hljs-string">"qwen2.5:7b-q8_0"</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">q4Model</span> <span class="hljs-operator">=</span> createModel(<span class="hljs-string">&quot;qwen2.5:7b-q4_k_m&quot;</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">q8Model</span> <span class="hljs-operator">=</span> createModel(<span class="hljs-string">&quot;qwen2.5:7b-q8_0&quot;</span>);
 
-        <span class="hljs-type">var</span> <span class="hljs-variable">q4Results</span> <span class="hljs-operator">=</span> benchmark(q4Model, <span class="hljs-string">"Q4_K_M"</span>);
-        <span class="hljs-type">var</span> <span class="hljs-variable">q8Results</span> <span class="hljs-operator">=</span> benchmark(q8Model, <span class="hljs-string">"Q8_0"</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">q4Results</span> <span class="hljs-operator">=</span> benchmark(q4Model, <span class="hljs-string">&quot;Q4_K_M&quot;</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">q8Results</span> <span class="hljs-operator">=</span> benchmark(q8Model, <span class="hljs-string">&quot;Q8_0&quot;</span>);
 
-        System.out.println(<span class="hljs-string">"===== 量化对比结果 ====="</span>);
+        System.out.println(<span class="hljs-string">&quot;===== 量化对比结果 =====&quot;</span>);
         printResult(q4Results);
         printResult(q8Results);
 
         <span class="hljs-comment">// Q8_0 质量应该优于 Q4_K_M，但速度通常更慢</span>
         assertThat(q8Results.avgTokensPerSecond())
             .isLessThanOrEqualTo(q4Results.avgTokensPerSecond() * <span class="hljs-number">1.1</span>);
-        System.out.println(<span class="hljs-string">"\n结论：Q8_0 速度略慢于 Q4_K_M 但质量更高"</span>);
-        System.out.println(<span class="hljs-string">"      CPU 推理推荐 Q5_K_M（速度与质量的平衡点）"</span>);
+        System.out.println(<span class="hljs-string">&quot;\n结论：Q8_0 速度略慢于 Q4_K_M 但质量更高&quot;</span>);
+        System.out.println(<span class="hljs-string">&quot;      CPU 推理推荐 Q5_K_M（速度与质量的平衡点）&quot;</span>);
     }
 
     <span class="hljs-keyword">private</span> OllamaChatModel <span class="hljs-title function_">createModel</span><span class="hljs-params">(String model)</span> {
@@ -1104,12 +1104,12 @@ AWQ 的解决方案：
     }
 
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">printResult</span><span class="hljs-params">(BenchmarkResult r)</span> {
-        System.out.printf(<span class="hljs-string">"""
+        System.out.printf(<span class="hljs-string">&quot;&quot;&quot;
             模型: %s
               平均延迟: %dms
               平均吞吐: %.1f tokens/s
               平均输出 Token: %d
-            %n"""</span>,
+            %n&quot;&quot;&quot;</span>,
             r.modelTag(), r.avgLatency().toMillis(),
             r.avgTokensPerSecond(), r.avgOutputTokens());
     }
@@ -1137,30 +1137,30 @@ AWQ 的解决方案：
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> OllamaEmbeddingModel m3Model;      <span class="hljs-comment">// 1024 维, 多语言</span>
 
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> List&lt;String&gt; TEST_TEXTS = List.of(
-        <span class="hljs-string">"Java Virtual Threads 是 JDK 21 引入的轻量级线程"</span>,
-        <span class="hljs-string">"分布式事务的 Saga 模式实现"</span>,
-        <span class="hljs-string">"PostgreSQL pgvector 向量检索性能优化"</span>,
-        <span class="hljs-string">"人工智能在保险行业的应用"</span>,
-        <span class="hljs-string">"Spring AI 框架的 ChatClient 使用指南"</span>
+        <span class="hljs-string">&quot;Java Virtual Threads 是 JDK 21 引入的轻量级线程&quot;</span>,
+        <span class="hljs-string">&quot;分布式事务的 Saga 模式实现&quot;</span>,
+        <span class="hljs-string">&quot;PostgreSQL pgvector 向量检索性能优化&quot;</span>,
+        <span class="hljs-string">&quot;人工智能在保险行业的应用&quot;</span>,
+        <span class="hljs-string">&quot;Spring AI 框架的 ChatClient 使用指南&quot;</span>
     );
 
     <span class="hljs-meta">@BeforeAll</span>
     <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">setUp</span><span class="hljs-params">()</span> {
-        <span class="hljs-type">var</span> <span class="hljs-variable">api</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">OllamaApi</span>(<span class="hljs-string">"http://localhost:11434"</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">api</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">OllamaApi</span>(<span class="hljs-string">&quot;http://localhost:11434&quot;</span>);
         smallModel = OllamaEmbeddingModel.builder()
             .withOllamaApi(api)
             .withDefaultOptions(OllamaOptions.builder()
-                .withModel(<span class="hljs-string">"bge-small:latest"</span>).build())
+                .withModel(<span class="hljs-string">&quot;bge-small:latest&quot;</span>).build())
             .build();
         largeModel = OllamaEmbeddingModel.builder()
             .withOllamaApi(api)
             .withDefaultOptions(OllamaOptions.builder()
-                .withModel(<span class="hljs-string">"bge-large:latest"</span>).build())
+                .withModel(<span class="hljs-string">&quot;bge-large:latest&quot;</span>).build())
             .build();
         m3Model = OllamaEmbeddingModel.builder()
             .withOllamaApi(api)
             .withDefaultOptions(OllamaOptions.builder()
-                .withModel(<span class="hljs-string">"bge-m3:latest"</span>).build())
+                .withModel(<span class="hljs-string">&quot;bge-m3:latest&quot;</span>).build())
             .build();
     }
 
@@ -1169,23 +1169,23 @@ AWQ 的解决方案：
 
     <span class="hljs-meta">@Test</span>
     <span class="hljs-keyword">void</span> <span class="hljs-title function_">compareEmbeddingModels</span><span class="hljs-params">()</span> {
-        <span class="hljs-type">var</span> <span class="hljs-variable">smallInfo</span> <span class="hljs-operator">=</span> embedAll(smallModel, <span class="hljs-string">"BGE-small"</span>);
-        <span class="hljs-type">var</span> <span class="hljs-variable">largeInfo</span> <span class="hljs-operator">=</span> embedAll(largeModel, <span class="hljs-string">"BGE-large"</span>);
-        <span class="hljs-type">var</span> <span class="hljs-variable">m3Info</span> <span class="hljs-operator">=</span> embedAll(m3Model, <span class="hljs-string">"BGE-M3"</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">smallInfo</span> <span class="hljs-operator">=</span> embedAll(smallModel, <span class="hljs-string">&quot;BGE-small&quot;</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">largeInfo</span> <span class="hljs-operator">=</span> embedAll(largeModel, <span class="hljs-string">&quot;BGE-large&quot;</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">m3Info</span> <span class="hljs-operator">=</span> embedAll(m3Model, <span class="hljs-string">&quot;BGE-M3&quot;</span>);
 
-        System.out.println(<span class="hljs-string">"===== Embedding 模型对比 ====="</span>);
-        System.out.printf(<span class="hljs-string">"BGE-small: %d 维%n"</span>, smallInfo.dimension());
-        System.out.printf(<span class="hljs-string">"BGE-large: %d 维%n"</span>, largeInfo.dimension());
-        System.out.printf(<span class="hljs-string">"BGE-M3:    %d 维%n"</span>, m3Info.dimension());
+        System.out.println(<span class="hljs-string">&quot;===== Embedding 模型对比 =====&quot;</span>);
+        System.out.printf(<span class="hljs-string">&quot;BGE-small: %d 维%n&quot;</span>, smallInfo.dimension());
+        System.out.printf(<span class="hljs-string">&quot;BGE-large: %d 维%n&quot;</span>, largeInfo.dimension());
+        System.out.printf(<span class="hljs-string">&quot;BGE-M3:    %d 维%n&quot;</span>, m3Info.dimension());
 
         <span class="hljs-comment">// 验证：维度变化意味着向量数据库必须重建索引</span>
         assertThat(smallInfo.dimension()).isNotEqualTo(largeInfo.dimension());
-        System.out.println(<span class="hljs-string">"\n⚠️ BGE-small → BGE-large: 维度变化 768→1024"</span>);
-        System.out.println(<span class="hljs-string">"   → 向量数据库必须重建索引"</span>);
+        System.out.println(<span class="hljs-string">&quot;\n⚠️ BGE-small → BGE-large: 维度变化 768→1024&quot;</span>);
+        System.out.println(<span class="hljs-string">&quot;   → 向量数据库必须重建索引&quot;</span>);
 
         assertThat(largeInfo.dimension()).isEqualTo(m3Info.dimension());
-        System.out.println(<span class="hljs-string">"✅ BGE-large → BGE-M3: 维度相同 1024→1024"</span>);
-        System.out.println(<span class="hljs-string">"   → 可以尝试复用索引（但仍需验证语义兼容性）"</span>);
+        System.out.println(<span class="hljs-string">&quot;✅ BGE-large → BGE-M3: 维度相同 1024→1024&quot;</span>);
+        System.out.println(<span class="hljs-string">&quot;   → 可以尝试复用索引（但仍需验证语义兼容性）&quot;</span>);
 
         <span class="hljs-comment">// 测试同维度下的语义空间兼容性</span>
         testSemanticCompatibility(largeInfo.embeddings(), m3Info.embeddings());
@@ -1223,12 +1223,12 @@ AWQ 的解决方案：
         }
         avgSimilarity /= count;
 
-        System.out.printf(<span class="hljs-string">"%n同一文本在不同模型上的平均余弦相似度: %.4f%n"</span>,
+        System.out.printf(<span class="hljs-string">&quot;%n同一文本在不同模型上的平均余弦相似度: %.4f%n&quot;</span>,
             avgSimilarity);
         <span class="hljs-keyword">if</span> (avgSimilarity &lt; <span class="hljs-number">0.95</span>) {
-            System.out.println(<span class="hljs-string">"⚠️ 语义空间不兼容（&lt; 0.95），不建议复用旧索引"</span>);
+            System.out.println(<span class="hljs-string">&quot;⚠️ 语义空间不兼容（&lt; 0.95），不建议复用旧索引&quot;</span>);
         } <span class="hljs-keyword">else</span> {
-            System.out.println(<span class="hljs-string">"✅ 语义空间兼容（&gt;= 0.95），可以尝试复用索引"</span>);
+            System.out.println(<span class="hljs-string">&quot;✅ 语义空间兼容（&gt;= 0.95），可以尝试复用索引&quot;</span>);
         }
     }
 
@@ -1267,14 +1267,14 @@ AWQ 的解决方案：
 
     <span class="hljs-comment">// OpenAI 兼容 API endpoint</span>
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">String</span> <span class="hljs-variable">MODEL_A_URL</span> <span class="hljs-operator">=</span>
-        <span class="hljs-string">"http://localhost:11434/v1/chat/completions"</span>;  <span class="hljs-comment">// Ollama</span>
+        <span class="hljs-string">&quot;http://localhost:11434/v1/chat/completions&quot;</span>;  <span class="hljs-comment">// Ollama</span>
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">String</span> <span class="hljs-variable">MODEL_B_URL</span> <span class="hljs-operator">=</span>
-        <span class="hljs-string">"http://localhost:8000/v1/chat/completions"</span>;   <span class="hljs-comment">// vLLM</span>
+        <span class="hljs-string">&quot;http://localhost:8000/v1/chat/completions&quot;</span>;   <span class="hljs-comment">// vLLM</span>
 
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> List&lt;String&gt; BUSINESS_PROMPTS = List.of(
-        <span class="hljs-string">"解释团体保险中的等待期条款"</span>,
-        <span class="hljs-string">"根据以下信息推荐合适的保险产品：员工200人，IT行业，预算每人2000元/年"</span>,
-        <span class="hljs-string">"批改（Endorsement）在保险业务流程中的作用是什么？"</span>
+        <span class="hljs-string">&quot;解释团体保险中的等待期条款&quot;</span>,
+        <span class="hljs-string">&quot;根据以下信息推荐合适的保险产品：员工200人，IT行业，预算每人2000元/年&quot;</span>,
+        <span class="hljs-string">&quot;批改（Endorsement）在保险业务流程中的作用是什么？&quot;</span>
     );
 
     <span class="hljs-keyword">record</span> <span class="hljs-title class_">ModelResponse</span><span class="hljs-params">(String modelName, String prompt,
@@ -1295,10 +1295,10 @@ AWQ 的解决方案：
                 .flatMap(prompt -&gt; List.of(
                     <span class="hljs-comment">// 模型 A 的请求</span>
                     scope.fork(() -&gt; callModel(
-                        MODEL_A_URL, <span class="hljs-string">"Qwen2.5-7B"</span>, prompt)),
+                        MODEL_A_URL, <span class="hljs-string">&quot;Qwen2.5-7B&quot;</span>, prompt)),
                     <span class="hljs-comment">// 模型 B 的请求</span>
                     scope.fork(() -&gt; callModel(
-                        MODEL_B_URL, <span class="hljs-string">"LLaMA-3.1-8B"</span>, prompt))
+                        MODEL_B_URL, <span class="hljs-string">&quot;LLaMA-3.1-8B&quot;</span>, prompt))
                 ).stream())
                 .toList();
 
@@ -1314,22 +1314,22 @@ AWQ 的解决方案：
         <span class="hljs-type">var</span> <span class="hljs-variable">report</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ComparisonReport</span>(allResponses, elapsed);
 
         <span class="hljs-comment">// 打印对比结果</span>
-        System.out.println(<span class="hljs-string">"===== 模型 A/B 对比报告 ====="</span>);
-        System.out.printf(<span class="hljs-string">"总耗时（并发）: %dms%n"</span>, elapsed.toMillis());
-        System.out.printf(<span class="hljs-string">"并发请求数: %d%n%n"</span>,
+        System.out.println(<span class="hljs-string">&quot;===== 模型 A/B 对比报告 =====&quot;</span>);
+        System.out.printf(<span class="hljs-string">&quot;总耗时（并发）: %dms%n&quot;</span>, elapsed.toMillis());
+        System.out.printf(<span class="hljs-string">&quot;并发请求数: %d%n%n&quot;</span>,
             BUSINESS_PROMPTS.size() * <span class="hljs-number">2</span>);
 
         <span class="hljs-comment">// 按模型分组统计</span>
         <span class="hljs-type">var</span> <span class="hljs-variable">modelA</span> <span class="hljs-operator">=</span> allResponses.stream()
-            .filter(r -&gt; r.modelName().equals(<span class="hljs-string">"Qwen2.5-7B"</span>)).toList();
+            .filter(r -&gt; r.modelName().equals(<span class="hljs-string">&quot;Qwen2.5-7B&quot;</span>)).toList();
         <span class="hljs-type">var</span> <span class="hljs-variable">modelB</span> <span class="hljs-operator">=</span> allResponses.stream()
-            .filter(r -&gt; r.modelName().equals(<span class="hljs-string">"LLaMA-3.1-8B"</span>)).toList();
+            .filter(r -&gt; r.modelName().equals(<span class="hljs-string">&quot;LLaMA-3.1-8B&quot;</span>)).toList();
 
-        printStats(<span class="hljs-string">"Qwen2.5-7B"</span>, modelA);
-        printStats(<span class="hljs-string">"LLaMA-3.1-8B"</span>, modelB);
+        printStats(<span class="hljs-string">&quot;Qwen2.5-7B&quot;</span>, modelA);
+        printStats(<span class="hljs-string">&quot;LLaMA-3.1-8B&quot;</span>, modelB);
 
         <span class="hljs-comment">// 打印逐题对比</span>
-        System.out.println(<span class="hljs-string">"\n===== 逐题对比 ====="</span>);
+        System.out.println(<span class="hljs-string">&quot;\n===== 逐题对比 =====&quot;</span>);
         <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> prompt : BUSINESS_PROMPTS) {
             <span class="hljs-type">var</span> <span class="hljs-variable">respA</span> <span class="hljs-operator">=</span> modelA.stream()
                 .filter(r -&gt; r.prompt().equals(prompt))
@@ -1338,12 +1338,12 @@ AWQ 的解决方案：
                 .filter(r -&gt; r.prompt().equals(prompt))
                 .findFirst().orElseThrow();
 
-            System.out.printf(<span class="hljs-string">"""
+            System.out.printf(<span class="hljs-string">&quot;&quot;&quot;
                 题目: %s
                   Qwen2.5-7B:   %dms, %d tokens
                   LLaMA-3.1-8B: %dms, %d tokens
-                %n"""</span>,
-                prompt.substring(<span class="hljs-number">0</span>, Math.min(<span class="hljs-number">30</span>, prompt.length())) + <span class="hljs-string">"..."</span>,
+                %n&quot;&quot;&quot;</span>,
+                prompt.substring(<span class="hljs-number">0</span>, Math.min(<span class="hljs-number">30</span>, prompt.length())) + <span class="hljs-string">&quot;...&quot;</span>,
                 respA.latency().toMillis(), respA.outputTokens(),
                 respB.latency().toMillis(), respB.outputTokens());
         }
@@ -1353,15 +1353,15 @@ AWQ 的解决方案：
                                      String prompt)</span> <span class="hljs-keyword">throws</span> Exception {
         <span class="hljs-type">var</span> <span class="hljs-variable">start</span> <span class="hljs-operator">=</span> Instant.now();
 
-        <span class="hljs-type">var</span> <span class="hljs-variable">requestBody</span> <span class="hljs-operator">=</span> String.format(<span class="hljs-string">"""
+        <span class="hljs-type">var</span> <span class="hljs-variable">requestBody</span> <span class="hljs-operator">=</span> String.format(<span class="hljs-string">&quot;&quot;&quot;
             {
-              "model": "%s",
-              "messages": [{"role": "user", "content": "%s"}],
-              "temperature": 0.0,
-              "max_tokens": 512
+              &quot;model&quot;: &quot;%s&quot;,
+              &quot;messages&quot;: [{&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;%s&quot;}],
+              &quot;temperature&quot;: 0.0,
+              &quot;max_tokens&quot;: 512
             }
-            """</span>, modelName.replace(<span class="hljs-string">" "</span>, <span class="hljs-string">""</span>).toLowerCase(),
-            prompt.replace(<span class="hljs-string">"\""</span>, <span class="hljs-string">"\\\""</span>));
+            &quot;&quot;&quot;</span>, modelName.replace(<span class="hljs-string">&quot; &quot;</span>, <span class="hljs-string">&quot;&quot;</span>).toLowerCase(),
+            prompt.replace(<span class="hljs-string">&quot;\&quot;&quot;</span>, <span class="hljs-string">&quot;\\\&quot;&quot;</span>));
 
         <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">client</span> <span class="hljs-operator">=</span> HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(<span class="hljs-number">30</span>))
@@ -1369,7 +1369,7 @@ AWQ 的解决方案：
 
             <span class="hljs-type">var</span> <span class="hljs-variable">request</span> <span class="hljs-operator">=</span> HttpRequest.newBuilder()
                 .uri(URI.create(url))
-                .header(<span class="hljs-string">"Content-Type"</span>, <span class="hljs-string">"application/json"</span>)
+                .header(<span class="hljs-string">&quot;Content-Type&quot;</span>, <span class="hljs-string">&quot;application/json&quot;</span>)
                 .POST(HttpRequest.BodyPublishers.ofString(requestBody))
                 .build();
 
@@ -1379,7 +1379,7 @@ AWQ 的解决方案：
             <span class="hljs-type">var</span> <span class="hljs-variable">elapsed</span> <span class="hljs-operator">=</span> Duration.between(start, Instant.now());
 
             <span class="hljs-comment">// 简化：用逗号粗略估计 token 数</span>
-            <span class="hljs-type">int</span> <span class="hljs-variable">tokenEstimate</span> <span class="hljs-operator">=</span> response.body().split(<span class="hljs-string">"\\s+"</span>).length;
+            <span class="hljs-type">int</span> <span class="hljs-variable">tokenEstimate</span> <span class="hljs-operator">=</span> response.body().split(<span class="hljs-string">&quot;\\s+&quot;</span>).length;
 
             <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ModelResponse</span>(
                 modelName, prompt,
@@ -1395,11 +1395,11 @@ AWQ 的解决方案：
             .mapToInt(ModelResponse::outputTokens)
             .average().orElse(<span class="hljs-number">0</span>);
 
-        System.out.printf(<span class="hljs-string">"""
+        System.out.printf(<span class="hljs-string">&quot;&quot;&quot;
             %s 统计:
               平均延迟: %.0fms
               平均输出Token: %.0f
-            %n"""</span>, model, avgLatency, avgTokens);
+            %n&quot;&quot;&quot;</span>, model, avgLatency, avgTokens);
     }
 }
 </code></pre></div><hr>
@@ -1459,9 +1459,9 @@ AWQ 的解决方案：
    → 特别是：格式遵循、领域术语、特定风格
    
 <span class="hljs-bullet">4.</span> DPO 对齐（需要偏好数据）
-   → 如果 SFT 后的输出"对但是不够好"
+   → 如果 SFT 后的输出&quot;对但是不够好&quot;
    → 例如：太啰嗦、太保守、格式不够规范
-</code></pre></div><p>核心判断标准：<strong>如果问题是"模型不知道答案"，用 RAG；如果问题是"模型知道答案但回答方式不对"，用微调。</strong></p>
+</code></pre></div><p>核心判断标准：<strong>如果问题是&quot;模型不知道答案&quot;，用 RAG；如果问题是&quot;模型知道答案但回答方式不对&quot;，用微调。</strong></p>
 <h3>Q4: 微调模型如何评估效果？</h3>
 <p><strong>A:</strong> 三层评估体系：</p>
 <ol>
@@ -1501,7 +1501,7 @@ AWQ 的解决方案：
 <tr>
 <td>SFT</td>
 <td>指令遵循、对话格式、任务执行</td>
-<td>模型"知道"但不会"聊天"，输出可能是续写而非回答</td>
+<td>模型&quot;知道&quot;但不会&quot;聊天&quot;，输出可能是续写而非回答</td>
 </tr>
 <tr>
 <td>RLHF/DPO</td>
@@ -1509,7 +1509,7 @@ AWQ 的解决方案：
 <td>模型会回答问题但可能啰嗦、不安全、不符合期望风格</td>
 </tr>
 </tbody></table>
-<p>一个有用的类比：Pre-training 是"上大学学知识"，SFT 是"职业培训学会干活"，RLHF 是"导师带你打磨工作质量"。</p>
+<p>一个有用的类比：Pre-training 是&quot;上大学学知识&quot;，SFT 是&quot;职业培训学会干活&quot;，RLHF 是&quot;导师带你打磨工作质量&quot;。</p>
 <h3>Q7: 不同推理服务（vLLM / Ollama / TGI）的量化格式兼容性如何？</h3>
 <p><strong>A:</strong> 这是 Java 开发者部署时最常见的困惑：</p>
 <table>
@@ -1559,7 +1559,7 @@ AWQ 的解决方案：
 <li><a href="#/07-AI基础/07-Embedding与Tokenization" class="cross-ref">07-Embedding与Tokenization</a> — Embedding 模型的训练（对比学习）和 Tokenization</li>
 <li><a href="#/07-AI基础/07-推理策略与评估方法" class="cross-ref">07-推理策略与评估方法</a> — 推理策略（Greedy/Top-k/Top-p）和更多评估细节</li>
 <li><a href="#/08-模型接入与推理/推理部署/08-模型能力矩阵与路由策略" class="cross-ref">08-模型能力矩阵与路由策略</a> — 模型能力对比和路由选择</li>
-<li><span class="broken-ref" title="未找到: 14-AI平台与LLMOps/评估体系">14-AI平台与LLMOps/评估体系</span> — 生产环境的模型评估和回归测试</li>
+<li><a href="#/14-AI平台与LLMOps/14-AI评估与可观测性" class="cross-ref">14-AI评估与可观测性</a> — 生产环境的模型评估和回归测试</li>
 </ul>
-</body></html></div>
+</div>
 </article>

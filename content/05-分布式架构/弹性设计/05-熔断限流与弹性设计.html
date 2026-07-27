@@ -6,7 +6,7 @@
     <div class="entry-badges"><span class="badge badge-verified">✅ 已验证</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#circuit-breaker</span><span class="badge badge-tag">#rate-limiter</span><span class="badge badge-tag">#resilience4j</span><span class="badge badge-tag">#sentinel</span><span class="badge badge-tag">#retry</span></div>
     <div class="entry-sources"><small>📖 来源：<a href="https://resilience4j.readme.io/docs" target="_blank" rel="noopener" class="source-link" title="Resilience4j 官方文档 — CircuitBreaker/Retry/RateLimiter/Bulkhead/TimeLimiter">Resilience4j 官方文档 — CircuitBreaker/Retry/RateLimiter/Bulkhead/TimeLimiter</a><a href="https://docs.spring.io/spring-cloud-circuitbreaker/docs/current/reference/htmlsingle/" target="_blank" rel="noopener" class="source-link" title="Spring Cloud Circuit Breaker 官方文档">Spring Cloud Circuit Breaker 官方文档</a><a href="https://github.com/resilience4j/resilience4j" target="_blank" rel="noopener" class="source-link" title="Resilience4j 源码（滑动窗口、令牌桶实现）">Resilience4j 源码（滑动窗口、令牌桶实现）</a><a href="https://martinfowler.com/bliki/CircuitBreaker.html" target="_blank" rel="noopener" class="source-link" title="Martin Fowler — Circuit Breaker Pattern">Martin Fowler — Circuit Breaker Pattern</a></small></div>
   </div>
-  <div class="entry-body"><html><head></head><body><h1>熔断、限流与弹性设计</h1>
+  <div class="entry-body"><h1>熔断、限流与弹性设计</h1>
 <h2>概述</h2>
 <p>弹性设计是分布式系统可靠性的最后防线。熔断器防止级联故障，重试机制处理瞬时错误，限流保护系统不被流量压垮，隔离舱防止单点资源耗尽。</p>
 <p>在 AI 应用中，模型 API 调用是典型的不可靠外部依赖——限流（Token 配额）、超时（长推理）、熔断（模型服务不可用）和重试（瞬时错误）缺一不可。</p>
@@ -110,7 +110,7 @@ Bucket<span class="hljs-number"> 0 </span>    Bucket<span class="hljs-number"> 1
 
     <span class="hljs-meta">@Bean</span>
     <span class="hljs-keyword">public</span> CircuitBreaker <span class="hljs-title function_">llmCircuitBreaker</span><span class="hljs-params">(CircuitBreakerRegistry registry)</span> {
-        <span class="hljs-keyword">return</span> registry.circuitBreaker(<span class="hljs-string">"llm-service"</span>);
+        <span class="hljs-keyword">return</span> registry.circuitBreaker(<span class="hljs-string">&quot;llm-service&quot;</span>);
     }
 }
 
@@ -127,17 +127,17 @@ Bucket<span class="hljs-number"> 0 </span>    Bucket<span class="hljs-number"> 1
     }
 
     <span class="hljs-comment">// 方式二：注解模式</span>
-    <span class="hljs-meta">@CircuitBreaker(name = "llm-service", fallbackMethod = "llmFallback")</span>
+    <span class="hljs-meta">@CircuitBreaker(name = &quot;llm-service&quot;, fallbackMethod = &quot;llmFallback&quot;)</span>
     <span class="hljs-keyword">public</span> String <span class="hljs-title function_">callLlmWithAnnotation</span><span class="hljs-params">(String prompt)</span> {
         <span class="hljs-keyword">return</span> openAiClient.chat(prompt);
     }
 
     <span class="hljs-keyword">public</span> String <span class="hljs-title function_">llmFallback</span><span class="hljs-params">(String prompt, CallNotPermittedException e)</span> {
-        <span class="hljs-keyword">return</span> <span class="hljs-string">"AI 服务暂时不可用，请稍后重试"</span>;
+        <span class="hljs-keyword">return</span> <span class="hljs-string">&quot;AI 服务暂时不可用，请稍后重试&quot;</span>;
     }
 
     <span class="hljs-keyword">public</span> String <span class="hljs-title function_">llmFallback</span><span class="hljs-params">(String prompt, TimeoutException e)</span> {
-        <span class="hljs-keyword">return</span> <span class="hljs-string">"AI 服务响应超时，已简化处理"</span>;
+        <span class="hljs-keyword">return</span> <span class="hljs-string">&quot;AI 服务响应超时，已简化处理&quot;</span>;
     }
 }
 </code></pre></div><h3>2.2 Retry 配置</h3>
@@ -148,7 +148,7 @@ Bucket<span class="hljs-number"> 0 </span>    Bucket<span class="hljs-number"> 1
             .waitDuration(Duration.ofMillis(<span class="hljs-number">500</span>))
             .intervalFunction(IntervalFunction.ofExponentialBackoff(
                     Duration.ofMillis(<span class="hljs-number">500</span>), <span class="hljs-number">2.0</span>)) <span class="hljs-comment">// 500ms, 1000ms, 2000ms</span>
-            .retryOnResult(result -&gt; result == <span class="hljs-literal">null</span> || result.contains(<span class="hljs-string">"rate_limit"</span>))
+            .retryOnResult(result -&gt; result == <span class="hljs-literal">null</span> || result.contains(<span class="hljs-string">&quot;rate_limit&quot;</span>))
             .retryOnException(e -&gt; e <span class="hljs-keyword">instanceof</span> TimeoutException)
             .ignoreExceptions(IllegalArgumentException.class)
             .failAfterMaxAttempts(<span class="hljs-literal">true</span>)
@@ -182,13 +182,13 @@ Bucket<span class="hljs-number"> 0 </span>    Bucket<span class="hljs-number"> 1
 }
 
 <span class="hljs-comment">// 使用示例</span>
-<span class="hljs-meta">@RateLimiter(name = "openai-api", fallbackMethod = "rateLimitFallback")</span>
+<span class="hljs-meta">@RateLimiter(name = &quot;openai-api&quot;, fallbackMethod = &quot;rateLimitFallback&quot;)</span>
 <span class="hljs-keyword">public</span> String <span class="hljs-title function_">callOpenAi</span><span class="hljs-params">(String prompt)</span> {
     <span class="hljs-keyword">return</span> openAiClient.chat(prompt);
 }
 
 <span class="hljs-keyword">public</span> String <span class="hljs-title function_">rateLimitFallback</span><span class="hljs-params">(String prompt, RequestNotPermitted e)</span> {
-    <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RateLimitExceededException</span>(<span class="hljs-string">"请求超过限流阈值，请稍后重试"</span>);
+    <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RateLimitExceededException</span>(<span class="hljs-string">&quot;请求超过限流阈值，请稍后重试&quot;</span>);
 }
 </code></pre></div><h3>2.4 Bulkhead 隔离</h3>
 <p><strong>信号量隔离（Semaphore）：</strong></p>
@@ -215,7 +215,7 @@ Bucket<span class="hljs-number"> 0 </span>    Bucket<span class="hljs-number"> 1
     <span class="hljs-keyword">return</span> ThreadPoolBulkheadRegistry.of(config);
 }
 
-<span class="hljs-meta">@Bulkhead(name = "llm-service", type = Bulkhead.Type.THREADPOOL)</span>
+<span class="hljs-meta">@Bulkhead(name = &quot;llm-service&quot;, type = Bulkhead.Type.THREADPOOL)</span>
 <span class="hljs-keyword">public</span> CompletableFuture&lt;String&gt; <span class="hljs-title function_">callLlmAsync</span><span class="hljs-params">(String prompt)</span> {
     <span class="hljs-keyword">return</span> CompletableFuture.supplyAsync(() -&gt; openAiClient.chat(prompt));
 }
@@ -253,7 +253,7 @@ Bucket<span class="hljs-number"> 0 </span>    Bucket<span class="hljs-number"> 1
 }
 
 <span class="hljs-comment">// 配合 CompletableFuture</span>
-<span class="hljs-meta">@TimeLimiter(name = "llm-service", fallbackMethod = "timeoutFallback")</span>
+<span class="hljs-meta">@TimeLimiter(name = &quot;llm-service&quot;, fallbackMethod = &quot;timeoutFallback&quot;)</span>
 <span class="hljs-keyword">public</span> CompletableFuture&lt;String&gt; <span class="hljs-title function_">callLlmWithTimeout</span><span class="hljs-params">(String prompt)</span> {
     <span class="hljs-keyword">return</span> CompletableFuture.supplyAsync(() -&gt; openAiClient.chat(prompt));
 }
@@ -282,14 +282,14 @@ CircuitBreaker → Retry → Bulkhead → TimeLimiter → 业务调用
                 .withBulkhead(bulkhead)
                 .withTimeLimiter(timeLimiter, Executors.newVirtualThreadPerTaskExecutor())
                 .withFallback(List.of(
-                        CallNotPermittedException.class, e -&gt; <span class="hljs-string">"熔断中"</span>,
-                        RequestNotPermitted.class, e -&gt; <span class="hljs-string">"限流中"</span>,
-                        TimeoutException.class, e -&gt; <span class="hljs-string">"超时"</span>
+                        CallNotPermittedException.class, e -&gt; <span class="hljs-string">&quot;熔断中&quot;</span>,
+                        RequestNotPermitted.class, e -&gt; <span class="hljs-string">&quot;限流中&quot;</span>,
+                        TimeoutException.class, e -&gt; <span class="hljs-string">&quot;超时&quot;</span>
                 ))
                 .decorate();
 
         <span class="hljs-keyword">return</span> Try.ofSupplier(decorated)
-                .recover(throwable -&gt; <span class="hljs-string">"弹性降级响应"</span>)
+                .recover(throwable -&gt; <span class="hljs-string">&quot;弹性降级响应&quot;</span>)
                 .get();
     }
 
@@ -478,7 +478,7 @@ limiter.acquire(); <span class="hljs-comment">// 阻塞直到获取令牌</span>
                   <span class="hljs-attr">replenishRate:</span> <span class="hljs-number">100</span>         <span class="hljs-comment"># 每秒令牌数</span>
                   <span class="hljs-attr">burstCapacity:</span> <span class="hljs-number">200</span>          <span class="hljs-comment"># 突发容量</span>
                   <span class="hljs-attr">requestedTokens:</span> <span class="hljs-number">1</span>          <span class="hljs-comment"># 每次请求消耗令牌数</span>
-                <span class="hljs-attr">key-resolver:</span> <span class="hljs-string">"#{@apiKeyResolver}"</span>
+                <span class="hljs-attr">key-resolver:</span> <span class="hljs-string">&quot;#{@apiKeyResolver}&quot;</span>
 </code></pre></div><div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Configuration</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">GatewayRateLimitConfig</span> {
 
@@ -487,7 +487,7 @@ limiter.acquire(); <span class="hljs-comment">// 阻塞直到获取令牌</span>
     <span class="hljs-keyword">public</span> KeyResolver <span class="hljs-title function_">userKeyResolver</span><span class="hljs-params">()</span> {
         <span class="hljs-keyword">return</span> exchange -&gt; Mono.just(
                 exchange.getRequest().getHeaders()
-                        .getFirst(<span class="hljs-string">"X-User-Id"</span>));
+                        .getFirst(<span class="hljs-string">&quot;X-User-Id&quot;</span>));
     }
 
     <span class="hljs-comment">// 按 IP 限流</span>
@@ -502,9 +502,9 @@ limiter.acquire(); <span class="hljs-comment">// 阻塞直到获取令牌</span>
     <span class="hljs-meta">@Bean</span>
     <span class="hljs-keyword">public</span> KeyResolver <span class="hljs-title function_">compositeKeyResolver</span><span class="hljs-params">()</span> {
         <span class="hljs-keyword">return</span> exchange -&gt; {
-            <span class="hljs-type">var</span> <span class="hljs-variable">userId</span> <span class="hljs-operator">=</span> exchange.getRequest().getHeaders().getFirst(<span class="hljs-string">"X-User-Id"</span>);
+            <span class="hljs-type">var</span> <span class="hljs-variable">userId</span> <span class="hljs-operator">=</span> exchange.getRequest().getHeaders().getFirst(<span class="hljs-string">&quot;X-User-Id&quot;</span>);
             <span class="hljs-type">var</span> <span class="hljs-variable">path</span> <span class="hljs-operator">=</span> exchange.getRequest().getPath().value();
-            <span class="hljs-keyword">return</span> Mono.just(userId + <span class="hljs-string">":"</span> + path);
+            <span class="hljs-keyword">return</span> Mono.just(userId + <span class="hljs-string">&quot;:&quot;</span> + path);
         };
     }
 }
@@ -523,12 +523,12 @@ local requested = tonumber(ARGV[4])
 local fill_time = capacity / rate
 local ttl = math.floor(fill_time * 2)
 
-local last_tokens = tonumber(redis.call("get", tokens_key))
+local last_tokens = tonumber(redis.call(&quot;get&quot;, tokens_key))
 if last_tokens == nil then
     last_tokens = capacity
 end
 
-local last_refreshed = tonumber(redis.call("get", timestamp_key))
+local last_refreshed = tonumber(redis.call(&quot;get&quot;, timestamp_key))
 if last_refreshed == nil then
     last_refreshed = 0
 end
@@ -542,8 +542,8 @@ if allowed then
     new_tokens = filled_tokens - requested
 end
 
-redis.call("setex", tokens_key, ttl, new_tokens)
-redis.call("setex", timestamp_key, ttl, now)
+redis.call(&quot;setex&quot;, tokens_key, ttl, new_tokens)
+redis.call(&quot;setex&quot;, timestamp_key, ttl, now)
 
 return { allowed, new_tokens }
 */</span>
@@ -621,5 +621,5 @@ A: Retry 处理模型 API 瞬时错误；CircuitBreaker 处理模型服务整体
 <li><a href="#/05-分布式架构/事务与一致性/05-分布式一致性与事务方案" class="cross-ref">05-分布式一致性与事务方案</a> — 分布式事务重试与补偿</li>
 <li><a href="#/04-数据与中间件/数据库与缓存/04-Redis深度解析" class="cross-ref">04-Redis深度解析</a> — Redis 分布式限流实现</li>
 </ul>
-</body></html></div>
+</div>
 </article>

@@ -6,7 +6,7 @@
     <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#microservices</span><span class="badge badge-tag">#nacos</span><span class="badge badge-tag">#spring-cloud-gateway</span><span class="badge badge-tag">#service-discovery</span><span class="badge badge-tag">#config-center</span></div>
     <div class="entry-sources"><small>📖 来源：<a href="https://nacos.io/docs/latest/guide/user/auth/" target="_blank" rel="noopener" class="source-link" title="Nacos 官方文档 — 注册中心、配置中心、服务发现">Nacos 官方文档 — 注册中心、配置中心、服务发现</a><a href="https://docs.spring.io/spring-cloud-gateway/docs/current/reference/htmlsingle/" target="_blank" rel="noopener" class="source-link" title="Spring Cloud Gateway 官方参考手册 — Route/Predicate/Filter 三大核心">Spring Cloud Gateway 官方参考手册 — Route/Predicate/Filter 三大核心</a><a href="https://micrometer.io/docs/tracing" target="_blank" rel="noopener" class="source-link" title="Micrometer Tracing 官方文档 — Observation API 与 Brave 集成">Micrometer Tracing 官方文档 — Observation API 与 Brave 集成</a><a href="https://docs.spring.io/spring-cloud-commons/docs/current/reference/htmlsingle/" target="_blank" rel="noopener" class="source-link" title="Spring Cloud Commons 官方文档 — LoadBalancer、服务发现抽象">Spring Cloud Commons 官方文档 — LoadBalancer、服务发现抽象</a><a href="https://github.com/alibaba/nacos" target="_blank" rel="noopener" class="source-link" title="Nacos 源码 — Distro 协议、Raft 协议实现、NamingService">Nacos 源码 — Distro 协议、Raft 协议实现、NamingService</a><a href="https://github.com/spring-cloud/spring-cloud-gateway" target="_blank" rel="noopener" class="source-link" title="Spring Cloud Gateway 源码 — RouteLocator、过滤器链、路由匹配">Spring Cloud Gateway 源码 — RouteLocator、过滤器链、路由匹配</a><a href="https://zipkin.io/pages/architecture.html" target="_blank" rel="noopener" class="source-link" title="Zipkin 架构文档 — 分布式追踪数据模型与 B3 Propagation 格式">Zipkin 架构文档 — 分布式追踪数据模型与 B3 Propagation 格式</a></small></div>
   </div>
-  <div class="entry-body"><html><head></head><body><h1>微服务基础设施</h1>
+  <div class="entry-body"><h1>微服务基础设施</h1>
 <h2>概述</h2>
 <p>微服务基础设施是分布式系统稳定运行的基石。当单体应用拆分为数十甚至数百个独立服务后，三个根本问题随之而来：(1) 服务实例动态变化，调用方如何发现目标服务？(2) 配置散落在各服务中，如何集中管理和动态变更？(3) 请求跨多个服务，如何追踪完整的调用链路？服务注册与发现、配置中心、API 网关和分布式链路追踪构成了回答这三个问题的四大基础设施。</p>
 <p>本文以 Nacos + Spring Cloud Gateway + Micrometer Tracing 为技术主线，深入服务注册发现的 AP/CP 协议权衡、配置中心的灰度发布与动态刷新机制、网关的路由断言过滤器三大核心、以及分布式链路追踪的采样策略与跨线程传播，覆盖从原理到生产实践的全链路知识。</p>
@@ -40,10 +40,10 @@
 <p>持久实例适用于期望即使服务下线也保留注册信息的场景（如数据库、中间件地址）：</p>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 注册持久实例</span>
 <span class="hljs-type">var</span> <span class="hljs-variable">instance</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Instance</span>();
-instance.setIp(<span class="hljs-string">"192.168.1.100"</span>);
+instance.setIp(<span class="hljs-string">&quot;192.168.1.100&quot;</span>);
 instance.setPort(<span class="hljs-number">8080</span>);
 instance.setEphemeral(<span class="hljs-literal">false</span>);  <span class="hljs-comment">// 持久实例 → 走 Raft 协议</span>
-instance.setClusterName(<span class="hljs-string">"DEFAULT"</span>);
+instance.setClusterName(<span class="hljs-string">&quot;DEFAULT&quot;</span>);
 
 <span class="hljs-comment">// NacosNamingService 内部根据 ephemeral 字段分流：</span>
 <span class="hljs-comment">// ephemeral=true  → Distro 协议 → 临时节点</span>
@@ -132,7 +132,7 @@ instance.setClusterName(<span class="hljs-string">"DEFAULT"</span>);
 
 触发后行为：
 <span class="hljs-bullet">  -</span> 不再剔除任何实例（即使心跳超时）
-<span class="hljs-bullet">  -</span> 日志输出 "EMERGENCY! EUREKA MAY BE INCORRECTLY CLAIMING INSTANCES ARE UP"
+<span class="hljs-bullet">  -</span> 日志输出 &quot;EMERGENCY! EUREKA MAY BE INCORRECTLY CLAIMING INSTANCES ARE UP&quot;
 <span class="hljs-bullet">  -</span> 新注册和续约请求正常处理
 
 风险：自我保护期间，调用方可能拿到已宕机的实例 → 必须配合重试+熔断
@@ -150,7 +150,7 @@ instance.setClusterName(<span class="hljs-string">"DEFAULT"</span>);
     │
     ▼
 客户端拉取（默认 30<span class="hljs-title">s</span> 间隔）</span>
-</code></pre></div><p>这导致 Eureka 的"最大不可用时间窗口"可达 30s（只读缓存同步间隔）+ 30s（客户端拉取间隔）= 60s，远超 Nacos 的 15s（3 次心跳间隔）。</p>
+</code></pre></div><p>这导致 Eureka 的&quot;最大不可用时间窗口&quot;可达 30s（只读缓存同步间隔）+ 30s（客户端拉取间隔）= 60s，远超 Nacos 的 15s（3 次心跳间隔）。</p>
 <h3>1.3 Consul — CP 模式与 Service Mesh 就绪</h3>
 <p>Consul 基于 Raft 协议实现强一致性，内置健康检查丰富度超过 Nacos 和 Eureka：</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>健康检查类型：
@@ -266,14 +266,14 @@ instance.setClusterName(<span class="hljs-string">"DEFAULT"</span>);
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> RestClient restClient;
 
     <span class="hljs-keyword">public</span> <span class="hljs-title function_">OrderServiceClient</span><span class="hljs-params">(<span class="hljs-meta">@LoadBalanced</span> RestClient.Builder builder)</span> {
-        <span class="hljs-built_in">this</span>.restClient = builder.baseUrl(<span class="hljs-string">"http://order-service"</span>).build();
+        <span class="hljs-built_in">this</span>.restClient = builder.baseUrl(<span class="hljs-string">&quot;http://order-service&quot;</span>).build();
     }
 
     <span class="hljs-keyword">public</span> OrderDto <span class="hljs-title function_">getOrder</span><span class="hljs-params">(Long orderId)</span> {
         <span class="hljs-comment">// 底层通过 ServiceInstanceListSupplier 从注册中心获取实例列表</span>
         <span class="hljs-comment">// LoadBalancer 选择具体实例后发起 HTTP 调用</span>
         <span class="hljs-keyword">return</span> restClient.get()
-                .uri(<span class="hljs-string">"/api/orders/{id}"</span>, orderId)
+                .uri(<span class="hljs-string">&quot;/api/orders/{id}&quot;</span>, orderId)
                 .retrieve()
                 .body(OrderDto.class);
     }
@@ -337,7 +337,7 @@ instance.setClusterName(<span class="hljs-string">"DEFAULT"</span>);
 <p>Nacos 支持按 IP 维度进行配置灰度，即指定 IP 的实例拉取 Beta 版配置：</p>
 <div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-comment"># 操作流程（通过控制台或 API）：</span>
 <span class="hljs-comment"># 1. 创建正式配置：order-service-dev.yml（version: 1）</span>
-<span class="hljs-comment"># 2. 创建 Beta 配置：选择目标 IP 列表 ["192.168.1.10", "192.168.1.11"]</span>
+<span class="hljs-comment"># 2. 创建 Beta 配置：选择目标 IP 列表 [&quot;192.168.1.10&quot;, &quot;192.168.1.11&quot;]</span>
 <span class="hljs-comment"># 3. 灰度验证通过后，发布 Beta 配置为正式配置</span>
 </code></pre></div><p>配置拉取逻辑：</p>
 <div class="code-block"><div class="code-header"><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code>Client 请求配置 →<span class="hljs-built_in"> Server </span>检查请求<span class="hljs-built_in"> IP
@@ -379,7 +379,7 @@ instance.setClusterName(<span class="hljs-string">"DEFAULT"</span>);
 <span class="hljs-string">@Component</span>
 <span class="hljs-string">public</span> <span class="hljs-string">class</span> <span class="hljs-string">AesEncryptionPlugin</span> <span class="hljs-string">implements</span> <span class="hljs-string">EncryptionPlugin</span> {
 
-    <span class="hljs-string">private</span> <span class="hljs-string">static</span> <span class="hljs-string">final</span> <span class="hljs-string">String</span> <span class="hljs-string">AES_KEY</span> <span class="hljs-string">=</span> <span class="hljs-string">System.getenv("NACOS_AES_KEY");</span>
+    <span class="hljs-string">private</span> <span class="hljs-string">static</span> <span class="hljs-string">final</span> <span class="hljs-string">String</span> <span class="hljs-string">AES_KEY</span> <span class="hljs-string">=</span> <span class="hljs-string">System.getenv(&quot;NACOS_AES_KEY&quot;);</span>
 
     <span class="hljs-string">@Override</span>
     <span class="hljs-string">public</span> <span class="hljs-string">String</span> <span class="hljs-string">encrypt(String</span> <span class="hljs-string">plainText)</span> {
@@ -401,7 +401,7 @@ instance.setClusterName(<span class="hljs-string">"DEFAULT"</span>);
       <span class="hljs-attr">server:</span>
         <span class="hljs-attr">git:</span>
           <span class="hljs-attr">uri:</span> <span class="hljs-string">https://git.example.com/config-repo</span>
-          <span class="hljs-attr">search-paths:</span> <span class="hljs-string">'{application}'</span>  <span class="hljs-comment"># 按应用名搜索子目录</span>
+          <span class="hljs-attr">search-paths:</span> <span class="hljs-string">&#x27;{application}&#x27;</span>  <span class="hljs-comment"># 按应用名搜索子目录</span>
           <span class="hljs-attr">default-label:</span> <span class="hljs-string">main</span>
           <span class="hljs-comment"># 复合仓库：不同应用从不同仓库拉取</span>
           <span class="hljs-attr">composite:</span>
@@ -420,7 +420,7 @@ instance.setClusterName(<span class="hljs-string">"DEFAULT"</span>);
 <div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-comment"># 加密配置值</span>
 <span class="hljs-attr">spring:</span>
   <span class="hljs-attr">datasource:</span>
-    <span class="hljs-attr">password:</span> <span class="hljs-string">'{cipher}AQA...encrypted_value...'</span>
+    <span class="hljs-attr">password:</span> <span class="hljs-string">&#x27;{cipher}AQA...encrypted_value...&#x27;</span>
 
 <span class="hljs-comment"># 服务端配置密钥</span>
 <span class="hljs-attr">encrypt:</span>
@@ -436,17 +436,17 @@ instance.setClusterName(<span class="hljs-string">"DEFAULT"</span>);
 <span class="hljs-meta">@RefreshScope</span>  <span class="hljs-comment">// 收到 RefreshScopeRefreshedEvent 后，下次访问时重新初始化</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">FeatureController</span> {
 
-    <span class="hljs-meta">@Value("${feature.new-checkout.enabled:false}")</span>
+    <span class="hljs-meta">@Value(&quot;${feature.new-checkout.enabled:false}&quot;)</span>
     <span class="hljs-keyword">private</span> <span class="hljs-type">boolean</span> newCheckoutEnabled;
 
-    <span class="hljs-meta">@GetMapping("/feature/checkout-v2")</span>
+    <span class="hljs-meta">@GetMapping(&quot;/feature/checkout-v2&quot;)</span>
     <span class="hljs-keyword">public</span> String <span class="hljs-title function_">checkout</span><span class="hljs-params">()</span> {
-        <span class="hljs-keyword">return</span> newCheckoutEnabled ? <span class="hljs-string">"V2"</span> : <span class="hljs-string">"V1"</span>;
+        <span class="hljs-keyword">return</span> newCheckoutEnabled ? <span class="hljs-string">&quot;V2&quot;</span> : <span class="hljs-string">&quot;V1&quot;</span>;
     }
 }
 
 <span class="hljs-comment">// 方式二：@ConfigurationProperties — 自动绑定刷新</span>
-<span class="hljs-meta">@ConfigurationProperties(prefix = "app")</span>
+<span class="hljs-meta">@ConfigurationProperties(prefix = &quot;app&quot;)</span>
 <span class="hljs-meta">@Component</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">AppProperties</span> {
     <span class="hljs-keyword">private</span> <span class="hljs-type">int</span> timeout;
@@ -464,7 +464,7 @@ instance.setClusterName(<span class="hljs-string">"DEFAULT"</span>);
         <span class="hljs-comment">// event.getKeys() 返回变更的 key 列表</span>
         <span class="hljs-comment">// 执行自定义清理逻辑：如清空本地缓存、重建连接池</span>
         <span class="hljs-keyword">for</span> (String key : event.getKeys()) {
-            log.info(<span class="hljs-string">"配置变更: {}"</span>, key);
+            log.info(<span class="hljs-string">&quot;配置变更: {}&quot;</span>, key);
         }
     }
 }
@@ -592,7 +592,7 @@ instance.setClusterName(<span class="hljs-string">"DEFAULT"</span>);
                   <span class="hljs-attr">replenishRate:</span> <span class="hljs-number">100</span>       <span class="hljs-comment"># 每秒补充 100 令牌</span>
                   <span class="hljs-attr">burstCapacity:</span> <span class="hljs-number">200</span>       <span class="hljs-comment"># 最大突发 200</span>
                   <span class="hljs-attr">requestedTokens:</span> <span class="hljs-number">1</span>
-                <span class="hljs-attr">key-resolver:</span> <span class="hljs-string">"#{@apiKeyResolver}"</span>
+                <span class="hljs-attr">key-resolver:</span> <span class="hljs-string">&quot;#{@apiKeyResolver}&quot;</span>
 
             <span class="hljs-comment"># 熔断 — Resilience4j 集成</span>
             <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">CircuitBreaker</span>
@@ -622,9 +622,9 @@ instance.setClusterName(<span class="hljs-string">"DEFAULT"</span>);
 
     <span class="hljs-comment">// 白名单路径，跳过鉴权</span>
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> List&lt;String&gt; WHITELIST = List.of(
-            <span class="hljs-string">"/api/auth/login"</span>,
-            <span class="hljs-string">"/api/auth/register"</span>,
-            <span class="hljs-string">"/api/public/**"</span>
+            <span class="hljs-string">&quot;/api/auth/login&quot;</span>,
+            <span class="hljs-string">&quot;/api/auth/register&quot;</span>,
+            <span class="hljs-string">&quot;/api/public/**&quot;</span>
     );
 
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">AntPathMatcher</span> <span class="hljs-variable">pathMatcher</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">AntPathMatcher</span>();
@@ -639,7 +639,7 @@ instance.setClusterName(<span class="hljs-string">"DEFAULT"</span>);
         }
 
         <span class="hljs-type">var</span> <span class="hljs-variable">authHeader</span> <span class="hljs-operator">=</span> exchange.getRequest().getHeaders().getFirst(HttpHeaders.AUTHORIZATION);
-        <span class="hljs-keyword">if</span> (authHeader == <span class="hljs-literal">null</span> || !authHeader.startsWith(<span class="hljs-string">"Bearer "</span>)) {
+        <span class="hljs-keyword">if</span> (authHeader == <span class="hljs-literal">null</span> || !authHeader.startsWith(<span class="hljs-string">&quot;Bearer &quot;</span>)) {
             exchange.getResponse().setStatusCode(HttpStatus.UNAUTHORIZED);
             <span class="hljs-keyword">return</span> exchange.getResponse().setComplete();
         }
@@ -650,9 +650,9 @@ instance.setClusterName(<span class="hljs-string">"DEFAULT"</span>);
 
             <span class="hljs-comment">// 将用户信息注入 Header 向下游传递，下游服务无需再次解析 JWT</span>
             exchange = exchange.mutate()
-                    .request(r -&gt; r.header(<span class="hljs-string">"X-User-Id"</span>, claims.getSubject())
-                                   .header(<span class="hljs-string">"X-User-Name"</span>, claims.get(<span class="hljs-string">"name"</span>, String.class))
-                                   .header(<span class="hljs-string">"X-Tenant-Id"</span>, claims.get(<span class="hljs-string">"tenantId"</span>, String.class)))
+                    .request(r -&gt; r.header(<span class="hljs-string">&quot;X-User-Id&quot;</span>, claims.getSubject())
+                                   .header(<span class="hljs-string">&quot;X-User-Name&quot;</span>, claims.get(<span class="hljs-string">&quot;name&quot;</span>, String.class))
+                                   .header(<span class="hljs-string">&quot;X-Tenant-Id&quot;</span>, claims.get(<span class="hljs-string">&quot;tenantId&quot;</span>, String.class)))
                     .build();
 
             <span class="hljs-keyword">return</span> chain.filter(exchange);
@@ -681,7 +681,7 @@ instance.setClusterName(<span class="hljs-string">"DEFAULT"</span>);
                     .then(Mono.fromRunnable(() -&gt; {
                         <span class="hljs-type">var</span> <span class="hljs-variable">duration</span> <span class="hljs-operator">=</span> System.currentTimeMillis() - start;
                         <span class="hljs-type">var</span> <span class="hljs-variable">status</span> <span class="hljs-operator">=</span> exchange.getResponse().getStatusCode();
-                        log.info(<span class="hljs-string">"Gateway {} {} {} in {}ms"</span>, config.getPrefix(),
+                        log.info(<span class="hljs-string">&quot;Gateway {} {} {} in {}ms&quot;</span>, config.getPrefix(),
                                 path, status, duration);
                     }));
         };
@@ -739,9 +739,9 @@ instance.setClusterName(<span class="hljs-string">"DEFAULT"</span>);
 
     <span class="hljs-comment">// Observation API: 统一的可观测性抽象</span>
     <span class="hljs-keyword">public</span> Order <span class="hljs-title function_">createOrder</span><span class="hljs-params">(OrderRequest request)</span> {
-        <span class="hljs-keyword">return</span> Observation.createNotStarted(<span class="hljs-string">"order.create"</span>, observationRegistry)
-                .lowCardinalityKeyValue(<span class="hljs-string">"order.amount"</span>, String.valueOf(request.amount()))
-                .highCardinalityKeyValue(<span class="hljs-string">"order.userId"</span>, request.userId())
+        <span class="hljs-keyword">return</span> Observation.createNotStarted(<span class="hljs-string">&quot;order.create&quot;</span>, observationRegistry)
+                .lowCardinalityKeyValue(<span class="hljs-string">&quot;order.amount&quot;</span>, String.valueOf(request.amount()))
+                .highCardinalityKeyValue(<span class="hljs-string">&quot;order.userId&quot;</span>, request.userId())
                 .observe(() -&gt; {
                     <span class="hljs-comment">// 业务逻辑</span>
                     <span class="hljs-comment">// 框架自动在此 Span 下创建子 Span（数据库查询、HTTP 调用等）</span>
@@ -796,17 +796,17 @@ instance.setClusterName(<span class="hljs-string">"DEFAULT"</span>);
         <span class="hljs-keyword">if</span> (span != <span class="hljs-literal">null</span>) {
             <span class="hljs-type">var</span> <span class="hljs-variable">context</span> <span class="hljs-operator">=</span> span.context();
             <span class="hljs-comment">// 注入到 Kafka Headers</span>
-            <span class="hljs-type">var</span> <span class="hljs-variable">producerRecord</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ProducerRecord</span>&lt;&gt;(<span class="hljs-string">"order-events"</span>, event);
+            <span class="hljs-type">var</span> <span class="hljs-variable">producerRecord</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ProducerRecord</span>&lt;&gt;(<span class="hljs-string">&quot;order-events&quot;</span>, event);
             producerRecord.headers()
-                    .add(<span class="hljs-string">"X-B3-TraceId"</span>, context.traceId().getBytes())
-                    .add(<span class="hljs-string">"X-B3-SpanId"</span>, context.spanId().getBytes());
+                    .add(<span class="hljs-string">&quot;X-B3-TraceId&quot;</span>, context.traceId().getBytes())
+                    .add(<span class="hljs-string">&quot;X-B3-SpanId&quot;</span>, context.spanId().getBytes());
             kafkaTemplate.send(producerRecord);
         }
     }
 }
 
 <span class="hljs-comment">// Kafka 消费者提取 Trace 上下文</span>
-<span class="hljs-meta">@KafkaListener(topics = "order-events")</span>
+<span class="hljs-meta">@KafkaListener(topics = &quot;order-events&quot;)</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">handleOrderEvent</span><span class="hljs-params">(ConsumerRecord&lt;String, OrderEvent&gt; record)</span> {
     <span class="hljs-comment">// 从 Headers 提取 TraceId → 创建 Span → 链路自动串起来</span>
     <span class="hljs-comment">// Micrometer + Brave 自动完成此过程</span>
@@ -820,7 +820,7 @@ instance.setClusterName(<span class="hljs-string">"DEFAULT"</span>);
 
 <span class="hljs-comment">// 方式二：手动包装（JDK 25 的 StructuredTaskScope）</span>
 <span class="hljs-keyword">public</span> List&lt;Order&gt; <span class="hljs-title function_">fetchOrdersInParallel</span><span class="hljs-params">(List&lt;Long&gt; orderIds)</span> {
-    <span class="hljs-type">var</span> <span class="hljs-variable">observation</span> <span class="hljs-operator">=</span> Observation.createNotStarted(<span class="hljs-string">"order.batch-fetch"</span>, registry)
+    <span class="hljs-type">var</span> <span class="hljs-variable">observation</span> <span class="hljs-operator">=</span> Observation.createNotStarted(<span class="hljs-string">&quot;order.batch-fetch&quot;</span>, registry)
             .start();
 
     <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">scope</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StructuredTaskScope</span>.ShutdownOnFailure()) {
@@ -836,7 +836,7 @@ instance.setClusterName(<span class="hljs-string">"DEFAULT"</span>);
         observation.stop();
     }
 }
-</code></pre></div><p>Scoped Values 相比 ThreadLocal 的根本优势：Scoped Value 绑定到"值的生命周期"而非"线程的生命周期"，Virtual Thread 被调度到不同 Carrier Thread 时上下文不会丢失。</p>
+</code></pre></div><p>Scoped Values 相比 ThreadLocal 的根本优势：Scoped Value 绑定到&quot;值的生命周期&quot;而非&quot;线程的生命周期&quot;，Virtual Thread 被调度到不同 Carrier Thread 时上下文不会丢失。</p>
 <h3>4.4 采样策略</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">yaml</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-yaml"><span class="hljs-comment"># 固定概率采样</span>
 <span class="hljs-attr">spring:</span>
@@ -851,15 +851,15 @@ instance.setClusterName(<span class="hljs-string">"DEFAULT"</span>);
     <span class="hljs-keyword">public</span> SamplerFunction&lt;HttpServerRequest&gt; <span class="hljs-title function_">httpSampler</span><span class="hljs-params">()</span> {
         <span class="hljs-keyword">return</span> request -&gt; {
             <span class="hljs-comment">// 错误路径全量采样</span>
-            <span class="hljs-keyword">if</span> (request.path().startsWith(<span class="hljs-string">"/api/error-report"</span>)) {
+            <span class="hljs-keyword">if</span> (request.path().startsWith(<span class="hljs-string">&quot;/api/error-report&quot;</span>)) {
                 <span class="hljs-keyword">return</span> <span class="hljs-literal">true</span>;
             }
             <span class="hljs-comment">// 健康检查不采样</span>
-            <span class="hljs-keyword">if</span> (request.path().startsWith(<span class="hljs-string">"/actuator"</span>)) {
+            <span class="hljs-keyword">if</span> (request.path().startsWith(<span class="hljs-string">&quot;/actuator&quot;</span>)) {
                 <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
             }
             <span class="hljs-comment">// 统计类接口低采样率</span>
-            <span class="hljs-keyword">if</span> (request.path().startsWith(<span class="hljs-string">"/api/stats"</span>)) {
+            <span class="hljs-keyword">if</span> (request.path().startsWith(<span class="hljs-string">&quot;/api/stats&quot;</span>)) {
                 <span class="hljs-keyword">return</span> Math.random() &lt; <span class="hljs-number">0.01</span>;
             }
             <span class="hljs-keyword">return</span> Math.random() &lt; <span class="hljs-number">0.1</span>;
@@ -1030,7 +1030,7 @@ instance.setClusterName(<span class="hljs-string">"DEFAULT"</span>);
                 <span class="hljs-attr">redis-rate-limiter:</span>
                   <span class="hljs-attr">replenishRate:</span> <span class="hljs-number">200</span>
                   <span class="hljs-attr">burstCapacity:</span> <span class="hljs-number">400</span>
-                <span class="hljs-attr">key-resolver:</span> <span class="hljs-string">"#{@userKeyResolver}"</span>
+                <span class="hljs-attr">key-resolver:</span> <span class="hljs-string">&quot;#{@userKeyResolver}&quot;</span>
             <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">CircuitBreaker</span>
               <span class="hljs-attr">args:</span>
                 <span class="hljs-attr">name:</span> <span class="hljs-string">userServiceCB</span>
@@ -1049,7 +1049,7 @@ instance.setClusterName(<span class="hljs-string">"DEFAULT"</span>);
                 <span class="hljs-attr">redis-rate-limiter:</span>
                   <span class="hljs-attr">replenishRate:</span> <span class="hljs-number">50</span>
                   <span class="hljs-attr">burstCapacity:</span> <span class="hljs-number">100</span>
-                <span class="hljs-attr">key-resolver:</span> <span class="hljs-string">"#{@userKeyResolver}"</span>
+                <span class="hljs-attr">key-resolver:</span> <span class="hljs-string">&quot;#{@userKeyResolver}&quot;</span>
             <span class="hljs-bullet">-</span> <span class="hljs-attr">name:</span> <span class="hljs-string">CircuitBreaker</span>
               <span class="hljs-attr">args:</span>
                 <span class="hljs-attr">name:</span> <span class="hljs-string">llmServiceCB</span>
@@ -1104,13 +1104,13 @@ instance.setClusterName(<span class="hljs-string">"DEFAULT"</span>);
                 <span class="hljs-type">var</span> <span class="hljs-variable">path</span> <span class="hljs-operator">=</span> request.path();
 
                 <span class="hljs-comment">// 健康检查和 actuator 端点不采样</span>
-                <span class="hljs-keyword">if</span> (matcher.match(<span class="hljs-string">"/actuator/**"</span>, path)
-                        || matcher.match(<span class="hljs-string">"/api/health/**"</span>, path)) {
+                <span class="hljs-keyword">if</span> (matcher.match(<span class="hljs-string">&quot;/actuator/**&quot;</span>, path)
+                        || matcher.match(<span class="hljs-string">&quot;/api/health/**&quot;</span>, path)) {
                     <span class="hljs-keyword">return</span> <span class="hljs-literal">false</span>;
                 }
 
                 <span class="hljs-comment">// 统计接口低采样</span>
-                <span class="hljs-keyword">if</span> (matcher.match(<span class="hljs-string">"/api/statistics/**"</span>, path)) {
+                <span class="hljs-keyword">if</span> (matcher.match(<span class="hljs-string">&quot;/api/statistics/**&quot;</span>, path)) {
                     <span class="hljs-keyword">return</span> ThreadLocalRandom.current().nextDouble() &lt; <span class="hljs-number">0.01</span>;
                 }
 
@@ -1179,8 +1179,8 @@ instance.setClusterName(<span class="hljs-string">"DEFAULT"</span>);
                     <span class="hljs-type">var</span> <span class="hljs-variable">totalWeight</span> <span class="hljs-operator">=</span> instances.stream()
                             .mapToDouble(i -&gt; {
                                 <span class="hljs-type">var</span> <span class="hljs-variable">meta</span> <span class="hljs-operator">=</span> i.getMetadata();
-                                <span class="hljs-keyword">return</span> meta.containsKey(<span class="hljs-string">"nacos.weight"</span>)
-                                        ? Double.parseDouble(meta.get(<span class="hljs-string">"nacos.weight"</span>))
+                                <span class="hljs-keyword">return</span> meta.containsKey(<span class="hljs-string">&quot;nacos.weight&quot;</span>)
+                                        ? Double.parseDouble(meta.get(<span class="hljs-string">&quot;nacos.weight&quot;</span>))
                                         : <span class="hljs-number">1.0</span>;
                             })
                             .sum();
@@ -1189,7 +1189,7 @@ instance.setClusterName(<span class="hljs-string">"DEFAULT"</span>);
                     <span class="hljs-type">double</span> <span class="hljs-variable">cumulative</span> <span class="hljs-operator">=</span> <span class="hljs-number">0.0</span>;
                     <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> instance : instances) {
                         <span class="hljs-type">var</span> <span class="hljs-variable">weight</span> <span class="hljs-operator">=</span> Double.parseDouble(
-                                instance.getMetadata().getOrDefault(<span class="hljs-string">"nacos.weight"</span>, <span class="hljs-string">"1.0"</span>));
+                                instance.getMetadata().getOrDefault(<span class="hljs-string">&quot;nacos.weight&quot;</span>, <span class="hljs-string">&quot;1.0&quot;</span>));
                         cumulative += weight;
                         <span class="hljs-keyword">if</span> (random &lt;= cumulative) {
                             <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">DefaultResponse</span>(instance);
@@ -1209,9 +1209,9 @@ instance.setClusterName(<span class="hljs-string">"DEFAULT"</span>);
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> RestClient userClient;
 
     <span class="hljs-keyword">public</span> <span class="hljs-title function_">ProductAggregationService</span><span class="hljs-params">(<span class="hljs-meta">@LoadBalanced</span> RestClient.Builder builder)</span> {
-        <span class="hljs-built_in">this</span>.orderClient = builder.baseUrl(<span class="hljs-string">"http://order-service"</span>).build();
-        <span class="hljs-built_in">this</span>.inventoryClient = builder.baseUrl(<span class="hljs-string">"http://inventory-service"</span>).build();
-        <span class="hljs-built_in">this</span>.userClient = builder.baseUrl(<span class="hljs-string">"http://user-service"</span>).build();
+        <span class="hljs-built_in">this</span>.orderClient = builder.baseUrl(<span class="hljs-string">&quot;http://order-service&quot;</span>).build();
+        <span class="hljs-built_in">this</span>.inventoryClient = builder.baseUrl(<span class="hljs-string">&quot;http://inventory-service&quot;</span>).build();
+        <span class="hljs-built_in">this</span>.userClient = builder.baseUrl(<span class="hljs-string">&quot;http://user-service&quot;</span>).build();
     }
 
     <span class="hljs-comment">/**
@@ -1223,21 +1223,21 @@ instance.setClusterName(<span class="hljs-string">"DEFAULT"</span>);
 
             <span class="hljs-type">var</span> <span class="hljs-variable">orderTask</span> <span class="hljs-operator">=</span> scope.fork(() -&gt;
                     orderClient.get()
-                            .uri(<span class="hljs-string">"/api/orders/product/{id}"</span>, productId)
+                            .uri(<span class="hljs-string">&quot;/api/orders/product/{id}&quot;</span>, productId)
                             .retrieve()
                             .body(OrderSummaryList.class)
             );
 
             <span class="hljs-type">var</span> <span class="hljs-variable">inventoryTask</span> <span class="hljs-operator">=</span> scope.fork(() -&gt;
                     inventoryClient.get()
-                            .uri(<span class="hljs-string">"/api/inventory/{id}"</span>, productId)
+                            .uri(<span class="hljs-string">&quot;/api/inventory/{id}&quot;</span>, productId)
                             .retrieve()
                             .body(InventoryDto.class)
             );
 
             <span class="hljs-type">var</span> <span class="hljs-variable">userTask</span> <span class="hljs-operator">=</span> scope.fork(() -&gt;
                     userClient.get()
-                            .uri(<span class="hljs-string">"/api/users/{id}"</span>, userId)
+                            .uri(<span class="hljs-string">&quot;/api/users/{id}&quot;</span>, userId)
                             .retrieve()
                             .body(UserDto.class)
             );
@@ -1252,7 +1252,7 @@ instance.setClusterName(<span class="hljs-string">"DEFAULT"</span>);
             );
         } <span class="hljs-keyword">catch</span> (InterruptedException e) {
             Thread.currentThread().interrupt();
-            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RuntimeException</span>(<span class="hljs-string">"聚合查询被中断"</span>, e);
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RuntimeException</span>(<span class="hljs-string">&quot;聚合查询被中断&quot;</span>, e);
         }
     }
 }
@@ -1261,22 +1261,22 @@ instance.setClusterName(<span class="hljs-string">"DEFAULT"</span>);
 <p><strong>Q: Nacos 1.x 升级 2.x 有哪些注意事项？</strong></p>
 <p>A: Nacos 2.x 的 gRPC 通信协议是最大的变化，1.x 使用 HTTP + UDP，2.x 引入了 gRPC 长连接。升级要点：(1) 客户端必须升级到 2.x 对应的 SDK；(2) 2.x 新增了两个 gRPC 端口（默认 9848/9849），需在防火墙放行；(3) 2.x 中临时实例的心跳走 gRPC 长连接而非 HTTP 心跳，更高效但需确认网络可达；(4) 建议先在测试环境验证 gRPC 通道是否正常连通。</p>
 <p><strong>Q: Gateway 路由冲突怎么排查？</strong></p>
-<p>A: Gateway 路由匹配是"先到先得"模式。排查步骤：(1) 开启 Gateway 调试日志 <code>logging.level.reactor.netty=TRACE</code>；(2) 确认 <code>spring.cloud.gateway.discovery.locator.enabled=true</code> 时是否自动生成了与自定义路由冲突的规则；(3) 检查路由的 <code>order</code> 值（越小越优先），确保关键路由 order 设得更小；(4) Path 断言注意 <code>/api/**</code> 和 <code>/api/v1/**</code> 的包含关系，范围大的放后面。</p>
+<p>A: Gateway 路由匹配是&quot;先到先得&quot;模式。排查步骤：(1) 开启 Gateway 调试日志 <code>logging.level.reactor.netty=TRACE</code>；(2) 确认 <code>spring.cloud.gateway.discovery.locator.enabled=true</code> 时是否自动生成了与自定义路由冲突的规则；(3) 检查路由的 <code>order</code> 值（越小越优先），确保关键路由 order 设得更小；(4) Path 断言注意 <code>/api/**</code> 和 <code>/api/v1/**</code> 的包含关系，范围大的放后面。</p>
 <p><strong>Q: 配置中心灰度发布如何实践？</strong></p>
 <p>A: Nacos 支持 Beta IP 灰度，也可以借助命名空间实现更严格的环境隔离：(1) 创建 <code>dev-gray</code> 命名空间作为灰度环境；(2) 灰度实例注册时指定 <code>spring.cloud.nacos.discovery.namespace=dev-gray</code>；(3) 在 Gateway 中通过 Header（如 <code>X-Gray: true</code>）将灰度流量路由到灰度实例；(4) 灰度验证通过后将 <code>dev-gray</code> 的配置同步到正式 <code>dev</code> 命名空间，发布上线。</p>
 <p><strong>Q: 链路追踪采样率如何调优？</strong></p>
 <p>A: 采样本质是成本与可观测性的权衡。建议：(1) 正常流量 5%-10% 采样；(2) 错误请求（5xx/异常）100% 采样；(3) 核心业务接口提高采样率到 20%-30%；(4) 健康检查、静态资源类路径 0% 采样；(5) 监控存储成本：假设 1000 QPS，10% 采样率 = 每日约 864 万 Span（按每个请求 10 个 Span 计），评估 Tempo/SkyWalking 后端是否能承受。</p>
 <p><strong>Q: 服务发现缓存与实时性如何权衡？</strong></p>
-<p>A: 服务发现本质是一个"弱一致 + 最终一致"的系统。Nacos 临时实例 15 秒心跳超时后剔除，客户端拉取间隔默认可达数秒，加上 LoadBalancer 的 <code>CachingServiceInstanceListSupplier</code> 缓存（默认 35 秒），总延迟最多可能达到 50 秒以上。生产建议：(1) 缩短 <code>spring.cloud.loadbalancer.cache.ttl</code> 到 10-15 秒；(2) Nacos 客户端配置 <code>nacos.discovery.watch-delay</code> 减小监听间隔；(3) 必须配合重试机制，容忍短暂的实例列表滞后。</p>
+<p>A: 服务发现本质是一个&quot;弱一致 + 最终一致&quot;的系统。Nacos 临时实例 15 秒心跳超时后剔除，客户端拉取间隔默认可达数秒，加上 LoadBalancer 的 <code>CachingServiceInstanceListSupplier</code> 缓存（默认 35 秒），总延迟最多可能达到 50 秒以上。生产建议：(1) 缩短 <code>spring.cloud.loadbalancer.cache.ttl</code> 到 10-15 秒；(2) Nacos 客户端配置 <code>nacos.discovery.watch-delay</code> 减小监听间隔；(3) 必须配合重试机制，容忍短暂的实例列表滞后。</p>
 <p><strong>Q: Spring Cloud Gateway 和 Nginx/Kong 怎么分工？</strong></p>
-<p>A: 典型分层架构中，Nginx/Kong 作为"入口网关"（Edge Gateway），Spring Cloud Gateway 作为"微服务网关"（Internal Gateway）。Nginx 负责 SSL 终结、WAF、全局 IP 限流、静态资源；Spring Cloud Gateway 负责 JWT 鉴权、服务路由、业务限流、灰度发布。两者不是替代关系，而是互补分层。</p>
+<p>A: 典型分层架构中，Nginx/Kong 作为&quot;入口网关&quot;（Edge Gateway），Spring Cloud Gateway 作为&quot;微服务网关&quot;（Internal Gateway）。Nginx 负责 SSL 终结、WAF、全局 IP 限流、静态资源；Spring Cloud Gateway 负责 JWT 鉴权、服务路由、业务限流、灰度发布。两者不是替代关系，而是互补分层。</p>
 <hr>
 <h2>相关条目</h2>
 <ul>
 <li><a href="#/05-分布式架构/弹性设计/05-熔断限流与弹性设计" class="cross-ref">05-熔断限流与弹性设计</a> — Gateway 中的 Resilience4j 集成、限流算法深入</li>
 <li><a href="#/05-分布式架构/事务与一致性/05-缓存策略与多级缓存架构" class="cross-ref">05-缓存策略与多级缓存架构</a> — 服务实例缓存与配置缓存策略</li>
 <li><a href="#/05-分布式架构/事务与一致性/05-分布式一致性与事务方案" class="cross-ref">05-分布式一致性与事务方案</a> — 分布式系统数据一致性问题</li>
-<li><span class="broken-ref" title="未找到: 06-可观测性与CI">06-可观测性与CI</span> — Prometheus + Grafana + Tempo + Loki 完整可观测性栈</li>
+<li><a href="#/06-云原生与SRE/可观测性与CI/06-OpenTelemetry可观测性体系" class="cross-ref">06-OpenTelemetry可观测性体系</a> — Prometheus + Grafana + Tempo + Loki 完整可观测性栈</li>
 </ul>
-</body></html></div>
+</div>
 </article>

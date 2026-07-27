@@ -6,7 +6,7 @@
     <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#model-gateway</span><span class="badge badge-tag">#prompt-management</span><span class="badge badge-tag">#spring-ai</span><span class="badge badge-tag">#rate-limiting</span><span class="badge badge-tag">#api-key-management</span></div>
     <div class="entry-sources"><small>📖 来源：<a href="https://docs.spring.io/spring-ai/reference/" target="_blank" rel="noopener" class="source-link" title="Spring AI 官方参考文档">Spring AI 官方参考文档</a><a href="https://github.com/spring-projects/spring-ai" target="_blank" rel="noopener" class="source-link" title="Spring AI GitHub 仓库">Spring AI GitHub 仓库</a><a href="https://platform.openai.com/docs/api-reference" target="_blank" rel="noopener" class="source-link" title="OpenAI API 参考">OpenAI API 参考</a><a href="https://docs.anthropic.com/en/api" target="_blank" rel="noopener" class="source-link" title="Anthropic API 参考">Anthropic API 参考</a></small></div>
   </div>
-  <div class="entry-body"><html><head></head><body><h1>模型网关设计与 Prompt 管理平台</h1>
+  <div class="entry-body"><h1>模型网关设计与 Prompt 管理平台</h1>
 <h2>一、概述</h2>
 <p>在企业级 AI 应用中，直接调用各个模型提供商的 API 会带来一系列问题：API 协议不一致、密钥管理混乱、缺乏统一的限流和配额控制、Prompt 版本难以追踪。模型网关（Model Gateway）和 Prompt 管理平台正是解决这些痛点的核心基础设施。</p>
 <p>模型网关充当所有 AI 模型调用的统一入口，提供协议适配、智能路由、限流、密钥管理和缓存等能力。Prompt 管理平台则负责 Prompt 模板的全生命周期管理，包括版本控制、环境绑定、A/B 测试和灰度发布。</p>
@@ -16,7 +16,7 @@
 <p>模型网关的核心职责之一是屏蔽不同模型提供商的 API 差异。我们在网关层定义统一的 Chat、Embedding、Rerank 请求格式，然后由适配器转换为各厂商的原生格式。</p>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 统一聊天请求</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">UnifiedChatRequest</span><span class="hljs-params">(
-    String model,                    // 逻辑模型名，如 "claude-sonnet-4"
+    String model,                    // 逻辑模型名，如 &quot;claude-sonnet-4&quot;
     List&lt;UnifiedMessage&gt; messages,
     Double temperature,
     Integer maxTokens,
@@ -35,7 +35,7 @@
 
 <span class="hljs-comment">// 统一 Embedding 请求</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">UnifiedEmbeddingRequest</span><span class="hljs-params">(
-    String model,                    // 如 "text-embedding-3-large"
+    String model,                    // 如 &quot;text-embedding-3-large&quot;
     List&lt;String&gt; inputs,             // 支持批量
     String encodingFormat            // <span class="hljs-type">float</span> / base64
 )</span> {}
@@ -72,13 +72,13 @@
 
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> OpenAiApi openAiApi;
 
-    <span class="hljs-keyword">public</span> <span class="hljs-title function_">OpenAiAdapter</span><span class="hljs-params">(<span class="hljs-meta">@Value("${openai.api-key}")</span> String apiKey)</span> {
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">OpenAiAdapter</span><span class="hljs-params">(<span class="hljs-meta">@Value(&quot;${openai.api-key}&quot;)</span> String apiKey)</span> {
         <span class="hljs-built_in">this</span>.openAiApi = OpenAiApi.builder().apiKey(apiKey).build();
     }
 
     <span class="hljs-meta">@Override</span>
     <span class="hljs-keyword">public</span> Set&lt;String&gt; <span class="hljs-title function_">supportedModels</span><span class="hljs-params">()</span> {
-        <span class="hljs-keyword">return</span> Set.of(<span class="hljs-string">"gpt-5"</span>, <span class="hljs-string">"gpt-5-mini"</span>, <span class="hljs-string">"text-embedding-3-large"</span>);
+        <span class="hljs-keyword">return</span> Set.of(<span class="hljs-string">&quot;gpt-5&quot;</span>, <span class="hljs-string">&quot;gpt-5-mini&quot;</span>, <span class="hljs-string">&quot;text-embedding-3-large&quot;</span>);
     }
 
     <span class="hljs-meta">@Override</span>
@@ -134,9 +134,9 @@
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">CapabilityRoutingStrategy</span> <span class="hljs-keyword">implements</span> <span class="hljs-title class_">RoutingStrategy</span> {
 
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> Map&lt;String, ModelCapability&gt; CAPABILITY_HINTS = Map.of(
-        <span class="hljs-string">"claude"</span>, ModelCapability.CODE,
-        <span class="hljs-string">"gpt"</span>, ModelCapability.GENERAL,
-        <span class="hljs-string">"gemini"</span>, ModelCapability.VISION
+        <span class="hljs-string">&quot;claude&quot;</span>, ModelCapability.CODE,
+        <span class="hljs-string">&quot;gpt&quot;</span>, ModelCapability.GENERAL,
+        <span class="hljs-string">&quot;gemini&quot;</span>, ModelCapability.VISION
     );
 
     <span class="hljs-meta">@Override</span>
@@ -151,21 +151,21 @@
                 .filter(ModelInfo::healthy)
                 .min(Comparator.comparingDouble(ModelInfo::costPer1kTokens))
                 .map(ModelInfo::modelName)
-                .orElseThrow(() -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">NoAvailableModelException</span>(<span class="hljs-string">"No healthy model"</span>)));
+                .orElseThrow(() -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">NoAvailableModelException</span>(<span class="hljs-string">&quot;No healthy model&quot;</span>)));
     }
 
     <span class="hljs-keyword">private</span> ModelCapability <span class="hljs-title function_">detectCapability</span><span class="hljs-params">(UnifiedChatRequest request)</span> {
-        <span class="hljs-comment">// 基于用户消息内容检测意图：含代码块 → CODE，含"翻译" → TRANSLATION</span>
+        <span class="hljs-comment">// 基于用户消息内容检测意图：含代码块 → CODE，含&quot;翻译&quot; → TRANSLATION</span>
         <span class="hljs-type">var</span> <span class="hljs-variable">userContent</span> <span class="hljs-operator">=</span> request.messages().stream()
             .filter(m -&gt; m.role() == MessageRole.USER)
             .map(UnifiedMessage::content)
-            .collect(Collectors.joining(<span class="hljs-string">" "</span>));
+            .collect(Collectors.joining(<span class="hljs-string">&quot; &quot;</span>));
 
-        <span class="hljs-keyword">if</span> (userContent.contains(<span class="hljs-string">"```"</span>) || userContent.contains(<span class="hljs-string">"代码"</span>)
-                || userContent.contains(<span class="hljs-string">"debug"</span>)) {
+        <span class="hljs-keyword">if</span> (userContent.contains(<span class="hljs-string">&quot;```&quot;</span>) || userContent.contains(<span class="hljs-string">&quot;代码&quot;</span>)
+                || userContent.contains(<span class="hljs-string">&quot;debug&quot;</span>)) {
             <span class="hljs-keyword">return</span> ModelCapability.CODE;
         }
-        <span class="hljs-keyword">if</span> (userContent.contains(<span class="hljs-string">"翻译"</span>) || userContent.contains(<span class="hljs-string">"translate"</span>)) {
+        <span class="hljs-keyword">if</span> (userContent.contains(<span class="hljs-string">&quot;翻译&quot;</span>) || userContent.contains(<span class="hljs-string">&quot;translate&quot;</span>)) {
             <span class="hljs-keyword">return</span> ModelCapability.TRANSLATION;
         }
         <span class="hljs-keyword">return</span> ModelCapability.GENERAL;
@@ -182,7 +182,7 @@
             .filter(m -&gt; m.currentLoad() &lt; <span class="hljs-number">80</span>)  <span class="hljs-comment">// 负载低于80%</span>
             .min(Comparator.comparingDouble(ModelInfo::costPer1kTokens))
             .map(ModelInfo::modelName)
-            .orElseThrow(() -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">NoAvailableModelException</span>(<span class="hljs-string">"No healthy model under load"</span>));
+            .orElseThrow(() -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">NoAvailableModelException</span>(<span class="hljs-string">&quot;No healthy model under load&quot;</span>));
     }
 }
 </code></pre></div><p><strong>故障转移路由</strong>：主模型不可用时自动切换到备用模型。</p>
@@ -191,7 +191,7 @@
 
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> List&lt;String&gt; failoverChain; <span class="hljs-comment">// 配置的降级链路</span>
 
-    <span class="hljs-keyword">public</span> <span class="hljs-title function_">FailoverRoutingStrategy</span><span class="hljs-params">(<span class="hljs-meta">@Value("${gateway.failover-chain}")</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">FailoverRoutingStrategy</span><span class="hljs-params">(<span class="hljs-meta">@Value(&quot;${gateway.failover-chain}&quot;)</span>
                                    List&lt;String&gt; failoverChain)</span> {
         <span class="hljs-built_in">this</span>.failoverChain = failoverChain;
     }
@@ -207,7 +207,7 @@
                 <span class="hljs-keyword">return</span> modelName;
             }
         }
-        <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">NoAvailableModelException</span>(<span class="hljs-string">"All models in failover chain unhealthy"</span>);
+        <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">NoAvailableModelException</span>(<span class="hljs-string">&quot;All models in failover chain unhealthy&quot;</span>);
     }
 }
 </code></pre></div><p><strong>灰度分流</strong>：按配置的比例将流量分发到不同模型，用于模型升级验证。</p>
@@ -217,7 +217,7 @@
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> <span class="hljs-type">AtomicInteger</span> <span class="hljs-variable">counter</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">AtomicInteger</span>(<span class="hljs-number">0</span>);
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">final</span> Map&lt;String, Integer&gt; canaryWeights; <span class="hljs-comment">// model -&gt; weight (0-100)</span>
 
-    <span class="hljs-keyword">public</span> <span class="hljs-title function_">CanaryRoutingStrategy</span><span class="hljs-params">(<span class="hljs-meta">@Value("#{${gateway.canary-weights}}")</span>
+    <span class="hljs-keyword">public</span> <span class="hljs-title function_">CanaryRoutingStrategy</span><span class="hljs-params">(<span class="hljs-meta">@Value(&quot;#{${gateway.canary-weights}}&quot;)</span>
                                  Map&lt;String, Integer&gt; canaryWeights)</span> {
         <span class="hljs-built_in">this</span>.canaryWeights = canaryWeights;
     }
@@ -264,9 +264,9 @@
      */</span>
     <span class="hljs-keyword">public</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">tryAcquire</span><span class="hljs-params">(String tenantId, String userId, String model)</span> {
         <span class="hljs-comment">// 三级限流：租户级 → 用户级 → 模型级</span>
-        <span class="hljs-keyword">return</span> checkLimit(<span class="hljs-string">"tenant:"</span> + tenantId, getTenantLimit(tenantId))
-            &amp;&amp; checkLimit(<span class="hljs-string">"user:"</span> + tenantId + <span class="hljs-string">":"</span> + userId, getUserLimit(userId))
-            &amp;&amp; checkLimit(<span class="hljs-string">"model:"</span> + tenantId + <span class="hljs-string">":"</span> + model, getModelLimit(model));
+        <span class="hljs-keyword">return</span> checkLimit(<span class="hljs-string">&quot;tenant:&quot;</span> + tenantId, getTenantLimit(tenantId))
+            &amp;&amp; checkLimit(<span class="hljs-string">&quot;user:&quot;</span> + tenantId + <span class="hljs-string">&quot;:&quot;</span> + userId, getUserLimit(userId))
+            &amp;&amp; checkLimit(<span class="hljs-string">&quot;model:&quot;</span> + tenantId + <span class="hljs-string">&quot;:&quot;</span> + model, getModelLimit(model));
     }
 
     <span class="hljs-keyword">private</span> <span class="hljs-type">boolean</span> <span class="hljs-title function_">checkLimit</span><span class="hljs-params">(String key, RateLimitConfig config)</span> {
@@ -274,16 +274,16 @@
         <span class="hljs-type">var</span> <span class="hljs-variable">windowStart</span> <span class="hljs-operator">=</span> now - config.windowMs();
 
         <span class="hljs-comment">// Lua 脚本：原子性地移除过期记录 + 计数 + 添加新记录</span>
-        <span class="hljs-type">var</span> <span class="hljs-variable">script</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
-            redis.call('ZREMRANGEBYSCORE', KEYS[1], 0, ARGV[1])
-            local count = redis.call('ZCARD', KEYS[1])
+        <span class="hljs-type">var</span> <span class="hljs-variable">script</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;&quot;&quot;
+            redis.call(&#x27;ZREMRANGEBYSCORE&#x27;, KEYS[1], 0, ARGV[1])
+            local count = redis.call(&#x27;ZCARD&#x27;, KEYS[1])
             if count &lt; tonumber(ARGV[2]) then
-                redis.call('ZADD', KEYS[1], ARGV[3], ARGV[3])
-                redis.call('EXPIRE', KEYS[1], ARGV[4])
+                redis.call(&#x27;ZADD&#x27;, KEYS[1], ARGV[3], ARGV[3])
+                redis.call(&#x27;EXPIRE&#x27;, KEYS[1], ARGV[4])
                 return 1
             end
             return 0
-            """</span>;
+            &quot;&quot;&quot;</span>;
 
         <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> redis.execute(
             RedisScript.of(script, Long.class),
@@ -342,7 +342,7 @@
             <span class="hljs-keyword">return</span> Optional.empty();
         }
         <span class="hljs-keyword">if</span> (!store.allowedModels().contains(model)
-                &amp;&amp; !store.allowedModels().contains(<span class="hljs-string">"*"</span>)) {
+                &amp;&amp; !store.allowedModels().contains(<span class="hljs-string">&quot;*&quot;</span>)) {
             <span class="hljs-keyword">return</span> Optional.empty();
         }
         <span class="hljs-keyword">return</span> Optional.of(AesGcmUtil.decrypt(store.encryptedKey()));
@@ -380,9 +380,9 @@
 
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">enum</span> <span class="hljs-title class_">QuotaMode</span> { HARD, SOFT }
 
-    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">String</span> <span class="hljs-variable">DAILY_KEY</span> <span class="hljs-operator">=</span> <span class="hljs-string">"quota:daily:%s:%s"</span>;   <span class="hljs-comment">// tenant:date</span>
-    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">String</span> <span class="hljs-variable">MONTHLY_KEY</span> <span class="hljs-operator">=</span> <span class="hljs-string">"quota:monthly:%s:%s"</span>;
-    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">String</span> <span class="hljs-variable">CONCURRENT_KEY</span> <span class="hljs-operator">=</span> <span class="hljs-string">"quota:concurrent:%s"</span>;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">String</span> <span class="hljs-variable">DAILY_KEY</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;quota:daily:%s:%s&quot;</span>;   <span class="hljs-comment">// tenant:date</span>
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">String</span> <span class="hljs-variable">MONTHLY_KEY</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;quota:monthly:%s:%s&quot;</span>;
+    <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> <span class="hljs-type">String</span> <span class="hljs-variable">CONCURRENT_KEY</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;quota:concurrent:%s&quot;</span>;
 
     <span class="hljs-comment">/**
      * 预扣配额。返回 QuotaResult 表示是否允许。
@@ -398,16 +398,16 @@
         <span class="hljs-keyword">if</span> (dailyUsed + estimatedTokens &gt; config.dailyTokenLimit()) {
             <span class="hljs-keyword">if</span> (config.mode() == QuotaMode.HARD) {
                 <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">QuotaResult</span>(<span class="hljs-literal">false</span>, dailyUsed, config.dailyTokenLimit(),
-                    <span class="hljs-string">"Daily quota exceeded"</span>);
+                    <span class="hljs-string">&quot;Daily quota exceeded&quot;</span>);
             }
             <span class="hljs-comment">// SOFT 模式：记录告警但放行</span>
-            meterRegistry.counter(<span class="hljs-string">"quota.soft_limit.hit"</span>,
-                <span class="hljs-string">"tenant"</span>, tenantId, <span class="hljs-string">"type"</span>, <span class="hljs-string">"daily"</span>).increment();
+            meterRegistry.counter(<span class="hljs-string">&quot;quota.soft_limit.hit&quot;</span>,
+                <span class="hljs-string">&quot;tenant&quot;</span>, tenantId, <span class="hljs-string">&quot;type&quot;</span>, <span class="hljs-string">&quot;daily&quot;</span>).increment();
         }
         <span class="hljs-keyword">if</span> (monthlyUsed + estimatedTokens &gt; config.monthlyTokenLimit()) {
             <span class="hljs-keyword">if</span> (config.mode() == QuotaMode.HARD) {
                 <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">QuotaResult</span>(<span class="hljs-literal">false</span>, monthlyUsed, config.monthlyTokenLimit(),
-                    <span class="hljs-string">"Monthly quota exceeded"</span>);
+                    <span class="hljs-string">&quot;Monthly quota exceeded&quot;</span>);
             }
         }
 
@@ -473,7 +473,7 @@
         <span class="hljs-keyword">if</span> (!results.isEmpty() &amp;&amp; results.getFirst().getScore() &gt;= threshold) {
             <span class="hljs-comment">// 3. 从 Redis 获取对应的缓存响应</span>
             <span class="hljs-type">var</span> <span class="hljs-variable">cacheId</span> <span class="hljs-operator">=</span> results.getFirst().getId();
-            <span class="hljs-type">var</span> <span class="hljs-variable">cached</span> <span class="hljs-operator">=</span> redis.opsForValue().get(<span class="hljs-string">"semantic:cache:"</span> + cacheId);
+            <span class="hljs-type">var</span> <span class="hljs-variable">cached</span> <span class="hljs-operator">=</span> redis.opsForValue().get(<span class="hljs-string">&quot;semantic:cache:&quot;</span> + cacheId);
             <span class="hljs-keyword">if</span> (cached != <span class="hljs-literal">null</span>) {
                 <span class="hljs-keyword">return</span> Optional.of(<span class="hljs-keyword">new</span> <span class="hljs-title class_">String</span>(cached, StandardCharsets.UTF_8));
             }
@@ -487,7 +487,7 @@
         <span class="hljs-type">var</span> <span class="hljs-variable">doc</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Document</span>(cacheId, userMessage, Map.of());
         vectorStore.add(List.of(doc));
         <span class="hljs-comment">// 存储响应体</span>
-        redis.opsForValue().set(<span class="hljs-string">"semantic:cache:"</span> + cacheId,
+        redis.opsForValue().set(<span class="hljs-string">&quot;semantic:cache:&quot;</span> + cacheId,
             response.getBytes(StandardCharsets.UTF_8), Duration.ofHours(<span class="hljs-number">2</span>));
     }
 }
@@ -512,14 +512,14 @@
     }
 
     <span class="hljs-keyword">private</span> String <span class="hljs-title function_">replaceVariables</span><span class="hljs-params">(String template, Map&lt;String, Object&gt; context)</span> {
-        <span class="hljs-type">var</span> <span class="hljs-variable">pattern</span> <span class="hljs-operator">=</span> Pattern.compile(<span class="hljs-string">"\\{\\{\\s*(\\S+?)\\s*\\}\\}"</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">pattern</span> <span class="hljs-operator">=</span> Pattern.compile(<span class="hljs-string">&quot;\\{\\{\\s*(\\S+?)\\s*\\}\\}&quot;</span>);
         <span class="hljs-type">var</span> <span class="hljs-variable">matcher</span> <span class="hljs-operator">=</span> pattern.matcher(template);
         <span class="hljs-type">var</span> <span class="hljs-variable">sb</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>();
         <span class="hljs-keyword">while</span> (matcher.find()) {
             <span class="hljs-type">var</span> <span class="hljs-variable">varName</span> <span class="hljs-operator">=</span> matcher.group(<span class="hljs-number">1</span>);
             <span class="hljs-type">var</span> <span class="hljs-variable">value</span> <span class="hljs-operator">=</span> resolveNestedValue(context, varName);
             matcher.appendReplacement(sb,
-                Matcher.quoteReplacement(value != <span class="hljs-literal">null</span> ? value.toString() : <span class="hljs-string">""</span>));
+                Matcher.quoteReplacement(value != <span class="hljs-literal">null</span> ? value.toString() : <span class="hljs-string">&quot;&quot;</span>));
         }
         matcher.appendTail(sb);
         <span class="hljs-keyword">return</span> sb.toString();
@@ -527,14 +527,14 @@
 
     <span class="hljs-keyword">private</span> String <span class="hljs-title function_">processIfBlocks</span><span class="hljs-params">(String template, Map&lt;String, Object&gt; context)</span> {
         <span class="hljs-type">var</span> <span class="hljs-variable">pattern</span> <span class="hljs-operator">=</span> Pattern.compile(
-            <span class="hljs-string">"\\{%\\s*if\\s+(\\S+)\\s*%\\}(.*?)\\{%\\s*endif\\s*%\\}"</span>, Pattern.DOTALL);
+            <span class="hljs-string">&quot;\\{%\\s*if\\s+(\\S+)\\s*%\\}(.*?)\\{%\\s*endif\\s*%\\}&quot;</span>, Pattern.DOTALL);
         <span class="hljs-type">var</span> <span class="hljs-variable">matcher</span> <span class="hljs-operator">=</span> pattern.matcher(template);
         <span class="hljs-type">var</span> <span class="hljs-variable">sb</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>();
         <span class="hljs-keyword">while</span> (matcher.find()) {
             <span class="hljs-type">var</span> <span class="hljs-variable">condition</span> <span class="hljs-operator">=</span> matcher.group(<span class="hljs-number">1</span>);
             <span class="hljs-type">var</span> <span class="hljs-variable">body</span> <span class="hljs-operator">=</span> matcher.group(<span class="hljs-number">2</span>);
             <span class="hljs-type">var</span> <span class="hljs-variable">value</span> <span class="hljs-operator">=</span> resolveNestedValue(context, condition);
-            <span class="hljs-type">var</span> <span class="hljs-variable">replacement</span> <span class="hljs-operator">=</span> isTruthy(value) ? body : <span class="hljs-string">""</span>;
+            <span class="hljs-type">var</span> <span class="hljs-variable">replacement</span> <span class="hljs-operator">=</span> isTruthy(value) ? body : <span class="hljs-string">&quot;&quot;</span>;
             <span class="hljs-comment">// 递归处理 body 中的嵌套模板</span>
             replacement = render(replacement, context);
             matcher.appendReplacement(sb, Matcher.quoteReplacement(replacement));
@@ -545,7 +545,7 @@
 
     <span class="hljs-keyword">private</span> String <span class="hljs-title function_">processForLoops</span><span class="hljs-params">(String template, Map&lt;String, Object&gt; context)</span> {
         <span class="hljs-type">var</span> <span class="hljs-variable">pattern</span> <span class="hljs-operator">=</span> Pattern.compile(
-            <span class="hljs-string">"\\{%\\s*for\\s+(\\S+)\\s+in\\s+(\\S+)\\s*%\\}(.*?)\\{%\\s*endfor\\s*%\\}"</span>,
+            <span class="hljs-string">&quot;\\{%\\s*for\\s+(\\S+)\\s+in\\s+(\\S+)\\s*%\\}(.*?)\\{%\\s*endfor\\s*%\\}&quot;</span>,
             Pattern.DOTALL);
         <span class="hljs-type">var</span> <span class="hljs-variable">matcher</span> <span class="hljs-operator">=</span> pattern.matcher(template);
         <span class="hljs-type">var</span> <span class="hljs-variable">sb</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>();
@@ -570,7 +570,7 @@
     }
 
     <span class="hljs-keyword">private</span> Object <span class="hljs-title function_">resolveNestedValue</span><span class="hljs-params">(Map&lt;String, Object&gt; context, String path)</span> {
-        <span class="hljs-type">var</span> <span class="hljs-variable">parts</span> <span class="hljs-operator">=</span> path.split(<span class="hljs-string">"\\."</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">parts</span> <span class="hljs-operator">=</span> path.split(<span class="hljs-string">&quot;\\.&quot;</span>);
         <span class="hljs-type">Object</span> <span class="hljs-variable">current</span> <span class="hljs-operator">=</span> context;
         <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> part : parts) {
             <span class="hljs-keyword">if</span> (current <span class="hljs-keyword">instanceof</span> Map&lt;?, ?&gt; map) {
@@ -594,7 +594,7 @@
 </code></pre></div><h3>3.2 版本控制</h3>
 <p>实现 Git-like 的 Prompt 版本控制和 Diff 功能。</p>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Entity</span>
-<span class="hljs-meta">@Table(name = "prompt_versions")</span>
+<span class="hljs-meta">@Table(name = &quot;prompt_versions&quot;)</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">PromptVersion</span> {
 
     <span class="hljs-meta">@Id</span>
@@ -605,10 +605,10 @@
     <span class="hljs-keyword">private</span> <span class="hljs-type">int</span> version;               <span class="hljs-comment">// 递增版本号</span>
     <span class="hljs-keyword">private</span> String parentVersionId;    <span class="hljs-comment">// 父版本ID（实现版本链）</span>
 
-    <span class="hljs-meta">@Column(columnDefinition = "TEXT")</span>
+    <span class="hljs-meta">@Column(columnDefinition = &quot;TEXT&quot;)</span>
     <span class="hljs-keyword">private</span> String template;           <span class="hljs-comment">// Prompt 模板内容</span>
 
-    <span class="hljs-meta">@Column(columnDefinition = "JSON")</span>
+    <span class="hljs-meta">@Column(columnDefinition = &quot;JSON&quot;)</span>
     <span class="hljs-keyword">private</span> String parameters;         <span class="hljs-comment">// 模型参数 JSON</span>
 
     <span class="hljs-keyword">private</span> String createdBy;
@@ -617,7 +617,7 @@
     <span class="hljs-meta">@Enumerated(EnumType.STRING)</span>
     <span class="hljs-keyword">private</span> PromptStatus status;       <span class="hljs-comment">// DRAFT, REVIEWING, PUBLISHED, ARCHIVED</span>
 
-    <span class="hljs-meta">@Column(columnDefinition = "TEXT")</span>
+    <span class="hljs-meta">@Column(columnDefinition = &quot;TEXT&quot;)</span>
     <span class="hljs-keyword">private</span> String changelog;          <span class="hljs-comment">// 变更说明</span>
 
     <span class="hljs-comment">// getters, setters, constructors 省略</span>
@@ -661,8 +661,8 @@
         <span class="hljs-type">var</span> <span class="hljs-variable">v1</span> <span class="hljs-operator">=</span> repo.findById(versionId1).orElseThrow();
         <span class="hljs-type">var</span> <span class="hljs-variable">v2</span> <span class="hljs-operator">=</span> repo.findById(versionId2).orElseThrow();
 
-        <span class="hljs-type">var</span> <span class="hljs-variable">lines1</span> <span class="hljs-operator">=</span> v1.getTemplate().split(<span class="hljs-string">"\n"</span>);
-        <span class="hljs-type">var</span> <span class="hljs-variable">lines2</span> <span class="hljs-operator">=</span> v2.getTemplate().split(<span class="hljs-string">"\n"</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">lines1</span> <span class="hljs-operator">=</span> v1.getTemplate().split(<span class="hljs-string">&quot;\n&quot;</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">lines2</span> <span class="hljs-operator">=</span> v2.getTemplate().split(<span class="hljs-string">&quot;\n&quot;</span>);
 
         <span class="hljs-type">var</span> <span class="hljs-variable">diffResult</span> <span class="hljs-operator">=</span> computeLineDiff(lines1, lines2);
 
@@ -740,9 +740,9 @@
     <span class="hljs-keyword">public</span> PromptVersion <span class="hljs-title function_">rollback</span><span class="hljs-params">(String promptId, <span class="hljs-type">int</span> targetVersion, String createdBy)</span> {
         <span class="hljs-type">var</span> <span class="hljs-variable">target</span> <span class="hljs-operator">=</span> repo.findByPromptIdAndVersion(promptId, targetVersion)
             .orElseThrow(() -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">IllegalArgumentException</span>(
-                <span class="hljs-string">"Version %d not found"</span>.formatted(targetVersion)));
+                <span class="hljs-string">&quot;Version %d not found&quot;</span>.formatted(targetVersion)));
         <span class="hljs-keyword">return</span> createVersion(promptId, target.getTemplate(), target.getParameters(),
-            <span class="hljs-string">"Rollback to version "</span> + targetVersion, createdBy);
+            <span class="hljs-string">&quot;Rollback to version &quot;</span> + targetVersion, createdBy);
     }
 }
 </code></pre></div><h3>3.3 环境绑定 + A/B 测试 + 灰度发布</h3>
@@ -789,7 +789,7 @@
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">startAbTest</span><span class="hljs-params">(String promptId, String environment,
                              List&lt;AbVariant&gt; variants)</span> {
         <span class="hljs-keyword">if</span> (variants.stream().mapToInt(AbVariant::trafficPercent).sum() != <span class="hljs-number">100</span>) {
-            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">IllegalArgumentException</span>(<span class="hljs-string">"Traffic percentages must sum to 100"</span>);
+            <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">IllegalArgumentException</span>(<span class="hljs-string">&quot;Traffic percentages must sum to 100&quot;</span>);
         }
 
         <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> variant : variants) {
@@ -805,7 +805,7 @@
     }
 
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">AbVariant</span><span class="hljs-params">(
-        String variantName,          // 如 "control", "variant-a"
+        String variantName,          // 如 &quot;control&quot;, &quot;variant-a&quot;
         String promptVersionId,
         <span class="hljs-type">int</span> trafficPercent           // 0-100
     )</span> {}
@@ -903,12 +903,12 @@
 
     <span class="hljs-comment">/**
      * 构建 Prompt 依赖关系图。
-     * 依赖关系由模板中的 {% import "prompt://xxx" %} 指令定义。
+     * 依赖关系由模板中的 {% import &quot;prompt://xxx&quot; %} 指令定义。
      */</span>
     <span class="hljs-keyword">public</span> DependencyGraph <span class="hljs-title function_">buildGraph</span><span class="hljs-params">(String promptId)</span> {
         <span class="hljs-type">var</span> <span class="hljs-variable">graph</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">DependencyGraph</span>(promptId);
         <span class="hljs-type">var</span> <span class="hljs-variable">visited</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">HashSet</span>&lt;String&gt;();
-        <span class="hljs-type">var</span> <span class="hljs-variable">importPattern</span> <span class="hljs-operator">=</span> Pattern.compile(<span class="hljs-string">"\\{%\\s*import\\s+\"prompt://(.+?)\"\\s*%\\}"</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">importPattern</span> <span class="hljs-operator">=</span> Pattern.compile(<span class="hljs-string">&quot;\\{%\\s*import\\s+\&quot;prompt://(.+?)\&quot;\\s*%\\}&quot;</span>);
 
         buildGraphRecursive(promptId, graph, visited, importPattern);
         <span class="hljs-keyword">return</span> graph;
@@ -1000,16 +1000,16 @@
      * 执行流程：缓存检查 → 限流 → 配额 → 路由 → 调用 → 记录指标
      */</span>
     <span class="hljs-keyword">public</span> UnifiedChatResponse <span class="hljs-title function_">chat</span><span class="hljs-params">(UnifiedChatRequest request)</span> {
-        <span class="hljs-type">var</span> <span class="hljs-variable">tenantId</span> <span class="hljs-operator">=</span> (String) request.metadata().getOrDefault(<span class="hljs-string">"tenantId"</span>, <span class="hljs-string">"default"</span>);
-        <span class="hljs-type">var</span> <span class="hljs-variable">userId</span> <span class="hljs-operator">=</span> (String) request.metadata().getOrDefault(<span class="hljs-string">"userId"</span>, <span class="hljs-string">"anonymous"</span>);
-        <span class="hljs-type">var</span> <span class="hljs-variable">traceId</span> <span class="hljs-operator">=</span> (String) request.metadata().getOrDefault(<span class="hljs-string">"traceId"</span>,
+        <span class="hljs-type">var</span> <span class="hljs-variable">tenantId</span> <span class="hljs-operator">=</span> (String) request.metadata().getOrDefault(<span class="hljs-string">&quot;tenantId&quot;</span>, <span class="hljs-string">&quot;default&quot;</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">userId</span> <span class="hljs-operator">=</span> (String) request.metadata().getOrDefault(<span class="hljs-string">&quot;userId&quot;</span>, <span class="hljs-string">&quot;anonymous&quot;</span>);
+        <span class="hljs-type">var</span> <span class="hljs-variable">traceId</span> <span class="hljs-operator">=</span> (String) request.metadata().getOrDefault(<span class="hljs-string">&quot;traceId&quot;</span>,
             UUID.randomUUID().toString());
 
         <span class="hljs-comment">// 构建 Span</span>
-        <span class="hljs-type">var</span> <span class="hljs-variable">span</span> <span class="hljs-operator">=</span> tracer.spanBuilder(<span class="hljs-string">"gateway.chat"</span>)
-            .setAttribute(<span class="hljs-string">"tenant.id"</span>, tenantId)
-            .setAttribute(<span class="hljs-string">"user.id"</span>, userId)
-            .setAttribute(<span class="hljs-string">"trace.id"</span>, traceId)
+        <span class="hljs-type">var</span> <span class="hljs-variable">span</span> <span class="hljs-operator">=</span> tracer.spanBuilder(<span class="hljs-string">&quot;gateway.chat&quot;</span>)
+            .setAttribute(<span class="hljs-string">&quot;tenant.id&quot;</span>, tenantId)
+            .setAttribute(<span class="hljs-string">&quot;user.id&quot;</span>, userId)
+            .setAttribute(<span class="hljs-string">&quot;trace.id&quot;</span>, traceId)
             .startSpan();
 
         <span class="hljs-keyword">try</span> (<span class="hljs-type">var</span> <span class="hljs-variable">scope</span> <span class="hljs-operator">=</span> span.makeCurrent()) {
@@ -1017,16 +1017,16 @@
             <span class="hljs-type">var</span> <span class="hljs-variable">cacheKey</span> <span class="hljs-operator">=</span> buildCacheKey(request);
             <span class="hljs-type">var</span> <span class="hljs-variable">cached</span> <span class="hljs-operator">=</span> cacheService.getExactMatch(cacheKey);
             <span class="hljs-keyword">if</span> (cached.isPresent()) {
-                meterRegistry.counter(<span class="hljs-string">"gateway.cache.hit"</span>, <span class="hljs-string">"level"</span>, <span class="hljs-string">"L1"</span>).increment();
-                span.setAttribute(<span class="hljs-string">"cache.hit"</span>, <span class="hljs-literal">true</span>);
+                meterRegistry.counter(<span class="hljs-string">&quot;gateway.cache.hit&quot;</span>, <span class="hljs-string">&quot;level&quot;</span>, <span class="hljs-string">&quot;L1&quot;</span>).increment();
+                span.setAttribute(<span class="hljs-string">&quot;cache.hit&quot;</span>, <span class="hljs-literal">true</span>);
                 <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">UnifiedChatResponse</span>(cached.get(), <span class="hljs-literal">null</span>, <span class="hljs-literal">null</span>, <span class="hljs-literal">true</span>);
             }
 
             <span class="hljs-comment">// Step 2: 限流检查</span>
             <span class="hljs-keyword">if</span> (!rateLimiter.tryAcquire(tenantId, userId, request.model())) {
-                meterRegistry.counter(<span class="hljs-string">"gateway.rate_limited"</span>,
-                    <span class="hljs-string">"tenant"</span>, tenantId).increment();
-                <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RateLimitExceededException</span>(<span class="hljs-string">"Rate limit exceeded"</span>);
+                meterRegistry.counter(<span class="hljs-string">&quot;gateway.rate_limited&quot;</span>,
+                    <span class="hljs-string">&quot;tenant&quot;</span>, tenantId).increment();
+                <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RateLimitExceededException</span>(<span class="hljs-string">&quot;Rate limit exceeded&quot;</span>);
             }
 
             <span class="hljs-comment">// Step 3: 配额检查</span>
@@ -1042,10 +1042,10 @@
             <span class="hljs-type">var</span> <span class="hljs-variable">targetModel</span> <span class="hljs-operator">=</span> routingStrategy.route(request, candidates);
 
             <span class="hljs-comment">// Step 5: 获取解密后的 Key</span>
-            <span class="hljs-type">var</span> <span class="hljs-variable">keyId</span> <span class="hljs-operator">=</span> targetModel + <span class="hljs-string">"-key"</span>;
+            <span class="hljs-type">var</span> <span class="hljs-variable">keyId</span> <span class="hljs-operator">=</span> targetModel + <span class="hljs-string">&quot;-key&quot;</span>;
             <span class="hljs-type">var</span> <span class="hljs-variable">apiKey</span> <span class="hljs-operator">=</span> keyVault.getDecryptedKey(keyId, targetModel)
                 .orElseThrow(() -&gt; <span class="hljs-keyword">new</span> <span class="hljs-title class_">KeyNotFoundException</span>(
-                    <span class="hljs-string">"No valid API key for model: "</span> + targetModel));
+                    <span class="hljs-string">&quot;No valid API key for model: &quot;</span> + targetModel));
 
             <span class="hljs-comment">// Step 6: 调用适配器</span>
             <span class="hljs-type">var</span> <span class="hljs-variable">adaptedRequest</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">UnifiedChatRequest</span>(
@@ -1063,10 +1063,10 @@
             cacheService.putExactMatch(cacheKey, response.content());
 
             <span class="hljs-comment">// Step 8: 记录指标和 Token 消耗</span>
-            meterRegistry.counter(<span class="hljs-string">"gateway.request"</span>,
-                <span class="hljs-string">"model"</span>, targetModel,
-                <span class="hljs-string">"tenant"</span>, tenantId).increment();
-            span.setAttribute(<span class="hljs-string">"model.target"</span>, targetModel);
+            meterRegistry.counter(<span class="hljs-string">&quot;gateway.request&quot;</span>,
+                <span class="hljs-string">&quot;model&quot;</span>, targetModel,
+                <span class="hljs-string">&quot;tenant&quot;</span>, tenantId).increment();
+            span.setAttribute(<span class="hljs-string">&quot;model.target&quot;</span>, targetModel);
 
             <span class="hljs-keyword">return</span> response;
 
@@ -1078,8 +1078,8 @@
     <span class="hljs-keyword">private</span> String <span class="hljs-title function_">buildCacheKey</span><span class="hljs-params">(UnifiedChatRequest request)</span> {
         <span class="hljs-type">var</span> <span class="hljs-variable">content</span> <span class="hljs-operator">=</span> request.messages().stream()
             .map(UnifiedMessage::content)
-            .collect(Collectors.joining(<span class="hljs-string">"|"</span>));
-        <span class="hljs-keyword">return</span> request.model() + <span class="hljs-string">":"</span> +
+            .collect(Collectors.joining(<span class="hljs-string">&quot;|&quot;</span>));
+        <span class="hljs-keyword">return</span> request.model() + <span class="hljs-string">&quot;:&quot;</span> +
             Hashing.sha256().hashString(content, StandardCharsets.UTF_8);
     }
 }
@@ -1100,15 +1100,15 @@ A: 设置较高的相似度阈值（建议 0.92+），并且仅对无工具调�
 <p><strong>Q: A/B 测试需要多少样本量才显著？</strong>
 A: 取决于效应量大小。一般建议每个变体至少 1000 次有效请求后再做统计检验。可使用卡方检验或 t 检验判断显著性。</p>
 <p><strong>Q: 限流算法为什么选择滑动窗口而非漏桶/令牌桶？</strong>
-A: 滑动窗口更适合 API 限流场景——可以精确控制"最近 N 秒内最多 M 次请求"，避免固定窗口的边界突发问题。对于 Token 级别的限流，则使用令牌桶更合理。</p>
+A: 滑动窗口更适合 API 限流场景——可以精确控制&quot;最近 N 秒内最多 M 次请求&quot;，避免固定窗口的边界突发问题。对于 Token 级别的限流，则使用令牌桶更合理。</p>
 <p><strong>Q: API Key 如何安全存储？</strong>
 A: 生产环境必须使用 HashiCorp Vault 或云厂商的 KMS。密钥在内存中解密后立即使用，不落盘、不记日志。定期轮换（建议 30 天）。每个 Key 绑定特定模型，遵循最小权限原则。</p>
 <h2>Prompt Cache分层策略</h2>
 <p>AI 应用中，Prompt 是最大的 Token 消耗来源之一。系统 Prompt（instructions）往往在每次请求中重复发送，造成 API 费用的巨大浪费。引入多层缓存策略可以将重复 Prompt 的边际成本降至接近零。</p>
 <p><strong>三层缓存架构</strong>：</p>
 <p><strong>L1 — 精确匹配缓存</strong>（本地内存，Caffeine Cache）：适合完全相同的 Prompt 调用。使用 Prompt 文本的 MD5 哈希作为 Key，存储完整的 API Response。TTL 设为 1 小时，因为即使 Prompt 相同，模型输出也可能因服务端更新而变化。命中率取决于业务场景——客服场景（话术标准化）可达 40-60%；创意写作场景低于 5%。</p>
-<p><strong>L2 — 语义缓存</strong>（Redis Vector Search）：适合近义但不完全相同的 Prompt。将历史 Prompt 通过嵌入模型向量化后存入 Redis，当新请求到达时做向量相似度搜索（cosine similarity &gt; 0.95 视为命中）。例如"帮我总结这篇文章"和"请把这篇文档总结一下"可以命中同一缓存。但要注意——语义相似不保证答案也相似（温度参数不同时尤其），必须额外校验 Response 的适用性。</p>
-<p><strong>L3 — 厂商侧缓存</strong>（Provider-side Cache）：Anthropic 的 Prompt Caching 和 OpenAI 的 Automatic Caching 在服务端缓存 Prompt 前缀。例如系统指令 3000 Token，每次请求只按 10% 计费。使用方式：Anthropic 在消息中标注 <code>cache_control: {"type": "ephemeral"}</code>；OpenAI 对重复前缀自动识别缓存。厂商缓存无需自建基础设施，但跨会话共享能力有限。</p>
+<p><strong>L2 — 语义缓存</strong>（Redis Vector Search）：适合近义但不完全相同的 Prompt。将历史 Prompt 通过嵌入模型向量化后存入 Redis，当新请求到达时做向量相似度搜索（cosine similarity &gt; 0.95 视为命中）。例如&quot;帮我总结这篇文章&quot;和&quot;请把这篇文档总结一下&quot;可以命中同一缓存。但要注意——语义相似不保证答案也相似（温度参数不同时尤其），必须额外校验 Response 的适用性。</p>
+<p><strong>L3 — 厂商侧缓存</strong>（Provider-side Cache）：Anthropic 的 Prompt Caching 和 OpenAI 的 Automatic Caching 在服务端缓存 Prompt 前缀。例如系统指令 3000 Token，每次请求只按 10% 计费。使用方式：Anthropic 在消息中标注 <code>cache_control: {&quot;type&quot;: &quot;ephemeral&quot;}</code>；OpenAI 对重复前缀自动识别缓存。厂商缓存无需自建基础设施，但跨会话共享能力有限。</p>
 <p><strong>分层决策</strong>：L1 最快（&lt;1ms）、最便宜，但命中率低；L2 命中率高但有语义漂移风险；L3 零维护但受厂商限制。实际使用中，三层组合使用——先查 L1，未命中查 L2，最后交给 L3。</p>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// JDK 25 + Spring Boot 4.x — 三层 Prompt Cache 实现</span>
 <span class="hljs-keyword">import</span> com.github.benmanes.caffeine.cache.Cache;
@@ -1142,67 +1142,67 @@ A: 生产环境必须使用 HashiCorp Vault 或云厂商的 KMS。密钥在内�
      * 三层级联缓存查询
      */</span>
     <span class="hljs-keyword">public</span> Optional&lt;CachedResponse&gt; <span class="hljs-title function_">get</span><span class="hljs-params">(String prompt, <span class="hljs-type">double</span> temperature)</span> {
-        <span class="hljs-type">var</span> <span class="hljs-variable">md5Key</span> <span class="hljs-operator">=</span> md5(prompt + <span class="hljs-string">":"</span> + temperature);
+        <span class="hljs-type">var</span> <span class="hljs-variable">md5Key</span> <span class="hljs-operator">=</span> md5(prompt + <span class="hljs-string">&quot;:&quot;</span> + temperature);
 
         <span class="hljs-comment">// L1: 精确匹配</span>
         <span class="hljs-type">var</span> <span class="hljs-variable">l1Result</span> <span class="hljs-operator">=</span> l1Cache.getIfPresent(md5Key);
         <span class="hljs-keyword">if</span> (l1Result != <span class="hljs-literal">null</span>) {
-            recordCacheHit(<span class="hljs-string">"L1"</span>, md5Key);
+            recordCacheHit(<span class="hljs-string">&quot;L1&quot;</span>, md5Key);
             <span class="hljs-keyword">return</span> Optional.of(l1Result);
         }
 
         <span class="hljs-comment">// L2: 语义缓存</span>
         <span class="hljs-type">var</span> <span class="hljs-variable">promptVector</span> <span class="hljs-operator">=</span> embeddingService.embed(prompt);
-        <span class="hljs-type">var</span> <span class="hljs-variable">results</span> <span class="hljs-operator">=</span> redis.ftSearch(<span class="hljs-string">"idx:prompt_cache"</span>,
-                <span class="hljs-string">"*=&gt;[KNN 1 @vector $vec AS score]"</span>,
+        <span class="hljs-type">var</span> <span class="hljs-variable">results</span> <span class="hljs-operator">=</span> redis.ftSearch(<span class="hljs-string">&quot;idx:prompt_cache&quot;</span>,
+                <span class="hljs-string">&quot;*=&gt;[KNN 1 @vector $vec AS score]&quot;</span>,
                 redis.ftSearchParams()
-                    .addParam(<span class="hljs-string">"vec"</span>, vectorToBytes(promptVector))
+                    .addParam(<span class="hljs-string">&quot;vec&quot;</span>, vectorToBytes(promptVector))
                     .dialect(<span class="hljs-number">2</span>));
 
         <span class="hljs-keyword">if</span> (!results.getDocuments().isEmpty()) {
             <span class="hljs-type">var</span> <span class="hljs-variable">doc</span> <span class="hljs-operator">=</span> results.getDocuments().get(<span class="hljs-number">0</span>);
-            <span class="hljs-type">double</span> <span class="hljs-variable">score</span> <span class="hljs-operator">=</span> Double.parseDouble(doc.getString(<span class="hljs-string">"__score"</span>));
+            <span class="hljs-type">double</span> <span class="hljs-variable">score</span> <span class="hljs-operator">=</span> Double.parseDouble(doc.getString(<span class="hljs-string">&quot;__score&quot;</span>));
             <span class="hljs-keyword">if</span> (score &gt;= SEMANTIC_THRESHOLD) {
-                recordCacheHit(<span class="hljs-string">"L2"</span>, doc.getId());
+                recordCacheHit(<span class="hljs-string">&quot;L2&quot;</span>, doc.getId());
                 <span class="hljs-type">var</span> <span class="hljs-variable">cached</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">CachedResponse</span>(
-                        doc.getString(<span class="hljs-string">"prompt"</span>),
-                        doc.getString(<span class="hljs-string">"response"</span>),
-                        Long.parseLong(doc.getString(<span class="hljs-string">"timestamp"</span>)),
-                        Double.parseDouble(doc.getString(<span class="hljs-string">"temperature"</span>)));
+                        doc.getString(<span class="hljs-string">&quot;prompt&quot;</span>),
+                        doc.getString(<span class="hljs-string">&quot;response&quot;</span>),
+                        Long.parseLong(doc.getString(<span class="hljs-string">&quot;timestamp&quot;</span>)),
+                        Double.parseDouble(doc.getString(<span class="hljs-string">&quot;temperature&quot;</span>)));
                 l1Cache.put(md5Key, cached); <span class="hljs-comment">// 回填 L1</span>
                 <span class="hljs-keyword">return</span> Optional.of(cached);
             }
         }
 
-        recordCacheHit(<span class="hljs-string">"MISS"</span>, md5Key);
+        recordCacheHit(<span class="hljs-string">&quot;MISS&quot;</span>, md5Key);
         <span class="hljs-keyword">return</span> Optional.empty();
     }
 
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">put</span><span class="hljs-params">(String prompt, CachedResponse response)</span> {
-        <span class="hljs-type">var</span> <span class="hljs-variable">md5Key</span> <span class="hljs-operator">=</span> md5(prompt + <span class="hljs-string">":"</span> + response.temperature());
+        <span class="hljs-type">var</span> <span class="hljs-variable">md5Key</span> <span class="hljs-operator">=</span> md5(prompt + <span class="hljs-string">&quot;:&quot;</span> + response.temperature());
         l1Cache.put(md5Key, response);
 
         Thread.startVirtualThread(() -&gt; {
             <span class="hljs-type">var</span> <span class="hljs-variable">vector</span> <span class="hljs-operator">=</span> embeddingService.embed(prompt);
-            redis.hset(<span class="hljs-string">"prompt:"</span> + md5Key, Map.of(
-                <span class="hljs-string">"prompt"</span>, prompt,
-                <span class="hljs-string">"response"</span>, response.response(),
-                <span class="hljs-string">"temperature"</span>, String.valueOf(response.temperature()),
-                <span class="hljs-string">"timestamp"</span>, String.valueOf(response.timestamp()),
-                <span class="hljs-string">"vector"</span>, vectorToBytes(vector)));
+            redis.hset(<span class="hljs-string">&quot;prompt:&quot;</span> + md5Key, Map.of(
+                <span class="hljs-string">&quot;prompt&quot;</span>, prompt,
+                <span class="hljs-string">&quot;response&quot;</span>, response.response(),
+                <span class="hljs-string">&quot;temperature&quot;</span>, String.valueOf(response.temperature()),
+                <span class="hljs-string">&quot;timestamp&quot;</span>, String.valueOf(response.timestamp()),
+                <span class="hljs-string">&quot;vector&quot;</span>, vectorToBytes(vector)));
         });
     }
 
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">recordCacheHit</span><span class="hljs-params">(String level, String key)</span> {
-        System.out.println(<span class="hljs-string">"[Cache] "</span> + level + <span class="hljs-string">" HIT: "</span> + key);
+        System.out.println(<span class="hljs-string">&quot;[Cache] &quot;</span> + level + <span class="hljs-string">&quot; HIT: &quot;</span> + key);
     }
 
     <span class="hljs-keyword">private</span> String <span class="hljs-title function_">md5</span><span class="hljs-params">(String input)</span> {
         <span class="hljs-keyword">try</span> {
-            <span class="hljs-type">var</span> <span class="hljs-variable">md</span> <span class="hljs-operator">=</span> MessageDigest.getInstance(<span class="hljs-string">"MD5"</span>);
+            <span class="hljs-type">var</span> <span class="hljs-variable">md</span> <span class="hljs-operator">=</span> MessageDigest.getInstance(<span class="hljs-string">&quot;MD5&quot;</span>);
             <span class="hljs-type">var</span> <span class="hljs-variable">bytes</span> <span class="hljs-operator">=</span> md.digest(input.getBytes());
             <span class="hljs-type">var</span> <span class="hljs-variable">sb</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">StringBuilder</span>();
-            <span class="hljs-keyword">for</span> (<span class="hljs-type">byte</span> b : bytes) sb.append(String.format(<span class="hljs-string">"%02x"</span>, b));
+            <span class="hljs-keyword">for</span> (<span class="hljs-type">byte</span> b : bytes) sb.append(String.format(<span class="hljs-string">&quot;%02x&quot;</span>, b));
             <span class="hljs-keyword">return</span> sb.toString();
         } <span class="hljs-keyword">catch</span> (Exception e) { <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">RuntimeException</span>(e); }
     }
@@ -1221,8 +1221,8 @@ A: 生产环境必须使用 HashiCorp Vault 或云厂商的 KMS。密钥在内�
 <h2>成本优化策略</h2>
 <p>AI API 调用成本是大规模 AI 应用的主要开销。智能的成本优化不是简单地选择最便宜的模型，而是在任务复杂度、输出质量和调用成本之间找到最优平衡点。</p>
 <p><strong>模型降级策略（Model Tiering）</strong>：不是所有任务都需要旗舰模型。建立三级模型池：（1）高能力模型（Claude Opus 4 / GPT-4o）用于复杂推理、代码生成、数学证明；（2）中等模型（Claude Sonnet 4 / GPT-4o-mini）用于分类、实体提取、摘要；（3）轻量模型（Claude Haiku / GPT-4o-mini）用于情感分析、关键词提取、简单问答。根据任务复杂度自动路由到合适的模型层级。</p>
-<p><strong>降级判据</strong>：简单的分类任务（如"判断这条短信是否垃圾信息"）用 gpt-4o-mini 和 gpt-4o 准确率差异通常 &lt; 1%，但成本相差 10-20 倍。结构化提取任务（如"从合同PDF提取甲乙方名称和金额"）中等模型的表现与旗舰模型接近。只有需要多步推理的任务才必须使用高级模型。</p>
-<p><strong>缓存 ROI 计算</strong>：缓存基础设施有成本（Redis 实例、嵌入模型推理）。以每天 100 万次 API 调用为例——假设 20% 命中 L2 语义缓存，每次节省 $0.01，每天节省 $2,000。Redis + 嵌入推理成本约 $200/天，ROI = 10:1。但需要持续监控缓存的"漂移率"——过期的缓存响应会导致输出质量下降。</p>
+<p><strong>降级判据</strong>：简单的分类任务（如&quot;判断这条短信是否垃圾信息&quot;）用 gpt-4o-mini 和 gpt-4o 准确率差异通常 &lt; 1%，但成本相差 10-20 倍。结构化提取任务（如&quot;从合同PDF提取甲乙方名称和金额&quot;）中等模型的表现与旗舰模型接近。只有需要多步推理的任务才必须使用高级模型。</p>
+<p><strong>缓存 ROI 计算</strong>：缓存基础设施有成本（Redis 实例、嵌入模型推理）。以每天 100 万次 API 调用为例——假设 20% 命中 L2 语义缓存，每次节省 $0.01，每天节省 $2,000。Redis + 嵌入推理成本约 $200/天，ROI = 10:1。但需要持续监控缓存的&quot;漂移率&quot;——过期的缓存响应会导致输出质量下降。</p>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// JDK 25 + Spring Boot 4.x — CostOptimizationAdvisor</span>
 <span class="hljs-keyword">import</span> java.util.List;
 
@@ -1233,10 +1233,10 @@ A: 生产环境必须使用 HashiCorp Vault 或云厂商的 KMS。密钥在内�
     <span class="hljs-keyword">record</span> <span class="hljs-title class_">ModelTier</span><span class="hljs-params">(String name, <span class="hljs-type">double</span> costPer1kTokens, <span class="hljs-type">int</span> capabilityScore)</span> {}
 
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">final</span> List&lt;ModelTier&gt; TIERS = List.of(
-        <span class="hljs-keyword">new</span> <span class="hljs-title class_">ModelTier</span>(<span class="hljs-string">"claude-sonnet-4-20250514"</span>, <span class="hljs-number">0.003</span>, <span class="hljs-number">95</span>),
-        <span class="hljs-keyword">new</span> <span class="hljs-title class_">ModelTier</span>(<span class="hljs-string">"gpt-4o"</span>,                  <span class="hljs-number">0.0025</span>, <span class="hljs-number">92</span>),
-        <span class="hljs-keyword">new</span> <span class="hljs-title class_">ModelTier</span>(<span class="hljs-string">"gpt-4o-mini"</span>,             <span class="hljs-number">0.00015</span>, <span class="hljs-number">75</span>),
-        <span class="hljs-keyword">new</span> <span class="hljs-title class_">ModelTier</span>(<span class="hljs-string">"claude-haiku-3-5"</span>,        <span class="hljs-number">0.0008</span>, <span class="hljs-number">65</span>)
+        <span class="hljs-keyword">new</span> <span class="hljs-title class_">ModelTier</span>(<span class="hljs-string">&quot;claude-sonnet-4-20250514&quot;</span>, <span class="hljs-number">0.003</span>, <span class="hljs-number">95</span>),
+        <span class="hljs-keyword">new</span> <span class="hljs-title class_">ModelTier</span>(<span class="hljs-string">&quot;gpt-4o&quot;</span>,                  <span class="hljs-number">0.0025</span>, <span class="hljs-number">92</span>),
+        <span class="hljs-keyword">new</span> <span class="hljs-title class_">ModelTier</span>(<span class="hljs-string">&quot;gpt-4o-mini&quot;</span>,             <span class="hljs-number">0.00015</span>, <span class="hljs-number">75</span>),
+        <span class="hljs-keyword">new</span> <span class="hljs-title class_">ModelTier</span>(<span class="hljs-string">&quot;claude-haiku-3-5&quot;</span>,        <span class="hljs-number">0.0008</span>, <span class="hljs-number">65</span>)
     );
 
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">record</span> <span class="hljs-title class_">Recommendation</span><span class="hljs-params">(ModelTier model,
@@ -1255,23 +1255,23 @@ A: 生产环境必须使用 HashiCorp Vault 或云厂商的 KMS。密钥在内�
 
         <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Recommendation</span>(
             recommendedModel, complexity, cost,
-            <span class="hljs-string">"任务复杂度[%s] → 推荐[%s]：%s能力匹配，预估成本$%.4f"</span>
+            <span class="hljs-string">&quot;任务复杂度[%s] → 推荐[%s]：%s能力匹配，预估成本$%.4f&quot;</span>
                 .formatted(complexity, recommendedModel.name(),
-                    recommendedModel.capabilityScore() &gt;= <span class="hljs-number">90</span> ? <span class="hljs-string">"高"</span> : <span class="hljs-string">"中"</span>, cost));
+                    recommendedModel.capabilityScore() &gt;= <span class="hljs-number">90</span> ? <span class="hljs-string">&quot;高&quot;</span> : <span class="hljs-string">&quot;中&quot;</span>, cost));
     }
 
     <span class="hljs-keyword">private</span> TaskComplexity <span class="hljs-title function_">assessComplexity</span><span class="hljs-params">(String task)</span> {
         <span class="hljs-type">var</span> <span class="hljs-variable">lower</span> <span class="hljs-operator">=</span> task.toLowerCase();
 
         <span class="hljs-type">var</span> <span class="hljs-variable">complexKeywords</span> <span class="hljs-operator">=</span> List.of(
-            <span class="hljs-string">"证明"</span>, <span class="hljs-string">"推理"</span>, <span class="hljs-string">"分析"</span>, <span class="hljs-string">"设计架构"</span>, <span class="hljs-string">"生成代码"</span>,
-            <span class="hljs-string">"多步骤"</span>, <span class="hljs-string">"数学"</span>, <span class="hljs-string">"逻辑"</span>);
+            <span class="hljs-string">&quot;证明&quot;</span>, <span class="hljs-string">&quot;推理&quot;</span>, <span class="hljs-string">&quot;分析&quot;</span>, <span class="hljs-string">&quot;设计架构&quot;</span>, <span class="hljs-string">&quot;生成代码&quot;</span>,
+            <span class="hljs-string">&quot;多步骤&quot;</span>, <span class="hljs-string">&quot;数学&quot;</span>, <span class="hljs-string">&quot;逻辑&quot;</span>);
         <span class="hljs-type">long</span> <span class="hljs-variable">complexHits</span> <span class="hljs-operator">=</span> complexKeywords.stream()
                 .filter(lower::contains).count();
 
         <span class="hljs-type">var</span> <span class="hljs-variable">simpleKeywords</span> <span class="hljs-operator">=</span> List.of(
-            <span class="hljs-string">"分类"</span>, <span class="hljs-string">"提取"</span>, <span class="hljs-string">"总结"</span>, <span class="hljs-string">"摘要"</span>, <span class="hljs-string">"判断"</span>, <span class="hljs-string">"是/否"</span>,
-            <span class="hljs-string">"关键词"</span>, <span class="hljs-string">"情感"</span>, <span class="hljs-string">"翻译"</span>, <span class="hljs-string">"格式化"</span>);
+            <span class="hljs-string">&quot;分类&quot;</span>, <span class="hljs-string">&quot;提取&quot;</span>, <span class="hljs-string">&quot;总结&quot;</span>, <span class="hljs-string">&quot;摘要&quot;</span>, <span class="hljs-string">&quot;判断&quot;</span>, <span class="hljs-string">&quot;是/否&quot;</span>,
+            <span class="hljs-string">&quot;关键词&quot;</span>, <span class="hljs-string">&quot;情感&quot;</span>, <span class="hljs-string">&quot;翻译&quot;</span>, <span class="hljs-string">&quot;格式化&quot;</span>);
         <span class="hljs-type">long</span> <span class="hljs-variable">simpleHits</span> <span class="hljs-operator">=</span> simpleKeywords.stream()
                 .filter(lower::contains).count();
 
@@ -1312,16 +1312,16 @@ A: 生产环境必须使用 HashiCorp Vault 或云厂商的 KMS。密钥在内�
         <span class="hljs-type">var</span> <span class="hljs-variable">advisor</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">CostOptimizationAdvisor</span>();
 
         <span class="hljs-type">var</span> <span class="hljs-variable">tasks</span> <span class="hljs-operator">=</span> List.of(
-            <span class="hljs-string">"判断这条评论的情感是正面还是负面"</span>,
-            <span class="hljs-string">"从以下合同文本中提取甲乙方的名称、地址和签署日期"</span>,
-            <span class="hljs-string">"设计一个支持10万QPS的分布式消息队列的架构方案"</span>
+            <span class="hljs-string">&quot;判断这条评论的情感是正面还是负面&quot;</span>,
+            <span class="hljs-string">&quot;从以下合同文本中提取甲乙方的名称、地址和签署日期&quot;</span>,
+            <span class="hljs-string">&quot;设计一个支持10万QPS的分布式消息队列的架构方案&quot;</span>
         );
 
         <span class="hljs-keyword">for</span> (<span class="hljs-keyword">var</span> task : tasks) {
             <span class="hljs-type">var</span> <span class="hljs-variable">rec</span> <span class="hljs-operator">=</span> advisor.analyze(task);
             System.out.println(rec.reasoning());
-            System.out.println(<span class="hljs-string">"  模型："</span> + rec.model().name());
-            System.out.println(<span class="hljs-string">"  预估成本：$"</span> + String.format(<span class="hljs-string">"%.6f"</span>, rec.estimatedCost()));
+            System.out.println(<span class="hljs-string">&quot;  模型：&quot;</span> + rec.model().name());
+            System.out.println(<span class="hljs-string">&quot;  预估成本：$&quot;</span> + String.format(<span class="hljs-string">&quot;%.6f&quot;</span>, rec.estimatedCost()));
             System.out.println();
         }
     }
@@ -1329,8 +1329,8 @@ A: 生产环境必须使用 HashiCorp Vault 或云厂商的 KMS。密钥在内�
 </code></pre></div><hr>
 <h2>预算告警机制</h2>
 <p>在多租户 AI 平台中，没有预算管控的 API 调用是财务灾难的导火索。一个 Prompt 编写不当或 Agent 陷入死循环，可能在数小时内耗尽月度预算。建立多级预算告警机制是生产级 AI 平台的基本要求。</p>
-<p><strong>多级预算告警设计</strong>：设置四级阈值触发不同响应——（1）50%：信息通知（Slack/邮件），提醒关注但不中断服务；（2）80%：警告通知，触发人工审核；（3）95%：严重告警，自动限制非关键服务的调用频率；（4）100%：硬阻断，返回 429（Too Many Requests）并提示"预算已耗尽，请联系管理员"。</p>
-<p><strong>租户级别的预算追踪</strong>：每个租户（业务线、部门、项目）有独立的日预算和月预算。使用滑动窗口算法（Redis Sorted Set）精确追踪消费——每个 API 调用写入 <code>tenant:{id}:usage</code> Sorted Set，score 为调用时间戳，member 为 <code>时间戳:Token数</code>。统计时用 <code>ZCOUNT</code> 查询时间窗口内的调用次数和 Token 总量。滑动窗口避免了固定窗口的"边界双倍计费"问题。</p>
+<p><strong>多级预算告警设计</strong>：设置四级阈值触发不同响应——（1）50%：信息通知（Slack/邮件），提醒关注但不中断服务；（2）80%：警告通知，触发人工审核；（3）95%：严重告警，自动限制非关键服务的调用频率；（4）100%：硬阻断，返回 429（Too Many Requests）并提示&quot;预算已耗尽，请联系管理员&quot;。</p>
+<p><strong>租户级别的预算追踪</strong>：每个租户（业务线、部门、项目）有独立的日预算和月预算。使用滑动窗口算法（Redis Sorted Set）精确追踪消费——每个 API 调用写入 <code>tenant:{id}:usage</code> Sorted Set，score 为调用时间戳，member 为 <code>时间戳:Token数</code>。统计时用 <code>ZCOUNT</code> 查询时间窗口内的调用次数和 Token 总量。滑动窗口避免了固定窗口的&quot;边界双倍计费&quot;问题。</p>
 <p><strong>Webhook 通知机制</strong>：告警不是日志——必须在数秒内触达到人。每个阈值绑定一个 Webhook URL，支持自定义 HTTP Method（POST/PUT）、自定义 Header（如 Authorization）、自定义 Body 模板（使用占位符 <code>{tenantId}</code>、<code>{currentUsage}</code>、<code>{budgetLimit}</code>、<code>{percentage}</code>、<code>{timestamp}</code>）。Webhook 投递失败时重试 3 次，每次间隔指数增长（1s, 5s, 25s）。</p>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// JDK 25 + Spring Boot 4.x — BudgetAlertService with sliding window</span>
 <span class="hljs-keyword">import</span> redis.clients.jedis.UnifiedJedis;
@@ -1343,10 +1343,10 @@ A: 生产环境必须使用 HashiCorp Vault 或云厂商的 KMS。密钥在内�
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">BudgetAlertService</span> {
 
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">enum</span> <span class="hljs-title class_">AlertLevel</span> {
-        INFO(<span class="hljs-number">0.50</span>, <span class="hljs-string">"预算使用达50%"</span>, <span class="hljs-literal">false</span>),
-        WARNING(<span class="hljs-number">0.80</span>, <span class="hljs-string">"预算使用达80%，请关注"</span>, <span class="hljs-literal">false</span>),
-        CRITICAL(<span class="hljs-number">0.95</span>, <span class="hljs-string">"预算使用达95%，即将耗尽"</span>, <span class="hljs-literal">true</span>),
-        BLOCKED(<span class="hljs-number">1.00</span>, <span class="hljs-string">"预算已耗尽，已自动阻断"</span>, <span class="hljs-literal">true</span>);
+        INFO(<span class="hljs-number">0.50</span>, <span class="hljs-string">&quot;预算使用达50%&quot;</span>, <span class="hljs-literal">false</span>),
+        WARNING(<span class="hljs-number">0.80</span>, <span class="hljs-string">&quot;预算使用达80%，请关注&quot;</span>, <span class="hljs-literal">false</span>),
+        CRITICAL(<span class="hljs-number">0.95</span>, <span class="hljs-string">&quot;预算使用达95%，即将耗尽&quot;</span>, <span class="hljs-literal">true</span>),
+        BLOCKED(<span class="hljs-number">1.00</span>, <span class="hljs-string">&quot;预算已耗尽，已自动阻断&quot;</span>, <span class="hljs-literal">true</span>);
 
         <span class="hljs-keyword">final</span> <span class="hljs-type">double</span> threshold;
         <span class="hljs-keyword">final</span> String message;
@@ -1381,10 +1381,10 @@ A: 生产环境必须使用 HashiCorp Vault 或云厂商的 KMS。密钥在内�
      */</span>
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">recordUsage</span><span class="hljs-params">(String tenantId, <span class="hljs-type">int</span> tokensUsed)</span> {
         <span class="hljs-type">long</span> <span class="hljs-variable">now</span> <span class="hljs-operator">=</span> System.currentTimeMillis();
-        <span class="hljs-type">var</span> <span class="hljs-variable">member</span> <span class="hljs-operator">=</span> now + <span class="hljs-string">":"</span> + tokensUsed;
-        redis.zadd(<span class="hljs-string">"tenant:"</span> + tenantId + <span class="hljs-string">":usage"</span>, now, member);
+        <span class="hljs-type">var</span> <span class="hljs-variable">member</span> <span class="hljs-operator">=</span> now + <span class="hljs-string">&quot;:&quot;</span> + tokensUsed;
+        redis.zadd(<span class="hljs-string">&quot;tenant:&quot;</span> + tenantId + <span class="hljs-string">&quot;:usage&quot;</span>, now, member);
 
-        redis.zremrangeByScore(<span class="hljs-string">"tenant:"</span> + tenantId + <span class="hljs-string">":usage"</span>,
+        redis.zremrangeByScore(<span class="hljs-string">&quot;tenant:&quot;</span> + tenantId + <span class="hljs-string">&quot;:usage&quot;</span>,
                 <span class="hljs-number">0</span>, now - Duration.ofDays(<span class="hljs-number">30</span>).toMillis());
 
         checkBudget(tenantId);
@@ -1425,14 +1425,14 @@ A: 生产环境必须使用 HashiCorp Vault 或云厂商的 KMS。密钥在内�
                 .atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli();
 
         <span class="hljs-type">var</span> <span class="hljs-variable">dailyMembers</span> <span class="hljs-operator">=</span> redis.zrangeByScore(
-                <span class="hljs-string">"tenant:"</span> + tenantId + <span class="hljs-string">":usage"</span>, dayStart, now);
+                <span class="hljs-string">&quot;tenant:&quot;</span> + tenantId + <span class="hljs-string">&quot;:usage&quot;</span>, dayStart, now);
         <span class="hljs-type">double</span> <span class="hljs-variable">dailyTokens</span> <span class="hljs-operator">=</span> dailyMembers.stream()
-                .mapToLong(m -&gt; Long.parseLong(m.split(<span class="hljs-string">":"</span>)[<span class="hljs-number">1</span>])).sum();
+                .mapToLong(m -&gt; Long.parseLong(m.split(<span class="hljs-string">&quot;:&quot;</span>)[<span class="hljs-number">1</span>])).sum();
 
         <span class="hljs-type">var</span> <span class="hljs-variable">monthlyMembers</span> <span class="hljs-operator">=</span> redis.zrangeByScore(
-                <span class="hljs-string">"tenant:"</span> + tenantId + <span class="hljs-string">":usage"</span>, monthStart, now);
+                <span class="hljs-string">&quot;tenant:&quot;</span> + tenantId + <span class="hljs-string">&quot;:usage&quot;</span>, monthStart, now);
         <span class="hljs-type">double</span> <span class="hljs-variable">monthlyTokens</span> <span class="hljs-operator">=</span> monthlyMembers.stream()
-                .mapToLong(m -&gt; Long.parseLong(m.split(<span class="hljs-string">":"</span>)[<span class="hljs-number">1</span>])).sum();
+                .mapToLong(m -&gt; Long.parseLong(m.split(<span class="hljs-string">&quot;:&quot;</span>)[<span class="hljs-number">1</span>])).sum();
 
         <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">UsageSnapshot</span>(tenantId, dailyTokens, monthlyTokens,
                 budget.dailyLimit(), budget.monthlyLimit());
@@ -1441,20 +1441,20 @@ A: 生产环境必须使用 HashiCorp Vault 或云厂商的 KMS。密钥在内�
     <span class="hljs-keyword">private</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">triggerAlert</span><span class="hljs-params">(String tenantId, UsageSnapshot snapshot,
                                AlertLevel level)</span> {
         <span class="hljs-type">var</span> <span class="hljs-variable">budget</span> <span class="hljs-operator">=</span> getTenantBudget(tenantId);
-        <span class="hljs-type">var</span> <span class="hljs-variable">webhookBody</span> <span class="hljs-operator">=</span> <span class="hljs-string">"""
+        <span class="hljs-type">var</span> <span class="hljs-variable">webhookBody</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;&quot;&quot;
             {
-              "tenantId": "%s",
-              "alertLevel": "%s",
-              "alertMessage": "%s",
-              "dailyUsage": %.0f,
-              "dailyLimit": %.0f,
-              "dailyPercentage": %.1f%%,
-              "monthlyUsage": %.0f,
-              "monthlyLimit": %.0f,
-              "monthlyPercentage": %.1f%%,
-              "timestamp": "%s"
+              &quot;tenantId&quot;: &quot;%s&quot;,
+              &quot;alertLevel&quot;: &quot;%s&quot;,
+              &quot;alertMessage&quot;: &quot;%s&quot;,
+              &quot;dailyUsage&quot;: %.0f,
+              &quot;dailyLimit&quot;: %.0f,
+              &quot;dailyPercentage&quot;: %.1f%%,
+              &quot;monthlyUsage&quot;: %.0f,
+              &quot;monthlyLimit&quot;: %.0f,
+              &quot;monthlyPercentage&quot;: %.1f%%,
+              &quot;timestamp&quot;: &quot;%s&quot;
             }
-            """</span>.formatted(tenantId, level.name(), level.message,
+            &quot;&quot;&quot;</span>.formatted(tenantId, level.name(), level.message,
                 snapshot.dailyUsed(), snapshot.dailyLimit(),
                 snapshot.dailyPercentage() * <span class="hljs-number">100</span>,
                 snapshot.monthlyUsed(), snapshot.monthlyLimit(),
@@ -1465,7 +1465,7 @@ A: 生产环境必须使用 HashiCorp Vault 或云厂商的 KMS。密钥在内�
                 budget.webhookUrl(), webhookBody, <span class="hljs-number">3</span>));
 
         <span class="hljs-keyword">if</span> (level.autoBlock) {
-            System.err.println(<span class="hljs-string">"[BUDGET BLOCK] 租户 "</span> + tenantId + <span class="hljs-string">" 已被自动阻断！"</span>);
+            System.err.println(<span class="hljs-string">&quot;[BUDGET BLOCK] 租户 &quot;</span> + tenantId + <span class="hljs-string">&quot; 已被自动阻断！&quot;</span>);
         }
     }
 
@@ -1474,7 +1474,7 @@ A: 生产环境必须使用 HashiCorp Vault 或云厂商的 KMS。密钥在内�
             <span class="hljs-keyword">try</span> {
                 <span class="hljs-type">var</span> <span class="hljs-variable">request</span> <span class="hljs-operator">=</span> HttpRequest.newBuilder()
                         .uri(URI.create(url))
-                        .header(<span class="hljs-string">"Content-Type"</span>, <span class="hljs-string">"application/json"</span>)
+                        .header(<span class="hljs-string">&quot;Content-Type&quot;</span>, <span class="hljs-string">&quot;application/json&quot;</span>)
                         .POST(HttpRequest.BodyPublishers.ofString(body))
                         .timeout(Duration.ofSeconds(<span class="hljs-number">10</span>))
                         .build();
@@ -1488,35 +1488,35 @@ A: 生产环境必须使用 HashiCorp Vault 或云厂商的 KMS。密钥在内�
                 }
             }
         }
-        System.err.println(<span class="hljs-string">"[WEBHOOK FAILED] 告警通知投递失败: "</span> + url);
+        System.err.println(<span class="hljs-string">&quot;[WEBHOOK FAILED] 告警通知投递失败: &quot;</span> + url);
     }
 
     <span class="hljs-keyword">private</span> TenantBudget <span class="hljs-title function_">getTenantBudget</span><span class="hljs-params">(String tenantId)</span> {
         <span class="hljs-keyword">return</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">TenantBudget</span>(tenantId,
                 <span class="hljs-number">100_000</span>,    <span class="hljs-comment">// 日预算：100K tokens</span>
                 <span class="hljs-number">3_000_000</span>,  <span class="hljs-comment">// 月预算：3M tokens</span>
-                <span class="hljs-string">"https://hooks.slack.com/services/xxx"</span>);
+                <span class="hljs-string">&quot;https://hooks.slack.com/services/xxx&quot;</span>);
     }
 
     <span class="hljs-comment">// 使用示例</span>
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">static</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">main</span><span class="hljs-params">(String[] args)</span> {
         <span class="hljs-type">var</span> <span class="hljs-variable">service</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">BudgetAlertService</span>(<span class="hljs-literal">null</span>);
-        <span class="hljs-type">var</span> <span class="hljs-variable">tenantId</span> <span class="hljs-operator">=</span> <span class="hljs-string">"insurance-dept"</span>;
+        <span class="hljs-type">var</span> <span class="hljs-variable">tenantId</span> <span class="hljs-operator">=</span> <span class="hljs-string">&quot;insurance-dept&quot;</span>;
 
         <span class="hljs-keyword">for</span> (<span class="hljs-type">int</span> <span class="hljs-variable">i</span> <span class="hljs-operator">=</span> <span class="hljs-number">0</span>; i &lt; <span class="hljs-number">500</span>; i++) {
             service.recordUsage(tenantId, <span class="hljs-number">200</span>);
         }
 
         <span class="hljs-type">var</span> <span class="hljs-variable">snapshot</span> <span class="hljs-operator">=</span> service.checkBudget(tenantId);
-        System.out.printf(<span class="hljs-string">"日使用率: %.1f%% | 月使用率: %.1f%%%n"</span>,
+        System.out.printf(<span class="hljs-string">&quot;日使用率: %.1f%% | 月使用率: %.1f%%%n&quot;</span>,
                 snapshot.dailyPercentage() * <span class="hljs-number">100</span>,
                 snapshot.monthlyPercentage() * <span class="hljs-number">100</span>);
     }
 }
-</code></pre></div><p>预算告警不是"锦上添花"——它是生产级 AI 平台的财务安全保障。在 Agent 自动执行任务的场景中，一个失控的 ReAct 循环可能在 10 分钟内消耗数万 Token。没有预算熔断机制，就会在月底收到一张令人震惊的账单。实施建议：日预算从宽、月预算从严，给短时间内的突发流量留有余地，但对月度总量严格管控。</p>
+</code></pre></div><p>预算告警不是&quot;锦上添花&quot;——它是生产级 AI 平台的财务安全保障。在 Agent 自动执行任务的场景中，一个失控的 ReAct 循环可能在 10 分钟内消耗数万 Token。没有预算熔断机制，就会在月底收到一张令人震惊的账单。实施建议：日预算从宽、月预算从严，给短时间内的突发流量留有余地，但对月度总量严格管控。</p>
 <hr>
 <h2>九、总结</h2>
 <p>本文介绍了企业级 AI 模型网关和 Prompt 管理平台的完整设计思路和 Spring 实现。模型网关提供了协议统一、智能路由、精细化限流、密钥安全管理和多层缓存等能力，是 AI 基础设施的关键组件。Prompt 管理平台通过模板引擎、版本控制、环境绑定和 A/B 测试，让 Prompt 成为可管理、可追踪、可优化的工程资产。</p>
 <p>完整的演示代码位于配套 GitHub 仓库，包含单元测试和集成测试。生产部署时需替换内存实现为 Redis/数据库持久化，并接入监控和告警体系。</p>
-</body></html></div>
+</div>
 </article>

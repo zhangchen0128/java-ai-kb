@@ -6,9 +6,9 @@
     <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🔴 高级</span><span class="badge badge-tag">#collections</span><span class="badge badge-tag">#generics</span><span class="badge badge-tag">#type-erasure</span><span class="badge badge-tag">#wildcards</span><span class="badge badge-tag">#pecs</span></div>
     <div class="entry-sources"><small>📖 来源：<a href="https://github.com/openjdk/jdk/tree/master/src/java.base/share/classes/java/util" target="_blank" rel="noopener" class="source-link" title="OpenJDK 25 source — ArrayList, HashMap, TreeMap, LinkedHashMap implementations">OpenJDK 25 source — ArrayList, HashMap, TreeMap, LinkedHashMap implementations</a><a href="https://docs.oracle.com/javase/specs/jls/se25/html/jls-4.html#jls-4.5" target="_blank" rel="noopener" class="source-link" title="Java Language Specification — Generics (JLS §4.5)">Java Language Specification — Generics (JLS §4.5)</a><a href="https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/util/package-summary.html" target="_blank" rel="noopener" class="source-link" title="JDK 25 Collections Framework API documentation">JDK 25 Collections Framework API documentation</a><a href="https://www.oreilly.com/library/view/java-generics-and/0596527756/" target="_blank" rel="noopener" class="source-link" title="Java Generics and Collections (Naftalin &amp; Wadler)">Java Generics and Collections (Naftalin &amp; Wadler)</a></small></div>
   </div>
-  <div class="entry-body"><html><head></head><body><h1>集合框架与泛型深度解析</h1>
+  <div class="entry-body"><h1>集合框架与泛型深度解析</h1>
 <h2>概述</h2>
-<p>Java 集合框架是日常编程使用频率最高的 API 之一，但大多数开发者对其理解停留在"会用 ArrayList 和 HashMap"的层面。泛型是集合框架的类型安全基石，但其类型擦除机制和通配符系统常常让人困惑。</p>
+<p>Java 集合框架是日常编程使用频率最高的 API 之一，但大多数开发者对其理解停留在&quot;会用 ArrayList 和 HashMap&quot;的层面。泛型是集合框架的类型安全基石，但其类型擦除机制和通配符系统常常让人困惑。</p>
 <p>本篇从 Collection/Map 层级体系出发，深入到关键类的源码实现（ArrayList 扩容、HashMap 的 put/resize/treeify），系统讲解泛型的类型擦除、通配符（PECS 原则）、Bridge Method 等核心机制，并使用 JDK 25 的最新特性进行示例讲解。</p>
 <hr>
 <h2>一、集合框架全景</h2>
@@ -59,12 +59,12 @@
 <p><strong>字节码层面的真相：</strong></p>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 源代码</span>
 List&lt;String&gt; list = <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;&gt;();
-list.add(<span class="hljs-string">"hello"</span>);
+list.add(<span class="hljs-string">&quot;hello&quot;</span>);
 <span class="hljs-type">String</span> <span class="hljs-variable">s</span> <span class="hljs-operator">=</span> list.get(<span class="hljs-number">0</span>);
 
 <span class="hljs-comment">// 编译后等价于（反编译可见）</span>
 <span class="hljs-type">List</span> <span class="hljs-variable">list</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>();        <span class="hljs-comment">// 泛型信息被擦除</span>
-list.add(<span class="hljs-string">"hello"</span>);
+list.add(<span class="hljs-string">&quot;hello&quot;</span>);
 <span class="hljs-type">String</span> <span class="hljs-variable">s</span> <span class="hljs-operator">=</span> (String) list.get(<span class="hljs-number">0</span>);    <span class="hljs-comment">// 编译器插入强制类型转换</span>
 </code></pre></div><p><strong>泛型类的擦除规则：</strong></p>
 <ul>
@@ -138,11 +138,11 @@ list.add(<span class="hljs-string">"hello"</span>);
 }
 </code></pre></div><h3>2.4 协变、逆变、不变</h3>
 <p>Java 中的泛型是<strong>不变的</strong>（Invariant）：<code>List&lt;String&gt;</code> 不是 <code>List&lt;Object&gt;</code> 的子类型。</p>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java">List&lt;String&gt; strings = List.of(<span class="hljs-string">"a"</span>, <span class="hljs-string">"b"</span>);
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java">List&lt;String&gt; strings = List.of(<span class="hljs-string">&quot;a&quot;</span>, <span class="hljs-string">&quot;b&quot;</span>);
 <span class="hljs-comment">// List&lt;Object&gt; objects = strings; // 编译错误！</span>
 
 <span class="hljs-comment">// 但数组是协变的（Covariant）—— 这是 Java 的历史遗留设计缺陷</span>
-Object[] objects = <span class="hljs-keyword">new</span> <span class="hljs-title class_">String</span>[]{<span class="hljs-string">"a"</span>, <span class="hljs-string">"b"</span>}; <span class="hljs-comment">// 编译通过</span>
+Object[] objects = <span class="hljs-keyword">new</span> <span class="hljs-title class_">String</span>[]{<span class="hljs-string">&quot;a&quot;</span>, <span class="hljs-string">&quot;b&quot;</span>}; <span class="hljs-comment">// 编译通过</span>
 objects[<span class="hljs-number">0</span>] = <span class="hljs-number">42</span>; <span class="hljs-comment">// 运行时抛出 ArrayStoreException</span>
 </code></pre></div><p><strong>协变模拟</strong>：使用 <code>? extends T</code>（上界通配符）
 <strong>逆变模拟</strong>：使用 <code>? super T</code>（下界通配符）</p>
@@ -166,7 +166,7 @@ objects[<span class="hljs-number">0</span>] = <span class="hljs-number">42</span
 <span class="hljs-comment">// List&lt;String&gt;[] array = new List&lt;String&gt;[10]; // 编译错误！</span>
 
 <span class="hljs-comment">// 变通方案：</span>
-<span class="hljs-meta">@SuppressWarnings("unchecked")</span>
+<span class="hljs-meta">@SuppressWarnings(&quot;unchecked&quot;)</span>
 T[] array = (T[]) <span class="hljs-keyword">new</span> <span class="hljs-title class_">Object</span>[<span class="hljs-number">10</span>];
 
 <span class="hljs-comment">// 2. 不能 instanceof 泛型</span>
@@ -265,9 +265,9 @@ T[] array = (T[]) <span class="hljs-keyword">new</span> <span class="hljs-title 
 </ul>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// TreeMap 按 Key 排序</span>
 <span class="hljs-type">var</span> <span class="hljs-variable">treeMap</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">TreeMap</span>&lt;String, Integer&gt;();
-treeMap.put(<span class="hljs-string">"banana"</span>, <span class="hljs-number">2</span>);
-treeMap.put(<span class="hljs-string">"apple"</span>, <span class="hljs-number">1</span>);
-treeMap.put(<span class="hljs-string">"cherry"</span>, <span class="hljs-number">3</span>);
+treeMap.put(<span class="hljs-string">&quot;banana&quot;</span>, <span class="hljs-number">2</span>);
+treeMap.put(<span class="hljs-string">&quot;apple&quot;</span>, <span class="hljs-number">1</span>);
+treeMap.put(<span class="hljs-string">&quot;cherry&quot;</span>, <span class="hljs-number">3</span>);
 
 <span class="hljs-comment">// 遍历输出：apple=1, banana=2, cherry=3（按字典序）</span>
 
@@ -275,7 +275,7 @@ treeMap.put(<span class="hljs-string">"cherry"</span>, <span class="hljs-number"
 <span class="hljs-type">var</span> <span class="hljs-variable">reverseMap</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">TreeMap</span>&lt;String, Integer&gt;(Comparator.reverseOrder());
 
 <span class="hljs-comment">// 范围查询</span>
-<span class="hljs-type">var</span> <span class="hljs-variable">subMap</span> <span class="hljs-operator">=</span> treeMap.subMap(<span class="hljs-string">"apple"</span>, <span class="hljs-literal">true</span>, <span class="hljs-string">"cherry"</span>, <span class="hljs-literal">false</span>); <span class="hljs-comment">// 左闭右开</span>
+<span class="hljs-type">var</span> <span class="hljs-variable">subMap</span> <span class="hljs-operator">=</span> treeMap.subMap(<span class="hljs-string">&quot;apple&quot;</span>, <span class="hljs-literal">true</span>, <span class="hljs-string">&quot;cherry&quot;</span>, <span class="hljs-literal">false</span>); <span class="hljs-comment">// 左闭右开</span>
 </code></pre></div><h3>3.4 LinkedHashMap LRU 实现</h3>
 <p>LinkedHashMap 维护双向链表来保持插入顺序或访问顺序。启用 LRU 模式：</p>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 实现一个固定大小的 LRU 缓存</span>
@@ -295,18 +295,18 @@ treeMap.put(<span class="hljs-string">"cherry"</span>, <span class="hljs-number"
 
 <span class="hljs-comment">// 使用</span>
 <span class="hljs-type">var</span> <span class="hljs-variable">cache</span> <span class="hljs-operator">=</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">LruCache</span>&lt;String, String&gt;(<span class="hljs-number">100</span>);
-cache.put(<span class="hljs-string">"key1"</span>, <span class="hljs-string">"value1"</span>);
-cache.get(<span class="hljs-string">"key1"</span>); <span class="hljs-comment">// 访问后移到链表尾部</span>
+cache.put(<span class="hljs-string">&quot;key1&quot;</span>, <span class="hljs-string">&quot;value1&quot;</span>);
+cache.get(<span class="hljs-string">&quot;key1&quot;</span>); <span class="hljs-comment">// 访问后移到链表尾部</span>
 <span class="hljs-comment">// 当 size &gt; 100 时，链表头部元素自动被删除</span>
 </code></pre></div><hr>
 <h2>四、JDK 25 集合与泛型改进</h2>
 <h3>4.1 泛型推断增强</h3>
 <p>JDK 25 进一步增强了 <code>var</code> 的泛型推断能力：</p>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 推断为 List&lt;String&gt;</span>
-<span class="hljs-type">var</span> <span class="hljs-variable">list</span> <span class="hljs-operator">=</span> List.of(<span class="hljs-string">"a"</span>, <span class="hljs-string">"b"</span>, <span class="hljs-string">"c"</span>);
+<span class="hljs-type">var</span> <span class="hljs-variable">list</span> <span class="hljs-operator">=</span> List.of(<span class="hljs-string">&quot;a&quot;</span>, <span class="hljs-string">&quot;b&quot;</span>, <span class="hljs-string">&quot;c&quot;</span>);
 
 <span class="hljs-comment">// 推断为 Map&lt;String, Integer&gt;</span>
-<span class="hljs-type">var</span> <span class="hljs-variable">map</span> <span class="hljs-operator">=</span> Map.of(<span class="hljs-string">"a"</span>, <span class="hljs-number">1</span>, <span class="hljs-string">"b"</span>, <span class="hljs-number">2</span>);
+<span class="hljs-type">var</span> <span class="hljs-variable">map</span> <span class="hljs-operator">=</span> Map.of(<span class="hljs-string">&quot;a&quot;</span>, <span class="hljs-number">1</span>, <span class="hljs-string">&quot;b&quot;</span>, <span class="hljs-number">2</span>);
 
 <span class="hljs-comment">// Stream 中的类型推断</span>
 <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> list.stream()
@@ -315,8 +315,8 @@ cache.get(<span class="hljs-string">"key1"</span>); <span class="hljs-comment">/
 </code></pre></div><h3>4.2 SequencedCollection（JDK 21+）</h3>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-comment">// 序列化集合接口：提供统一的首尾操作</span>
 SequencedCollection&lt;String&gt; seq = <span class="hljs-keyword">new</span> <span class="hljs-title class_">ArrayList</span>&lt;&gt;();
-seq.addFirst(<span class="hljs-string">"first"</span>);   <span class="hljs-comment">// 加到头部</span>
-seq.addLast(<span class="hljs-string">"last"</span>);     <span class="hljs-comment">// 加到尾部</span>
+seq.addFirst(<span class="hljs-string">&quot;first&quot;</span>);   <span class="hljs-comment">// 加到头部</span>
+seq.addLast(<span class="hljs-string">&quot;last&quot;</span>);     <span class="hljs-comment">// 加到尾部</span>
 <span class="hljs-type">var</span> <span class="hljs-variable">first</span> <span class="hljs-operator">=</span> seq.getFirst();
 <span class="hljs-type">var</span> <span class="hljs-variable">last</span> <span class="hljs-operator">=</span> seq.getLast();
 <span class="hljs-type">var</span> <span class="hljs-variable">reversed</span> <span class="hljs-operator">=</span> seq.reversed(); <span class="hljs-comment">// 反转视图</span>
@@ -338,7 +338,7 @@ A: 99% 的情况用 ArrayList。LinkedList 仅在频繁在列表头部插入/删
 <li><a href="#/02-Java平台/语言特性/02-现代Java25深度解析" class="cross-ref">02-现代Java25深度解析</a>：JDK 25 新特性全解</li>
 <li><a href="#/02-Java平台/反射与模块化/02-反射与模块化系统" class="cross-ref">02-反射与模块化系统</a>：反射中的泛型处理</li>
 <li><a href="#/02-Java平台/并发/02-Java并发深度解析" class="cross-ref">02-Java并发深度解析</a>：ConcurrentHashMap 源码分析</li>
-<li><span class="broken-ref" title="未找到: 01-数据结构（树与哈希表）">01-数据结构（树与哈希表）</span>：前置数据结构基础</li>
+<li><a href="#/01-计算机基础/数据结构与算法/01-数据结构与算法" class="cross-ref">01-数据结构与算法</a>：前置数据结构基础</li>
 </ul>
-</body></html></div>
+</div>
 </article>

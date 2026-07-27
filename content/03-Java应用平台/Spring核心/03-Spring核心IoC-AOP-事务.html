@@ -6,7 +6,7 @@
     <div class="entry-badges"><span class="badge badge-draft">📝 草稿</span><span class="badge badge-level">🟡 中级</span><span class="badge badge-tag">#spring-ioc</span><span class="badge badge-tag">#spring-aop</span><span class="badge badge-tag">#spring-transaction</span><span class="badge badge-tag">#bean-lifecycle</span><span class="badge badge-tag">#circular-dependency</span></div>
     <div class="entry-sources"><small>📖 来源：<a href="https://docs.spring.io/spring-framework/reference/core.html" target="_blank" rel="noopener" class="source-link" title="Spring Framework Reference — IoC Container, AOP, Transaction Management, Events, Resources">Spring Framework Reference — IoC Container, AOP, Transaction Management, Events, Resources</a><a href="https://docs.spring.io/spring-framework/reference/data-access/transaction.html" target="_blank" rel="noopener" class="source-link" title="Spring Transaction Management Reference">Spring Transaction Management Reference</a><a href="https://github.com/spring-projects/spring-framework" target="_blank" rel="noopener" class="source-link" title="Spring Framework source — DefaultListableBeanFactory, TransactionInterceptor, AbstractAutoProxyCreator">Spring Framework source — DefaultListableBeanFactory, TransactionInterceptor, AbstractAutoProxyCreator</a><a href="https://www.manning.com/books/spring-in-action-sixth-edition" target="_blank" rel="noopener" class="source-link" title="Spring in Action, Sixth Edition (Craig Walls, 2022)">Spring in Action, Sixth Edition (Craig Walls, 2022)</a></small></div>
   </div>
-  <div class="entry-body"><html><head></head><body><h1>Spring 核心 IoC / AOP / 事务</h1>
+  <div class="entry-body"><h1>Spring 核心 IoC / AOP / 事务</h1>
 <h2>概述</h2>
 <p>Spring Framework 是 Java 企业开发的事实标准，其三大核心能力——<strong>IoC 容器</strong>（控制反转与依赖注入）、<strong>AOP</strong>（面向切面编程）、<strong>事务管理</strong>——构成了现代 Java 应用的骨架。</p>
 <p>本文从源码级别剖析 Bean 生命周期的完整链路、AOP 的代理选择策略和失效场景、Spring 事务的传播机制及其常见陷阱，以及事件机制和资源抽象。所有代码示例使用 JDK 25 + Spring Boot 4.x 风格。</p>
@@ -117,7 +117,7 @@
 <td>应用级共享数据</td>
 </tr>
 </tbody></table>
-<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Scope("prototype")</span>
+<div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Scope(&quot;prototype&quot;)</span>
 <span class="hljs-meta">@Component</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ReportGenerator</span> {
     <span class="hljs-comment">// 每次注入/获取都创建新实例</span>
@@ -154,43 +154,43 @@
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">LoggingAspect</span> {
 
     <span class="hljs-comment">// Pointcut：定义切点</span>
-    <span class="hljs-meta">@Pointcut("execution(* com.example.service.*.*(..))")</span>
+    <span class="hljs-meta">@Pointcut(&quot;execution(* com.example.service.*.*(..))&quot;)</span>
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">serviceLayer</span><span class="hljs-params">()</span> {}
 
     <span class="hljs-comment">// Before：方法执行前</span>
-    <span class="hljs-meta">@Before("serviceLayer()")</span>
+    <span class="hljs-meta">@Before(&quot;serviceLayer()&quot;)</span>
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">logBefore</span><span class="hljs-params">(JoinPoint joinPoint)</span> {
         <span class="hljs-type">var</span> <span class="hljs-variable">methodName</span> <span class="hljs-operator">=</span> joinPoint.getSignature().getName();
         <span class="hljs-type">var</span> <span class="hljs-variable">args</span> <span class="hljs-operator">=</span> Arrays.toString(joinPoint.getArgs());
-        System.out.printf(<span class="hljs-string">"→ %s(%s)%n"</span>, methodName, args);
+        System.out.printf(<span class="hljs-string">&quot;→ %s(%s)%n&quot;</span>, methodName, args);
     }
 
     <span class="hljs-comment">// AfterReturning：方法正常返回后</span>
-    <span class="hljs-meta">@AfterReturning(pointcut = "serviceLayer()", returning = "result")</span>
+    <span class="hljs-meta">@AfterReturning(pointcut = &quot;serviceLayer()&quot;, returning = &quot;result&quot;)</span>
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">logAfterReturning</span><span class="hljs-params">(JoinPoint joinPoint, Object result)</span> {
-        System.out.printf(<span class="hljs-string">"← %s returned: %s%n"</span>,
+        System.out.printf(<span class="hljs-string">&quot;← %s returned: %s%n&quot;</span>,
             joinPoint.getSignature().getName(), result);
     }
 
     <span class="hljs-comment">// AfterThrowing：方法抛出异常后</span>
-    <span class="hljs-meta">@AfterThrowing(pointcut = "serviceLayer()", throwing = "ex")</span>
+    <span class="hljs-meta">@AfterThrowing(pointcut = &quot;serviceLayer()&quot;, throwing = &quot;ex&quot;)</span>
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">logAfterThrowing</span><span class="hljs-params">(JoinPoint joinPoint, Exception ex)</span> {
-        System.err.printf(<span class="hljs-string">"✗ %s threw: %s%n"</span>,
+        System.err.printf(<span class="hljs-string">&quot;✗ %s threw: %s%n&quot;</span>,
             joinPoint.getSignature().getName(), ex.getMessage());
     }
 
     <span class="hljs-comment">// Around：环绕通知（最强大，控制方法执行全过程）</span>
-    <span class="hljs-meta">@Around("serviceLayer()")</span>
+    <span class="hljs-meta">@Around(&quot;serviceLayer()&quot;)</span>
     <span class="hljs-keyword">public</span> Object <span class="hljs-title function_">logAround</span><span class="hljs-params">(ProceedingJoinPoint pjp)</span> <span class="hljs-keyword">throws</span> Throwable {
         <span class="hljs-type">var</span> <span class="hljs-variable">start</span> <span class="hljs-operator">=</span> System.nanoTime();
         <span class="hljs-keyword">try</span> {
             <span class="hljs-type">var</span> <span class="hljs-variable">result</span> <span class="hljs-operator">=</span> pjp.proceed(); <span class="hljs-comment">// 必须调用 proceed()，否则方法不执行</span>
             <span class="hljs-type">var</span> <span class="hljs-variable">elapsed</span> <span class="hljs-operator">=</span> (System.nanoTime() - start) / <span class="hljs-number">1_000_000</span>;
-            System.out.printf(<span class="hljs-string">"%s completed in %dms%n"</span>,
+            System.out.printf(<span class="hljs-string">&quot;%s completed in %dms%n&quot;</span>,
                 pjp.getSignature(), elapsed);
             <span class="hljs-keyword">return</span> result;
         } <span class="hljs-keyword">catch</span> (Exception e) {
-            System.err.printf(<span class="hljs-string">"%s failed: %s%n"</span>, pjp.getSignature(), e.getMessage());
+            System.err.printf(<span class="hljs-string">&quot;%s failed: %s%n&quot;</span>, pjp.getSignature(), e.getMessage());
             <span class="hljs-keyword">throw</span> e;
         }
     }
@@ -251,7 +251,7 @@
 <span class="hljs-meta">@Component</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ToolMetricsAspect</span> {
 
-    <span class="hljs-meta">@Around("@annotation(toolMethod)")</span>
+    <span class="hljs-meta">@Around(&quot;@annotation(toolMethod)&quot;)</span>
     <span class="hljs-keyword">public</span> Object <span class="hljs-title function_">measureToolExecution</span><span class="hljs-params">(ProceedingJoinPoint pjp, ToolMethod toolMethod)</span>
             <span class="hljs-keyword">throws</span> Throwable {
         <span class="hljs-type">var</span> <span class="hljs-variable">start</span> <span class="hljs-operator">=</span> System.nanoTime();
@@ -259,7 +259,7 @@
             <span class="hljs-keyword">return</span> pjp.proceed();
         } <span class="hljs-keyword">finally</span> {
             <span class="hljs-type">var</span> <span class="hljs-variable">elapsed</span> <span class="hljs-operator">=</span> (System.nanoTime() - start) / <span class="hljs-number">1_000_000.0</span>;
-            System.out.printf(<span class="hljs-string">"[Metrics] Tool '%s' executed in %.2fms%n"</span>,
+            System.out.printf(<span class="hljs-string">&quot;[Metrics] Tool &#x27;%s&#x27; executed in %.2fms%n&quot;</span>,
                 toolMethod.name(), elapsed);
             <span class="hljs-comment">// 实际项目中：将指标发送到 Micrometer/Prometheus</span>
         }
@@ -300,7 +300,7 @@
 </code></pre></div><p><strong>场景3：异常类型不匹配</strong></p>
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Transactional(rollbackFor = RuntimeException.class)</span> <span class="hljs-comment">// 默认</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">process</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> Exception {
-    <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Exception</span>(<span class="hljs-string">"Checked exception"</span>); <span class="hljs-comment">// 不会回滚！</span>
+    <span class="hljs-keyword">throw</span> <span class="hljs-keyword">new</span> <span class="hljs-title class_">Exception</span>(<span class="hljs-string">&quot;Checked exception&quot;</span>); <span class="hljs-comment">// 不会回滚！</span>
 }
 
 <span class="hljs-comment">// 解决方案</span>
@@ -414,7 +414,7 @@
         <span class="hljs-comment">// 主事务：创建订单</span>
         orderRepo.save(dto.toEntity());
         <span class="hljs-comment">// 记录日志（独立事务，即使主事务失败，日志也保留）</span>
-        auditService.log(<span class="hljs-string">"Order created: "</span> + dto.orderId());
+        auditService.log(<span class="hljs-string">&quot;Order created: &quot;</span> + dto.orderId());
     }
 }
 
@@ -471,14 +471,14 @@
     <span class="hljs-comment">// 同步监听（默认）</span>
     <span class="hljs-meta">@EventListener</span>
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">handleOrderCreated</span><span class="hljs-params">(OrderCreatedEvent event)</span> {
-        smsService.sendNotification(event.userId(), <span class="hljs-string">"Order created!"</span>);
+        smsService.sendNotification(event.userId(), <span class="hljs-string">&quot;Order created!&quot;</span>);
     }
 
     <span class="hljs-comment">// 事务提交后监听（确保数据已持久化）</span>
     <span class="hljs-meta">@TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)</span>
     <span class="hljs-keyword">public</span> <span class="hljs-keyword">void</span> <span class="hljs-title function_">handleAfterCommit</span><span class="hljs-params">(OrderCreatedEvent event)</span> {
         <span class="hljs-comment">// 此时事务已提交，适合发送消息、调用外部 API</span>
-        messageQueue.send(<span class="hljs-string">"order-topic"</span>, event);
+        messageQueue.send(<span class="hljs-string">&quot;order-topic&quot;</span>, event);
     }
 
     <span class="hljs-comment">// 异步监听</span>
@@ -496,10 +496,10 @@
 <div class="code-block"><div class="code-header"><span class="code-lang">java</span><button class="copy-btn" onclick="copyCode(this)">复制</button></div><pre><code class="hljs language-java"><span class="hljs-meta">@Component</span>
 <span class="hljs-keyword">public</span> <span class="hljs-keyword">class</span> <span class="hljs-title class_">ConfigLoader</span> {
     <span class="hljs-comment">// 支持 classpath:、file:、http: 等前缀</span>
-    <span class="hljs-meta">@Value("classpath:prompts/system-prompt.txt")</span>
+    <span class="hljs-meta">@Value(&quot;classpath:prompts/system-prompt.txt&quot;)</span>
     <span class="hljs-keyword">private</span> Resource systemPrompt;
 
-    <span class="hljs-meta">@Value("file:${app.data-dir}/faq.json")</span>
+    <span class="hljs-meta">@Value(&quot;file:${app.data-dir}/faq.json&quot;)</span>
     <span class="hljs-keyword">private</span> Resource faqFile;
 
     <span class="hljs-keyword">public</span> String <span class="hljs-title function_">loadSystemPrompt</span><span class="hljs-params">()</span> <span class="hljs-keyword">throws</span> IOException {
@@ -524,5 +524,5 @@ A: Spring 的本地事务不支持分布式。使用 Seata（AT/TCC/Saga 模式�
 <li><a href="#/03-Java应用平台/Web与安全/03-SpringMVC与SSE流式输出" class="cross-ref">03-SpringMVC与SSE流式输出</a>：Web 层核心</li>
 <li><a href="#/03-Java应用平台/数据访问/03-SpringDataJPA与MyBatis深度解析" class="cross-ref">03-SpringDataJPA与MyBatis深度解析</a>：事务在持久层的应用</li>
 </ul>
-</body></html></div>
+</div>
 </article>
