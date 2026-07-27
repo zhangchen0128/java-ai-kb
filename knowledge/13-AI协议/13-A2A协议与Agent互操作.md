@@ -4,9 +4,9 @@ title: "A2A协议背景与Agent互操作实战"
 status: "draft"
 level: "intermediate"
 sources:
-  - level: "L1"
-    url: "https://a2a-protocol.org/specification/latest/"
-    description: "A2A官方协议规范最新版"
+  - level: "L0"
+    url: "https://a2a-protocol.org/latest/specification/"
+    description: "A2A 1.0 规范"
   - level: "L1"
     url: "https://github.com/a2a-protocol/a2a-java"
     description: "A2A Java SDK官方仓库"
@@ -19,9 +19,9 @@ sources:
 relations:
   prerequisite: ["13-MCP协议与JavaSDK", "09-SpringAI2深度解析"]
   related: ["09-SpringAI2深度解析", "12-多Agent协作架构"]
-tags: ["a2a", "agent-to-agent", "agent-interop", "java", "spring-ai", "multi-agent", "mcp"]
+tags: ["a2a", "a2a-1.0", "agent-to-agent", "agent-interop", "java", "spring-ai", "multi-agent", "mcp", "protocol-binding", "json-rpc", "grpc"]
 created: "2026-07-17"
-updated: "2026-07-17"
+updated: "2026-07-27"
 ---
 
 # A2A协议背景与Agent互操作实战
@@ -63,15 +63,33 @@ A2A是一个开放标准协议，定义了AI Agent之间通信的规范。它不
 
 ### 2.1 Agent Card（Agent名片）
 
-Agent Card是A2A协议的基石——每个Agent通过一个JSON描述文件声明自己的身份和能力。其他Agent通过读取这个文件来发现和了解对方。
+Agent Card 是 A2A 1.0 协议的基石——每个 Agent 通过一个标准化的 JSON 文档（`agent-card.json`）声明自己的身份、能力、端点、认证方式等元数据。其他 Agent 通过读取这个文件来发现和了解对方，无需事先约定。
 
-Agent Card包含以下关键信息：
+**Agent Card 的核心字段（A2A 1.0 规范）：**
 
-- **身份信息**：name、description、version、url
-- **能力声明**：skills列表（每个skill有id、name、description、tags、examples）
-- **端点信息**：任务创建端点、状态查询端点、流式响应端点
-- **认证方式**：支持的认证机制（OAuth2、API Key等）
-- **安全策略**：支持的签名算法、信任模型
+| 字段 | 类型 | 必需 | 说明 |
+|------|------|------|------|
+| `name` | string | 是 | Agent 的人类可读名称 |
+| `description` | string | 是 | Agent 的功能描述 |
+| `url` | string | 是 | Agent 的基础 URL |
+| `version` | string | 是 | 语义化版本号 |
+| `capabilities` | object | 是 | 能力声明（streaming、pushNotifications 等） |
+| `skills` | array | 是 | Agent 的技能列表，每个 skill 含 id、name、description、tags、examples、inputModes、outputModes |
+| `authentication` | object | 否 | 认证方案（schemes 数组 + credentials 等） |
+| `defaultInputModes` | array | 是 | 默认支持的输入类型：text、file、data |
+| `defaultOutputModes` | array | 是 | 默认支持的输出类型：text、file、data |
+| `provider` | object | 否 | 提供商信息（organization、url） |
+| `security` | object | 否 | 安全策略（签名算法、信任模型） |
+
+**Agent Card 发现机制：Well-Known URI**
+
+A2A 1.0 采用 IETF RFC 8615 标准的 Well-Known URI 模式进行 Agent 自动发现。每个 Agent 必须在其根路径下暴露：
+
+```
+GET https://<agent-base-url>/.well-known/agent-card.json
+```
+
+客户端无需任何预先配置，仅通过 Agent 的基础 URL 即可自动发现其完整能力。此外，A2A 1.0 还支持通过 DNS TXT 记录和 Agent Registry（注册中心）进行辅助发现，适用于大规模 Agent 集群场景。
 
 ```json
 {
@@ -79,9 +97,14 @@ Agent Card包含以下关键信息：
   "description": "Specialized in web research, data gathering, and fact verification",
   "url": "https://agents.example.com/research",
   "version": "1.2.0",
+  "provider": {
+    "organization": "AI Research Labs",
+    "url": "https://example.com"
+  },
   "capabilities": {
     "streaming": true,
-    "pushNotifications": true
+    "pushNotifications": true,
+    "stateTransitionHistory": true
   },
   "skills": [
     {
@@ -92,28 +115,44 @@ Agent Card包含以下关键信息：
       "examples": [
         "Find the latest papers on quantum computing",
         "Search for market data on electric vehicles"
-      ]
+      ],
+      "inputModes": ["text"],
+      "outputModes": ["text", "file"]
     }
   ],
   "defaultInputModes": ["text", "file"],
   "defaultOutputModes": ["text", "file"],
   "authentication": {
-    "schemes": ["oauth2"],
-    "authorizationServer": "https://auth.example.com"
+    "schemes": ["bearer"],
+    "credentials": {
+      "serviceUrl": "https://auth.example.com/token"
+    }
   }
 }
 ```
 
 ### 2.2 Message（消息）
 
-A2A中的Message是Agent间通信的基本单位。每条Message包含role（谁发送的）、parts（内容部分）、metadata（元数据）。
+Message 是 A2A 1.0 中 Agent 间通信的基本单位，代表一次对话回合（turn）。每条 Message 包含 `role`（发送方角色）、`parts`（内容片段数组）、`metadata`（扩展元数据）。
 
-Message的role可以是：
-- `user`：最终用户的消息
-- `agent`：Agent代理用户发出的消息
-- `system`：系统级指令和上下文
+**Message 结构（A2A 1.0）：**
 
-每个part可以是文本、文件引用、结构化数据等。
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `messageId` | string | 消息唯一标识 |
+| `role` | string | `"user"`（最终用户）或 `"agent"`（Agent 代用户发出的消息） |
+| `parts` | array | 内容片段列表，支持 TextPart、FilePart、DataPart |
+| `metadata` | object | 可选的扩展元数据（如 priority、locale 等） |
+| `contextId` | string | 可选的会话上下文 ID，用于关联多轮对话 |
+| `taskId` | string | 可选的任务 ID，关联到所属 Task |
+
+**Part 类型：**
+
+- **TextPart**：纯文本内容，`type: "text"`，包含 `text` 字段
+- **FilePart**：文件引用或内联内容，`type: "file"`，包含 `name`、`mimeType`、`content`（或 `uri`）
+- **DataPart**：结构化数据，`type: "data"`，包含 `data` 字段（JSON 对象）
+
+A2A 1.0 中 role 仅有 `user` 和 `agent` 两种——没有 `system` role。系统级指令和上下文应通过 Agent Card 的 skills 描述或 Task 的配置传递。
 
 ```java
 // Message构建示例
@@ -132,33 +171,66 @@ var message = A2aMessage.builder()
 
 ### 2.3 Task（任务）
 
-Task是A2A对长耗时操作的抽象。当一个Agent向另一个Agent发起请求时，后者可能创建一个Task来跟踪工作进度。
+Task 是 A2A 1.0 对长耗时、多步骤操作的统一抽象。当一个 Agent 向另一个 Agent 发起请求时，后者创建一个 Task 来跟踪整个工作流程的生命周期。
 
-Task的生命周期状态：
-- `input-required`：等待用户或上游Agent提供更多信息
-- `working`：正在处理中
-- `rejected`：任务被拒绝
-- `completed`：任务成功完成
-- `failed`：任务处理失败
-- `canceled`：任务被取消
+**Task 状态机（A2A 1.0）：**
 
-每个Task包含：
-- **id**：唯一标识符
-- **status**：当前状态
-- **history**：任务处理过程中的所有Message
-- **artifacts**：任务产生的产出物
+```
+                    ┌──────────┐
+                    │ pending  │
+                    └────┬─────┘
+                         │ 开始处理
+                         ▼
+                   ┌──────────────┐
+                   │ in-progress  │
+                   └───┬─────┬────┘
+             完成     /     \    失败/取消
+                     /       \
+                    ▼         ▼
+           ┌───────────┐  ┌─────────┐
+           │ completed │  │ failed  │
+           └───────────┘  └─────────┘
+                          ┌──────────┐
+                          │ cancelled│
+                          └──────────┘
+```
+
+五个核心状态：
+- **pending**：任务已创建，等待开始处理
+- **in-progress**：任务正在执行中，可附带进度信息
+- **completed**：任务成功完成，产出 Artifact 可供获取
+- **failed**：任务执行失败，附带错误信息
+- **cancelled**：任务被主动取消
+
+**Task 对象核心字段：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | string | 任务唯一标识符 |
+| `status` | object | 当前状态（`state` + 可选 `message`、`timestamp`） |
+| `history` | array | 任务处理过程中的所有 Message（对话历史） |
+| `artifacts` | array | 任务产生的产出物列表 |
+| `metadata` | object | 扩展元数据 |
 
 ### 2.4 Artifact（产出物）
 
-Artifact是Task完成后产生的成果。一个Task可以产生多个Artifact。每个Artifact包含：
-- **name**：产出物名称
-- **parts**：内容部分（与Message的parts结构相同）
-- **metadata**：扩展元数据
+Artifact 是 Task 产出的具体成果。一个 Task 可以产生多个 Artifact（例如一份报告的多个章节，或图文混合内容）。
+
+**Artifact 对象结构（A2A 1.0）：**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `name` | string | 产出物名称（如文件名） |
+| `description` | string | 产出物描述 |
+| `parts` | array | 内容部分（与 Message 的 parts 结构一致：TextPart、FilePart、DataPart） |
+| `mimeType` | string | 产出物的 MIME 类型（如 `text/markdown`、`application/json`、`image/png`） |
+| `metadata` | object | 扩展元数据 |
 
 ```java
 var artifact = Artifact.builder()
     .name("research-report.md")
     .description("电动汽车市场研究报告")
+    .mimeType("text/markdown")
     .parts(List.of(
         A2aPart.text("# 电动汽车市场研究报告\n\n## 摘要\n..."),
         A2aPart.file("chart.png", "image/png", chartBytes)
@@ -342,14 +414,9 @@ public Task pollUntilComplete(String taskId,
             case COMPLETED -> { return task; }
             case FAILED -> throw new RuntimeException(
                 "Task failed: " + task.getStatus().getMessage());
-            case CANCELED -> throw new RuntimeException("Task was canceled");
-            case REJECTED -> throw new RuntimeException("Task was rejected");
-            case INPUT_REQUIRED -> {
-                // 需要用户输入——返回当前Task让调用方处理
-                return task;
-            }
-            case WORKING -> {
-                // 继续等待
+            case CANCELLED -> throw new RuntimeException("Task was cancelled");
+            default -> {
+                // pending / in-progress, 继续等待
                 Thread.sleep(pollInterval.toMillis());
             }
         }
@@ -409,7 +476,7 @@ A2A支持通过Server-Sent Events（SSE）进行流式响应：
 
 ```
 event: status_change
-data: {"taskId": "task-001", "state": "working", "timestamp": "..."}
+data: {"taskId": "task-001", "state": "in-progress", "timestamp": "..."}
 
 event: artifact_update
 data: {"taskId": "task-001", "artifact": {"name": "report.md", "parts": [...]}}
@@ -418,11 +485,112 @@ event: status_change
 data: {"taskId": "task-001", "state": "completed", "timestamp": "..."}
 ```
 
-## 四、认证与信任
+## 四、协议绑定（Protocol Binding）
 
-### 4.1 OAuth2 / OIDC集成
+A2A 1.0 设计了传输层无关的协议绑定机制——核心语义（Message、Task、Artifact）保持一致，而传输层可以选择不同的序列化格式和传输协议。
 
-A2A推荐使用OAuth 2.0进行Agent间认证。Agent Card中声明其Authorization Server，客户端通过标准OAuth流程获取Token：
+### 4.1 A2A-Version Header
+
+所有 A2A 1.0 请求和响应都必须携带 `A2A-Version` HTTP Header，用于版本协商和兼容性检测：
+
+```
+A2A-Version: 1.0
+```
+
+客户端和服务器通过此 Header 宣告自己支持的 A2A 协议版本。如果版本不兼容，服务器应返回 `400 Bad Request` 并附带明确的错误信息。未来 A2A 协议升级（如 1.1、2.0）时，此 Header 是保证平滑迁移的关键机制。
+
+### 4.2 HTTP+JSON Binding（默认绑定）
+
+HTTP+JSON 是 A2A 1.0 的**主要绑定方式**，也是最简单的入门方式。所有 A2A 端点均以 HTTP RESTful 风格暴露，Payload 使用 JSON 格式：
+
+- Agent Card 发现：`GET /.well-known/agent-card.json` → JSON
+- 任务创建：`POST /tasks/send` → JSON Request/Response
+- 任务查询：`GET /tasks/get?taskId=xxx` → JSON
+- 任务取消：`POST /tasks/cancel` → JSON
+- 流式响应：`POST /tasks/send` + `Accept: text/event-stream` → SSE
+
+```java
+// A2A 1.0 HTTP+JSON 请求示例
+var request = java.net.http.HttpRequest.newBuilder()
+    .uri(java.net.URI.create(agentUrl + "/tasks/send"))
+    .header("Content-Type", "application/json")
+    .header("A2A-Version", "1.0")
+    .POST(java.net.http.HttpRequest.BodyPublishers.ofString(jsonPayload))
+    .build();
+```
+
+### 4.3 JSON-RPC Binding
+
+对于更结构化的远程调用场景，A2A 1.0 支持 JSON-RPC 2.0 绑定。所有 A2A 操作映射到 JSON-RPC 方法调用，通过同一个端点处理：
+
+```
+POST /a2a/jsonrpc
+Content-Type: application/json
+A2A-Version: 1.0
+
+{
+  "jsonrpc": "2.0",
+  "method": "tasks/send",
+  "params": { "message": {...} },
+  "id": "req-001"
+}
+```
+
+JSON-RPC 绑定的优势在于：统一的错误码体系、批量调用支持、与现有 JSON-RPC 基础设施集成（如 MCP 协议也基于 JSON-RPC）。
+
+### 4.4 gRPC Binding
+
+对于高性能、强类型的 Agent 间通信，A2A 1.0 定义了 gRPC 绑定。A2A 的核心数据结构（AgentCard、Message、Task、Artifact）被映射到 Protobuf 定义：
+
+```protobuf
+service A2AService {
+  rpc GetAgentCard(GetAgentCardRequest) returns (AgentCard);
+  rpc SendTask(SendTaskRequest) returns (Task);
+  rpc GetTask(GetTaskRequest) returns (Task);
+  rpc CancelTask(CancelTaskRequest) returns (Task);
+  rpc SendTaskStreaming(SendTaskRequest) returns (stream TaskUpdate);
+}
+```
+
+gRPC 绑定适用于：
+- 高吞吐量的 Agent 间通信（HTTP/2 多路复用）
+- 需要双向流的场景
+- 多语言 Agent 系统（利用 gRPC 的代码生成能力）
+- 需要严格接口契约的企业级部署
+
+### 4.5 Binding 对比
+
+| 维度 | HTTP+JSON | JSON-RPC | gRPC |
+|------|-----------|----------|------|
+| 复杂度 | 低 | 中 | 中高 |
+| 性能 | 中 | 中 | 高（HTTP/2） |
+| 流式支持 | SSE | SSE | 原生双向流 |
+| 类型安全 | 弱 | 弱 | 强（Protobuf） |
+| 调试友好 | 高（curl/Postman） | 中 | 低（需工具） |
+| 适用场景 | 简单集成、原型 | 结构化调用、批量 | 高性能、多语言 |
+
+**建议**：原型和简单集成使用 HTTP+JSON，需要结构化调用和批量处理时升级到 JSON-RPC，高性能 Agent 间通信采用 gRPC。
+
+
+## 五、安全与扩展
+
+### 5.1 Agent Card 签名
+
+A2A 1.0 支持对 Agent Card 进行数字签名，防止 Agent 身份伪造和能力篡改。Agent Card 签名遵循 JWS（JSON Web Signature，RFC 7515）规范——将 Agent Card JSON 序列化为 JWS Payload，使用 Agent 的私钥签名，其他 Agent 通过公钥验证。
+
+```
+签名流程：
+Agent Card JSON → JWS Payload → Sign(PrivateKey) → Signed Agent Card (JWS Compact Serialization)
+
+验证流程：
+Signed Agent Card → Verify(PublicKey) → Extract Payload → Agent Card JSON
+```
+
+签名后的 Agent Card 可以通过 Well-Known URI 发布，或注册到 Agent Registry 中。验证方通过 Agent Card 中声明的公钥 URL（`jwksUrl` 字段）获取公钥进行验证。
+
+### 5.2 OAuth2 / OIDC 集成
+
+A2A 1.0 推荐使用 OAuth 2.0 进行 Agent 间认证和授权。Agent Card 的 `authentication` 字段声明其支持的认证方案和 Token 端点，客户端通过标准 OAuth 2.0 流程获取 Access Token：
 
 ```
 Client → Authorization Server: POST /token (client_credentials)
@@ -430,11 +598,14 @@ Client ← Authorization Server: {"access_token": "...", "expires_in": 3600}
 
 Client → Agent B: GET /tasks/get?taskId=xxx
            Authorization: Bearer <access_token>
+           A2A-Version: 1.0
 ```
 
-### 4.2 Agent间权限委托（Delegation）
+对于需要用户身份传递的场景，A2A 1.0 支持 OIDC（OpenID Connect）集成，通过 ID Token 传递用户身份信息。Agent 间还可以通过 Token Exchange（RFC 8693）实现权限委托。
 
-当Agent A代表用户向Agent B请求服务时，A2A支持权限委托机制。Agent A可以携带用户的权限声明，Agent B根据权限声明决定是否执行操作。
+### 5.3 Agent 间权限委托（Delegation）
+
+当 Agent A 代表用户向 Agent B 请求服务时，A2A 1.0 支持权限委托机制。Agent A 可以携带用户的权限声明，Agent B 根据权限声明决定是否执行操作。
 
 ```java
 // Delegation Token构建
@@ -500,9 +671,51 @@ public class DelegationManager {
 }
 ```
 
-## 五、Java A2A SDK使用
+### 5.4 扩展字段的兼容性处理
 
-### 5.1 Maven依赖
+A2A 1.0 采用 **前向兼容** 策略：所有核心对象（AgentCard、Message、Task、Artifact）均允许额外的扩展字段。客户端和服务器的兼容性规则：
+
+- **未知字段忽略**：接收方遇到不认识的字段时**必须忽略**（而非报错），确保旧版客户端可以与新版服务端互通。
+- **metadata 扩展**：每个核心对象都有 `metadata` 字段（`Map<String, Object>`），用于携带自定义业务数据，不影响协议核心逻辑。
+- **Capability 协商**：通过 Agent Card 的 `capabilities` 字段声明支持的特性（如 streaming），调用方据此决定是否使用特定功能。
+- **Semantic Versioning**：Agent Card 的 `version` 字段遵循语义化版本，大版本号变更表示不兼容改动。
+
+### 5.5 错误码映射
+
+A2A 1.0 定义了标准化的错误码体系，覆盖 HTTP 层、协议层和业务层：
+
+| 错误码 | HTTP 状态 | 说明 |
+|--------|----------|------|
+| `TASK_NOT_FOUND` | 404 | 指定 taskId 的任务不存在 |
+| `TASK_NOT_CANCELABLE` | 409 | 任务当前状态不允许取消 |
+| `INVALID_REQUEST` | 400 | 请求参数不符合协议规范 |
+| `UNSUPPORTED_OPERATION` | 501 | 请求的操作不被该 Agent 支持 |
+| `AUTHENTICATION_REQUIRED` | 401 | 需要认证但未提供凭据 |
+| `PERMISSION_DENIED` | 403 | 认证通过但权限不足 |
+| `RATE_LIMIT_EXCEEDED` | 429 | 超出速率限制 |
+| `INTERNAL_ERROR` | 500 | Agent 内部处理错误 |
+| `SERVICE_UNAVAILABLE` | 503 | Agent 暂时不可用（如过载、维护） |
+| `TIMEOUT` | 504 | 任务执行超时 |
+
+所有错误响应均包含统一的 JSON 结构：
+
+```json
+{
+  "error": {
+    "code": "TASK_NOT_FOUND",
+    "message": "Task with id 'task-001' not found",
+    "details": {
+      "taskId": "task-001"
+    }
+  }
+}
+```
+
+`details` 字段为可选的扩展信息，遵循 5.4 节的兼容性原则——客户端应忽略无法识别的 details 字段。
+
+## 六、Java A2A SDK使用
+
+### 6.1 Maven依赖
 
 ```xml
 <!-- A2A Java SDK -->
@@ -520,7 +733,7 @@ public class DelegationManager {
 </dependency>
 ```
 
-### 5.2 构建A2A Agent Server
+### 6.2 构建A2A Agent Server
 
 ```java
 // A2aAgentServer.java
@@ -580,22 +793,22 @@ class ResearchTaskHandler implements A2aTaskHandler {
         // 创建Task跟踪进度
         var task = Task.builder()
             .id(context.taskId())
-            .status(TaskStatus.working("开始研究: " + query))
+            .status(new TaskStatus(TaskStatus.IN_PROGRESS, "开始研究: " + query))
             .build();
 
         // 执行研究（这里用Virtual Thread）
         Thread.ofVirtual().start(() -> {
             try {
                 // 步骤1: 搜索资料
-                context.updateStatus(TaskStatus.working("正在搜索相关资源..."));
+                context.updateStatus(new TaskStatus(TaskStatus.IN_PROGRESS, "正在搜索相关资源..."));
                 var searchResults = performWebSearch(query);
 
                 // 步骤2: 交叉验证
-                context.updateStatus(TaskStatus.working("正在交叉验证信息..."));
+                context.updateStatus(new TaskStatus(TaskStatus.IN_PROGRESS, "正在交叉验证信息..."));
                 var verifiedResults = crossVerify(searchResults);
 
                 // 步骤3: 生成报告
-                context.updateStatus(TaskStatus.working("正在生成研究报告..."));
+                context.updateStatus(new TaskStatus(TaskStatus.IN_PROGRESS, "正在生成研究报告..."));
                 var report = generateReport(verifiedResults);
 
                 // 完成
@@ -642,9 +855,9 @@ class ResearchTaskHandler implements A2aTaskHandler {
 }
 ```
 
-## 六、MCP与A2A的对比与协作
+## 七、MCP与A2A的对比与协作
 
-### 6.1 对比表
+### 7.1 对比表
 
 | 维度 | MCP | A2A |
 |------|-----|-----|
@@ -657,7 +870,7 @@ class ResearchTaskHandler implements A2aTaskHandler {
 | **传输协议** | stdio / HTTP (JSON-RPC 2.0) | HTTP (REST + SSE) |
 | **典型场景** | 查询数据库、发送邮件、读取文件 | Agent协作流水线、分布式任务编排 |
 
-### 6.2 协同工作模式
+### 7.2 协同工作模式
 
 MCP和A2A不是互斥的，在实际系统中它们经常配合使用：
 
@@ -684,7 +897,7 @@ MCP和A2A不是互斥的，在实际系统中它们经常配合使用：
 └────────────┘  └────────────┘  └────────────────────┘
 ```
 
-## 七、完整示例：多Agent协作系统
+## 八、完整示例：多Agent协作系统
 
 以下是一个完整的多Agent协作示例：Research Agent负责收集信息，Writer Agent负责撰写报告，Orchestrator Agent负责协调。
 
@@ -813,7 +1026,7 @@ public class ResearchAgentServer {
             // 立即返回Task ID
             var taskResponse = JacksonUtils.toJson(Map.of(
                 "taskId", "research-" + System.currentTimeMillis(),
-                "status", Map.of("state", "working",
+                "status", Map.of("state", "in-progress",
                     "message", "正在研究中...")
             ));
             exchange.getResponseHeaders().set("Content-Type", "application/json");
@@ -1001,12 +1214,11 @@ record Task(String id, TaskStatus status, List<A2aMessage> history,
             List<Artifact> artifacts) {}
 
 record TaskStatus(String state, String message) {
-    static final String INPUT_REQUIRED = "input-required";
-    static final String WORKING = "working";
-    static final String REJECTED = "rejected";
+    static final String PENDING = "pending";
+    static final String IN_PROGRESS = "in-progress";
     static final String COMPLETED = "completed";
     static final String FAILED = "failed";
-    static final String CANCELED = "canceled";
+    static final String CANCELLED = "cancelled";
 }
 
 record Artifact(String name, String description, List<A2aPart> parts,
@@ -1025,7 +1237,7 @@ record A2aMessage(String messageId, String role, List<A2aPart> parts,
 record StreamEvent(String eventType, String taskId, Artifact artifact) {}
 ```
 
-## 八、常见问题与最佳实践
+## 九、常见问题与最佳实践
 
 ### Q1: 如何处理A2A中的超时和重试？
 

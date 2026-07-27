@@ -4,9 +4,9 @@ title: "MCP协议深入与Java SDK实战"
 status: "draft"
 level: "intermediate"
 sources:
-  - level: "L1"
-    url: "https://modelcontextprotocol.io/specification/2025-06-18/"
-    description: "MCP官方规范 2025-06-18版本"
+  - level: "L0"
+    url: "https://modelcontextprotocol.io/specification/2025-11-25/"
+    description: "MCP 规范 2025-11-25"
   - level: "L1"
     url: "https://modelcontextprotocol.io/sdk/java/mcp-server"
     description: "MCP Java SDK官方文档 - Server端"
@@ -21,7 +21,7 @@ relations:
   related: ["13-A2A协议与Agent互操作", "12-ToolCalling完整剖析"]
 tags: ["mcp", "model-context-protocol", "java", "spring-ai", "tool-calling", "agent-protocol"]
 created: "2026-07-17"
-updated: "2026-07-17"
+updated: "2026-07-27"
 ---
 
 # MCP协议深入与Java SDK实战
@@ -87,7 +87,7 @@ Client → Server: initialize {
   "jsonrpc": "2.0",
   "method": "initialize",
   "params": {
-    "protocolVersion": "2025-06-18",
+    "protocolVersion": "2025-11-25",
     "capabilities": {
       "roots": {"listChanged": true},
       "sampling": {}
@@ -101,7 +101,7 @@ Client → Server: initialize {
 
 Server → Client: {
   "result": {
-    "protocolVersion": "2025-06-18",
+    "protocolVersion": "2025-11-25",
     "capabilities": {
       "tools": {"listChanged": true},
       "resources": {"subscribe": true, "listChanged": true}
@@ -116,15 +116,22 @@ Server → Client: {
 Client → Server: {"jsonrpc": "2.0", "method": "notifications/initialized"}
 ```
 
-### 2.2 能力协商（Capabilities）
+### 2.2 能力协商（Capability Negotiation）
 
-双方在initialize阶段交换capabilities，声明各自支持的功能。关键capability项：
+双方在 initialize 阶段交换 capabilities，声明各自支持的功能。这是 MCP 协议的核心设计之一——Client 和 Server 各自独立声明能力，最终可用功能取双方能力的交集。例如，如果 Server 声明了 `tools` 能力但 Client 未声明，则该 Server 的 Tool 不会被 LLM 调用。这种设计保证了协议的向前兼容：新版本 Server 添加新能力时，旧版本 Client 可以安全忽略。
 
-- `tools`：Server可提供工具调用能力，`listChanged`表示工具列表可动态变化
-- `resources`：Server可暴露资源，支持`subscribe`（订阅变更）和`listChanged`
-- `prompts`：Server可提供Prompt模板
-- `sampling`：Client可代表Server调用LLM
-- `elicitation`：Client可向用户请求输入
+**Client 侧能力声明**：
+- `roots`：Client 可向 Server 提供文件系统根目录信息，`listChanged` 表示根目录列表可动态变化
+- `sampling`：Client 可代表 Server 调用 LLM，支持 Server 端智能处理
+- `elicitation`：Client 支持 Server 发起的用户输入请求（表单、确认、URL 跳转等）
+
+**Server 侧能力声明**：
+- `tools`：Server 可提供工具调用能力，`listChanged` 表示工具列表可动态变化（支持运行时注册/注销 Tool）
+- `resources`：Server 可暴露资源，支持 `subscribe`（订阅资源变更通知）和 `listChanged`（资源列表可动态变化）
+- `prompts`：Server 可提供 Prompt 模板，`listChanged` 表示模板列表可动态变化
+- `logging`：Server 可向 Client 发送日志消息
+
+**协商策略**：Client 在 initialize 请求中声明自己的能力，Server 在响应中声明自己的能力。双方根据对方的能力声明决定后续行为。例如，如果 Client 声明了 `elicitation` 能力，Server 就可以在需要用户确认时发送 `elicitation/create` 请求；如果 Client 未声明，Server 应采用降级策略（如默认允许或直接拒绝）。在 Java SDK 中，`McpSchema.ClientCapabilities` 和 `McpSchema.ServerCapabilities` 的 Builder 模式提供了清晰的能力声明 API。
 
 ### 2.3 Tools查询与调用
 
@@ -175,15 +182,116 @@ Client → Server: {
 
 ### 2.5 Sampling与Elicitation
 
-**Sampling**允许Server请求Client调用LLM，实现Server端的智能处理。Server发送`sampling/createMessage`请求，Client调用LLM并返回结果。
+#### 2.5.1 Sampling（服务端调用LLM）
 
-**Elicitation**允许Server向用户请求输入。当Server执行操作需要用户确认或额外信息时，发送`elicitation/create`请求。这在敏感操作（删除数据、财务操作）场景中非常重要。
+Sampling 允许 Server 反向请求 Client 调用 LLM，实现 Server 端的智能处理。典型流程：Server 发送 `sampling/createMessage` 请求，携带 messages（对话上下文）、modelPreferences（模型偏好）、maxTokens 等参数；Client 收到后调用绑定的 LLM，将生成的文本返回给 Server。这一机制使 MCP Server 不再是被动的工具提供者，而可以在内部实现智能决策——例如，一个数据库 MCP Server 可以使用 Sampling 将自然语言查询转换为 SQL，而无需在 Server 端集成 LLM SDK。
+
+```
+Server → Client: {
+  "method": "sampling/createMessage",
+  "params": {
+    "messages": [{"role": "user", "content": {"type": "text", "text": "..."}}],
+    "maxTokens": 1000
+  }
+}
+Client → Server: {
+  "result": {
+    "role": "assistant",
+    "content": {"type": "text", "text": "SELECT ..."},
+    "model": "claude-sonnet-4-20250514",
+    "stopReason": "endTurn"
+  }
+}
+```
+
+**注意**：Sampling 需要 Client 声明 `sampling` 能力。在安全敏感场景中，Client 应限制 Sampling 的调用频率和 Token 消耗上限，防止 Server 滥用 LLM 资源。
+
+#### 2.5.2 Elicitation（服务端请求用户输入）
+
+Elicitation 是 MCP 规范 2025-11-25 中明确定义的能力，允许 Server 向 Client 请求用户输入，用于敏感操作确认、参数补充、表单填写等场景。与 Sampling 不同，Elicitation 的目标是人类用户而非 LLM。
+
+Server 发送 `elicitation/create` 请求，携带 `mode`（交互模式）和 `message`（提示信息）等参数。MCP 定义了三种 Elicitation 模式：
+
+- **`form` 模式**：向用户展示表单，用户填写后返回结构化数据。适用于需要多个输入参数但 LLM 无法推断的场景。
+- **`url` 模式**：引导用户打开外部 URL（如 OAuth 授权页面），完成后返回。适用于需要用户在第三方系统操作的场景。
+- **`schema` 模式**：向用户展示 Schema，用户选择或确认后返回。适用于敏感操作确认。
+
+```
+Server → Client: {
+  "method": "elicitation/create",
+  "params": {
+    "mode": "form",
+    "message": "请确认删除以下数据: [用户ID: 42, 订单数: 15]",
+    "requestedSchema": {
+      "type": "object",
+      "properties": {
+        "confirm": {"type": "boolean", "title": "确认删除"},
+        "reason": {"type": "string", "title": "删除原因"}
+      }
+    }
+  }
+}
+Client → Server: {
+  "result": {
+    "action": "accept",
+    "content": {"confirm": true, "reason": "用户已注销"}
+  }
+}
+```
+
+**关键点**：Elicitation 依赖于 Client 声明 `elicitation` 能力。如果 Client 未声明此能力，Server 应采用降级策略——例如对所有敏感操作默认拒绝，或在 Tool 描述中提示 LLM 先获取用户确认再调用。MCP Java SDK 2.0 提供了更丰富的 Elicitation 支持，包括客户端 Schema 默认值、URL Elicitation 和基于表单的多步交互。
 
 ### 2.6 Authorization流程
 
-MCP支持OAuth 2.0 / OIDC授权。对于HTTP Transport，Client在请求头中携带Bearer Token。授权流程：Client发现Server的Authorization Server → 发起OAuth 2.0流程 → 获取Access Token → 后续请求携带Token。
+MCP 规范定义了一套基于 OAuth 2.0 / OIDC 的授权模型，用于保护 HTTP Transport 上的 MCP Server 访问。授权流程如下：
 
-## 三、Java MCP SDK使用
+**1. 发现 Authorization Server**：Client 首先向 MCP Server 的 `/.well-known/oauth-protected-resource` 端点发起请求（HTTP 401 响应或直接访问），获取 Authorization Server 的元数据，包括 `authorization_endpoint`、`token_endpoint`、`registration_endpoint` 等。
+
+**2. 动态客户端注册（DCR）**：如果 Client 尚未在 Authorization Server 注册，需要通过 `registration_endpoint` 动态注册，获取 `client_id` 和 `client_secret`。MCP 允许 Client 在注册时声明所需的 scope。
+
+**3. 获取 Access Token**：Client 使用标准 OAuth 2.0 流程（Authorization Code + PKCE 推荐）获取 Access Token。MCP 定义的常用 scope 包括：
+- `mcp:tools`：允许访问 Server 的 Tool
+- `mcp:resources`：允许访问 Server 的 Resource
+- `mcp:prompts`：允许访问 Server 的 Prompt
+- `mcp:sampling`：允许 Server 通过 Client 调用 LLM
+- `mcp:elicitation`：允许 Server 向用户请求输入
+
+**4. 携带 Token 访问**：获取 Token 后，Client 在每次 HTTP 请求的 `Authorization: Bearer <token>` 头中携带。Server 验证 Token 的有效性和 scope，决定是否允许操作。
+
+**5. Token 刷新**：Access Token 过期后，Client 使用 Refresh Token 刷新。MCP 规范建议 Access Token 有效期为 1 小时，Refresh Token 有效期为 30 天。
+
+```
+Client → Server: GET /.well-known/oauth-protected-resource
+Server → Client: 401 {"authorization_endpoint": "https://auth.example.com/oauth/authorize", ...}
+Client → AuthServer: POST /oauth/register {"scope": "mcp:tools mcp:resources"}
+AuthServer → Client: {"client_id": "...", "client_secret": "..."}
+Client → AuthServer: ...OAuth 2.0 flow with PKCE...
+AuthServer → Client: {"access_token": "...", "refresh_token": "...", "expires_in": 3600}
+Client → MCP Server: POST /mcp {"Authorization": "Bearer <access_token>", ...}
+```
+
+**注意**：stdio Transport 不经过网络，天然无需 Authorization。Java MCP Client 通过 `HttpClientTransport` 构造函数的 headers 参数传入 Token，配合令牌刷新机制实现无缝授权管理。
+
+### 2.7 错误处理与兼容策略
+
+MCP 协议在设计中考虑了版本演进和错误处理的场景，确保 Server 升级时不会破坏现有 Client 的集成。
+
+**协议版本协商**：Client 在 initialize 请求中声明自己支持的 `protocolVersion`（如 `"2025-11-25"`），Server 在响应中确认可接受的版本。如果 Server 不支持 Client 请求的版本，应返回兼容的最高版本或拒绝连接。最佳实践是 Client 始终请求自己支持的最新版本，Server 尽可能支持多个版本的范围。
+
+**向后兼容原则**：MCP 规范要求所有变更必须向后兼容（在同一个大版本内）。新增字段应设置为可选，删除字段应预留过渡期。Server 不应假设 Client 实现了所有能力——例如，若 Client 未声明 `elicitation`，Server 不应发送 Elicitation 请求，而应使用 Tool 描述中的提示信息作为降级方案。
+
+**未知 Capability 处理**：Client 应安全忽略 Server 声明的未知 capability，不应因未知能力而拒绝连接。同样，Server 也应安全忽略 Client 声明的未知 capability。这保证了未来新能力被添加到规范时，旧版实现不会被破坏。
+
+**JSON-RPC 错误码**：MCP 使用标准 JSON-RPC 2.0 错误码，另外定义了 MCP 特定错误：
+- `-32000`（Server not initialized）：在 initialize 完成前尝试调用其他方法
+- `-32001`（Request timed out）：请求处理超时
+- `-32002`（Invalid params）：参数校验失败（如 Tool 调用参数不符合 inputSchema）
+- `-32003`（Method not found）：调用了不存在的方法
+- `-32603`（Internal error）：Server 内部异常
+
+**降级策略设计**：在实现 MCP Server 时，应为每个能力提供降级方案。例如，当一个需要用户确认的 Tool（依赖 Elicitation）被不支持 Elicitation 的 Client 调用时，Server 应返回明确错误信息并提示 LLM 先获取用户确认，而非静默失败。Java SDK 提供了能力检测 API，Server 可在运行时判断 Client 是否支持特定能力并据此调整行为。
+
+**生产环境建议**：在部署 MCP Server 新版本时，建议使用金丝雀或灰度发布策略——先部署新版 Server 到部分流量，验证兼容性后再全量切换。监控 JSON-RPC 错误码分布，对 `-32003`（Method not found）和版本不匹配错误设置告警。对于破坏性变更（如移除 Tool），应在 Agent Card 或变更日志中提前通知下游 Client 开发者。
 
 ### 3.1 Maven依赖
 
@@ -192,14 +300,28 @@ MCP支持OAuth 2.0 / OIDC授权。对于HTTP Transport，Client在请求头中�
 <dependency>
     <groupId>io.modelcontextprotocol.sdk</groupId>
     <artifactId>mcp</artifactId>
-    <version>0.14.0</version>
+    <version>2.0.0</version>
+</dependency>
+<!-- 也可使用 mcp-core（精简版，推荐新项目使用） -->
+<dependency>
+    <groupId>io.modelcontextprotocol.sdk</groupId>
+    <artifactId>mcp-core</artifactId>
+    <version>2.0.0</version>
 </dependency>
 
-<!-- Spring AI MCP Boot Starter -->
+<!-- Spring AI MCP Boot Starter（Spring AI 2.0.0） -->
 <dependency>
     <groupId>org.springframework.ai</groupId>
-    <artifactId>spring-ai-mcp-server-spring-boot-starter</artifactId>
-    <version>2.1.0</version>
+    <artifactId>spring-ai-starter-mcp-server</artifactId>
+    <version>2.0.0</version>
+</dependency>
+<!-- Spring AI BOM 统一版本管理 -->
+<dependency>
+    <groupId>org.springframework.ai</groupId>
+    <artifactId>spring-ai-bom</artifactId>
+    <version>2.0.0</version>
+    <type>pom</type>
+    <scope>import</scope>
 </dependency>
 ```
 
@@ -430,21 +552,20 @@ public class McpClientConfiguration {
 
 ### 3.4 Spring AI MCP集成
 
-Spring AI提供了自动发现MCP Tool并注册到ToolRegistry的能力：
+Spring AI 2.0 提供了注解驱动的 MCP 编程模型，通过 `@McpTool`、`@McpResource`、`@McpPrompt` 等注解声明式地暴露 MCP 能力：
 
 ```java
-// SpringAiMcpConfig.java
+// SpringAiMcpConfig.java — Spring AI 2.0 注解驱动 MCP Server
 import org.springframework.ai.mcp.server.McpServerProperties;
-import org.springframework.ai.tool.ToolRegistry;
+import org.springframework.ai.tool.annotation.McpTool;
+import org.springframework.ai.tool.annotation.McpToolParam;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class SpringAiMcpConfig {
 
-    // Spring Boot自动配置会发现类路径上的@Tool注解方法
-    // 并自动注册为MCP Tool
-
+    // Spring Boot 自动配置通过 @McpTool 注解发现并注册 MCP Tool
     @Bean
     McpServerProperties mcpServerProperties() {
         var props = new McpServerProperties();
@@ -453,21 +574,29 @@ public class SpringAiMcpConfig {
         props.setVersion("1.0.0");
         return props;
     }
+}
 
-    // 可选：手动注册额外Tool
-    @Bean
-    ToolRegistry customToolRegistry() {
-        return ToolRegistry.builder()
-            .tool("health_check", toolContext -> {
-                return "{\"status\": \"healthy\", \"timestamp\": \""
-                    + java.time.Instant.now() + "\"}";
-            })
-            .description("健康检查工具，返回服务运行状态")
-            .build();
+// 声明式 Tool 定义 — 使用注解替代手动构建 JSON Schema
+// 放在任意 @Component / @Service 类中即可被自动发现
+@Component
+class DatabaseMcpTools {
+
+    @McpTool(description = "在数据库表中执行只读SELECT查询")
+    public String queryTable(
+        @McpToolParam(description = "SELECT查询语句") String sql,
+        @McpToolParam(description = "查询参数") java.util.List<String> params) {
+        var result = DatabaseService.query(sql, params);
+        return JacksonUtils.toJson(result);
+    }
+
+    @McpTool(description = "获取指定数据库表的结构信息")
+    public String describeTable(
+        @McpToolParam(description = "表名") String tableName) {
+        return JacksonUtils.toJson(DatabaseService.describeTable(tableName));
     }
 }
 
-// 在application.yml中配置
+// 在application.yml中配置（Spring AI 2.0）
 // spring:
 //   ai:
 //     mcp:
@@ -475,9 +604,10 @@ public class SpringAiMcpConfig {
 //         name: "my-ai-server"
 //         version: "1.0.0"
 //         type: SYNC
+//         protocol-version: "2025-11-25"
 //       client:
 //         type: ASYNC
-//         sse:
+//         streamable-http:
 //           connections:
 //             database:
 //               url: "http://localhost:8080/mcp"
@@ -494,7 +624,7 @@ public class SpringAiMcpConfig {
 
 **stdio Transport的工作原理**：Client通过`ProcessBuilder`启动Server子进程，Server的`System.in`和`System.out`被重定向为Client的通信通道。每条JSON-RPC消息以换行符分隔，因此消息体内部不能包含未转义的换行符。由于Server运行在子进程中，它天然受到进程隔离保护——Server无法访问Client的内存空间，也无法主动发起网络请求（除非Server自行建立网络连接）。
 
-**HTTP Transport的工作原理**：Server以独立HTTP服务形式运行（可以是Servlet容器、Netty、或嵌入式Tomcat），Client通过HTTP POST发送JSON-RPC请求。HTTP Transport支持连接池、负载均衡、水平扩展等企业级特性。Streamable HTTP还支持SSE推送，允许Server主动向Client发送通知（如工具列表变更事件）。
+**HTTP Transport的工作原理**：Server以独立HTTP服务形式运行（可以是Servlet容器、Netty、或嵌入式Tomcat），Client通过HTTP POST发送JSON-RPC请求。HTTP Transport支持连接池、负载均衡、水平扩展等企业级特性。MCP Java SDK 2.0 将 Streamable HTTP 作为主要 HTTP Transport 方式（SSE Transport 已标记为 deprecated），支持 Server 到 Client 的流式推送和双向通信。
 
 **选择建议**：本地开发和桌面应用首选stdio，因为部署简单且天然安全隔离；生产环境的微服务架构中，MCP Server应作为独立服务部署，使用HTTP Transport并配置认证、限流、监控等基础设施；混合场景下，可以在本地使用stdio连接开发工具MCP Server，同时通过HTTP连接远程的企业级MCP服务。
 
