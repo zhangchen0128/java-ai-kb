@@ -101,12 +101,16 @@ async function renderNav() {
   navTreeEl.innerHTML = html;
 
   navTreeEl.querySelectorAll('.nav-domain-title').forEach(el => {
+    el.setAttribute('role', 'button');
+    el.setAttribute('aria-expanded', 'false');
     el.onclick = () => {
       const sub = el.nextElementSibling;
       const arrow = el.querySelector('.arrow');
+      const open = !sub.classList.contains('open');
       sub.classList.toggle('open');
       arrow.classList.toggle('open');
-      localStorage.setItem('kb-nav-' + el.dataset.domain, sub.classList.contains('open') ? '1' : '0');
+      el.setAttribute('aria-expanded', open);
+      localStorage.setItem('kb-nav-' + el.dataset.domain, open ? '1' : '0');
     };
     if (localStorage.getItem('kb-nav-' + el.dataset.domain) === '1') {
       el.nextElementSibling.classList.add('open');
@@ -309,13 +313,28 @@ document.addEventListener('click', e => {
 
 async function doSearch(q) {
   const idx = await loadSearch();
-  const lower = q.toLowerCase();
-  const results = idx.filter(item => {
-    return item.t.toLowerCase().includes(lower) ||
-           item.d.toLowerCase().includes(lower) ||
-           item.s.toLowerCase().includes(lower) ||
-           (item.g && item.g.some(t => t.toLowerCase().includes(lower)));
-  }).slice(0, 20);
+  const keywords = q.toLowerCase().split(/\s+/).filter(Boolean);
+
+  // Score each item: title match (100) > tag match (50) > domain match (30) > snippet match (10)
+  const scored = idx.map(item => {
+    let score = 0;
+    const t = item.t.toLowerCase();
+    const d = item.d.toLowerCase();
+    const s = item.s.toLowerCase();
+    const g = (item.g || []).map(x => x.toLowerCase());
+
+    for (const kw of keywords) {
+      if (t.includes(kw)) score += 100;
+      else if (g.some(tag => tag.includes(kw))) score += 50;
+      else if (d.includes(kw)) score += 30;
+      else if (s.includes(kw)) score += 10;
+    }
+    return { item, score };
+  }).filter(r => r.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 20);
+
+  const results = scored.map(r => r.item);
 
   if (results.length === 0) {
     searchResultsInner.innerHTML = '<div class="no-results">未找到匹配结果</div>';
