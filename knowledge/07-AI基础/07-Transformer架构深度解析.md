@@ -17,7 +17,7 @@ level: advanced
 sources:
   - level: L0
     url: https://arxiv.org/abs/1706.03762
-    description: "Attention Is All You Need" — Vaswani et al., 2017
+    description: Attention Is All You Need (Vaswani et al., 2017)
   - level: L3
     description: 《Natural Language Processing with Transformers》— Tunstall et al., O'Reilly 2022
   - level: L4

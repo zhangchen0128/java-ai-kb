@@ -19,7 +19,7 @@ sources:
     url: https://platform.openai.com/docs/guides/embeddings
     description: OpenAI Embeddings API 官方文档
   - level: L3
-    description: 《Speech and Language Processing》3rd ed. — Jurafsky & Martin (Chapter 6: Vector Semantics)
+    description: 《Speech and Language Processing》3rd ed. — Jurafsky and Martin (Chapter 6: Vector Semantics)
   - level: L4
     url: https://arxiv.org/abs/1508.07909
     description: Neural Machine Translation of Rare Words with Subword Units (Sennrich et al., BPE for NLP)
