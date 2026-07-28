@@ -1,9 +1,25 @@
 ---
 domain: 11-检索与RAG
 title: 高级RAG模式：从Multi-Query到GraphRAG
-status: draft
+status: verified
+verification:
+  reviewed_at: "2026-07-28"
+  version_anchor: "JDK 25 / Spring Boot 4.x / Spring AI 2.x"
+  code_status: tested
+  lab: lab-rag-pipeline
+  evidence:
+    scope: article-core
+    source_files:
+      - labs/lab-rag-pipeline/src/main/java/com/javaai/kb/labs/rag-pipeline/ChunkerDemo.java
+    test_files:
+      - labs/lab-rag-pipeline/src/test/java/com/javaai/kb/labs/rag-pipeline/ChunkerDemoTest.java
 level: advanced
 sources:
+  - level: L1
+    url: https://docs.spring.io/spring-ai/reference/api/etl-pipeline.html
+    description: Spring AI RAG 官方文档
+  - level: L3
+    description: RAG权威综述 — A Survey on RAG (Lewis et al., 2020 + 2024 updates)
   - level: L4
     url: https://arxiv.org/abs/2212.10496
     description: HyDE论文 — Precise Zero-Shot Dense Retrieval without Relevance Labels

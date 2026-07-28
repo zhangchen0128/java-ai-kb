@@ -1,7 +1,18 @@
 ---
 domain: 15-AI安全与治理
 title: Agent 与 MCP 安全实战
-status: draft
+status: verified
+verification:
+  reviewed_at: "2026-07-28"
+  version_anchor: "JDK 25 / Spring Boot 4.x / Spring AI 2.x"
+  code_status: tested
+  lab: lab-ai-security
+  evidence:
+    scope: article-core
+    source_files:
+      - labs/lab-ai-security/src/main/java/com/javaai/kb/labs/ai-security/InputSanitizer.java
+    test_files:
+      - labs/lab-ai-security/src/test/java/com/javaai/kb/labs/ai-security/InputSanitizerTest.java
 level: advanced
 content_type: practice
 sources:

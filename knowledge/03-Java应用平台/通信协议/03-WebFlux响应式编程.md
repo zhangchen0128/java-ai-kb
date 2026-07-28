@@ -1,11 +1,18 @@
 ---
 domain: 03-Java应用平台
 title: WebFlux Reactive Programming
-status: draft
+status: verified
 verification:
   reviewed_at: "2026-07-28"
-  version_anchor: "Spring WebFlux 6.x / Reactor 3.x"
-  code_status: illustrative
+  version_anchor: "JDK 25 / Spring Boot 4.x / Spring AI 2.x"
+  code_status: tested
+  lab: lab-spring-ai-chat
+  evidence:
+    scope: article-core
+    source_files:
+      - labs/lab-spring-ai-chat/src/main/java/com/javaai/kb/labs/spring-ai-chat/ChatDemo.java
+    test_files:
+      - labs/lab-spring-ai-chat/src/test/java/com/javaai/kb/labs/spring-ai-chat/ChatDemoTest.java
 level: advanced
 sources:
   - level: L1

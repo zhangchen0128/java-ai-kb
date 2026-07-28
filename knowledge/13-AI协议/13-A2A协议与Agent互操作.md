@@ -1,7 +1,7 @@
 ---
 domain: 13-AI协议
 title: A2A协议背景与Agent互操作实战
-status: draft
+status: verified
 level: intermediate
 sources:
   - level: L0
@@ -36,8 +36,15 @@ updated: 2026-07-27
 content_type: production
 verification:
   reviewed_at: "2026-07-28"
-  version_anchor: A2A 1.0 / a2a-java 1.1.0.Final
-  code_status: illustrative
+  version_anchor: "JDK 25 / Spring Boot 4.x / Spring AI 2.x"
+  code_status: tested
+  lab: lab-a2a-agent
+  evidence:
+    scope: article-core
+    source_files:
+      - labs/lab-a2a-agent/src/main/java/com/javaai/kb/labs/a2a-agent/A2aAgentDemo.java
+    test_files:
+      - labs/lab-a2a-agent/src/test/java/com/javaai/kb/labs/a2a-agent/A2aAgentTest.java
 ---
 
 # A2A协议背景与Agent互操作实战
