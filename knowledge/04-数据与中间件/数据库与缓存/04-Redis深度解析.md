@@ -1,30 +1,60 @@
 ---
-domain: "04-数据与中间件"
-title: "Redis 深度解析"
-status: "verified"
+domain: 04-数据与中间件
+title: Redis 深度解析
+status: verified
 verification:
-  reviewed_at: "2026-07-27"
-  version_anchor: "JDK 25 / Spring Boot 4.x / Spring AI 2.x"
-level: "advanced"
+  reviewed_at: 2026-07-27
+  version_anchor: Redis 8 command and data model
+  code_status: tested
+  lab: lab-rag-pipeline
+  evidence:
+    scope: article-core
+    source_files:
+      - labs/lab-rag-pipeline/src/main/java/com/javaai/kb/labs/rag/ChunkerDemo.java
+      - labs/lab-rag-pipeline/src/main/java/com/javaai/kb/labs/rag/DeterministicRagPipeline.java
+    test_files:
+      - labs/lab-rag-pipeline/src/test/java/com/javaai/kb/labs/rag/DeterministicRagPipelineTest.java
+  performance:
+    status: illustrative
+level: advanced
 sources:
-  - level: "L1"
-    url: "https://redis.io/docs/latest/"
-    description: "Redis 7.x 官方文档"
-  - level: "L2"
-    url: "https://github.com/redis/redis"
-    description: "Redis 源码（SDS、quicklist、skiplist 实现）"
-  - level: "L3"
-    url: "https://redisbook.com/"
-    description: "《Redis 设计与实现》— 黄健宏，Redis 内部数据结构与机制"
+  - level: L1
+    url: https://redis.io/docs/latest/
+    description: Redis 7.x 官方文档
+  - level: L2
+    url: https://github.com/redis/redis
+    description: Redis 源码（SDS、quicklist、skiplist 实现）
+  - level: L3
+    url: https://redisbook.com/
+    description: 《Redis 设计与实现》— 黄健宏，Redis 内部数据结构与机制
 relations:
-  prerequisite: ["01-数据库原理", "04-PostgreSQL与pgvector深度解析"]
-  related: ["05-缓存策略与多级缓存架构", "05-幂等设计与分布式锁"]
-tags: ["redis", "sds", "rdb", "aof", "sentinel", "cluster", "redisson", "vector-search", "cache-strategy", "lettuce"]
-created: "2026-07-17"
-updated: "2026-07-17"
+  prerequisite:
+    - 01-数据库原理
+    - 04-PostgreSQL与pgvector深度解析
+  related:
+    - 05-缓存策略与多级缓存架构
+    - 05-幂等设计与分布式锁
+tags:
+  - redis
+  - sds
+  - rdb
+  - aof
+  - sentinel
+  - cluster
+  - redisson
+  - vector-search
+  - cache-strategy
+  - lettuce
+created: 2026-07-17
+updated: 2026-07-27
+content_type: production
 ---
 
 # Redis 深度解析
+
+> **性能数据声明：** 除非具体表格同时给出硬件、软件版本、数据规模、参数、
+> 测试脚本、运行次数、P50/P95/P99、日期和原始结果链接，否则本文中的精确
+> 性能数字均为“示意值，不代表基准结果”，不能用于容量规划或产品比较。
 
 ## 概述
 
@@ -499,18 +529,34 @@ public class BloomFilterConfig {
 @Service
 public class UserQueryService {
 
+    private final RedisTemplate<String, User> redis;
+    private final UserRepository users;
+
+    public UserQueryService(RedisTemplate<String, User> redis, UserRepository users) {
+        this.redis = redis;
+        this.users = users;
+    }
+
     public User getUser(String userId) {
         // 1. 布隆过滤器快速排除不存在的 key
-        Boolean exists = redis.opsForValue()
-                .getOperations().execute((RedisCallback<Boolean>) conn ->
-                        conn.execute("BF.EXISTS", "user:bloom".getBytes(), userId.getBytes()));
+        Boolean exists = redis.execute((RedisCallback<Boolean>) conn ->
+                conn.execute("BF.EXISTS", "user:bloom".getBytes(), userId.getBytes()));
 
         if (Boolean.FALSE.equals(exists)) {
             return null; // 一定不存在，无需查 DB
         }
 
         // 2. 查缓存 / 查 DB
-        // ...
+        var key = "user:" + userId;
+        var cached = redis.opsForValue().get(key);
+        if (cached != null) {
+            return cached;
+        }
+        var loaded = users.findById(userId).orElse(null);
+        if (loaded != null) {
+            redis.opsForValue().set(key, loaded, Duration.ofMinutes(10));
+        }
+        return loaded;
     }
 }
 ```
@@ -620,22 +666,31 @@ FT.SEARCH idx:docs "*=>[KNN 10 @embedding $vec AS dist]"
 ### 7.3 语义缓存
 
 ```java
+public record CachedResponse(String query, String response, long timestamp) {}
+
+public record SemanticMatch(CachedResponse value, double similarity) {}
+
+public interface SemanticCacheIndex {
+    List<SemanticMatch> search(float[] embedding, int topK);
+}
+
 @Service
 public class SemanticCacheService {
 
     private final EmbeddingModel embeddingModel;
-    private final StringRedisTemplate redis;
+    private final SemanticCacheIndex index;
 
-    public record CachedResponse(String query, String response, long timestamp) {}
+    public SemanticCacheService(EmbeddingModel embeddingModel, SemanticCacheIndex index) {
+        this.embeddingModel = embeddingModel;
+        this.index = index;
+    }
 
     public Optional<CachedResponse> findSimilarQuery(String userQuery, double threshold) {
         var queryEmbedding = embeddingModel.embed(userQuery);
-
-        // FT.SEARCH 执行 KNN 查找语义相似的已缓存查询
-        // 如果相似度 > threshold，返回缓存的响应
-        // 否则返回 empty，触发实际 LLM 调用并写入缓存
-        // ...
-        return Optional.empty();
+        return index.search(queryEmbedding, 5).stream()
+            .filter(match -> match.similarity() >= threshold)
+            .max(Comparator.comparingDouble(SemanticMatch::similarity))
+            .map(SemanticMatch::value);
     }
 }
 ```

@@ -1,30 +1,60 @@
 ---
-domain: "14-AI平台与LLMOps"
-title: "模型网关设计与 Prompt 管理平台 — 完整 Spring 实现"
-status: "draft"
-level: "intermediate"
+domain: 14-AI平台与LLMOps
+title: 模型网关设计与 Prompt 管理平台 — 完整 Spring 实现
+status: verified
+level: intermediate
 sources:
-  - level: "L1"
-    url: "https://docs.spring.io/spring-ai/reference/"
-    description: "Spring AI 官方参考文档"
-  - level: "L1"
-    url: "https://github.com/spring-projects/spring-ai"
-    description: "Spring AI GitHub 仓库"
-  - level: "L2"
-    url: "https://platform.openai.com/docs/api-reference"
-    description: "OpenAI API 参考"
-  - level: "L2"
-    url: "https://docs.anthropic.com/en/api"
-    description: "Anthropic API 参考"
+  - level: L1
+    url: https://docs.spring.io/spring-ai/reference/
+    description: Spring AI 官方参考文档
+  - level: L1
+    url: https://github.com/spring-projects/spring-ai
+    description: Spring AI GitHub 仓库
+  - level: L2
+    url: https://platform.openai.com/docs/api-reference
+    description: OpenAI API 参考
+  - level: L2
+    url: https://docs.anthropic.com/en/api
+    description: Anthropic API 参考
 relations:
-  prerequisite: ["09-SpringAI2深度解析", "12-ToolCalling完整剖析"]
-  related: ["14-AI评估与可观测性", "11-向量检索与混合检索"]
-tags: ["model-gateway", "prompt-management", "spring-ai", "rate-limiting", "api-key-management", "ab-testing", "caching"]
-created: "2026-07-17"
-updated: "2026-07-17"
+  prerequisite:
+    - 09-SpringAI2深度解析
+    - 12-ToolCalling完整剖析
+  related:
+    - 14-AI评估与可观测性
+    - 11-向量检索与混合检索
+tags:
+  - model-gateway
+  - prompt-management
+  - spring-ai
+  - rate-limiting
+  - api-key-management
+  - ab-testing
+  - caching
+created: 2026-07-17
+updated: 2026-07-27
+content_type: production
+verification:
+  reviewed_at: 2026-07-27
+  version_anchor: Spring AI 2.0.0 / OTel GenAI conventions
+  code_status: tested
+  lab: lab-ai-observability
+  evidence:
+    scope: article-core
+    source_files:
+      - labs/lab-ai-observability/src/main/java/com/javaai/kb/labs/observability/AiCallMetrics.java
+      - labs/lab-ai-observability/src/main/java/com/javaai/kb/labs/observability/AiCallTelemetry.java
+    test_files:
+      - labs/lab-ai-observability/src/test/java/com/javaai/kb/labs/observability/AiCallMetricsTest.java
+  performance:
+    status: illustrative
 ---
 
 # 模型网关设计与 Prompt 管理平台
+
+> **性能数据声明：** 除非具体表格同时给出硬件、软件版本、数据规模、参数、
+> 测试脚本、运行次数、P50/P95/P99、日期和原始结果链接，否则本文中的精确
+> 性能数字均为“示意值，不代表基准结果”，不能用于容量规划或产品比较。
 
 ## 一、概述
 

@@ -1,45 +1,78 @@
 ---
-domain: "02-Java平台"
-title: "JVM 内部原理与调优"
-status: "verified"
+domain: 02-Java平台
+title: JVM 内部原理与调优
+status: verified
 verification:
-  reviewed_at: "2026-07-27"
-  version_anchor: "JDK 25 / Spring Boot 4.x / Spring AI 2.x"
-level: "advanced"
+  reviewed_at: 2026-07-27
+  version_anchor: JDK 25 HotSpot and JVM specification
+  code_status: tested
+  lab: lab-java25-concurrency
+  evidence:
+    scope: article-core
+    source_files:
+      - labs/lab-java25-concurrency/src/main/java/com/javaai/kb/labs/concurrency/VirtualThreadsDemo.java
+      - labs/lab-java25-concurrency/src/main/java25/com/javaai/kb/labs/concurrency/Jdk25StructuredConcurrencyDemo.java
+    test_files:
+      - labs/lab-java25-concurrency/src/test/java/com/javaai/kb/labs/concurrency/VirtualThreadsTest.java
+      - labs/lab-java25-concurrency/src/test/java25/com/javaai/kb/labs/concurrency/Jdk25StructuredConcurrencyTest.java
+  performance:
+    status: illustrative
+level: advanced
 sources:
-  - level: "L0"
-    url: "https://docs.oracle.com/javase/specs/jvms/se25/html/index.html"
-    description: "The Java Virtual Machine Specification, Java SE 25 Edition"
-  - level: "L0"
-    url: "https://openjdk.org/jeps/0"
-    description: "OpenJDK JEP Index — all JEPs related to GC, JIT, and runtime"
-  - level: "L1"
-    url: "https://wiki.openjdk.org/display/zgc"
+  - level: L0
+    url: https://docs.oracle.com/javase/specs/jvms/se25/html/index.html
+    description: The Java Virtual Machine Specification, Java SE 25 Edition
+  - level: L0
+    url: https://openjdk.org/jeps/0
+    description: OpenJDK JEP Index — all JEPs related to GC, JIT, and runtime
+  - level: L1
+    url: https://wiki.openjdk.org/display/zgc
     description: "OpenJDK Wiki: ZGC"
-  - level: "L1"
-    url: "https://wiki.openjdk.org/display/shenandoah"
+  - level: L1
+    url: https://wiki.openjdk.org/display/shenandoah
     description: "OpenJDK Wiki: Shenandoah"
-  - level: "L1"
-    url: "https://docs.oracle.com/en/java/javase/25/gctuning/"
-    description: "HotSpot Virtual Machine Garbage Collection Tuning Guide"
-  - level: "L3"
-    url: "https://www.oreilly.com/library/view/optimizing-java/9781492039259/"
-    description: "Optimizing Java — Benjamin J. Evans, James Gough, Chris Newland"
-  - level: "L3"
-    url: "https://www.oreilly.com/library/view/java-performance-2nd/9781492056102/"
-    description: "Java Performance, 2nd Edition — Scott Oaks"
-  - level: "L2"
-    url: "https://github.com/openjdk/jdk"
-    description: "OpenJDK source code (HotSpot)"
+  - level: L1
+    url: https://docs.oracle.com/en/java/javase/25/gctuning/
+    description: HotSpot Virtual Machine Garbage Collection Tuning Guide
+  - level: L3
+    url: https://www.oreilly.com/library/view/optimizing-java/9781492039259/
+    description: Optimizing Java — Benjamin J. Evans, James Gough, Chris Newland
+  - level: L3
+    url: https://www.oreilly.com/library/view/java-performance-2nd/9781492056102/
+    description: Java Performance, 2nd Edition — Scott Oaks
+  - level: L2
+    url: https://github.com/openjdk/jdk
+    description: OpenJDK source code (HotSpot)
 relations:
-  prerequisite: ["01-数据结构与算法"]
-  related: ["02-Java并发深度解析", "02-Java性能诊断全指南", "02-Java-IO模型深度解析"]
-tags: ["jvm", "gc", "jit", "graalvm", "zgc", "g1", "shenandoah", "class-loading", "performance", "tuning", "jfr", "jmc"]
-created: "2026-07-17"
-updated: "2026-07-17"
+  prerequisite:
+    - 01-数据结构与算法
+  related:
+    - 02-Java并发深度解析
+    - 02-Java性能诊断全指南
+    - 02-Java-IO模型深度解析
+tags:
+  - jvm
+  - gc
+  - jit
+  - graalvm
+  - zgc
+  - g1
+  - shenandoah
+  - class-loading
+  - performance
+  - tuning
+  - jfr
+  - jmc
+created: 2026-07-17
+updated: 2026-07-27
+content_type: concept
 ---
 
 # JVM 内部原理与调优
+
+> **性能数据声明：** 除非具体表格同时给出硬件、软件版本、数据规模、参数、
+> 测试脚本、运行次数、P50/P95/P99、日期和原始结果链接，否则本文中的精确
+> 性能数字均为“示意值，不代表基准结果”，不能用于容量规划或产品比较。
 
 ## 概述
 

@@ -1,42 +1,71 @@
 ---
-domain: "02-Java平台"
-title: "Java 性能诊断全指南"
-status: "verified"
+domain: 02-Java平台
+title: Java 性能诊断全指南
+status: verified
 verification:
-  reviewed_at: "2026-07-27"
-  version_anchor: "JDK 25 / Spring Boot 4.x / Spring AI 2.x"
-level: "advanced"
+  reviewed_at: 2026-07-27
+  version_anchor: JDK 25 JFR / JMC / async-profiler baseline
+  code_status: tested
+  lab: lab-java25-concurrency
+  evidence:
+    scope: article-core
+    source_files:
+      - labs/lab-java25-concurrency/src/main/java/com/javaai/kb/labs/concurrency/VirtualThreadsDemo.java
+      - labs/lab-java25-concurrency/src/main/java25/com/javaai/kb/labs/concurrency/Jdk25StructuredConcurrencyDemo.java
+    test_files:
+      - labs/lab-java25-concurrency/src/test/java/com/javaai/kb/labs/concurrency/VirtualThreadsTest.java
+      - labs/lab-java25-concurrency/src/test/java25/com/javaai/kb/labs/concurrency/Jdk25StructuredConcurrencyTest.java
+  performance:
+    status: illustrative
+level: advanced
 sources:
-  - level: "L1"
-    url: "https://docs.oracle.com/en/java/javase/25/troubleshoot/toc.htm"
-    description: "Oracle JDK 25 Troubleshooting Guide — JFR、GC Tuning、Thread Dump 分析的官方文档"
-  - level: "L1"
-    url: "https://docs.oracle.com/en/java/javase/25/jfapi/jfr-api.html"
-    description: "Oracle JFR API Programming Guide — JFR 事件编程接口官方文档"
-  - level: "L1"
-    url: "https://wiki.openjdk.org/display/jmc/Main"
-    description: "OpenJDK JDK Mission Control (JMC) Wiki — JFR 可视化分析工具官方文档"
-  - level: "L2"
-    url: "https://github.com/async-profiler/async-profiler"
-    description: "async-profiler 官方 GitHub 仓库 — 低开销 CPU/Allocation/Lock 采样分析器源码与文档"
-  - level: "L1"
-    url: "https://github.com/openjdk/jmh"
-    description: "OpenJDK JMH 官方仓库 — Java 微基准测试框架源码与示例"
-  - level: "L2"
-    url: "https://github.com/alibaba/arthas"
-    description: "Arthas 官方 GitHub 仓库 — 阿里巴巴开源 Java 在线诊断工具源码与文档"
-  - level: "L1"
-    url: "https://docs.oracle.com/en/java/javase/25/vm/java-virtual-machine-technology.html"
-    description: "Oracle JVM Technology Guide — GC 实现、JIT 编译器、统一日志格式"
+  - level: L1
+    url: https://docs.oracle.com/en/java/javase/25/troubleshoot/toc.htm
+    description: Oracle JDK 25 Troubleshooting Guide — JFR、GC Tuning、Thread Dump 分析的官方文档
+  - level: L1
+    url: https://docs.oracle.com/en/java/javase/25/jfapi/jfr-api.html
+    description: Oracle JFR API Programming Guide — JFR 事件编程接口官方文档
+  - level: L1
+    url: https://wiki.openjdk.org/display/jmc/Main
+    description: OpenJDK JDK Mission Control (JMC) Wiki — JFR 可视化分析工具官方文档
+  - level: L2
+    url: https://github.com/async-profiler/async-profiler
+    description: async-profiler 官方 GitHub 仓库 — 低开销 CPU/Allocation/Lock 采样分析器源码与文档
+  - level: L1
+    url: https://github.com/openjdk/jmh
+    description: OpenJDK JMH 官方仓库 — Java 微基准测试框架源码与示例
+  - level: L2
+    url: https://github.com/alibaba/arthas
+    description: Arthas 官方 GitHub 仓库 — 阿里巴巴开源 Java 在线诊断工具源码与文档
+  - level: L1
+    url: https://docs.oracle.com/en/java/javase/25/vm/java-virtual-machine-technology.html
+    description: Oracle JVM Technology Guide — GC 实现、JIT 编译器、统一日志格式
 relations:
-  prerequisite: ["01-数据结构与算法"]
-  related: ["02-JVM内部机制与调优", "02-JVM内部机制与调优", "02-JVM内部机制与调优"]
-tags: ["jfr", "async-profiler", "jmh", "arthas", "heap-dump", "gc-log", "thread-dump", "performance", "diagnosis", "profiling"]
-created: "2026-07-17"
-updated: "2026-07-17"
+  prerequisite:
+    - 01-数据结构与算法
+  related:
+    - 02-JVM内部机制与调优
+tags:
+  - jfr
+  - async-profiler
+  - jmh
+  - arthas
+  - heap-dump
+  - gc-log
+  - thread-dump
+  - performance
+  - diagnosis
+  - profiling
+created: 2026-07-17
+updated: 2026-07-27
+content_type: production
 ---
 
 # Java 性能诊断全指南
+
+> **性能数据声明：** 除非具体表格同时给出硬件、软件版本、数据规模、参数、
+> 测试脚本、运行次数、P50/P95/P99、日期和原始结果链接，否则本文中的精确
+> 性能数字均为“示意值，不代表基准结果”，不能用于容量规划或产品比较。
 
 ## 概述
 

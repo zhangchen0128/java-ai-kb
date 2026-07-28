@@ -1,39 +1,53 @@
 ---
-domain: "03-Java应用平台"
-title: "Java 测试最佳实践"
-status: "draft"
-level: "intermediate"
+domain: 03-Java应用平台
+title: Java 测试最佳实践
+status: draft
+level: intermediate
 sources:
-  - level: "L1"
-    url: "https://junit.org/junit5/docs/current/user-guide/"
-    description: "JUnit 5 官方用户指南，涵盖 Jupiter、Vintage、Platform 三大模块"
-  - level: "L1"
-    url: "https://javadoc.io/doc/org.mockito/mockito-core/latest/org/mockito/Mockito.html"
-    description: "Mockito 官方文档，mock 框架核心 API 参考"
-  - level: "L1"
-    url: "https://testcontainers.com/guides/"
-    description: "Testcontainers 官方指南，包含各模块的集成测试最佳实践"
-  - level: "L1"
-    url: "https://wiremock.org/docs/"
-    description: "WireMock 官方文档，HTTP stub 和验证完整参考"
-  - level: "L1"
-    url: "https://rest-assured.io/"
-    description: "REST Assured 官方文档，Java DSL 风格的 API 测试框架"
-  - level: "L1"
-    url: "https://www.archunit.org/"
-    description: "ArchUnit 官方文档，Java 架构测试框架"
-  - level: "L3"
-    url: "https://www.manning.com/books/effective-software-testing"
-    description: "Effective Software Testing — 系统介绍测试金字塔、基于属性的测试、变异测试"
-  - level: "L3"
-    url: "https://www.manning.com/books/java-testing-with-spock"
-    description: "Java Testing with Spock — 涵盖单元测试、集成测试和 BDD 实践"
+  - level: L1
+    url: https://junit.org/junit5/docs/current/user-guide/
+    description: JUnit 5 官方用户指南，涵盖 Jupiter、Vintage、Platform 三大模块
+  - level: L1
+    url: https://javadoc.io/doc/org.mockito/mockito-core/latest/org/mockito/Mockito.html
+    description: Mockito 官方文档，mock 框架核心 API 参考
+  - level: L1
+    url: https://testcontainers.com/guides/
+    description: Testcontainers 官方指南，包含各模块的集成测试最佳实践
+  - level: L1
+    url: https://wiremock.org/docs/
+    description: WireMock 官方文档，HTTP stub 和验证完整参考
+  - level: L1
+    url: https://rest-assured.io/
+    description: REST Assured 官方文档，Java DSL 风格的 API 测试框架
+  - level: L1
+    url: https://www.archunit.org/
+    description: ArchUnit 官方文档，Java 架构测试框架
+  - level: L3
+    url: https://www.manning.com/books/effective-software-testing
+    description: Effective Software Testing — 系统介绍测试金字塔、基于属性的测试、变异测试
+  - level: L3
+    url: https://www.manning.com/books/java-testing-with-spock
+    description: Java Testing with Spock — 涵盖单元测试、集成测试和 BDD 实践
 relations:
-  prerequisite: ["02-现代Java25深度解析"]
-  related: ["03-SpringBoot4深度解析", "03-Java测试最佳实践"]
-tags: ["testing", "junit5", "mockito", "testcontainers", "wiremock", "rest-assured", "archunit", "ai-testing", "test-data", "quality"]
-created: "2026-07-17"
-updated: "2026-07-17"
+  prerequisite:
+    - 02-现代Java25深度解析
+  related:
+    - 03-SpringBoot4深度解析
+    - 03-Java测试最佳实践
+tags:
+  - testing
+  - junit5
+  - mockito
+  - testcontainers
+  - wiremock
+  - rest-assured
+  - archunit
+  - ai-testing
+  - test-data
+  - quality
+created: 2026-07-17
+updated: 2026-07-17
+content_type: practice
 ---
 
 # Java 测试最佳实践

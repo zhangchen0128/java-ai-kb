@@ -68,6 +68,9 @@ code{font-family:"JetBrains Mono","Fira Code","Cascadia Code","SF Mono",Consolas
 .brand-icon{font-size:1.3rem;line-height:1}
 #menuBtn,#themeBtn{background:none;border:none;font-size:1.15rem;cursor:pointer;padding:6px 8px;border-radius:8px;color:var(--text2);transition:all .15s;flex-shrink:0;line-height:1}
 #menuBtn:hover,#themeBtn:hover{background:var(--bg2);color:var(--text)}
+.verified-filter{display:flex;align-items:center;gap:6px;white-space:nowrap;padding:6px 9px;border:1px solid var(--border);border-radius:8px;background:var(--bg2);color:var(--text2);font-size:.75rem;font-weight:600;cursor:pointer}
+.verified-filter:has(input:checked){border-color:#16a34a;background:var(--badge-verified);color:#15803d}
+.verified-filter input{accent-color:#16a34a}
 #searchBox{flex:1;max-width:440px;position:relative;margin:0 auto}
 #searchBox::before{content:"🔍";position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:.78rem;pointer-events:none;z-index:2}
 #searchInput{width:100%;height:36px;border:1.5px solid var(--border);border-radius:9px;padding:0 50px 0 34px;font-size:.9rem;background:var(--bg2);color:var(--text);outline:none;transition:all .2s}
@@ -78,12 +81,15 @@ code{font-family:"JetBrains Mono","Fira Code","Cascadia Code","SF Mono",Consolas
 .search-hint{position:absolute;right:28px;top:50%;transform:translateY(-50%);font-size:.62rem;color:var(--text3);border:1px solid var(--border);border-radius:3px;padding:2px 5px;pointer-events:none;font-family:monospace;white-space:nowrap}
 @media(max-width:768px){.search-hint{display:none!important}}
 @media(max-width:520px){.brand-text{display:none}#searchBox{max-width:none}}
+@media(max-width:700px){.verified-filter span{display:none}.verified-filter{padding:6px}}
 
 /* ===== Sidebar ===== */
-#sidebar{position:fixed;top:var(--topbar-h);left:0;bottom:0;width:var(--sidebar-w);background:var(--sidebar-bg);border-right:1px solid var(--border);overflow-y:auto;z-index:90;transform:translateX(-100%);transition:transform .3s cubic-bezier(.4,0,.2,1)}
-#sidebar.open{transform:translateX(0)}
+#sidebar{position:fixed;top:var(--topbar-h);left:0;bottom:0;width:var(--sidebar-w);background:var(--sidebar-bg);border-right:1px solid var(--border);overflow-y:auto;z-index:90;transform:translateX(-100%);visibility:hidden;pointer-events:none;transition:transform .3s cubic-bezier(.4,0,.2,1),visibility 0s linear .3s;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+#sidebar.open{transform:translateX(0);visibility:visible;pointer-events:auto;transition-delay:0s}
 .sidebar-inner{padding:14px 10px}
 #navTree{font-size:.86rem}
+.nav-loading,.nav-error{padding:18px 10px;color:var(--text2);font-size:.82rem;line-height:1.6}
+.nav-error button{margin-top:8px;padding:5px 9px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);cursor:pointer}
 .nav-domain{margin-bottom:6px}
 .nav-domain-title{display:flex;align-items:center;gap:6px;padding:7px 10px;cursor:pointer;border-radius:8px;font-weight:650;color:var(--text);user-select:none;font-size:.9rem;transition:all .12s}
 .nav-domain-title:hover{background:var(--bg2)}
@@ -94,16 +100,18 @@ code{font-family:"JetBrains Mono","Fira Code","Cascadia Code","SF Mono",Consolas
 .nav-subdir-title{padding:4px 10px 4px 26px;font-size:.8rem;color:var(--text2);font-weight:550;cursor:pointer;border-radius:6px;transition:color .12s;display:flex;align-items:center;gap:4px}
 .nav-subdir-title::before{content:"";width:4px;height:4px;border-radius:50%;background:var(--text3);flex-shrink:0}
 .nav-subdir-title:hover{color:var(--accent)}
-.nav-file{padding:4px 10px 4px 36px;font-size:.8rem;color:var(--text2);display:block;border-radius:6px;transition:all .12s;position:relative}
+.nav-file{padding:4px 10px 4px 36px;font-size:.8rem;color:var(--text2);display:flex;align-items:center;gap:6px;border-radius:6px;transition:all .12s;position:relative}
 .nav-file::before{content:"";position:absolute;left:22px;top:50%;width:5px;height:5px;border-radius:50%;background:var(--text3);transform:translateY(-50%);opacity:.4}
 .nav-file:hover{background:var(--bg2);color:var(--text)}
 .nav-file.active{background:var(--accent);color:#fff;font-weight:600;box-shadow:0 2px 6px rgba(59,130,246,.25)}
 .nav-file.active::before{background:#fff;opacity:.8}
+.nav-status{width:7px;height:7px;border-radius:50%;background:#eab308;flex:0 0 auto}
+.nav-file[data-status="verified"] .nav-status{background:#22c55e}
+.nav-file[data-status="outdated"] .nav-status,.nav-file[data-status="stale"] .nav-status{background:#ef4444}
 .nav-file-count{font-size:.68rem;color:var(--text3);margin-left:auto;min-width:22px;text-align:center}
 
 /* ===== Content ===== */
 #content{margin-top:var(--topbar-h);padding:24px 28px;transition:margin-left .3s cubic-bezier(.4,0,.2,1);min-height:calc(100vh - var(--topbar-h) - 60px)}
-.sidebar-visible #content{margin-left:var(--sidebar-w)}
 #progressBar{position:fixed;top:var(--topbar-h);left:0;height:2.5px;background:var(--accent-grad);z-index:101;width:0%;transition:width .08s linear}
 #article{max-width:820px;margin:0 auto}
 
@@ -123,6 +131,13 @@ code{font-family:"JetBrains Mono","Fira Code","Cascadia Code","SF Mono",Consolas
 .domain-card .dc-num{font-size:.7rem;color:var(--accent);font-weight:700;letter-spacing:1px;text-transform:uppercase}
 .domain-card .dc-name{font-weight:650;margin:6px 0 4px;font-size:.92rem}
 .domain-card .dc-desc{font-size:.78rem;color:var(--text2);line-height:1.5}
+.learning-path{max-width:760px;margin:0 auto 2.5em;text-align:left}
+.learning-path h2{font-size:1.05rem;text-align:center;margin-bottom:12px}
+.learning-steps{display:grid;grid-template-columns:repeat(4,1fr);gap:9px}
+.learning-steps a{display:flex;flex-direction:column;gap:3px;padding:13px;border:1px solid var(--border);border-radius:10px;background:var(--bg);color:var(--text);box-shadow:var(--shadow-sm)}
+.learning-steps a:hover{border-color:var(--accent);transform:translateY(-1px)}
+.learning-steps strong{font-size:.83rem;color:var(--accent)}
+.learning-steps span{font-size:.7rem;color:var(--text2);line-height:1.45}
 
 /* ===== Entry (article) ===== */
 .entry-meta{margin-bottom:28px;padding-bottom:18px;border-bottom:1px solid var(--border)}
@@ -134,11 +149,31 @@ code{font-family:"JetBrains Mono","Fira Code","Cascadia Code","SF Mono",Consolas
 .badge-draft{background:var(--badge-draft);color:#a16207}.dark .badge-draft{color:#fde047}
 .badge-verified{background:var(--badge-verified);color:#15803d}.dark .badge-verified{color:#86efac}
 .badge-outdated{background:var(--badge-outdated);color:#b91c1c}.dark .badge-outdated{color:#fca5a5}
+.badge-stale{background:#ffedd5;color:#c2410c}.dark .badge-stale{background:#431407;color:#fdba74}
+.badge-content{background:#ede9fe;color:#6d28d9}.dark .badge-content{background:#2e1065;color:#c4b5fd}
 .badge-level{background:var(--bg2);color:var(--text2);border:1px solid var(--border)}
-.badge-tag{background:var(--bg3);color:var(--text2);font-family:monospace;font-size:.68rem;font-weight:500}
+.badge-tag{background:var(--bg3);color:var(--text2);font-family:monospace;font-size:.68rem;font-weight:500;border:0;cursor:pointer}
+.badge-tag:hover{color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
 .entry-sources{margin-top:10px;display:flex;flex-wrap:wrap;gap:8px}
 .source-link{font-size:.73rem;color:var(--text2);text-decoration:underline;text-underline-offset:3px;text-decoration-color:var(--text3)}
 .source-link:hover{color:var(--accent)}
+.source-level{display:inline-block;margin-right:4px;padding:0 4px;border-radius:3px;background:var(--bg3);font-family:monospace;font-weight:700;text-decoration:none}
+.entry-verification{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:12px;padding:10px 12px;border:1px solid #bbf7d0;border-radius:8px;background:#f0fdf4;color:#166534;font-size:.76rem}
+.dark .entry-verification{border-color:#14532d;background:#052e16;color:#bbf7d0}
+.entry-verification a{color:inherit;text-decoration:underline}
+.verification-evidence{flex-basis:100%;margin-top:2px}
+.verification-evidence summary{cursor:pointer}
+.verification-evidence ul{margin:8px 0 0;padding-left:20px}
+.verification-evidence li{margin:4px 0;overflow-wrap:anywhere}
+.block-evidence-item{display:flex;flex-direction:column;align-items:flex-start;gap:3px}
+.block-evidence-link{padding:0;border:0;background:transparent;color:inherit;font:inherit;font-weight:700;text-decoration:underline;cursor:pointer}
+.code-evidenced{outline:1px solid color-mix(in srgb,var(--accent,#2563eb) 38%,transparent);outline-offset:2px}
+.code-evidence-id{margin-right:auto;color:#166534;font-size:.72rem;font-weight:700}
+.dark .code-evidence-id{color:#86efac}
+.status-notice{margin:0 0 20px;padding:12px 14px;border-radius:9px;border-left:4px solid;font-size:.84rem}
+.status-notice-draft{background:#fffbeb;border-color:#eab308;color:#854d0e}
+.status-notice-stale{background:#fff7ed;border-color:#f97316;color:#9a3412}
+.dark .status-notice-draft{background:#422006;color:#fde68a}.dark .status-notice-stale{background:#431407;color:#fdba74}
 .entry-body{word-break:break-word}
 .entry-body h1,.entry-body h2,.entry-body h3,.entry-body h4{margin:1.4em 0 .5em;line-height:1.4;scroll-margin-top:calc(var(--topbar-h) + 12px)}
 .entry-body h1{font-size:1.5rem;font-weight:750}
@@ -182,6 +217,10 @@ code{font-family:"JetBrains Mono","Fira Code","Cascadia Code","SF Mono",Consolas
 .search-item:hover{background:var(--bg2)}
 .search-item .si-title{font-weight:600;font-size:.9rem;color:var(--text)}
 .search-item .si-domain{font-size:.7rem;color:var(--accent);margin-right:6px;background:rgba(59,130,246,.08);padding:1px 8px;border-radius:10px}
+.search-status,.listing-status{display:inline-block;margin-right:6px;padding:1px 6px;border-radius:8px;font-size:.62rem;font-weight:700}
+.search-verified,.listing-verified{background:var(--badge-verified);color:#15803d}
+.search-draft,.listing-draft{background:var(--badge-draft);color:#a16207}
+.search-stale,.listing-stale{background:#ffedd5;color:#c2410c}
 .search-item .si-snippet{font-size:.78rem;color:var(--text2);margin-top:3px;line-height:1.5}
 .search-item .si-tags{margin-top:5px}
 .search-item .si-tags .badge-tag{font-size:.62rem}
@@ -203,7 +242,7 @@ mark{padding:1px 3px;border-radius:3px}
 .site-footer a{color:var(--text2)}
 
 /* ===== Overlay ===== */
-#overlay{position:fixed;inset:0;background:rgba(0,0,0,0.35);z-index:85;display:none;backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
+#overlay{position:fixed;inset:var(--topbar-h) 0 0;background:rgba(0,0,0,0.35);z-index:85;display:none;backdrop-filter:blur(2px);-webkit-backdrop-filter:blur(2px)}
 #overlay.open{display:block}
 
 /* ===== TOC (平板+桌面端) ===== */
@@ -220,12 +259,13 @@ mark{padding:1px 3px;border-radius:3px}
 
 /* ===== Responsive ===== */
 @media(min-width:1024px){
-  #sidebar{transform:translateX(0)}
+  #sidebar{transform:translateX(0);visibility:visible;pointer-events:auto}
   #content{margin-left:var(--sidebar-w)}
   #menuBtn{display:none}
 }
 @media(max-width:1023px){
-  .sidebar-visible #overlay{display:block}
+  #sidebar{width:min(82vw,320px);max-width:calc(100vw - 56px)}
+  .sidebar-visible #content{margin-left:0}
   body.sidebar-visible{overflow:hidden}
 }
 @media(max-width:768px){
@@ -235,6 +275,7 @@ mark{padding:1px 3px;border-radius:3px}
   .domain-grid{grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px}
   .stat strong{font-size:1.5rem}
   .domain-card{padding:14px 12px}
+  .learning-steps{grid-template-columns:1fr 1fr}
 }
 @media(max-width:480px){
   #content{padding:10px}

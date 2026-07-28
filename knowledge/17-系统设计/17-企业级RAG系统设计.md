@@ -1,30 +1,43 @@
 ---
-domain: "17-系统设计"
-title: "企业级RAG系统完整设计"
-status: "draft"
-level: "advanced"
+domain: 17-系统设计
+title: 企业级RAG系统完整设计
+status: draft
+level: advanced
 sources:
-  - level: "L1"
-    url: "https://docs.spring.io/spring-ai/reference/"
-    description: "Spring AI官方文档 - ChatClient、VectorStore、ETL Pipeline"
-  - level: "L1"
-    url: "https://www.pgvector.org/"
-    description: "pgvector官方文档 - PostgreSQL向量扩展"
-  - level: "L2"
-    url: "https://www.elastic.co/guide/en/elasticsearch/reference/current/dense-vector.html"
-    description: "Elasticsearch密集向量与混合检索"
-  - level: "L2"
-    url: "https://kubernetes.io/docs/concepts/workloads/"
-    description: "Kubernetes工作负载与自动伸缩"
-  - level: "L3"
-    url: "https://github.com/vllm-project/vllm"
-    description: "vLLM高性能LLM推理引擎"
+  - level: L1
+    url: https://docs.spring.io/spring-ai/reference/
+    description: Spring AI官方文档 - ChatClient、VectorStore、ETL Pipeline
+  - level: L1
+    url: https://www.pgvector.org/
+    description: pgvector官方文档 - PostgreSQL向量扩展
+  - level: L2
+    url: https://www.elastic.co/guide/en/elasticsearch/reference/current/dense-vector.html
+    description: Elasticsearch密集向量与混合检索
+  - level: L2
+    url: https://kubernetes.io/docs/concepts/workloads/
+    description: Kubernetes工作负载与自动伸缩
+  - level: L3
+    url: https://github.com/vllm-project/vllm
+    description: vLLM高性能LLM推理引擎
 relations:
-  prerequisite: ["05-分布式一致性与事务方案", "11-向量检索与混合检索", "14-模型网关与Prompt管理"]
-  related: ["04-PostgreSQL与pgvector深度解析", "06-Docker与Kubernetes云原生部署"]
-tags: ["system-design", "rag", "enterprise", "multi-tenant", "kubernetes", "pgvector", "spring-ai"]
-created: "2026-07-17"
-updated: "2026-07-17"
+  prerequisite:
+    - 05-分布式一致性与事务方案
+    - 11-向量检索与混合检索
+    - 14-模型网关与Prompt管理
+  related:
+    - 04-PostgreSQL与pgvector深度解析
+    - 06-Docker与Kubernetes云原生部署
+tags:
+  - system-design
+  - rag
+  - enterprise
+  - multi-tenant
+  - kubernetes
+  - pgvector
+  - spring-ai
+created: 2026-07-17
+updated: 2026-07-17
+content_type: concept
 ---
 
 # 企业级RAG系统完整设计

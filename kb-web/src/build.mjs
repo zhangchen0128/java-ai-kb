@@ -5,11 +5,13 @@ import { fileURLToPath } from 'url';
 import { parseFrontmatter } from './parse.mjs';
 import { renderMarkdown, processCallouts, enhanceCodeBlocks, buildEntryHTML } from './render.mjs';
 import { resolveWikilinks, escapeHtml } from './wikilinks.mjs';
+import { isReviewStale } from './audit-content.mjs';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const KNOWLEDGE = join(__dirname, '..', '..', 'knowledge');
 const PUBLIC = join(__dirname, '..', 'public');
 const CONTENT = join(PUBLIC, 'content');
+const BUILD_DATE = new Date();
 
 // ===== Utilities =====
 function ensureDir(p) { if (!existsSync(p)) mkdirSync(p, { recursive: true }); }
@@ -28,14 +30,11 @@ function walk(dir, base = '') {
 // ===== Main Build =====
 console.log('🔨 构建知识库网页...\n');
 
-// Ensure output directory exists before any writes
+// A build is always reproducible from an empty output directory. This also
+// prevents deleted pages and old audit reports from surviving a deployment.
+if (existsSync(PUBLIC)) rmSync(PUBLIC, { recursive: true });
 ensureDir(PUBLIC);
-
-// Clean old content
-if (existsSync(CONTENT)) {
-  rmSync(CONTENT, { recursive: true });
-  console.log('🧹 已清理旧 content 目录');
-}
+console.log('🧹 已从空 public/ 目录开始构建');
 
 const files = walk(KNOWLEDGE);
 console.log(`📄 找到 ${files.length} 个条目\n`);
@@ -78,11 +77,21 @@ for (const rel of files) {
     tags: meta.tags || [],
     sources: meta.sources || [],
     relations: meta.relations || {},
+    contentType: meta.content_type,
+    stale: isEntryStale(meta, domainDir),
     meta,
     body,
   };
   entries.push(entry);
   entryMap.set(rel, entry);
+}
+
+function isEntryStale(meta, domain) {
+  const reference = meta.status === 'verified'
+    ? meta.verification?.reviewed_at
+    : (meta.updated || meta.created);
+  if (!reference) return false;
+  return isReviewStale(domain, reference, BUILD_DATE);
 }
 
 // Phase 2: Validate relations
@@ -102,13 +111,17 @@ for (const e of entries) {
       // Full path reference
       const found = [...entryMap.keys()].some(k => k.includes('/' + target + '.md') || k.endsWith('/' + target + '.md'));
       if (found) continue;
+      // References may retain an old directory prefix while the filename is stable.
+      const last = target.replace(/\.md$/, '').split('/').pop();
+      if (entryNames.has(last)) continue;
 
-      console.error(`  ⚠️  ${e.path}: relations.${type} → "${target}" 未找到`);
+      console.error(`  ❌ ${e.path}: relations.${type} → "${target}" 未找到`);
       relErrors++;
     }
   }
 }
 console.log(`  ${relErrors > 0 ? '⚠️ ' + relErrors + ' 个未解析的关系引用' : '✅ 全部关系引用有效'}\n`);
+if (relErrors > 0) process.exit(1);
 
 // Phase 3: Build nav tree
 console.log('🌳 构建导航树...');
@@ -121,7 +134,14 @@ for (const e of entries) {
     if (!node[part]) node[part] = { _entries: [] };
     node = node[part];
   }
-  node._entries.push(e);
+  node._entries.push({
+    url: e.url,
+    title: e.title,
+    status: e.status,
+    level: e.level,
+    contentType: e.contentType,
+    stale: e.stale,
+  });
 }
 function sortTree(node) {
   if (node._entries) node._entries.sort((a, b) => a.title.localeCompare(b.title, 'zh-CN'));
@@ -140,6 +160,9 @@ const searchIndex = entries.map(e => ({
   t: e.title,
   d: e.domain,
   g: e.tags,
+  st: e.status,
+  ct: e.contentType,
+  x: e.stale,
   s: e.body.replace(/[#*`\[\]()>|\-]/g, '').replace(/\n+/g, ' ').trim().slice(0, 240),
 }));
 writeFileSync(join(PUBLIC, 'search-index.json'), JSON.stringify(searchIndex), 'utf-8');
@@ -164,7 +187,7 @@ for (const e of entries) {
     process.exit(1);
   }
 
-  const fullHtml = buildEntryHTML(e.title, e.meta, html, e.domain, e.domainNum);
+  const fullHtml = buildEntryHTML(e.title, { ...e.meta, stale: e.stale }, html, e.domain, e.domainNum);
 
   const outPath = join(CONTENT, e.url + '.html');
   ensureDir(dirname(outPath));
@@ -198,6 +221,8 @@ const siteMeta = {
   lines: totalLines,
   status: statusDist,
   level: levelDist,
+  verified: statusDist.verified || 0,
+  stale: entries.filter(entry => entry.stale).length,
   updated: new Date().toISOString().slice(0, 10),
 };
 writeFileSync(join(PUBLIC, 'site-meta.json'), JSON.stringify(siteMeta), 'utf-8');

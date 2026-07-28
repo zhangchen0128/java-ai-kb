@@ -1,32 +1,49 @@
 package com.javaai.kb.labs.chat;
 
-/**
- * Spring AI ChatClient 示例 (Mock 模式，无需真实 API Key).
- *
- * 对应知识库：09-Java AI框架/09-SpringAI2深度解析.md
- *
- * 运行需要设置环境变量: export SPRING_AI_OPENAI_API_KEY=test-key
- * 或使用 mock profile: spring.profiles.active=mock
- */
-public class ChatDemo {
+import java.util.Objects;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.model.ChatModel;
 
-    /** 构建 ChatClient 请求示例 */
-    public static String buildRequest(String systemPrompt, String userMessage) {
-        return """
-            ChatClient.create(chatModel)
-                .prompt()
-                .system("%s")
-                .user("%s")
-                .call()
-                .content();
-            """.formatted(systemPrompt, userMessage);
+/**
+ * A real Spring AI {@link ChatClient} flow. Tests inject a deterministic
+ * {@link ChatModel}, so no provider account or API key is required.
+ */
+public final class ChatDemo {
+
+    public record AnswerSummary(String answer, int confidence) {
     }
 
-    public static void main(String[] args) {
-        System.out.println("Spring AI ChatClient Demo");
-        System.out.println(buildRequest("你是Java专家", "什么是Virtual Threads?"));
-        System.out.println("\n⚠️ 运行需要 Spring Boot Starter + API Key.");
-        System.out.println("   export SPRING_AI_OPENAI_API_KEY=sk-xxx");
-        System.out.println("   mvn spring-boot:run");
+    private final ChatClient chatClient;
+
+    public ChatDemo(ChatModel chatModel) {
+        this.chatClient = ChatClient.create(Objects.requireNonNull(chatModel));
+    }
+
+    public String answer(String systemPrompt, String userMessage) {
+        validatePrompts(systemPrompt, userMessage);
+        return chatClient.prompt()
+            .system(systemPrompt)
+            .user(userMessage)
+            .call()
+            .content();
+    }
+
+    /** Uses Spring AI's structured-output conversion instead of parsing JSON manually. */
+    public AnswerSummary structuredAnswer(String systemPrompt, String userMessage) {
+        validatePrompts(systemPrompt, userMessage);
+        return chatClient.prompt()
+            .system(systemPrompt)
+            .user(userMessage)
+            .call()
+            .entity(AnswerSummary.class);
+    }
+
+    private static void validatePrompts(String systemPrompt, String userMessage) {
+        if (systemPrompt == null || systemPrompt.isBlank()) {
+            throw new IllegalArgumentException("systemPrompt must not be blank");
+        }
+        if (userMessage == null || userMessage.isBlank()) {
+            throw new IllegalArgumentException("userMessage must not be blank");
+        }
     }
 }

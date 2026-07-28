@@ -1,43 +1,44 @@
 ---
-domain: "03-Java应用平台"
-title: "Spring MVC 请求处理与 SSE 流式输出深度解析"
-status: "draft"
-level: "advanced"
+domain: 03-Java应用平台
+title: Spring MVC 请求处理与 SSE 流式输出深度解析
+status: draft
+level: advanced
 sources:
-  - level: "L1"
-    url: "https://docs.spring.io/spring-framework/reference/web/webmvc.html"
-    description: "Spring Framework 官方参考手册 — Web MVC 章节"
-  - level: "L1"
-    url: "https://docs.spring.io/spring-framework/reference/web/webmvc/mvc-servlet.html"
-    description: "Spring Framework 官方参考手册 — DispatcherServlet 章节"
-  - level: "L2"
-    url: "https://github.com/spring-projects/spring-framework/tree/main/spring-webmvc/src/main/java/org/springframework/web/servlet"
-    description: "Spring Framework 源码 — DispatcherServlet 及其核心组件实现"
-  - level: "L4"
-    url: "https://spring.io/blog"
-    description: "Spring 官方博客 — MVC 与 SSE 相关技术文章"
-  - level: "L3"
-    description: "《Spring 实战》第6版 — Web MVC 与 REST 服务章节"
+  - level: L1
+    url: https://docs.spring.io/spring-framework/reference/web/webmvc.html
+    description: Spring Framework 官方参考手册 — Web MVC 章节
+  - level: L1
+    url: https://docs.spring.io/spring-framework/reference/web/webmvc/mvc-servlet.html
+    description: Spring Framework 官方参考手册 — DispatcherServlet 章节
+  - level: L2
+    url: https://github.com/spring-projects/spring-framework/tree/main/spring-webmvc/src/main/java/org/springframework/web/servlet
+    description: Spring Framework 源码 — DispatcherServlet 及其核心组件实现
+  - level: L4
+    url: https://spring.io/blog
+    description: Spring 官方博客 — MVC 与 SSE 相关技术文章
+  - level: L3
+    description: 《Spring 实战》第6版 — Web MVC 与 REST 服务章节
 relations:
-  prerequisite:
+  prerequisite: null
   related:
-    - "03-Java应用平台/Spring核心/03-SpringBoot4深度解析"
-    - "03-Java应用平台/通信协议/03-WebFlux响应式编程"
-    - "03-Java应用平台/通信协议/03-WebSocket与gRPC通信"
-  contrast:
+    - 03-Java应用平台/Spring核心/03-SpringBoot4深度解析
+    - 03-Java应用平台/通信协议/03-WebFlux响应式编程
+    - 03-Java应用平台/通信协议/03-WebSocket与gRPC通信
+  contrast: null
 tags:
-  - "spring-mvc"
-  - "dispatcher-servlet"
-  - "sse"
-  - "server-sent-events"
-  - "sse-emitter"
-  - "controller-advice"
-  - "exception-handling"
-  - "virtual-threads"
-  - "streaming"
-  - "ai-integration"
-created: "2026-07-17"
-updated: "2026-07-17"
+  - spring-mvc
+  - dispatcher-servlet
+  - sse
+  - server-sent-events
+  - sse-emitter
+  - controller-advice
+  - exception-handling
+  - virtual-threads
+  - streaming
+  - ai-integration
+created: 2026-07-17
+updated: 2026-07-17
+content_type: practice
 ---
 
 # Spring MVC 请求处理与 SSE 流式输出深度解析

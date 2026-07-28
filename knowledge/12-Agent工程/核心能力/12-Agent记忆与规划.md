@@ -1,24 +1,33 @@
 ---
-domain: "12-Agent工程"
-title: "Agent Memory 体系与 Planning 策略深度实践"
-status: "draft"
-level: "intermediate"
+domain: 12-Agent工程
+title: Agent Memory 体系与 Planning 策略深度实践
+status: draft
+level: intermediate
 sources:
-  - level: "L1"
-    url: "https://docs.spring.io/spring-ai/reference/api/chat-memory.html"
-    description: "Spring AI ChatMemory 官方文档"
-  - level: "L1"
-    url: "https://arxiv.org/abs/2210.03629"
+  - level: L1
+    url: https://docs.spring.io/spring-ai/reference/api/chat-memory.html
+    description: Spring AI ChatMemory 官方文档
+  - level: L1
+    url: https://arxiv.org/abs/2210.03629
     description: "ReAct: Synergizing Reasoning and Acting in Language Models"
-  - level: "L2"
-    url: "https://langchain-ai.github.io/langgraph/concepts/memory/"
-    description: "LangGraph Memory 概念文档"
+  - level: L2
+    url: https://langchain-ai.github.io/langgraph/concepts/memory/
+    description: LangGraph Memory 概念文档
 relations:
-  prerequisite: ["12-ToolCalling完整剖析"]
-  related: ["12-Agent工作流与人机协作", "12-多Agent协作架构"]
-tags: ["agent-memory", "react", "planning", "spring-ai", "chat-memory"]
-created: "2026-07-17"
-updated: "2026-07-17"
+  prerequisite:
+    - 12-ToolCalling完整剖析
+  related:
+    - 12-Agent工作流与人机协作
+    - 12-多Agent协作架构
+tags:
+  - agent-memory
+  - react
+  - planning
+  - spring-ai
+  - chat-memory
+created: 2026-07-17
+updated: 2026-07-17
+content_type: concept
 ---
 
 # Agent Memory 体系与 Planning 策略深度实践

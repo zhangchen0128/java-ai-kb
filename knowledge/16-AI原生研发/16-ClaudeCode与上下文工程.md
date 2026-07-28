@@ -1,27 +1,47 @@
 ---
-domain: "16-AI原生研发"
-title: "Claude Code与上下文工程：AI原生软件开发实践指南"
-status: "draft"
-level: "intermediate"
+domain: 16-AI原生研发
+title: Claude Code与上下文工程：AI原生软件开发实践指南
+status: draft
+level: intermediate
 sources:
-  - level: "L1"
-    url: "https://docs.anthropic.com/en/docs/claude-code"
-    description: "Claude Code官方文档"
-  - level: "L1"
-    url: "https://docs.anthropic.com/en/docs/claude-code/overview"
-    description: "Claude Code概述与架构"
-  - level: "L2"
-    url: "https://docs.anthropic.com/en/docs/agents-and-tools"
-    description: "Claude Agent SDK与工具使用"
+  - level: L1
+    url: https://docs.anthropic.com/en/docs/claude-code
+    description: Claude Code官方文档
+  - level: L1
+    url: https://docs.anthropic.com/en/docs/claude-code/overview
+    description: Claude Code概述与架构
+  - level: L2
+    url: https://docs.anthropic.com/en/docs/agents-and-tools
+    description: Claude Agent SDK与工具使用
 relations:
-  prerequisite: ["02-现代Java25深度解析", "03-SpringBoot4深度解析"]
-  related: ["12-ToolCalling完整剖析", "09-SpringAI2深度解析"]
-tags: ["claude-code", "context-engineering", "spec-driven-dev", "ai-code-quality", "claude-md", "adr", "hallucination-detection"]
-created: "2026-07-17"
-updated: "2026-07-17"
+  prerequisite:
+    - 02-现代Java25深度解析
+    - 03-SpringBoot4深度解析
+  related:
+    - 12-ToolCalling完整剖析
+    - 09-SpringAI2深度解析
+tags:
+  - claude-code
+  - context-engineering
+  - spec-driven-dev
+  - ai-code-quality
+  - claude-md
+  - adr
+  - hallucination-detection
+created: 2026-07-17
+updated: 2026-07-27
+content_type: overview
+verification:
+  reviewed_at: 2026-07-27
+  version_anchor: Claude Code documentation reviewed 2026-07-27
+  code_status: illustrative
 ---
 
 # Claude Code与上下文工程：AI原生软件开发实践指南
+
+> **性能数据声明：** 除非具体表格同时给出硬件、软件版本、数据规模、参数、
+> 测试脚本、运行次数、P50/P95/P99、日期和原始结果链接，否则本文中的精确
+> 性能数字均为“示意值，不代表基准结果”，不能用于容量规划或产品比较。
 
 ## 一、Claude Code核心机制
 

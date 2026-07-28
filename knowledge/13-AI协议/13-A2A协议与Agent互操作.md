@@ -1,27 +1,43 @@
 ---
-domain: "13-AI协议"
-title: "A2A协议背景与Agent互操作实战"
-status: "draft"
-level: "intermediate"
+domain: 13-AI协议
+title: A2A协议背景与Agent互操作实战
+status: draft
+level: intermediate
 sources:
-  - level: "L0"
-    url: "https://a2a-protocol.org/latest/specification/"
-    description: "A2A 1.0 规范"
-  - level: "L1"
-    url: "https://github.com/a2a-protocol/a2a-java"
-    description: "A2A Java SDK官方仓库"
-  - level: "L1"
-    url: "https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability/"
-    description: "A2A协议背景与技术概览（Google Blog）"
-  - level: "L2"
-    url: "https://spring.io/blog/2025/06/spring-ai-a2a-support"
-    description: "Spring AI A2A集成支持"
+  - level: L0
+    url: https://a2a-protocol.org/latest/specification/
+    description: A2A 1.0 规范
+  - level: L1
+    url: https://github.com/a2aproject/a2a-java
+    description: A2A Java SDK官方仓库
+  - level: L1
+    url: https://developers.googleblog.com/en/a2a-a-new-era-of-agent-interoperability/
+    description: A2A协议背景与技术概览（Google Blog）
 relations:
-  prerequisite: ["13-MCP协议与JavaSDK", "09-SpringAI2深度解析"]
-  related: ["09-SpringAI2深度解析", "12-多Agent协作架构"]
-tags: ["a2a", "a2a-1.0", "agent-to-agent", "agent-interop", "java", "spring-ai", "multi-agent", "mcp", "protocol-binding", "json-rpc", "grpc"]
-created: "2026-07-17"
-updated: "2026-07-27"
+  prerequisite:
+    - 13-MCP协议与JavaSDK
+    - 09-SpringAI2深度解析
+  related:
+    - 12-多Agent协作架构
+tags:
+  - a2a
+  - a2a-1.0
+  - agent-to-agent
+  - agent-interop
+  - java
+  - spring-ai
+  - multi-agent
+  - mcp
+  - protocol-binding
+  - json-rpc
+  - grpc
+created: 2026-07-17
+updated: 2026-07-27
+content_type: production
+verification:
+  reviewed_at: 2026-07-27
+  version_anchor: A2A 1.0 / a2a-java 1.1.0.Final
+  code_status: illustrative
 ---
 
 # A2A协议背景与Agent互操作实战
@@ -504,7 +520,7 @@ A2A-Version: 1.0
 HTTP+JSON 是 A2A 1.0 的**主要绑定方式**，也是最简单的入门方式。所有 A2A 端点均以 HTTP RESTful 风格暴露，Payload 使用 JSON 格式：
 
 - Agent Card 发现：`GET /.well-known/agent-card.json` → JSON
-- 任务创建：`POST /message:send` → JSON Request/Response
+- 消息发送：`POST /message:send` → JSON Request/Response
 - 任务查询：`GET /tasks/xxx` → JSON
 - 任务取消：`POST /tasks/` → JSON
 - 流式响应：`POST /message:send` + `Accept: text/event-stream` → SSE
@@ -530,13 +546,13 @@ A2A-Version: 1.0
 
 {
   "jsonrpc": "2.0",
-  "method": "message:send",
+  "method": "SendMessage",
   "params": { "message": {...} },
   "id": "req-001"
 }
 ```
 
-JSON-RPC 绑定的优势在于：统一的错误码体系、批量调用支持、与现有 JSON-RPC 基础设施集成（如 MCP 协议也基于 JSON-RPC）。
+JSON-RPC 绑定的优势在于：统一的错误码体系、批量调用支持、与现有 JSON-RPC 基础设施集成。注意 HTTP+JSON 的 `/message:send` 路径与 JSON-RPC 的 `SendMessage` 方法名是两套绑定，不能混用。
 
 ### 4.4 gRPC Binding
 
@@ -720,20 +736,17 @@ A2A 1.0 定义了标准化的错误码体系，覆盖 HTTP 层、协议层和业
 ```xml
 <!-- A2A Java SDK -->
 <dependency>
-    <groupId>org.a2a-protocol</groupId>
-    <artifactId>a2a-sdk</artifactId>
-    <version>0.8.0</version>
-</dependency>
-
-<!-- Spring AI A2A Starter -->
-<dependency>
-    <groupId>org.springframework.ai</groupId>
-    <artifactId>spring-ai-a2a-spring-boot-starter</artifactId>
-    <version>2.1.0</version>
+    <groupId>org.a2aproject.sdk</groupId>
+    <artifactId>a2a-java-sdk-reference-jsonrpc</artifactId>
+    <version>1.1.0.Final</version>
 </dependency>
 ```
 
-### 6.2 构建A2A Agent Server
+`labs/lab-a2a-agent` 使用上述官方 SDK 坐标并执行 Agent Card、SendMessage、
+GetTask 和版本头的确定性测试。下面的 Server 代码用于说明处理流程，是架构伪代码，
+不是官方 SDK 类型清单；可编译的 SDK 用法以 Lab 为准。
+
+### 6.2 构建 A2A Agent Server（架构伪代码）
 
 ```java
 // A2aAgentServer.java
@@ -1279,14 +1292,14 @@ Agent Card可能频繁变化（Agent升级、能力变更）。建议：
 public class IdealAgentArchitecture {
 
     // MCP: 工具和数据层
-    @MCPTool(name = "search_database", description = "...")
+    // 伪代码：由实际 MCP SDK 注册 search_database 工具
     public SearchResult searchDatabase(String query) { /* ... */ }
 
-    @MCPResource(uri = "schema://tables/{name}")
+    // 伪代码：由实际 MCP SDK 注册 schema://tables/{name} 资源
     public TableSchema getTableSchema(String name) { /* ... */ }
 
     // A2A: Agent协作层
-    @A2AEndpoint(path = "/message:send")
+    // 伪代码：由实际 A2A transport 注册 /message:send
     public Task handleExternalTask(A2aMessage message) {
         // 1. 解析外部Agent的请求
         // 2. 使用本地MCP Tool收集数据
@@ -1313,6 +1326,6 @@ public class IdealAgentArchitecture {
 - A2A解决的是Agent之间的互操作问题，与MCP是互补关系
 - Agent Card是Agent发现和能力声明的核心机制
 - Task抽象支持长耗时操作的跟踪和管理
-- A2A SDK提供了完整的Java API，配合Virtual Threads实现高效并发
+- 官方 A2A Java SDK 提供协议类型和 transport；具体并发策略由应用和运行时实现
 - 安全方面：OAuth 2.0认证、权限委托、mTLS是生产环境的标配
 - MCP + A2A组合构成了完整的企业级AI Agent架构：MCP管工具和数据，A2A管Agent协作

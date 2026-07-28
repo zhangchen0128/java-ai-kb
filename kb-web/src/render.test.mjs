@@ -63,14 +63,47 @@ describe('enhanceCodeBlocks', () => {
     assert.match(out, /code-block/);
     assert.match(out, /copy-btn/);
   });
+
+  it('turns a code-id annotation into a visible evidence marker', () => {
+    const html = '<!-- code-id: mapped-demo -->\n<pre><code class="hljs language-java">class Demo {}</code></pre>';
+    const out = enhanceCodeBlocks(html);
+    assert.match(out, /id="code-mapped-demo"/);
+    assert.match(out, /data-code-id="mapped-demo"/);
+    assert.match(out, /已映射 · mapped-demo/);
+    assert.doesNotMatch(out, /<!-- code-id:/);
+  });
 });
 
 describe('buildEntryHTML', () => {
   const meta = {
     status: 'verified',
     level: 'advanced',
+    content_type: 'practice',
     tags: ['java', 'jvm'],
-    sources: [{ url: 'https://example.com', description: 'Example' }],
+    sources: [{ level: 'L1', url: 'https://example.com', description: 'Example' }],
+    verification: {
+      reviewed_at: '2026-07-27',
+      version_anchor: 'JDK 25 GA',
+      code_status: 'tested',
+      lab: 'lab-java25-concurrency',
+      evidence: {
+        scope: 'article-core',
+        source_files: ['labs/lab-java25-concurrency/src/main/java/Demo.java'],
+        test_files: ['labs/lab-java25-concurrency/src/test/java/DemoTest.java'],
+        blocks: [{
+          id: 'mapped-demo',
+          sources: [{
+            file: 'labs/lab-java25-concurrency/src/main/java/Demo.java',
+            symbols: ['Demo#run'],
+          }],
+          tests: [{
+            file: 'labs/lab-java25-concurrency/src/test/java/DemoTest.java',
+            symbols: ['DemoTest#runsDemo'],
+          }],
+        }],
+      },
+      performance: { status: 'illustrative' },
+    },
   };
   it('generates valid article HTML', () => {
     const html = buildEntryHTML('Test Article', meta, '<p>Content</p>', '02-Java平台', '02');
@@ -78,12 +111,41 @@ describe('buildEntryHTML', () => {
     assert.match(html, /Test Article/);
     assert.match(html, /badge-verified/);
     assert.match(html, /badge-level/);
-    assert.match(html, /badge-tag">#java/);
+    assert.match(html, /badge-content/);
+    assert.match(html, /badge-tag[\s\S]*?>#java/);
+    assert.match(html, /entry-verification/);
+    assert.match(html, /lab-java25-concurrency/);
+    assert.match(html, /核心代码证据/);
+    assert.match(html, /1 个源码 \/ 1 个测试 \/ 1 个精确代码块/);
+    assert.match(html, /class="block-evidence-link"/);
+    assert.match(html, /代码块：mapped-demo/);
+    assert.match(html, /Demo#run/);
+    assert.match(html, /DemoTest#runsDemo/);
+    assert.match(html, /blob\/main\/labs\/lab-java25-concurrency\/src\/main\/java\/Demo.java/);
+    assert.match(html, /代码：<\/strong>tested（文章核心，1 块精确映射）/);
+    assert.match(html, /性能：<\/strong>示意数据（非基准）/);
   });
 
   it('escapes HTML in title', () => {
     const html = buildEntryHTML('<script>alert(1)</script>', meta, '<p>x</p>', '01-Test', '01');
     assert.ok(!html.includes('<script>alert'));
     assert.match(html, /&lt;script&gt;/);
+  });
+
+  it('renders conspicuous draft and stale notices', () => {
+    const draft = buildEntryHTML('Draft', {
+      ...meta,
+      status: 'draft',
+      verification: {
+        reviewed_at: '2026-07-27',
+        version_anchor: 'A2A 1.0',
+        code_status: 'illustrative',
+      },
+    }, '<p>x</p>', '13-AI协议', '13');
+    assert.match(draft, /status-notice-draft/);
+
+    const stale = buildEntryHTML('Stale', { ...meta, stale: true }, '<p>x</p>', '02-Java平台', '02');
+    assert.match(stale, /badge-stale/);
+    assert.match(stale, /status-notice-stale/);
   });
 });

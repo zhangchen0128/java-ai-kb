@@ -1,30 +1,57 @@
 ---
-domain: "13-AI协议"
-title: "MCP协议深入与Java SDK实战"
-status: "draft"
-level: "intermediate"
+domain: 13-AI协议
+title: MCP协议深入与Java SDK实战
+status: verified
+level: intermediate
 sources:
-  - level: "L0"
-    url: "https://modelcontextprotocol.io/specification/2025-11-25/"
-    description: "MCP 规范 2025-11-25"
-  - level: "L1"
-    url: "https://modelcontextprotocol.io/sdk/java/mcp-server"
-    description: "MCP Java SDK官方文档 - Server端"
-  - level: "L1"
-    url: "https://modelcontextprotocol.io/sdk/java/mcp-client"
-    description: "MCP Java SDK官方文档 - Client端"
-  - level: "L2"
-    url: "https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html"
-    description: "Spring AI MCP集成文档"
+  - level: L0
+    url: https://modelcontextprotocol.io/specification/2025-11-25/
+    description: MCP 规范 2025-11-25
+  - level: L1
+    url: https://github.com/modelcontextprotocol/java-sdk
+    description: MCP Java SDK官方文档 - Server端
+  - level: L1
+    url: https://docs.spring.io/spring-ai/reference/api/mcp/mcp-client-boot-starter-docs.html
+    description: MCP Java SDK官方文档 - Client端
+  - level: L2
+    url: https://docs.spring.io/spring-ai/reference/api/mcp/mcp-overview.html
+    description: Spring AI MCP集成文档
 relations:
-  prerequisite: ["09-SpringAI2深度解析", "09-SpringAI2深度解析"]
-  related: ["13-A2A协议与Agent互操作", "12-ToolCalling完整剖析"]
-tags: ["mcp", "model-context-protocol", "java", "spring-ai", "tool-calling", "agent-protocol"]
-created: "2026-07-17"
-updated: "2026-07-27"
+  prerequisite:
+    - 09-SpringAI2深度解析
+  related:
+    - 13-A2A协议与Agent互操作
+    - 12-ToolCalling完整剖析
+tags:
+  - mcp
+  - model-context-protocol
+  - java
+  - spring-ai
+  - tool-calling
+  - agent-protocol
+created: 2026-07-17
+updated: 2026-07-27
+content_type: practice
+verification:
+  reviewed_at: 2026-07-27
+  version_anchor: MCP specification 2025-11-25
+  code_status: tested
+  lab: lab-mcp-server
+  evidence:
+    scope: article-core
+    source_files:
+      - labs/lab-mcp-server/src/main/java/com/javaai/kb/labs/mcp/McpStdioServerMain.java
+    test_files:
+      - labs/lab-mcp-server/src/test/java/com/javaai/kb/labs/mcp/McpStdioIntegrationTest.java
+  performance:
+    status: illustrative
 ---
 
 # MCP协议深入与Java SDK实战
+
+> **性能数据声明：** 除非具体表格同时给出硬件、软件版本、数据规模、参数、
+> 测试脚本、运行次数、P50/P95/P99、日期和原始结果链接，否则本文中的精确
+> 性能数字均为“示意值，不代表基准结果”，不能用于容量规划或产品比较。
 
 ## 一、MCP架构深入
 
@@ -803,360 +830,88 @@ MCP App目前仍处于早期规范制定阶段，官方的Java SDK对MCP App的�
 
 **场景三：研发效能平台**。MCP App聚合了Jira MCP Server（项目管理）、GitHub MCP Server（代码仓库）、Jenkins MCP Server（CI/CD），为开发团队提供一站式研发协作能力。
 
-## 六、完整示例：Database MCP Server
+## 六、完整示例：可测试的 STDIO MCP Server
 
-以下是完整的Database MCP Server实现，包含Tools和Resources：
+下面的核心实现使用 MCP Java SDK 2.0，通过 STDIO 提供
+`lookup_policy` 工具。对应的
+`labs/lab-mcp-server/src/test/java/com/javaai/kb/labs/mcp/McpStdioIntegrationTest.java`
+会启动独立 Java 子进程，实际执行初始化、工具发现和工具调用；默认测试不访问
+公网，也不需要模型密钥。
 
 ```java
-// DatabaseMcpServer.java - 完整可运行的Database MCP Server
-package com.example.mcp.server;
+package com.javaai.kb.labs.mcp;
 
+import io.modelcontextprotocol.json.McpJsonMapper;
+import io.modelcontextprotocol.json.McpJsonMapperSupplier;
 import io.modelcontextprotocol.server.McpServer;
-import io.modelcontextprotocol.server.McpServerFeatures;
-import io.modelcontextprotocol.server.transport.StdioServerTransport;
+import io.modelcontextprotocol.server.transport.StdioServerTransportProvider;
 import io.modelcontextprotocol.spec.McpSchema;
+import java.util.List;
+import java.util.Map;
+import java.util.ServiceLoader;
+import java.util.concurrent.CountDownLatch;
 
-import javax.sql.DataSource;
-import java.sql.ResultSet;
-import java.time.Instant;
-import java.util.*;
+public final class McpStdioServerMain {
 
-/**
- * 完整Database MCP Server实现
- * Tools: query_table, describe_table, list_tables, db_stats
- * Resources: schema://tables/{name}, schema://status
- * 
- * 运行方式: java -jar database-mcp-server.jar
- * MCP Client通过stdio子进程通信连接此Server
- */
-public class DatabaseMcpServer {
-
-    // 模拟数据库连接池
-    private static final DataSource dataSource = HikariDataSourceFactory.create();
-
-    public static void main(String[] args) {
-        var server = buildServer();
-        
-        // 注册优雅关闭
-        Runtime.getRuntime().addShutdownHook(
-            Thread.ofVirtual().unstarted(() -> {
-                System.out.println("Shutting down Database MCP Server...");
-                server.closeGracefully();
-            })
-        );
-
-        // 通过stdio启动
-        var transport = new StdioServerTransport();
-        server.connect(transport).join();
-        
-        System.err.println("Database MCP Server v2.3.0 started (stdio)");
+    private McpStdioServerMain() {
     }
 
-    private static McpServer buildServer() {
-        var server = McpServer.sync(
-            McpServer.ServerInfo.create("database-mcp-server", "2.3.0")
-        )
-        .capabilities(McpSchema.ServerCapabilities.builder()
-            .tools(true)
-            .resources(true, true)
-            .build())
-        .build();
+    public static void main(String[] args) throws InterruptedException {
+        var transport = new StdioServerTransportProvider(jsonMapper());
+        var tool = McpSchema.Tool.builder("lookup_policy", Map.of(
+                "type", "object",
+                "properties", Map.of(
+                    "policyId", Map.of("type", "string")
+                ),
+                "required", List.of("policyId")
+            ))
+            .description("Look up an insurance policy by id")
+            .build();
 
-        // ===== Tools 注册 =====
-
-        // Tool 1: query_table - 执行SELECT查询
-        server.addTool(McpServerFeatures.SyncToolSpecification.builder()
-            .name("query_table")
-            .description("在数据库表中执行只读SELECT查询。仅支持SELECT语句。支持参数化查询防止SQL注入。")
-            .inputSchema(McpSchema.JsonSchema.builder()
-                .type("object")
-                .property("sql", McpSchema.JsonSchema.builder()
-                    .type("string")
-                    .description("SELECT查询语句，可使用?占位符")
-                    .build())
-                .property("params", McpSchema.JsonSchema.builder()
-                    .type("array")
-                    .description("查询参数，按顺序替换SQL中的?占位符")
-                    .items(McpSchema.JsonSchema.builder().type("string").build())
-                    .build())
-                .property("limit", McpSchema.JsonSchema.builder()
-                    .type("integer")
-                    .description("返回最大行数，默认100，最大1000")
-                    .defaultValue(100)
-                    .build())
-                .required(List.of("sql"))
+        var server = McpServer.sync(transport)
+            .serverInfo("java-ai-kb-stdio", "1.0.0")
+            .capabilities(McpSchema.ServerCapabilities.builder()
+                .tools(false)
                 .build())
-            .handler((exchange, request) -> {
-                var sql = (String) request.arguments().get("sql");
-                @SuppressWarnings("unchecked")
-                var params = (List<String>) request.arguments().getOrDefault("params", List.of());
-                var limit = ((Number) request.arguments().getOrDefault("limit", 100)).intValue();
-                
-                // 安全校验
-                ParameterValidator.validateSql(sql);
-                ParameterValidator.validateParamCount(params, 20);
-                limit = Math.min(limit, 1000);
-                
-                // 自动追加LIMIT
-                if (!sql.toUpperCase().contains("LIMIT")) {
-                    sql = sql + " LIMIT " + limit;
+            .validateToolInputs(true)
+            .toolCall(tool, (exchange, request) -> {
+                var value = request.arguments().get("policyId");
+                if (!(value instanceof String policyId) || policyId.isBlank()) {
+                    return McpSchema.CallToolResult.builder(
+                        List.of(McpSchema.TextContent
+                            .builder("policyId is required")
+                            .build())
+                    ).isError(true).build();
                 }
-                
-                // 执行查询
-                var result = executeQuery(sql, params);
-                
-                // 审计
-                AuditLogger.log("query_table", request.arguments(), 
-                    exchange.getClientId(), true, null);
-                
-                return McpSchema.CallToolResult.builder()
-                    .content(List.of(
-                        McpSchema.TextContent.builder()
-                            .text(formatQueryResult(result))
-                            .build()
-                    ))
+
+                var result = "policy:" + policyId;
+                return McpSchema.CallToolResult.builder(
+                    List.of(McpSchema.TextContent.builder(result).build())
+                )
+                    .structuredContent(Map.of("result", result))
+                    .isError(false)
                     .build();
             })
-            .build());
+            .build();
 
-        // Tool 2: describe_table - 查看表结构
-        server.addTool(McpServerFeatures.SyncToolSpecification.builder()
-            .name("describe_table")
-            .description("获取指定数据库表的结构信息，包括列名、数据类型、是否可空、默认值、注释等。")
-            .inputSchema(McpSchema.JsonSchema.builder()
-                .type("object")
-                .property("tableName", McpSchema.JsonSchema.builder()
-                    .type("string")
-                    .description("要查看的表名")
-                    .build())
-                .required(List.of("tableName"))
-                .build())
-            .handler((exchange, request) -> {
-                var tableName = (String) request.arguments().get("tableName");
-                ParameterValidator.validateTableName(tableName);
-                
-                var schema = getTableSchema(tableName);
-                AuditLogger.log("describe_table", request.arguments(),
-                    exchange.getClientId(), true, null);
-                
-                return McpSchema.CallToolResult.builder()
-                    .content(List.of(
-                        McpSchema.TextContent.builder()
-                            .text(JacksonUtils.toJson(schema))
-                            .build()
-                    ))
-                    .build();
-            })
-            .build());
-
-        // Tool 3: list_tables - 列出所有表
-        server.addTool(McpServerFeatures.SyncToolSpecification.builder()
-            .name("list_tables")
-            .description("列出数据库中所有的表名及简要描述")
-            .inputSchema(McpSchema.JsonSchema.builder()
-                .type("object")
-                .property("schema", McpSchema.JsonSchema.builder()
-                    .type("string")
-                    .description("数据库schema名，默认为public")
-                    .defaultValue("public")
-                    .build())
-                .build())
-            .handler((exchange, request) -> {
-                var schemaName = (String) request.arguments()
-                    .getOrDefault("schema", "public");
-                var tables = listAllTables(schemaName);
-                
-                return McpSchema.CallToolResult.builder()
-                    .content(List.of(
-                        McpSchema.TextContent.builder()
-                            .text(JacksonUtils.toJson(tables))
-                            .build()
-                    ))
-                    .build();
-            })
-            .build());
-
-        // Tool 4: db_stats - 数据库统计信息
-        server.addTool(McpServerFeatures.SyncToolSpecification.builder()
-            .name("db_stats")
-            .description("获取数据库整体统计信息：总表数、总行数估算、连接数等")
-            .inputSchema(McpSchema.JsonSchema.builder()
-                .type("object")
-                .properties(Map.of())
-                .build())
-            .handler((exchange, request) -> {
-                var stats = Map.of(
-                    "totalTables", 42,
-                    "estimatedTotalRows", 1_250_000L,
-                    "activeConnections", 8,
-                    "uptime", "72h 15m",
-                    "version", "PostgreSQL 17.2",
-                    "timestamp", Instant.now().toString()
-                );
-                
-                return McpSchema.CallToolResult.builder()
-                    .content(List.of(
-                        McpSchema.TextContent.builder()
-                            .text(JacksonUtils.toJson(stats))
-                            .build()
-                    ))
-                    .build();
-            })
-            .build());
-
-        // ===== Resources 注册 =====
-
-        // Resource 1: 服务器状态
-        server.addResource(McpServerFeatures.SyncResourceSpecification.builder()
-            .uri("schema://status")
-            .name("数据库连接状态")
-            .description("返回MCP Server当前的数据库连接状态和健康信息")
-            .mimeType("application/json")
-            .handler(exchange -> {
-                var status = Map.of(
-                    "connected", true,
-                    "serverVersion", "2.3.0",
-                    "databaseVersion", "PostgreSQL 17.2",
-                    "poolSize", 10,
-                    "activeConnections", 3,
-                    "uptime", "72h 15m"
-                );
-                return McpSchema.ReadResourceResult.builder()
-                    .contents(List.of(
-                        McpSchema.TextResourceContents.builder()
-                            .uri("schema://status")
-                            .mimeType("application/json")
-                            .text(JacksonUtils.toJson(status))
-                            .build()
-                    ))
-                    .build();
-            })
-            .build());
-
-        // Resource Template: 动态表结构
-        server.addResourceTemplate(
-            McpServerFeatures.SyncResourceTemplateSpecification.builder()
-                .uriTemplate("schema://tables/{tableName}")
-                .name("表结构详情")
-                .description("获取指定表(tableName)的完整结构定义，包括所有列信息、索引、约束")
-                .mimeType("application/json")
-                .handler((exchange, request) -> {
-                    var tableName = request.pathVariables().get("tableName");
-                    ParameterValidator.validateTableName(tableName);
-                    
-                    var tableInfo = getTableFullInfo(tableName);
-                    
-                    return McpSchema.ReadResourceResult.builder()
-                        .contents(List.of(
-                            McpSchema.TextResourceContents.builder()
-                                .uri("schema://tables/" + tableName)
-                                .mimeType("application/json")
-                                .text(JacksonUtils.toJson(tableInfo))
-                                .build()
-                        ))
-                        .build();
-                })
-                .build());
-
-        return server;
+        Runtime.getRuntime().addShutdownHook(new Thread(server::close));
+        new CountDownLatch(1).await();
     }
 
-    // ===== 模拟数据库操作 =====
-
-    record ColumnInfo(String name, String type, boolean nullable, 
-                      String defaultValue, String comment) {}
-
-    record TableInfo(String name, List<ColumnInfo> columns, 
-                     List<String> indexes, List<String> constraints) {}
-
-    static QueryResult executeQuery(String sql, List<String> params) {
-        // 模拟查询：实际应使用JDBC PreparedStatement
-        var columns = List.of("id", "name", "email", "created_at");
-        var rows = new ArrayList<List<Object>>();
-        for (int i = 1; i <= 5; i++) {
-            rows.add(List.of(i, "User " + i, "user" + i + "@example.com",
-                Instant.now().minus(java.time.Duration.ofDays(i)).toString()));
-        }
-        return new QueryResult(columns, rows, rows.size(), sql);
-    }
-
-    record QueryResult(List<String> columns, List<List<Object>> rows, 
-                       int rowCount, String executedSql) {}
-
-    static String formatQueryResult(QueryResult result) {
-        var sb = new StringBuilder();
-        sb.append("SQL: ").append(result.executedSql()).append("\n");
-        sb.append("Rows: ").append(result.rowCount()).append("\n");
-        sb.append("Columns: ").append(String.join(", ", result.columns())).append("\n");
-        sb.append("---\n");
-        for (var row : result.rows()) {
-            sb.append(String.join(" | ", 
-                row.stream().map(Object::toString).toList())).append("\n");
-        }
-        return sb.toString();
-    }
-
-    static List<Map<String, String>> listAllTables(String schema) {
-        return List.of(
-            Map.of("name", "users", "description", "用户信息表", "rows", "10,230"),
-            Map.of("name", "orders", "description", "订单记录表", "rows", "52,481"),
-            Map.of("name", "products", "description", "产品目录表", "rows", "1,024")
-        );
-    }
-
-    static List<ColumnInfo> getTableSchema(String tableName) {
-        return switch (tableName) {
-            case "users" -> List.of(
-                new ColumnInfo("id", "BIGINT", false, "auto_increment", "主键"),
-                new ColumnInfo("name", "VARCHAR(100)", false, null, "用户名"),
-                new ColumnInfo("email", "VARCHAR(255)", false, null, "邮箱地址"),
-                new ColumnInfo("status", "VARCHAR(20)", true, "'active'", "状态"),
-                new ColumnInfo("created_at", "TIMESTAMP", false, "CURRENT_TIMESTAMP", "创建时间")
-            );
-            case "orders" -> List.of(
-                new ColumnInfo("id", "BIGINT", false, "auto_increment", "主键"),
-                new ColumnInfo("user_id", "BIGINT", false, null, "用户ID外键"),
-                new ColumnInfo("total", "DECIMAL(10,2)", false, null, "订单总额"),
-                new ColumnInfo("status", "VARCHAR(20)", false, "'pending'", "订单状态")
-            );
-            default -> throw new IllegalArgumentException("Unknown table: " + tableName);
-        };
-    }
-
-    static Map<String, Object> getTableFullInfo(String tableName) {
-        return Map.of(
-            "name", tableName,
-            "columns", getTableSchema(tableName),
-            "indexes", List.of("idx_" + tableName + "_status", "idx_" + tableName + "_created_at"),
-            "constraints", List.of("pk_" + tableName, "fk_" + tableName + "_user_id")
-        );
-    }
-}
-
-// ===== 辅助工厂类 =====
-class HikariDataSourceFactory {
-    static DataSource create() {
-        // 返回模拟DataSource，实际应配置HikariCP
-        return null; // 示例中不实现真实连接
-    }
-}
-
-// ===== JSON工具类 =====
-class JacksonUtils {
-    private static final com.fasterxml.jackson.databind.ObjectMapper mapper =
-        new com.fasterxml.jackson.databind.ObjectMapper()
-            .registerModule(new com.fasterxml.jackson.datatype.jsr310.JavaTimeModule())
-            .disable(com.fasterxml.jackson.databind.SerializationFeature.WRITE_DATES_AS_TIMESTAMPS);
-
-    static String toJson(Object obj) {
-        try {
-            return mapper.writerWithDefaultPrettyPrinter().writeValueAsString(obj);
-        } catch (Exception e) {
-            return "{\"error\": \"" + e.getMessage() + "\"}";
-        }
+    static McpJsonMapper jsonMapper() {
+        return ServiceLoader.load(McpJsonMapperSupplier.class)
+            .findFirst()
+            .orElseThrow(() ->
+                new IllegalStateException("No MCP JSON mapper on classpath"))
+            .get();
     }
 }
 ```
+
+STDIO 协议帧必须独占标准输出，因此该 Lab 还提供
+`src/main/resources/logback.xml`，将服务日志发送到标准错误。测试端使用
+`StdioClientTransport` 拉起上述主类，并断言协商版本为
+`2025-11-25`、工具名为 `lookup_policy`、结构化结果为请求的保单编号。
 
 ## 七、常见问题与最佳实践
 

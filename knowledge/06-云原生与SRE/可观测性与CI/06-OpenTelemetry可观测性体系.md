@@ -1,33 +1,63 @@
 ---
-domain: "06-云原生与SRE"
-title: "OpenTelemetry 可观测性体系"
-status: "verified"
+domain: 06-云原生与SRE
+title: OpenTelemetry 可观测性体系
+status: verified
 verification:
-  reviewed_at: "2026-07-27"
-  version_anchor: "JDK 25 / Spring Boot 4.x / Spring AI 2.x"
-level: "advanced"
+  reviewed_at: 2026-07-27
+  version_anchor: OpenTelemetry Java / GenAI semantic conventions
+  code_status: tested
+  lab: lab-ai-observability
+  evidence:
+    scope: article-core
+    source_files:
+      - labs/lab-ai-observability/src/main/java/com/javaai/kb/labs/observability/AiCallMetrics.java
+      - labs/lab-ai-observability/src/main/java/com/javaai/kb/labs/observability/AiCallTelemetry.java
+    test_files:
+      - labs/lab-ai-observability/src/test/java/com/javaai/kb/labs/observability/AiCallMetricsTest.java
+  performance:
+    status: illustrative
+level: advanced
 sources:
-  - level: "L1"
-    url: "https://opentelemetry.io/docs/languages/java/"
-    description: "OpenTelemetry Java 官方文档"
-  - level: "L1"
-    url: "https://opentelemetry.io/docs/specs/semconv/gen-ai/"
-    description: "OpenTelemetry GenAI 语义约定"
-  - level: "L1"
-    url: "https://grafana.com/docs/grafana/latest/"
-    description: "Grafana 官方文档"
-  - level: "L1"
-    url: "https://prometheus.io/docs/introduction/overview/"
-    description: "Prometheus 官方文档"
+  - level: L1
+    url: https://opentelemetry.io/docs/languages/java/
+    description: OpenTelemetry Java 官方文档
+  - level: L1
+    url: https://opentelemetry.io/docs/specs/semconv/gen-ai/
+    description: OpenTelemetry GenAI 语义约定
+  - level: L1
+    url: https://grafana.com/docs/grafana/latest/
+    description: Grafana 官方文档
+  - level: L1
+    url: https://prometheus.io/docs/introduction/overview/
+    description: Prometheus 官方文档
 relations:
-  prerequisite: ["05-分布式一致性与事务方案", "06-Docker与Kubernetes云原生部署"]
-  related: ["06-CICD与基础设施即代码", "14-模型网关与Prompt管理"]
-tags: ["opentelemetry", "observability", "metrics", "tracing", "logging", "genai-semconv", "prometheus", "grafana", "tempo", "loki"]
-created: "2026-07-17"
-updated: "2026-07-17"
+  prerequisite:
+    - 05-分布式一致性与事务方案
+    - 06-Docker与Kubernetes云原生部署
+  related:
+    - 06-CICD与基础设施即代码
+    - 14-模型网关与Prompt管理
+tags:
+  - opentelemetry
+  - observability
+  - metrics
+  - tracing
+  - logging
+  - genai-semconv
+  - prometheus
+  - grafana
+  - tempo
+  - loki
+created: 2026-07-17
+updated: 2026-07-27
+content_type: production
 ---
 
 # OpenTelemetry 可观测性体系
+
+> **性能数据声明：** 除非具体表格同时给出硬件、软件版本、数据规模、参数、
+> 测试脚本、运行次数、P50/P95/P99、日期和原始结果链接，否则本文中的精确
+> 性能数字均为“示意值，不代表基准结果”，不能用于容量规划或产品比较。
 
 ## 概述
 

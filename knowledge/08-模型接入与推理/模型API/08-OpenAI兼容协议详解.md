@@ -1,27 +1,39 @@
 ---
-domain: "08-模型接入与推理"
-title: "OpenAI Compatible Protocol"
-status: "draft"
-level: "intermediate"
+domain: 08-模型接入与推理
+title: OpenAI Compatible Protocol
+status: draft
+level: intermediate
 sources:
-  - level: "L1"
-    url: "https://platform.openai.com/docs/api-reference/chat"
-    description: "OpenAI Chat Completions API Reference"
-  - level: "L1"
-    url: "https://docs.anthropic.com/en/api/messages"
-    description: "Anthropic Messages API Reference"
-  - level: "L1"
-    url: "https://docs.aws.amazon.com/bedrock/latest/APIReference/API_Operations_Amazon_Bedrock_Runtime.html"
-    description: "AWS Bedrock Converse API Reference"
-  - level: "L1"
-    url: "https://ai.google.dev/gemini-api/docs"
-    description: "Google Gemini API Reference"
+  - level: L1
+    url: https://platform.openai.com/docs/api-reference/chat
+    description: OpenAI Chat Completions API Reference
+  - level: L1
+    url: https://docs.anthropic.com/en/api/messages
+    description: Anthropic Messages API Reference
+  - level: L1
+    url: https://docs.aws.amazon.com/bedrock/latest/APIReference/API_Operations_Amazon_Bedrock_Runtime.html
+    description: AWS Bedrock Converse API Reference
+  - level: L1
+    url: https://ai.google.dev/gemini-api/docs
+    description: Google Gemini API Reference
 relations:
-  prerequisite: ["07-推理策略与评估方法"]
-  related: ["08-云模型API与SDK使用", "08-本地推理与Ollama", "08-模型能力矩阵与路由策略"]
-tags: ["openai", "api", "chat-completions", "tool-calling", "streaming", "sse", "structured-output"]
-created: "2026-07-17"
-updated: "2026-07-17"
+  prerequisite:
+    - 07-推理策略与评估方法
+  related:
+    - 08-云模型API与SDK使用
+    - 08-本地推理与Ollama
+    - 08-模型能力矩阵与路由策略
+tags:
+  - openai
+  - api
+  - chat-completions
+  - tool-calling
+  - streaming
+  - sse
+  - structured-output
+created: 2026-07-17
+updated: 2026-07-17
+content_type: concept
 ---
 
 # OpenAI Compatible Protocol

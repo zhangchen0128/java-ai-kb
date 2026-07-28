@@ -1,27 +1,40 @@
 ---
-domain: "03-Java应用平台"
-title: "WebSocket与gRPC通信"
-status: "draft"
-level: "intermediate"
+domain: 03-Java应用平台
+title: WebSocket与gRPC通信
+status: draft
+level: intermediate
 sources:
-  - level: "L1"
-    url: "https://docs.spring.io/spring-framework/reference/web/websocket.html"
-    description: "Spring WebSocket Reference — WebSocketHandler, STOMP, SockJS"
-  - level: "L1"
-    url: "https://grpc.io/docs/languages/java/"
-    description: "gRPC Java Official Documentation — proto definition, stubs, streaming modes"
-  - level: "L0"
-    url: "https://datatracker.ietf.org/doc/html/rfc6455"
-    description: "WebSocket Protocol (RFC 6455)"
-  - level: "L2"
-    url: "https://github.com/grpc/grpc-java"
-    description: "gRPC Java source code and examples"
+  - level: L1
+    url: https://docs.spring.io/spring-framework/reference/web/websocket.html
+    description: Spring WebSocket Reference — WebSocketHandler, STOMP, SockJS
+  - level: L1
+    url: https://grpc.io/docs/languages/java/
+    description: gRPC Java Official Documentation — proto definition, stubs, streaming modes
+  - level: L0
+    url: https://datatracker.ietf.org/doc/html/rfc6455
+    description: WebSocket Protocol (RFC 6455)
+  - level: L2
+    url: https://github.com/grpc/grpc-java
+    description: gRPC Java source code and examples
 relations:
-  prerequisite: ["03-Spring核心IoC-AOP-事务", "01-计算机网络"]
-  related: ["03-SpringMVC与SSE流式输出", "13-MCP协议与JavaSDK"]
-tags: ["websocket", "grpc", "protobuf", "stomp", "sockjs", "streaming", "bidirectional", "ai-agent"]
-created: "2026-07-20"
-updated: "2026-07-20"
+  prerequisite:
+    - 03-Spring核心IoC-AOP-事务
+    - 01-计算机网络
+  related:
+    - 03-SpringMVC与SSE流式输出
+    - 13-MCP协议与JavaSDK
+tags:
+  - websocket
+  - grpc
+  - protobuf
+  - stomp
+  - sockjs
+  - streaming
+  - bidirectional
+  - ai-agent
+created: 2026-07-20
+updated: 2026-07-20
+content_type: practice
 ---
 
 # WebSocket 与 gRPC 通信

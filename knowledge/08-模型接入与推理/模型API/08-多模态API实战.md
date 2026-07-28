@@ -1,30 +1,44 @@
 ---
-domain: "08-模型接入与推理"
-title: "Multimodal API in Practice"
-status: "draft"
-level: "intermediate"
+domain: 08-模型接入与推理
+title: Multimodal API in Practice
+status: draft
+level: intermediate
 sources:
-  - level: "L1"
-    url: "https://platform.openai.com/docs/guides/vision"
-    description: "OpenAI Vision API 文档"
-  - level: "L1"
-    url: "https://docs.anthropic.com/en/docs/vision"
-    description: "Anthropic Claude Vision API 文档"
-  - level: "L1"
-    url: "https://platform.openai.com/docs/guides/images"
-    description: "OpenAI DALL-E Image Generation API"
-  - level: "L1"
-    url: "https://platform.openai.com/docs/guides/speech-to-text"
-    description: "OpenAI Whisper Speech-to-Text API"
-  - level: "L1"
-    url: "https://platform.openai.com/docs/guides/text-to-speech"
-    description: "OpenAI TTS API"
+  - level: L1
+    url: https://platform.openai.com/docs/guides/vision
+    description: OpenAI Vision API 文档
+  - level: L1
+    url: https://docs.anthropic.com/en/docs/vision
+    description: Anthropic Claude Vision API 文档
+  - level: L1
+    url: https://platform.openai.com/docs/guides/images
+    description: OpenAI DALL-E Image Generation API
+  - level: L1
+    url: https://platform.openai.com/docs/guides/speech-to-text
+    description: OpenAI Whisper Speech-to-Text API
+  - level: L1
+    url: https://platform.openai.com/docs/guides/text-to-speech
+    description: OpenAI TTS API
 relations:
-  prerequisite: ["07-Transformer架构深度解析", "08-OpenAI兼容协议详解"]
-  related: ["08-云模型API与SDK使用", "08-模型能力矩阵与路由策略", "12-ToolCalling完整剖析"]
-tags: ["multimodal", "vision", "dall-e", "whisper", "tts", "stt", "image-generation", "video"]
-created: "2026-07-20"
-updated: "2026-07-20"
+  prerequisite:
+    - 07-Transformer架构深度解析
+    - 08-OpenAI兼容协议详解
+  related:
+    - 08-云模型API与SDK使用
+    - 08-模型能力矩阵与路由策略
+    - 12-ToolCalling完整剖析
+tags:
+  - multimodal
+  - vision
+  - dall-e
+  - whisper
+  - tts
+  - stt
+  - image-generation
+  - video
+created: 2026-07-20
+updated: 2026-07-20
+content_type: practice
 ---
 
 # 多模态API实战

@@ -1,24 +1,36 @@
 ---
-domain: "08-模型接入与推理"
-title: "JVM内嵌推理：DJL与ONNX Runtime"
-status: "draft"
-level: "intermediate"
+domain: 08-模型接入与推理
+title: JVM内嵌推理：DJL与ONNX Runtime
+status: draft
+level: intermediate
 sources:
-  - level: "L1"
-    url: "https://djl.ai/"
-    description: "DJL (Deep Java Library) 官方文档"
-  - level: "L1"
-    url: "https://onnxruntime.ai/docs/get-started/with-java.html"
-    description: "ONNX Runtime Java API 官方文档"
-  - level: "L2"
-    url: "https://github.com/deepjavalibrary/djl"
-    description: "DJL GitHub 仓库源码"
+  - level: L1
+    url: https://djl.ai/
+    description: DJL (Deep Java Library) 官方文档
+  - level: L1
+    url: https://onnxruntime.ai/docs/get-started/with-java.html
+    description: ONNX Runtime Java API 官方文档
+  - level: L2
+    url: https://github.com/deepjavalibrary/djl
+    description: DJL GitHub 仓库源码
 relations:
-  prerequisite: ["07-Transformer架构深度解析", "07-Embedding与Tokenization"]
-  related: ["08-模型能力矩阵与路由策略", "08-本地推理与Ollama", "08-云模型API与SDK使用"]
-tags: ["djl", "onnx-runtime", "jvm-inference", "embedding", "sentiment-analysis", "token-count"]
-created: "2026-07-20"
-updated: "2026-07-20"
+  prerequisite:
+    - 07-Transformer架构深度解析
+    - 07-Embedding与Tokenization
+  related:
+    - 08-模型能力矩阵与路由策略
+    - 08-本地推理与Ollama
+    - 08-云模型API与SDK使用
+tags:
+  - djl
+  - onnx-runtime
+  - jvm-inference
+  - embedding
+  - sentiment-analysis
+  - token-count
+created: 2026-07-20
+updated: 2026-07-20
+content_type: practice
 ---
 
 # JVM内嵌推理：DJL与ONNX Runtime

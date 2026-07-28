@@ -1,27 +1,39 @@
 ---
-domain: "08-模型接入与推理"
-title: "Local Inference and Ollama"
-status: "draft"
-level: "intermediate"
+domain: 08-模型接入与推理
+title: Local Inference and Ollama
+status: draft
+level: intermediate
 sources:
-  - level: "L1"
-    url: "https://github.com/ollama/ollama"
-    description: "Ollama 官方仓库和文档"
-  - level: "L1"
-    url: "https://docs.vllm.ai/"
-    description: "vLLM 官方文档"
-  - level: "L1"
-    url: "https://github.com/NVIDIA/TensorRT-LLM"
-    description: "TensorRT-LLM 官方仓库"
-  - level: "L1"
-    url: "https://huggingface.co/docs/text-generation-inference/"
-    description: "HuggingFace TGI 官方文档"
+  - level: L1
+    url: https://github.com/ollama/ollama
+    description: Ollama 官方仓库和文档
+  - level: L1
+    url: https://docs.vllm.ai/
+    description: vLLM 官方文档
+  - level: L1
+    url: https://github.com/NVIDIA/TensorRT-LLM
+    description: TensorRT-LLM 官方仓库
+  - level: L1
+    url: https://huggingface.co/docs/text-generation-inference/
+    description: HuggingFace TGI 官方文档
 relations:
-  prerequisite: ["08-OpenAI兼容协议详解"]
-  related: ["08-云模型API与SDK使用", "08-模型能力矩阵与路由策略", "09-SpringAI2深度解析"]
-tags: ["ollama", "vllm", "tensorrt-llm", "tgi", "local-inference", "quantization", "gguf"]
-created: "2026-07-17"
-updated: "2026-07-17"
+  prerequisite:
+    - 08-OpenAI兼容协议详解
+  related:
+    - 08-云模型API与SDK使用
+    - 08-模型能力矩阵与路由策略
+    - 09-SpringAI2深度解析
+tags:
+  - ollama
+  - vllm
+  - tensorrt-llm
+  - tgi
+  - local-inference
+  - quantization
+  - gguf
+created: 2026-07-17
+updated: 2026-07-17
+content_type: production
 ---
 
 # Local Inference and Ollama
@@ -283,7 +295,7 @@ Q5_K_M: K-Quants 5-bit
 ```xml
 <dependency>
     <groupId>org.springframework.ai</groupId>
-    <artifactId>spring-ai-ollama-spring-boot-starter</artifactId>
+    <artifactId>spring-ai-starter-model-ollama</artifactId>
 </dependency>
 ```
 

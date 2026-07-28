@@ -1,27 +1,40 @@
 ---
-domain: "03-Java应用平台"
-title: "Spring核心IoC-AOP-事务"
-status: "draft"
-level: "intermediate"
+domain: 03-Java应用平台
+title: Spring核心IoC-AOP-事务
+status: draft
+level: intermediate
 sources:
-  - level: "L1"
-    url: "https://docs.spring.io/spring-framework/reference/core.html"
-    description: "Spring Framework Reference — IoC Container, AOP, Transaction Management, Events, Resources"
-  - level: "L1"
-    url: "https://docs.spring.io/spring-framework/reference/data-access/transaction.html"
-    description: "Spring Transaction Management Reference"
-  - level: "L2"
-    url: "https://github.com/spring-projects/spring-framework"
-    description: "Spring Framework source — DefaultListableBeanFactory, TransactionInterceptor, AbstractAutoProxyCreator"
-  - level: "L3"
-    url: "https://www.manning.com/books/spring-in-action-sixth-edition"
-    description: "Spring in Action, Sixth Edition (Craig Walls, 2022)"
+  - level: L1
+    url: https://docs.spring.io/spring-framework/reference/core.html
+    description: Spring Framework Reference — IoC Container, AOP, Transaction Management, Events, Resources
+  - level: L1
+    url: https://docs.spring.io/spring-framework/reference/data-access/transaction.html
+    description: Spring Transaction Management Reference
+  - level: L2
+    url: https://github.com/spring-projects/spring-framework
+    description: Spring Framework source — DefaultListableBeanFactory, TransactionInterceptor, AbstractAutoProxyCreator
+  - level: L3
+    url: https://www.manning.com/books/spring-in-action-sixth-edition
+    description: Spring in Action, Sixth Edition (Craig Walls, 2022)
 relations:
-  prerequisite: ["02-反射与模块化系统", "02-集合框架与泛型深度解析"]
-  related: ["03-SpringBoot4深度解析", "03-SpringMVC与SSE流式输出"]
-tags: ["spring-ioc", "spring-aop", "spring-transaction", "bean-lifecycle", "circular-dependency", "transaction-propagation", "pointcut", "application-event"]
-created: "2026-07-20"
-updated: "2026-07-20"
+  prerequisite:
+    - 02-反射与模块化系统
+    - 02-集合框架与泛型深度解析
+  related:
+    - 03-SpringBoot4深度解析
+    - 03-SpringMVC与SSE流式输出
+tags:
+  - spring-ioc
+  - spring-aop
+  - spring-transaction
+  - bean-lifecycle
+  - circular-dependency
+  - transaction-propagation
+  - pointcut
+  - application-event
+created: 2026-07-20
+updated: 2026-07-20
+content_type: concept
 ---
 
 # Spring 核心 IoC / AOP / 事务

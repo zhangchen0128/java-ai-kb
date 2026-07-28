@@ -1,27 +1,41 @@
 ---
-domain: "03-Java应用平台"
-title: "Maven多模块工程实践"
-status: "draft"
-level: "intermediate"
+domain: 03-Java应用平台
+title: Maven多模块工程实践
+status: draft
+level: intermediate
 sources:
-  - level: "L1"
-    url: "https://maven.apache.org/guides/introduction/introduction-to-the-pom.html"
-    description: "Maven POM Reference Documentation"
-  - level: "L1"
-    url: "https://maven.apache.org/plugins/maven-compiler-plugin/"
-    description: "Maven Compiler Plugin — Java 25 configuration"
-  - level: "L1"
-    url: "https://docs.spring.io/spring-boot/maven-plugin/"
-    description: "Spring Boot Maven Plugin Reference — AOT processing"
-  - level: "L4"
-    url: "https://maven.apache.org/guides/mini/guide-multiple-modules.html"
-    description: "Maven Multi-Module Guide"
+  - level: L1
+    url: https://maven.apache.org/guides/introduction/introduction-to-the-pom.html
+    description: Maven POM Reference Documentation
+  - level: L1
+    url: https://maven.apache.org/plugins/maven-compiler-plugin/
+    description: Maven Compiler Plugin — Java 25 configuration
+  - level: L1
+    url: https://docs.spring.io/spring-boot/maven-plugin/
+    description: Spring Boot Maven Plugin Reference — AOT processing
+  - level: L4
+    url: https://maven.apache.org/guides/mini/guide-multiple-modules.html
+    description: Maven Multi-Module Guide
 relations:
-  prerequisite: ["03-SpringBoot4深度解析"]
-  related: ["03-Jackson-MapStruct-Validator序列化与校验", "03-任务调度Quartz与XXL-JOB"]
-tags: ["maven", "multi-module", "dependency-management", "bom", "wraper", "spotbugs", "checkstyle", "pmd", "spring-boot", "pom"]
-created: "2026-07-20"
-updated: "2026-07-20"
+  prerequisite:
+    - 03-SpringBoot4深度解析
+  related:
+    - 03-Jackson-MapStruct-Validator序列化与校验
+    - 03-任务调度Quartz与XXL-JOB
+tags:
+  - maven
+  - multi-module
+  - dependency-management
+  - bom
+  - wraper
+  - spotbugs
+  - checkstyle
+  - pmd
+  - spring-boot
+  - pom
+created: 2026-07-20
+updated: 2026-07-20
+content_type: practice
 ---
 
 # Maven 多模块工程实践

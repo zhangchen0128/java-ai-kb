@@ -1,24 +1,55 @@
 ---
-domain: "09-Java AI框架"
-title: "Spring AI 2.x In Depth"
-status: "draft"
-level: "intermediate"
+domain: 09-Java AI框架
+title: Spring AI 2.x In Depth
+status: verified
+level: intermediate
 sources:
-  - level: "L1"
-    url: "https://docs.spring.io/spring-ai/reference/"
-    description: "Spring AI 2.x 官方参考文档"
-  - level: "L2"
-    url: "https://github.com/spring-projects/spring-ai"
-    description: "Spring AI GitHub 仓库"
+  - level: L1
+    url: https://docs.spring.io/spring-ai/reference/
+    description: Spring AI 2.x 官方参考文档
+  - level: L2
+    url: https://github.com/spring-projects/spring-ai
+    description: Spring AI GitHub 仓库
 relations:
-  prerequisite: ["03-SpringBoot4深度解析", "08-OpenAI兼容协议详解"]
-  related: ["09-架构抽象层设计", "09-LangChain4j对比与选型", "08-云模型API与SDK使用"]
-tags: ["spring-ai", "chat-client", "advisors", "tool-calling", "rag", "chat-memory", "mcp", "structured-output"]
-created: "2026-07-17"
-updated: "2026-07-17"
+  prerequisite:
+    - 03-SpringBoot4深度解析
+    - 08-OpenAI兼容协议详解
+  related:
+    - 09-架构抽象层设计
+    - 09-LangChain4j对比与选型
+    - 08-云模型API与SDK使用
+tags:
+  - spring-ai
+  - chat-client
+  - advisors
+  - tool-calling
+  - rag
+  - chat-memory
+  - mcp
+  - structured-output
+created: 2026-07-17
+updated: 2026-07-27
+content_type: practice
+verification:
+  reviewed_at: 2026-07-27
+  version_anchor: Spring AI 2.0.0 / Spring Boot 4.0.7
+  code_status: tested
+  lab: lab-spring-ai-chat
+  evidence:
+    scope: article-core
+    source_files:
+      - labs/lab-spring-ai-chat/src/main/java/com/javaai/kb/labs/chat/ChatDemo.java
+    test_files:
+      - labs/lab-spring-ai-chat/src/test/java/com/javaai/kb/labs/chat/ChatDemoTest.java
+  performance:
+    status: illustrative
 ---
 
 # Spring AI 2.x In Depth
+
+> **性能数据声明：** 除非具体表格同时给出硬件、软件版本、数据规模、参数、
+> 测试脚本、运行次数、P50/P95/P99、日期和原始结果链接，否则本文中的精确
+> 性能数字均为“示意值，不代表基准结果”，不能用于容量规划或产品比较。
 
 ## 概述
 
@@ -45,9 +76,9 @@ Spring AI 2.x 核心架构：
 │  Pgvector │ Redis │ Elasticsearch │ Milvus │ Qdrant         │
 ├──────────────────────────────────────────────────────────────┤
 │                   Spring Boot Auto-Configuration               │
-│  spring-ai-openai-spring-boot-starter                          │
-│  spring-ai-ollama-spring-boot-starter                          │
-│  spring-ai-pgvector-spring-boot-starter                        │
+│  spring-ai-starter-model-openai                                │
+│  spring-ai-starter-model-ollama                                │
+│  spring-ai-starter-vector-store-pgvector                       │
 │  ...                                                           │
 └──────────────────────────────────────────────────────────────┘
 ```
@@ -1014,11 +1045,11 @@ public class AiEvaluationService {
             .userQuestion("JDK 25有哪些新特性？")
             .aiResponse("JDK 25引入了Scoped Values等特性...")
             .referenceFacts("""
-                JDK 25主要特性：
-                - Virtual Threads (JEP 444)
-                - Scoped Values (JEP 481)
-                - Structured Concurrency (JEP 480)
-                ...
+                JDK 25 并发与语言特性：
+                - Scoped Values (JEP 506，正式特性)
+                - Structured Concurrency (JEP 505，第五次预览)
+                - Flexible Constructor Bodies (JEP 513，正式特性)
+                Virtual Threads 由 JEP 444 在 JDK 21 正式交付，并非 JDK 25 新增。
                 """)
             .build();
 
@@ -1129,21 +1160,17 @@ public class IntelligentCustomerService {
 
 ```java
 /**
- * Spring AI 2.x 自动集成 Micrometer + OpenTelemetry
- * 只需添加依赖，自动埋点：
+ * Spring AI 2.x 使用 Micrometer Observation。应用添加 Actuator 和所选
+ * registry/OTel bridge，且明确选择是否记录 Prompt/Completion：
  *
  * <dependency>
- *   <groupId>org.springframework.ai</groupId>
- *   <artifactId>spring-ai-micrometer-spring-boot-starter</artifactId>
+ *   <groupId>org.springframework.boot</groupId>
+ *   <artifactId>spring-boot-starter-actuator</artifactId>
  * </dependency>
  *
- * 自动记录的指标：
- * - spring.ai.chat.client.requests (Counter)
- * - spring.ai.chat.client.responses (Counter)
- * - spring.ai.chat.client.duration (Timer)
- * - spring.ai.chat.client.token.usage (DistributionSummary)
- * - spring.ai.vector.store.requests (Counter)
- * - spring.ai.vector.store.duration (Timer)
+ * 指标与 Span 名称以 Spring AI 2.0 官方 Observability 文档和
+ * OpenTelemetry GenAI semantic conventions 为准；不要把 Prompt
+ * 或 Completion 放入低基数指标标签。
  */
 
 @Configuration
@@ -1185,7 +1212,7 @@ A: Advisor 是 Spring AI 自己的拦截器概念，专为 LLM 调用设计。�
 
 **Q: 如何在 Spring AI 中切换到不同的模型提供商？**
 
-A: 仅需改配置。例如从 OpenAI 切到 Ollama：从 `spring-ai-openai-spring-boot-starter` 改为 `spring-ai-ollama-spring-boot-starter`，修改 `application.yml` 中的 provider 配置，业务代码零改动。
+A: 使用统一抽象可以保持主要业务代码不变，但仍需替换 Provider Starter、配置和能力适配。例如从 OpenAI 切到 Ollama：从 `spring-ai-starter-model-openai` 改为 `spring-ai-starter-model-ollama`，并重新验证多模态、工具调用、结构化输出和 Token 统计等能力差异。
 
 ## 流式处理最佳实践
 

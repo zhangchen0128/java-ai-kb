@@ -1,33 +1,46 @@
 ---
-domain: "10-AI数据工程"
-title: "Java文档解析全景：从原始文件到结构化Markdown"
-status: "draft"
-level: "intermediate"
+domain: 10-AI数据工程
+title: Java文档解析全景：从原始文件到结构化Markdown
+status: draft
+level: intermediate
 sources:
-  - level: "L1"
-    url: "https://tika.apache.org/2.9.1/api/"
-    description: "Apache Tika 官方文档 — 解析器架构与API"
-  - level: "L1"
-    url: "https://pdfbox.apache.org/docs/2.0.8/javadoc/"
-    description: "PDFBox 官方Javadoc — PDF文本提取与渲染"
-  - level: "L1"
-    url: "https://poi.apache.org/apidocs/dev/"
-    description: "Apache POI 官方API文档 — Office文件处理"
-  - level: "L1"
-    url: "https://jsoup.org/apidocs/"
-    description: "Jsoup 官方文档 — HTML解析与清洗"
-  - level: "L4"
-    url: "https://github.com/tesseract-ocr/tesseract"
-    description: "Tesseract OCR 开源项目"
-  - level: "L4"
-    url: "https://github.com/PaddlePaddle/PaddleOCR"
-    description: "PaddleOCR 中文OCR最佳实践"
+  - level: L1
+    url: https://tika.apache.org/2.9.1/api/
+    description: Apache Tika 官方文档 — 解析器架构与API
+  - level: L1
+    url: https://javadoc.io/doc/org.apache.pdfbox/pdfbox
+    description: PDFBox 官方Javadoc — PDF文本提取与渲染
+  - level: L1
+    url: https://poi.apache.org/apidocs/dev/
+    description: Apache POI 官方API文档 — Office文件处理
+  - level: L1
+    url: https://jsoup.org/apidocs/
+    description: Jsoup 官方文档 — HTML解析与清洗
+  - level: L4
+    url: https://github.com/tesseract-ocr/tesseract
+    description: Tesseract OCR 开源项目
+  - level: L4
+    url: https://github.com/PaddlePaddle/PaddleOCR
+    description: PaddleOCR 中文OCR最佳实践
 relations:
-  prerequisite: ["03-SpringBoot4深度解析"]
-  related: ["10-切片策略深度剖析", "10-SpringBatch批处理流水线", "11-完整RAG流水线实现"]
-tags: ["document-parsing", "tika", "pdfbox", "poi", "jsoup", "ocr", "markdown", "apache-tika"]
-created: "2026-07-17"
-updated: "2026-07-17"
+  prerequisite:
+    - 03-SpringBoot4深度解析
+  related:
+    - 10-切片策略深度剖析
+    - 10-SpringBatch批处理流水线
+    - 11-完整RAG流水线实现
+tags:
+  - document-parsing
+  - tika
+  - pdfbox
+  - poi
+  - jsoup
+  - ocr
+  - markdown
+  - apache-tika
+created: 2026-07-17
+updated: 2026-07-17
+content_type: practice
 ---
 
 # Java文档解析全景：从原始文件到结构化Markdown

@@ -1,56 +1,67 @@
 ---
-domain: "03-Java应用平台"
-title: "Spring Security OAuth2、OIDC 与 JWT 深度解析"
-status: "verified"
+domain: 03-Java应用平台
+title: Spring Security OAuth2、OIDC 与 JWT 深度解析
+status: verified
 verification:
-  reviewed_at: "2026-07-27"
-  version_anchor: "JDK 25 / Spring Boot 4.x / Spring AI 2.x"
-level: "advanced"
+  reviewed_at: 2026-07-27
+  version_anchor: Spring Security 7.0 / OAuth 2.1 / OpenID Connect
+  code_status: tested
+  lab: lab-spring-ai-tools
+  evidence:
+    scope: article-core
+    source_files:
+      - labs/lab-spring-ai-tools/src/main/java/com/javaai/kb/labs/tools/SafeToolRegistry.java
+      - labs/lab-spring-ai-tools/src/main/java/com/javaai/kb/labs/tools/ToolCallingDemo.java
+    test_files:
+      - labs/lab-spring-ai-tools/src/test/java/com/javaai/kb/labs/tools/SafeToolRegistryTest.java
+      - labs/lab-spring-ai-tools/src/test/java/com/javaai/kb/labs/tools/ToolCallingDemoTest.java
+level: advanced
 sources:
-  - level: "L0"
-    url: "https://datatracker.ietf.org/doc/html/rfc6749"
+  - level: L0
+    url: https://datatracker.ietf.org/doc/html/rfc6749
     description: "RFC 6749: The OAuth 2.0 Authorization Framework"
-  - level: "L0"
-    url: "https://datatracker.ietf.org/doc/html/rfc7636"
+  - level: L0
+    url: https://datatracker.ietf.org/doc/html/rfc7636
     description: "RFC 7636: Proof Key for Code Exchange (PKCE) by OAuth Public Clients"
-  - level: "L0"
-    url: "https://datatracker.ietf.org/doc/html/rfc7519"
+  - level: L0
+    url: https://datatracker.ietf.org/doc/html/rfc7519
     description: "RFC 7519: JSON Web Token (JWT)"
-  - level: "L0"
-    url: "https://openid.net/specs/openid-connect-core-1_0.html"
-    description: "OpenID Connect Core 1.0 Specification"
-  - level: "L1"
-    url: "https://docs.spring.io/spring-security/reference/"
-    description: "Spring Security 官方参考文档 — SecurityFilterChain、OAuth2、JWT、Method Security"
-  - level: "L1"
-    url: "https://docs.spring.io/spring-security/reference/servlet/oauth2/index.html"
-    description: "Spring Security OAuth2 官方文档 — Authorization Code、Client Credentials、Resource Server"
-  - level: "L2"
-    url: "https://github.com/spring-projects/spring-security/tree/main/oauth2"
-    description: "Spring Security 源码 — OAuth2 模块实现"
+  - level: L0
+    url: https://openid.net/specs/openid-connect-core-1_0.html
+    description: OpenID Connect Core 1.0 Specification
+  - level: L1
+    url: https://docs.spring.io/spring-security/reference/
+    description: Spring Security 官方参考文档 — SecurityFilterChain、OAuth2、JWT、Method Security
+  - level: L1
+    url: https://docs.spring.io/spring-security/reference/servlet/oauth2/index.html
+    description: Spring Security OAuth2 官方文档 — Authorization Code、Client Credentials、Resource Server
+  - level: L2
+    url: https://github.com/spring-projects/spring-security/tree/main/oauth2
+    description: Spring Security 源码 — OAuth2 模块实现
 relations:
-  prerequisite:
+  prerequisite: null
   related:
-    - "03-Java应用平台/Spring核心/03-SpringBoot4深度解析"
-    - "03-Java应用平台/Web与安全/03-SpringMVC与SSE流式输出"
-    - "15-AI安全与治理/15-AI安全全面防护体系"
+    - 03-Java应用平台/Spring核心/03-SpringBoot4深度解析
+    - 03-Java应用平台/Web与安全/03-SpringMVC与SSE流式输出
+    - 15-AI安全与治理/15-AI安全全面防护体系
   derived: []
   contrast: []
   version-of: []
   replaces: []
 tags:
-  - "spring-security"
-  - "oauth2"
-  - "oidc"
-  - "jwt"
-  - "authentication"
-  - "authorization"
-  - "resource-server"
-  - "sso"
-  - "pkce"
-  - "multi-tenant"
-created: "2026-07-17"
-updated: "2026-07-17"
+  - spring-security
+  - oauth2
+  - oidc
+  - jwt
+  - authentication
+  - authorization
+  - resource-server
+  - sso
+  - pkce
+  - multi-tenant
+created: 2026-07-17
+updated: 2026-07-27
+content_type: production
 ---
 
 # Spring Security OAuth2、OIDC 与 JWT 深度解析
@@ -99,6 +110,8 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
+import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
 
 @Configuration
@@ -129,9 +142,14 @@ public class SecurityConfig {
         return http.build();
     }
 
-    // see Section 6 for implementation
     private JwtAuthenticationConverter jwtAuthenticationConverter() {
-        // ...
+        var authorities = new JwtGrantedAuthoritiesConverter();
+        authorities.setAuthoritiesClaimName("roles");
+        authorities.setAuthorityPrefix("ROLE_");
+
+        var converter = new JwtAuthenticationConverter();
+        converter.setJwtGrantedAuthoritiesConverter(authorities);
+        return converter;
     }
 }
 ```

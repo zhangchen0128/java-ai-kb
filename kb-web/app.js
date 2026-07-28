@@ -2,6 +2,7 @@
 let navTree = null;
 let searchIdx = null;
 let siteMeta = null;
+let verifiedOnly = localStorage.getItem('kb-verified-only') === '1';
 
 // ===== DOM refs =====
 const $ = s => document.querySelector(s);
@@ -19,6 +20,16 @@ const prevNext = $('#prevNext');
 const domainGrid = $('#domainGrid');
 const tocEl = $('#toc');
 const tocNav = $('#tocNav');
+const verifiedOnlyInput = $('#verifiedOnly');
+verifiedOnlyInput.checked = verifiedOnly;
+verifiedOnlyInput.addEventListener('change', async () => {
+  verifiedOnly = verifiedOnlyInput.checked;
+  localStorage.setItem('kb-verified-only', verifiedOnly ? '1' : '0');
+  await renderNav();
+  if (getRoute() === '/') await renderHome();
+  else if (getRoute().startsWith('/?d=')) await navigate(getRoute());
+  if (searchInput.value.trim()) await doSearch(searchInput.value.trim());
+});
 
 // ===== Theme =====
 const themeBtn = $('#themeBtn');
@@ -33,20 +44,20 @@ if (savedTheme === 'dark') applyTheme(true);
 else if (!savedTheme && window.matchMedia('(prefers-color-scheme:dark)').matches) applyTheme(true);
 
 // ===== Sidebar =====
-$('#menuBtn').onclick = () => {
-  const open = !sidebar.classList.contains('open');
-  sidebar.classList.toggle('open');
-  overlay.classList.toggle('open');
-  document.body.classList.toggle('sidebar-visible', open);
-  $('#menuBtn').setAttribute('aria-expanded', open);
-};
+$('#menuBtn').onclick = () => setSidebarOpen(!sidebar.classList.contains('open'));
 overlay.onclick = closeSidebar;
-function closeSidebar() {
-  sidebar.classList.remove('open');
-  overlay.classList.remove('open');
-  document.body.classList.remove('sidebar-visible');
-  $('#menuBtn').setAttribute('aria-expanded', 'false');
+function setSidebarOpen(open) {
+  sidebar.classList.toggle('open', open);
+  overlay.classList.toggle('open', open);
+  document.body.classList.toggle('sidebar-visible', open);
+  $('#menuBtn').setAttribute('aria-expanded', String(open));
 }
+function closeSidebar() {
+  setSidebarOpen(false);
+}
+window.addEventListener('resize', () => {
+  if (window.innerWidth >= 1024) closeSidebar();
+}, { passive: true });
 
 // ===== Scroll =====
 window.addEventListener('scroll', () => {
@@ -93,7 +104,8 @@ async function renderHome() {
   const entries = meta?.entries || 80;
   const domains = meta?.domains || 19;
   const lines = meta?.lines || 85000;
-  const updated = meta?.updated || '';
+  const verified = meta?.verified || 0;
+  const stale = meta?.stale || 0;
 
   articleEl.innerHTML = `
     <div class="welcome">
@@ -102,8 +114,18 @@ async function renderHome() {
       <div class="stats">
         <div class="stat"><strong>18+1</strong><span>主题域+知识工程元域</span></div>
         <div class="stat"><strong>${entries}</strong><span>篇笔记</span></div>
-        <div class="stat"><strong>${Math.round(lines/1000)}K+</strong><span>行内容</span></div>
+        <div class="stat"><strong>${verified}</strong><span>已验证</span></div>
+        <div class="stat"><strong>${stale}</strong><span>待复核</span></div>
       </div>
+      <section class="learning-path" aria-labelledby="learningPathTitle">
+        <h2 id="learningPathTitle">推荐学习路径</h2>
+        <div class="learning-steps">
+          <a href="#/?d=02"><strong>1. 基础 Java</strong><span>Java 25、JVM 与工程基础</span></a>
+          <a href="#/?d=09"><strong>2. AI 应用</strong><span>Spring AI 与统一模型接入</span></a>
+          <a href="#/?d=11"><strong>3. Agent / RAG</strong><span>检索、工具与协议协作</span></a>
+          <a href="#/?d=14"><strong>4. 生产治理</strong><span>平台、安全、观测与行业落地</span></a>
+        </div>
+      </section>
       <div class="quick-nav"><h3>快速导航</h3><div class="domain-grid" id="domainGrid"></div></div>
     </div>`;
   renderDomainGrid();
@@ -161,18 +183,25 @@ async function renderNav() {
 }
 
 function countEntries(node) {
-  let count = node._entries?.length || 0;
+  let count = node._entries?.filter(isVisibleEntry).length || 0;
   for (const key of Object.keys(node)) { if (key !== '_entries') count += countEntries(node[key]); }
   return count;
+}
+function isVisibleEntry(entry) {
+  return !verifiedOnly || entry.status === 'verified';
 }
 function renderNavNode(node) {
   let html = '';
   for (const sub of Object.keys(node).filter(k => k !== '_entries').sort()) {
     const subCount = countEntries(node[sub]);
+    if (subCount === 0) continue;
     html += `<div class="nav-subdir-title">▸ ${esc(sub)} <span class="nav-file-count">${subCount}</span></div><div style="display:none">${renderNavNode(node[sub])}</div>`;
   }
   if (node._entries?.length) {
-    for (const e of node._entries) html += `<a href="#${esc(e.url)}" class="nav-file" data-url="${esc(e.url)}">${esc(e.title)}</a>`;
+    for (const e of node._entries.filter(isVisibleEntry)) {
+      const status = e.stale ? 'stale' : e.status;
+      html += `<a href="#${esc(e.url)}" class="nav-file" data-url="${esc(e.url)}" data-status="${esc(status)}"><span class="nav-status" aria-label="${esc(status)}"></span>${esc(e.title)}</a>`;
+    }
   }
   return html;
 }
@@ -244,7 +273,12 @@ function renderDomainEntries(node) {
   for (const sub of Object.keys(node).filter(k => k !== '_entries').sort()) {
     html += `<li style="list-style:none;margin-top:.8em"><strong>${esc(sub)}</strong><ul>${renderDomainEntries(node[sub])}</ul></li>`;
   }
-  if (node._entries) for (const e of node._entries) html += `<li><a href="#${esc(e.url)}">${esc(e.title)}</a></li>`;
+  if (node._entries) {
+    for (const e of node._entries.filter(isVisibleEntry)) {
+      const label = e.stale ? '待复核' : (e.status === 'verified' ? '已验证' : '草稿');
+      html += `<li><a href="#${esc(e.url)}">${esc(e.title)}</a> <span class="listing-status listing-${esc(e.stale ? 'stale' : e.status)}">${label}</span></li>`;
+    }
+  }
   return html;
 }
 
@@ -270,7 +304,7 @@ function expandParentDomain(url) {
 function renderPrevNext(path) {
   const flat = [];
   (function flatten(node) {
-    if (node._entries) for (const e of node._entries) flat.push(e);
+    if (node._entries) for (const e of node._entries.filter(isVisibleEntry)) flat.push(e);
     for (const key of Object.keys(node)) { if (key !== '_entries') flatten(node[key]); }
   })(navTree || {});
   if (!flat.length) { prevNext.innerHTML = ''; return; }
@@ -294,12 +328,15 @@ searchInput.addEventListener('input', () => {
 });
 searchInput.addEventListener('focus', () => { if (searchInput.value.trim().length >= 1) doSearch(searchInput.value.trim()); });
 clearSearch.onclick = () => { searchInput.value = ''; clearSearch.classList.remove('visible'); searchResults.classList.remove('open'); searchInput.focus(); };
-document.addEventListener('click', e => { if (!searchResults.contains(e.target) && e.target !== searchInput) searchResults.classList.remove('open'); });
+document.addEventListener('click', e => {
+  if (e.target.closest?.('.badge-tag')) return;
+  if (!searchResults.contains(e.target) && e.target !== searchInput) searchResults.classList.remove('open');
+});
 
 async function doSearch(q) {
   const idx = await loadSearch();
   const keywords = q.toLowerCase().split(/\s+/).filter(Boolean);
-  const scored = idx.map(item => {
+  const scored = idx.filter(item => !verifiedOnly || item.st === 'verified').map(item => {
     let score = 0;
     const t = item.t.toLowerCase(), d = item.d.toLowerCase(), s = item.s.toLowerCase(), g = (item.g||[]).map(x=>x.toLowerCase());
     for (const kw of keywords) {
@@ -314,7 +351,7 @@ async function doSearch(q) {
   searchResultsInner.innerHTML = scored.map(r => {
     const i = r.item;
     return `<a href="#${esc(i.u)}" class="search-item">
-      <div class="si-title"><span class="si-domain">${esc(i.d)}</span>${hl(i.t, q)}</div>
+      <div class="si-title"><span class="si-domain">${esc(i.d)}</span><span class="search-status search-${esc(i.x ? 'stale' : i.st)}">${esc(i.x ? '待复核' : (i.st === 'verified' ? '已验证' : '草稿'))}</span>${hl(i.t, q)}</div>
       <div class="si-snippet">${hl(i.s.slice(0,180), q)}</div>
       ${i.g?.length ? '<div class="si-tags">'+i.g.slice(0,5).map(t=>`<span class="badge badge-tag">#${esc(t)}</span>`).join('')+'</div>' : ''}
     </a>`;
@@ -325,6 +362,13 @@ function hl(text, q) {
   const re = new RegExp(`(${q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')})`, 'gi');
   return esc(text).replace(re, '<mark style="background:#fde68a;padding:0 2px;border-radius:2px">$1</mark>');
 }
+
+window.searchTag = function(tag) {
+  searchInput.value = tag;
+  clearSearch.classList.add('visible');
+  searchInput.focus();
+  doSearch(tag);
+};
 
 // ===== Code Copy =====
 window.copyCode = function(btn) {
@@ -338,7 +382,12 @@ window.copyCode = function(btn) {
 // ===== Keyboard =====
 document.addEventListener('keydown', e => {
   if ((e.metaKey || e.ctrlKey) && e.key === 'k') { e.preventDefault(); searchInput.focus(); }
-  if (e.key === 'Escape') { searchInput.blur(); searchResults.classList.remove('open'); clearSearch.classList.remove('visible'); }
+  if (e.key === 'Escape') {
+    closeSidebar();
+    searchInput.blur();
+    searchResults.classList.remove('open');
+    clearSearch.classList.remove('visible');
+  }
 });
 
 // ===== Hash routing =====
@@ -346,10 +395,15 @@ window.addEventListener('hashchange', () => navigate(getRoute()));
 
 // ===== Init =====
 async function init() {
-  await loadNav();
-  await loadSearch();
-  await loadSiteMeta();
-  renderNav();
-  navigate(getRoute());
+  try {
+    await loadNav();
+    await renderNav();
+    await navigate(getRoute());
+    Promise.all([loadSearch(), loadSiteMeta()]).catch(error => {
+      console.warn('Optional index preload failed', error);
+    });
+  } catch (error) {
+    navTreeEl.innerHTML = `<div class="nav-error">导航加载失败：${esc(error.message)}<br><button type="button" onclick="location.reload()">重新加载</button></div>`;
+  }
 }
 init();

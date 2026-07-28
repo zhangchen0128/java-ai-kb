@@ -1,24 +1,33 @@
 ---
-domain: "12-Agent工程"
-title: "多 Agent 协作架构模式与实战"
-status: "draft"
-level: "intermediate"
+domain: 12-Agent工程
+title: 多 Agent 协作架构模式与实战
+status: draft
+level: intermediate
 sources:
-  - level: "L1"
-    url: "https://docs.spring.io/spring-ai/reference/api/effective-agents.html"
-    description: "Spring AI Multi-Agent 相关文档"
-  - level: "L2"
-    url: "https://arxiv.org/abs/2308.08155"
+  - level: L1
+    url: https://docs.spring.io/spring-ai/reference/api/effective-agents.html
+    description: Spring AI Multi-Agent 相关文档
+  - level: L2
+    url: https://arxiv.org/abs/2308.08155
     description: "AutoGen: Enabling Next-Gen LLM Applications via Multi-Agent Conversation"
-  - level: "L2"
-    url: "https://github.com/google/A2A"
-    description: "Google Agent-to-Agent (A2A) 协议"
+  - level: L2
+    url: https://github.com/google/A2A
+    description: Google Agent-to-Agent (A2A) 协议
 relations:
-  prerequisite: ["12-ToolCalling完整剖析", "12-Agent记忆与规划"]
-  related: ["12-Agent工作流与人机协作"]
-tags: ["multi-agent", "collaboration", "code-review", "a2a", "swarm"]
-created: "2026-07-17"
-updated: "2026-07-17"
+  prerequisite:
+    - 12-ToolCalling完整剖析
+    - 12-Agent记忆与规划
+  related:
+    - 12-Agent工作流与人机协作
+tags:
+  - multi-agent
+  - collaboration
+  - code-review
+  - a2a
+  - swarm
+created: 2026-07-17
+updated: 2026-07-17
+content_type: production
 ---
 
 # 多 Agent 协作架构模式与实战

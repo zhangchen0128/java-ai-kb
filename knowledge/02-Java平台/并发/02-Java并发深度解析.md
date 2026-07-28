@@ -1,33 +1,48 @@
 ---
-domain: "02-Java平台"
-title: "Java 并发深度解析——JMM、锁、AQS、ConcurrentHashMap、原子类与高级同步器"
-status: "draft"
-level: "advanced"
+domain: 02-Java平台
+title: Java 并发深度解析——JMM、锁、AQS、ConcurrentHashMap、原子类与高级同步器
+status: draft
+level: advanced
 sources:
-  - level: "L0"
-    url: "https://docs.oracle.com/javase/specs/jls/se25/html/jls-17.html"
+  - level: L0
+    url: https://docs.oracle.com/javase/specs/jls/se25/html/jls-17.html
     description: "JLS Chapter 17: Threads and Locks — Java 内存模型规范"
-  - level: "L2"
-    url: "https://github.com/openjdk/jdk/tree/master/src/java.base/share/classes/java/util/concurrent"
-    description: "OpenJDK java.util.concurrent 源码"
-  - level: "L3"
-    url: "https://jcip.net/"
-    description: "Brian Goetz, Java Concurrency in Practice — 并发编程必读经典"
-  - level: "L4"
-    url: "https://shipilev.net/blog/2014/jmm/"
-    description: "Aleksey Shipilev, JMM Pragmatics — JMM深入解读与翻译"
-  - level: "L4"
-    url: "https://tech.meituan.com/2018/11/15/java-lock.html"
-    description: "美团技术博客，synchronized 锁升级源码详解"
-  - level: "L4"
-    url: "https://www.cs.rochester.edu/~scott/papers/1991_TOCS_synch.pdf"
-    description: "Mellor-Crummey & Scott, Algorithms for Scalable Synchronization on Shared-Memory Multiprocessors — CLH/MCS 锁原始论文"
+  - level: L2
+    url: https://github.com/openjdk/jdk/tree/master/src/java.base/share/classes/java/util/concurrent
+    description: OpenJDK java.util.concurrent 源码
+  - level: L3
+    url: https://jcip.net/
+    description: Brian Goetz, Java Concurrency in Practice — 并发编程必读经典
+  - level: L4
+    url: https://shipilev.net/blog/2014/jmm-pragmatics/
+    description: Aleksey Shipilev, JMM Pragmatics — JMM深入解读与翻译
+  - level: L4
+    url: https://tech.meituan.com/2018/11/15/java-lock.html
+    description: 美团技术博客，synchronized 锁升级源码详解
+  - level: L4
+    url: https://www.cs.rochester.edu/~scott/papers/1991_TOCS_synch.pdf
+    description: Mellor-Crummey & Scott, Algorithms for Scalable Synchronization on Shared-Memory Multiprocessors — CLH/MCS 锁原始论文
 relations:
-  prerequisite: ["01-数据结构与算法"]
-  related: ["02-现代Java25深度解析", "02-JVM内部机制与调优"]
-tags: ["concurrency", "JMM", "synchronized", "volatile", "AQS", "ConcurrentHashMap", "CAS", "CompletableFuture", "ForkJoinPool", "StampedLock", "VirtualThreads"]
-created: "2026-07-17"
-updated: "2026-07-17"
+  prerequisite:
+    - 01-数据结构与算法
+  related:
+    - 02-现代Java25深度解析
+    - 02-JVM内部机制与调优
+tags:
+  - concurrency
+  - JMM
+  - synchronized
+  - volatile
+  - AQS
+  - ConcurrentHashMap
+  - CAS
+  - CompletableFuture
+  - ForkJoinPool
+  - StampedLock
+  - VirtualThreads
+created: 2026-07-17
+updated: 2026-07-17
+content_type: practice
 ---
 
 # Java 并发深度解析

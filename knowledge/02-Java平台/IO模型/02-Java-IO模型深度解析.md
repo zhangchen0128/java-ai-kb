@@ -1,42 +1,75 @@
 ---
-domain: "02-Java平台"
-title: "Java IO 模型深度解析 — BIO、NIO、epoll、零拷贝、Netty 与 AI 场景实战"
-status: "verified"
-level: "advanced"
+domain: 02-Java平台
+title: Java IO 模型深度解析 — BIO、NIO、epoll、零拷贝、Netty 与 AI 场景实战
+status: verified
+level: advanced
 sources:
-  - level: "L0"
-    url: "https://openjdk.org/projects/nio/"
-    description: "OpenJDK NIO 官方文档与规范，涵盖 Buffer、Channel、Selector API 定义"
-  - level: "L1"
-    url: "https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/nio/package-summary.html"
-    description: "JDK 25 java.nio 包官方 JavaDoc"
-  - level: "L1"
-    url: "https://netty.io/wiki/user-guide-for-4.x.html"
-    description: "Netty 官方用户指南（4.x），EventLoop、ChannelPipeline、ByteBuf 权威参考"
-  - level: "L2"
-    url: "https://github.com/netty/netty"
-    description: "Netty 源码仓库，核心实现包括 EpollEventLoop、PooledByteBufAllocator"
-  - level: "L3"
-    url: "https://www.oreilly.com/library/view/java-nio/0596002882/"
-    description: "《Java NIO》(O'Reilly)，Ronn Hitchens 著，NIO 原理权威书籍"
-  - level: "L3"
-    url: "https://www.oreilly.com/library/view/netty-in-action/9781617291470/"
-    description: "《Netty in Action》，Norman Maurer 著，Netty 核心架构与实践"
-  - level: "L4"
-    url: "https://kafka.apache.org/documentation/#design_os"
-    description: "Apache Kafka 设计文档，sendfile 零拷贝在 Kafka 中的实际应用"
-  - level: "L4"
-    url: "https://man7.org/linux/man-pages/man7/epoll.7.html"
-    description: "Linux epoll(7) 手册，epoll 三种工作模式及 ET/LT 触发语义"
+  - level: L0
+    url: https://openjdk.org/projects/nio/
+    description: OpenJDK NIO 官方文档与规范，涵盖 Buffer、Channel、Selector API 定义
+  - level: L1
+    url: https://docs.oracle.com/en/java/javase/25/docs/api/java.base/java/nio/package-summary.html
+    description: JDK 25 java.nio 包官方 JavaDoc
+  - level: L1
+    url: https://netty.io/wiki/user-guide-for-4.x.html
+    description: Netty 官方用户指南（4.x），EventLoop、ChannelPipeline、ByteBuf 权威参考
+  - level: L2
+    url: https://github.com/netty/netty
+    description: Netty 源码仓库，核心实现包括 EpollEventLoop、PooledByteBufAllocator
+  - level: L3
+    url: https://www.oreilly.com/library/view/java-nio/0596002882/
+    description: 《Java NIO》(O'Reilly)，Ronn Hitchens 著，NIO 原理权威书籍
+  - level: L3
+    url: https://www.oreilly.com/library/view/netty-in-action/9781617291470/
+    description: 《Netty in Action》，Norman Maurer 著，Netty 核心架构与实践
+  - level: L4
+    url: https://kafka.apache.org/documentation/#design_os
+    description: Apache Kafka 设计文档，sendfile 零拷贝在 Kafka 中的实际应用
+  - level: L4
+    url: https://man7.org/linux/man-pages/man7/epoll.7.html
+    description: Linux epoll(7) 手册，epoll 三种工作模式及 ET/LT 触发语义
 relations:
-  prerequisite: ["01-操作系统基础"]
-  related: ["02-现代Java25深度解析", "02-Java并发深度解析"]
-tags: ["java-nio", "bio", "epoll", "zero-copy", "netty", "sse", "websocket", "io-models", "virtual-threads", "kafka"]
-created: "2026-07-17"
-updated: "2026-07-17"
+  prerequisite:
+    - 01-操作系统基础
+  related:
+    - 02-现代Java25深度解析
+    - 02-Java并发深度解析
+tags:
+  - java-nio
+  - bio
+  - epoll
+  - zero-copy
+  - netty
+  - sse
+  - websocket
+  - io-models
+  - virtual-threads
+  - kafka
+created: 2026-07-17
+updated: 2026-07-27
+content_type: practice
+verification:
+  reviewed_at: 2026-07-27
+  version_anchor: JDK 25 NIO / Netty 4.1 APIs
+  code_status: tested
+  lab: lab-java25-concurrency
+  evidence:
+    scope: article-core
+    source_files:
+      - labs/lab-java25-concurrency/src/main/java/com/javaai/kb/labs/concurrency/VirtualThreadsDemo.java
+      - labs/lab-java25-concurrency/src/main/java25/com/javaai/kb/labs/concurrency/Jdk25StructuredConcurrencyDemo.java
+    test_files:
+      - labs/lab-java25-concurrency/src/test/java/com/javaai/kb/labs/concurrency/VirtualThreadsTest.java
+      - labs/lab-java25-concurrency/src/test/java25/com/javaai/kb/labs/concurrency/Jdk25StructuredConcurrencyTest.java
+  performance:
+    status: illustrative
 ---
 
 # Java IO 模型深度解析 — BIO、NIO、epoll、零拷贝、Netty 与 AI 场景实战
+
+> **性能数据声明：** 除非具体表格同时给出硬件、软件版本、数据规模、参数、
+> 测试脚本、运行次数、P50/P95/P99、日期和原始结果链接，否则本文中的精确
+> 性能数字均为“示意值，不代表基准结果”，不能用于容量规划或产品比较。
 
 ## 概述
 
@@ -573,7 +606,12 @@ Apache Kafka 是零拷贝技术的经典案例。Kafka 的消息传递路径是"
 // Kafka 的 FileRecords.writeTo() 核心逻辑（简化示意）
 // 实际实现在 kafka/server/src/main/java/org/apache/kafka/storage/internals/log/FileRecords.java
 public class FileRecords {
-    // ...
+    private final java.nio.channels.FileChannel channel;
+
+    public FileRecords(java.nio.channels.FileChannel channel) {
+        this.channel = java.util.Objects.requireNonNull(channel);
+    }
+
     public long writeTo(java.nio.channels.GatheringByteChannel destChannel,
                          long offset, int length) throws IOException {
         // 使用 FileChannel.transferTo() 直接发送文件到网络

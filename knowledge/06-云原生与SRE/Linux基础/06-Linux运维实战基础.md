@@ -1,30 +1,44 @@
 ---
-domain: "06-云原生与SRE"
-title: "Linux 运维实战基础"
-status: "draft"
-level: "intermediate"
+domain: 06-云原生与SRE
+title: Linux 运维实战基础
+status: draft
+level: intermediate
 sources:
-  - level: "L1"
-    url: "https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html"
-    description: "Linux Kernel cgroup v2 官方文档"
-  - level: "L1"
-    url: "https://systemd.io/"
-    description: "systemd 官方文档"
-  - level: "L1"
-    url: "https://man7.org/linux/man-pages/"
-    description: "Linux man-pages 官方手册页"
-  - level: "L3"
-    url: "https://www.brendangregg.com/linuxperf.html"
+  - level: L1
+    url: https://www.kernel.org/doc/html/latest/admin-guide/cgroup-v2.html
+    description: Linux Kernel cgroup v2 官方文档
+  - level: L1
+    url: https://systemd.io/
+    description: systemd 官方文档
+  - level: L1
+    url: https://man7.org/linux/man-pages/
+    description: Linux man-pages 官方手册页
+  - level: L3
+    url: https://www.brendangregg.com/linuxperf.html
     description: "Brendan Gregg — 《Systems Performance: Enterprise and the Cloud》"
-  - level: "L4"
-    url: "https://docs.docker.com/engine/security/rootless/"
-    description: "Docker 官方文档 — Rootless 模式与 Namespace 隔离"
+  - level: L4
+    url: https://docs.docker.com/engine/security/rootless/
+    description: Docker 官方文档 — Rootless 模式与 Namespace 隔离
 relations:
-  prerequisite: ["01-数据结构与算法"]
-  related: ["06-Docker与Kubernetes云原生部署", "02-JVM内部机制与调优"]
-tags: ["linux", "performance", "troubleshooting", "systemd", "cgroup", "namespace", "shell", "java-ops", "docker", "container"]
-created: "2026-07-20"
-updated: "2026-07-20"
+  prerequisite:
+    - 01-数据结构与算法
+  related:
+    - 06-Docker与Kubernetes云原生部署
+    - 02-JVM内部机制与调优
+tags:
+  - linux
+  - performance
+  - troubleshooting
+  - systemd
+  - cgroup
+  - namespace
+  - shell
+  - java-ops
+  - docker
+  - container
+created: 2026-07-20
+updated: 2026-07-20
+content_type: practice
 ---
 
 # Linux 运维实战基础

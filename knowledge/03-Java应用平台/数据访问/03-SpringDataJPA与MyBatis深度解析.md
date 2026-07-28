@@ -1,27 +1,41 @@
 ---
-domain: "03-Java应用平台"
-title: "Spring Data JPA与MyBatis深度解析"
-status: "draft"
-level: "intermediate"
+domain: 03-Java应用平台
+title: Spring Data JPA与MyBatis深度解析
+status: draft
+level: intermediate
 sources:
-  - level: "L1"
-    url: "https://docs.spring.io/spring-data/jpa/reference/"
-    description: "Spring Data JPA Reference Documentation"
-  - level: "L1"
-    url: "https://mybatis.org/mybatis-3/"
-    description: "MyBatis 3 Official Documentation"
-  - level: "L2"
-    url: "https://github.com/spring-projects/spring-data-jpa"
-    description: "Spring Data JPA source code"
-  - level: "L3"
-    url: "https://www.manning.com/books/java-persistence-with-spring-data-and-hibernate"
-    description: "Java Persistence with Spring Data and Hibernate"
+  - level: L1
+    url: https://docs.spring.io/spring-data/jpa/reference/
+    description: Spring Data JPA Reference Documentation
+  - level: L1
+    url: https://mybatis.org/mybatis-3/
+    description: MyBatis 3 Official Documentation
+  - level: L2
+    url: https://github.com/spring-projects/spring-data-jpa
+    description: Spring Data JPA source code
+  - level: L3
+    url: https://www.manning.com/books/java-persistence-with-spring-data-and-hibernate
+    description: Java Persistence with Spring Data and Hibernate
 relations:
-  prerequisite: ["03-Spring核心IoC-AOP-事务", "01-数据库原理"]
-  related: ["03-SpringBoot4深度解析"]
-tags: ["jpa", "hibernate", "mybatis", "mybatis-plus", "spring-data-jpa", "n+1", "jpql", "criteria", "entity-graph", "repository"]
-created: "2026-07-20"
-updated: "2026-07-20"
+  prerequisite:
+    - 03-Spring核心IoC-AOP-事务
+    - 01-数据库原理
+  related:
+    - 03-SpringBoot4深度解析
+tags:
+  - jpa
+  - hibernate
+  - mybatis
+  - mybatis-plus
+  - spring-data-jpa
+  - n+1
+  - jpql
+  - criteria
+  - entity-graph
+  - repository
+created: 2026-07-20
+updated: 2026-07-20
+content_type: practice
 ---
 
 # Spring Data JPA 与 MyBatis 深度解析

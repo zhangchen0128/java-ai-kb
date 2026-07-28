@@ -1,33 +1,53 @@
 ---
-domain: "06-云原生与SRE"
-title: "SLO与混沌工程"
-status: "draft"
-level: "advanced"
+domain: 06-云原生与SRE
+title: SLO与混沌工程
+status: draft
+level: advanced
 sources:
-  - level: "L3"
-    url: "https://sre.google/books/"
-    description: "Google SRE Book — 第2-6章 SLO/SLI/Error Budget 方法论源头"
-  - level: "L3"
-    url: "https://learning.oreilly.com/library/view/chaos-engineering/9781492043867/"
-    description: "《混沌工程：通过实验构建系统信心》— 混沌工程理论基础与实战"
-  - level: "L1"
-    url: "https://chaos-mesh.org/docs/"
-    description: "Chaos Mesh 官方文档 — Kubernetes 原生混沌工程平台"
-  - level: "L1"
-    url: "https://chaosblade.io/docs/"
-    description: "ChaosBlade 官方文档 — 阿里开源多平台混沌实验工具"
-  - level: "L1"
-    url: "https://prometheus.io/docs/alerting/latest/alertmanager/"
-    description: "Prometheus Alertmanager 官方文档 — 多窗口燃尽告警配置"
-  - level: "L4"
-    url: "https://sre.google/workbook/alerting-on-slos/"
-    description: "Google SRE Workbook — 基于 SLO 的告警设计章节"
+  - level: L3
+    url: https://sre.google/books/
+    description: Google SRE Book — 第2-6章 SLO/SLI/Error Budget 方法论源头
+  - level: L3
+    url: https://learning.oreilly.com/library/view/chaos-engineering/9781492043867/
+    description: 《混沌工程：通过实验构建系统信心》— 混沌工程理论基础与实战
+  - level: L1
+    url: https://chaos-mesh.org/docs/
+    description: Chaos Mesh 官方文档 — Kubernetes 原生混沌工程平台
+  - level: L1
+    url: https://chaosblade.io/docs/
+    description: ChaosBlade 官方文档 — 阿里开源多平台混沌实验工具
+  - level: L1
+    url: https://prometheus.io/docs/alerting/latest/alertmanager/
+    description: Prometheus Alertmanager 官方文档 — 多窗口燃尽告警配置
+  - level: L4
+    url: https://sre.google/workbook/alerting-on-slos/
+    description: Google SRE Workbook — 基于 SLO 的告警设计章节
 relations:
-  prerequisite: ["05-分布式一致性与事务方案", "06-Docker与Kubernetes云原生部署"]
-  related: ["06-OpenTelemetry可观测性体系", "05-熔断限流与弹性设计"]
-tags: ["slo", "sli", "sla", "error-budget", "burn-rate", "chaos-engineering", "chaos-mesh", "chaosblade", "reliability", "capacity-planning", "prometheus", "grafana", "resilience4j", "hpa", "keda"]
-created: "2026-07-20"
-updated: "2026-07-20"
+  prerequisite:
+    - 05-分布式一致性与事务方案
+    - 06-Docker与Kubernetes云原生部署
+  related:
+    - 06-OpenTelemetry可观测性体系
+    - 05-熔断限流与弹性设计
+tags:
+  - slo
+  - sli
+  - sla
+  - error-budget
+  - burn-rate
+  - chaos-engineering
+  - chaos-mesh
+  - chaosblade
+  - reliability
+  - capacity-planning
+  - prometheus
+  - grafana
+  - resilience4j
+  - hpa
+  - keda
+created: 2026-07-20
+updated: 2026-07-20
+content_type: concept
 ---
 
 # SLO与混沌工程

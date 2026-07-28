@@ -47,6 +47,7 @@ CLAUDE.md               ← 操作规则：定义"怎么操作"（本文件）
 5. **遵循技术雷达** — 代码示例使用 Adopt 象限技术，Trial 技术需额外标注
 6. **建立关联** — 在 frontmatter 中标注 `prerequisite` 和 `related` 关系
 7. **更新 README** — 在对应域目录的 `README.md`（如存在）中添加条目链接
+8. **先保持 draft** — 只有 `npm run check`、来源、关系、版本和对应 Lab 全部通过后才可升级为 `verified`
 
 ### 2.3 编写代码示例
 
@@ -237,8 +238,26 @@ java-ai-knowledge/
 - [ ] 版本信息与版本矩阵一致
 
 ### 时效性
-- [ ] 创建日期在 6 个月内，或已复核更新
+- [ ] `verification.reviewed_at` 未超过所在领域的 90/180/365 天复核周期
 - [ ] 所述技术与当前技术雷达一致
+
+### 自动门禁
+- [ ] `content_type` 与文章职责一致
+- [ ] `version_anchor` 与主题直接相关，不批量填写通用版本
+- [ ] 含 Java 代码时 `code_status: tested`，关联真实 Lab，并列出文章核心源码和测试证据
+- [ ] 声明精确覆盖的 Java 块有唯一 `code-id`，并映射到真实源码符号和测试方法
+- [ ] verified Java 代码不含 TODO、孤立省略号、待实现异常或“示例中不实现”等占位逻辑
+- [ ] 快速变化领域至少两个独立来源，其中至少一个 L0/L1
+- [ ] 无错误关系、重复关系或知识图谱孤岛
+- [ ] 精确性能数字有完整基准信息，否则明确标记为示意值
+- [ ] `cd kb-web && npm run check`
+- [ ] `mvn -B -f labs/pom.xml test`
+
+### 固定维护节奏
+- 每周运行全量链接审核。
+- 每月检查 03、06–16 的依赖和规范版本。
+- 每季度抽检全部 verified 文章、实验和来源。
+- JDK、Spring AI、MCP、A2A 重大版本发布时建立专项升级任务。
 
 ---
 

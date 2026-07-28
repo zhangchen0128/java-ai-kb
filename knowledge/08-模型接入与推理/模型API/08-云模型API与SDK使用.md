@@ -1,33 +1,86 @@
 ---
-domain: "08-模型接入与推理"
-title: "Cloud Model APIs"
-status: "draft"
-level: "intermediate"
+domain: 08-模型接入与推理
+title: Cloud Model APIs
+status: verified
+level: intermediate
 sources:
-  - level: "L1"
-    url: "https://platform.openai.com/docs/api-reference"
-    description: "OpenAI API Reference"
-  - level: "L1"
-    url: "https://docs.anthropic.com/en/api"
-    description: "Anthropic API Reference"
-  - level: "L1"
-    url: "https://docs.aws.amazon.com/bedrock/latest/userguide/conversation-inference.html"
-    description: "AWS Bedrock Converse API"
-  - level: "L1"
-    url: "https://ai.google.dev/gemini-api/docs"
-    description: "Google GenAI API Reference"
-  - level: "L1"
-    url: "https://learn.microsoft.com/en-us/azure/ai-services/openai/"
-    description: "Azure OpenAI Documentation"
+  - level: L1
+    url: https://platform.openai.com/docs/api-reference
+    description: OpenAI API Reference
+  - level: L1
+    url: https://docs.anthropic.com/en/api
+    description: Anthropic API Reference
+  - level: L1
+    url: https://docs.aws.amazon.com/bedrock/latest/userguide/conversation-inference.html
+    description: AWS Bedrock Converse API
+  - level: L1
+    url: https://ai.google.dev/gemini-api/docs
+    description: Google GenAI API Reference
+  - level: L1
+    url: https://learn.microsoft.com/en-us/azure/ai-services/openai/
+    description: Azure OpenAI Documentation
 relations:
-  prerequisite: ["08-OpenAI兼容协议详解"]
-  related: ["08-本地推理与Ollama", "08-模型能力矩阵与路由策略", "09-架构抽象层设计"]
-tags: ["openai", "anthropic", "bedrock", "gemini", "azure", "java-sdk", "provider"]
-created: "2026-07-17"
-updated: "2026-07-17"
+  prerequisite:
+    - 08-OpenAI兼容协议详解
+  related:
+    - 08-本地推理与Ollama
+    - 08-模型能力矩阵与路由策略
+    - 09-架构抽象层设计
+tags:
+  - openai
+  - anthropic
+  - bedrock
+  - gemini
+  - azure
+  - java-sdk
+  - provider
+created: 2026-07-17
+updated: 2026-07-28
+content_type: practice
+verification:
+  reviewed_at: 2026-07-28
+  version_anchor: Provider APIs reviewed 2026-07-27
+  code_status: tested
+  lab: lab-spring-ai-chat
+  evidence:
+    scope: article-core
+    source_files:
+      - labs/lab-spring-ai-chat/src/main/java/com/javaai/kb/labs/chat/ChatModelPort.java
+      - labs/lab-spring-ai-chat/src/main/java/com/javaai/kb/labs/chat/SpringAiChatAdapter.java
+    test_files:
+      - labs/lab-spring-ai-chat/src/test/java/com/javaai/kb/labs/chat/SpringAiChatAdapterTest.java
+    blocks:
+      - id: spring-ai-chat-port
+        sources:
+          - file: labs/lab-spring-ai-chat/src/main/java/com/javaai/kb/labs/chat/ChatModelPort.java
+            symbols:
+              - ChatModelPort
+              - ChatModelPort#chat
+              - ChatModelPort#chatStream
+              - ChatRequest
+              - ChatResponse
+              - ChatChunk
+          - file: labs/lab-spring-ai-chat/src/main/java/com/javaai/kb/labs/chat/SpringAiChatAdapter.java
+            symbols:
+              - SpringAiChatAdapter
+              - SpringAiChatAdapter#chat
+              - SpringAiChatAdapter#chatStream
+              - SpringAiChatAdapter#validate
+        tests:
+          - file: labs/lab-spring-ai-chat/src/test/java/com/javaai/kb/labs/chat/SpringAiChatAdapterTest.java
+            symbols:
+              - SpringAiChatAdapterTest#mapsSynchronousResponseWithoutLeakingProviderTypes
+              - SpringAiChatAdapterTest#mapsStreamingChunksInOrder
+              - SpringAiChatAdapterTest#validatesAdapterAndRequestBoundaries
+  performance:
+    status: illustrative
 ---
 
 # Cloud Model APIs
+
+> **性能数据声明：** 除非具体表格同时给出硬件、软件版本、数据规模、参数、
+> 测试脚本、运行次数、P50/P95/P99、日期和原始结果链接，否则本文中的精确
+> 性能数字均为“示意值，不代表基准结果”，不能用于容量规划或产品比较。
 
 ## 概述
 
@@ -1009,7 +1062,13 @@ public class AzureAiSdkExample {
 
 ## 多 Provider 统一抽象示例
 
+<!-- code-id: spring-ai-chat-port -->
 ```java
+import java.util.Objects;
+import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.model.ChatModel;
+import reactor.core.publisher.Flux;
+
 /**
  * 统一聊天接口
  * 业务代码只依赖这个接口，不依赖任何具体 SDK
@@ -1018,85 +1077,55 @@ public interface ChatModelPort {
     ChatResponse chat(ChatRequest request);
     Flux<ChatChunk> chatStream(ChatRequest request);
 
-    record ChatRequest(
-        List<ChatMessage> messages,
-        String requestId,
-        double temperature,
-        int maxTokens,
-        List<ToolDefinition> tools,
-        String toolChoice,
-        String responseFormat
-    ) {}
-
-    record ChatResponse(
-        String content,
-        List<ToolCall> toolCalls,
-        String finishReason,
-        TokenUsage usage,
-        String modelId
-    ) {}
-
-    record ChatChunk(String delta, String finishReason) {}
-
-    record ChatMessage(String role, String content,
-        String toolCallId, List<ToolCall> toolCalls) {}
-
-    record ToolDefinition(String name, String description,
-        Map<String, Object> jsonSchema) {}
-
-    record ToolCall(String id, String name, String arguments) {}
-
-    record TokenUsage(int input, int output, int total) {}
+    record ChatRequest(String systemPrompt, String userPrompt) {}
+    record ChatResponse(String content, String modelId) {}
+    record ChatChunk(String delta) {}
 }
 
 /**
- * OpenAI 适配器
+ * 基于 Spring AI ChatClient 的完整适配器。Provider 差异留在 ChatModel Bean
+ * 配置中，业务端口不暴露任何厂商 SDK 类型。
  */
-public class OpenAiChatAdapter implements ChatModelPort {
-    private final OpenAiClient client;
+public final class SpringAiChatAdapter implements ChatModelPort {
+    private final ChatClient client;
     private final String modelId;
 
-    public OpenAiChatAdapter(OpenAiClient client, String modelId) {
-        this.client = client;
+    public SpringAiChatAdapter(ChatModel model, String modelId) {
+        this.client = ChatClient.create(Objects.requireNonNull(model, "model"));
+        if (modelId == null || modelId.isBlank()) {
+            throw new IllegalArgumentException("modelId must not be blank");
+        }
         this.modelId = modelId;
     }
 
     @Override
     public ChatResponse chat(ChatRequest request) {
-        // 将 ChatRequest 转换为 OpenAI SDK 的请求参数...
-        // 调用 client.chat().completions().create(...)
-        // 将响应转换为 ChatResponse...
-        throw new UnsupportedOperationException("完整实现见adapters包");
+        validate(request);
+        var content = client.prompt()
+            .system(request.systemPrompt())
+            .user(request.userPrompt())
+            .call()
+            .content();
+        return new ChatResponse(content, modelId);
     }
 
     @Override
     public Flux<ChatChunk> chatStream(ChatRequest request) {
-        // 流式适配...
-        throw new UnsupportedOperationException("完整实现见adapters包");
-    }
-}
-
-/**
- * Anthropic 适配器
- */
-public class AnthropicChatAdapter implements ChatModelPort {
-    private final AnthropicClient client;
-    private final String modelId;
-
-    public AnthropicChatAdapter(AnthropicClient client, String modelId) {
-        this.client = client;
-        this.modelId = modelId;
+        validate(request);
+        return client.prompt()
+            .system(request.systemPrompt())
+            .user(request.userPrompt())
+            .stream()
+            .content()
+            .map(ChatChunk::new);
     }
 
-    @Override
-    public ChatResponse chat(ChatRequest request) {
-        // 将 ChatRequest 转换为 Anthropic SDK 的请求参数...
-        throw new UnsupportedOperationException("完整实现见adapters包");
-    }
-
-    @Override
-    public Flux<ChatChunk> chatStream(ChatRequest request) {
-        throw new UnsupportedOperationException("完整实现见adapters包");
+    private static void validate(ChatRequest request) {
+        Objects.requireNonNull(request, "request");
+        if (request.systemPrompt() == null || request.systemPrompt().isBlank()
+                || request.userPrompt() == null || request.userPrompt().isBlank()) {
+            throw new IllegalArgumentException("systemPrompt and userPrompt must not be blank");
+        }
     }
 }
 ```

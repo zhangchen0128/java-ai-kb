@@ -1,30 +1,40 @@
 ---
-domain: "07-AI基础"
-title: "Transformer Architecture In Depth"
-status: "draft"
-level: "advanced"
+domain: 07-AI基础
+title: Transformer Architecture In Depth
+status: draft
+level: advanced
 sources:
-  - level: "L4"
-    url: "https://arxiv.org/abs/1706.03762"
-    description: "Attention Is All You Need (Vaswani et al., 2017)"
-  - level: "L4"
-    url: "https://arxiv.org/abs/1810.04805"
+  - level: L4
+    url: https://arxiv.org/abs/1706.03762
+    description: Attention Is All You Need (Vaswani et al., 2017)
+  - level: L4
+    url: https://arxiv.org/abs/1810.04805
     description: "BERT: Pre-training of Deep Bidirectional Transformers"
-  - level: "L4"
-    url: "https://arxiv.org/abs/2302.13971"
+  - level: L4
+    url: https://arxiv.org/abs/2302.13971
     description: "LLaMA: Open and Efficient Foundation Language Models"
-  - level: "L4"
-    url: "https://arxiv.org/abs/2104.09864"
+  - level: L4
+    url: https://arxiv.org/abs/2104.09864
     description: "RoPE: Rotary Position Embedding (Su et al.)"
-  - level: "L5"
-    url: "https://jalammar.github.io/illustrated-transformer/"
-    description: "The Illustrated Transformer — community reference"
+  - level: L5
+    url: https://jalammar.github.io/illustrated-transformer/
+    description: The Illustrated Transformer — community reference
 relations:
   prerequisite: []
-  related: ["07-Embedding与Tokenization", "07-推理策略与评估方法"]
-tags: ["transformer", "self-attention", "multi-head-attention", "positional-encoding", "decoder-only", "gpt", "llama"]
-created: "2026-07-17"
-updated: "2026-07-17"
+  related:
+    - 07-Embedding与Tokenization
+    - 07-推理策略与评估方法
+tags:
+  - transformer
+  - self-attention
+  - multi-head-attention
+  - positional-encoding
+  - decoder-only
+  - gpt
+  - llama
+created: 2026-07-17
+updated: 2026-07-17
+content_type: concept
 ---
 
 # Transformer Architecture In Depth

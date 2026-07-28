@@ -1,27 +1,39 @@
 ---
-domain: "03-Java应用平台"
-title: "任务调度Quartz与XXL-JOB"
-status: "draft"
-level: "intermediate"
+domain: 03-Java应用平台
+title: 任务调度Quartz与XXL-JOB
+status: draft
+level: intermediate
 sources:
-  - level: "L1"
-    url: "https://docs.spring.io/spring-boot/reference/io/quartz.html"
-    description: "Spring Boot Quartz Scheduler Reference"
-  - level: "L1"
-    url: "https://www.quartz-scheduler.org/documentation/"
-    description: "Quartz Scheduler Official Documentation"
-  - level: "L1"
-    url: "https://www.xuxueli.com/xxl-job/"
-    description: "XXL-JOB Official Documentation — 分布式任务调度平台"
-  - level: "L2"
-    url: "https://github.com/xuxueli/xxl-job"
-    description: "XXL-JOB source code"
+  - level: L1
+    url: https://docs.spring.io/spring-boot/reference/io/quartz.html
+    description: Spring Boot Quartz Scheduler Reference
+  - level: L1
+    url: https://www.quartz-scheduler.org/documentation/
+    description: Quartz Scheduler Official Documentation
+  - level: L1
+    url: https://www.xuxueli.com/xxl-job/
+    description: XXL-JOB Official Documentation — 分布式任务调度平台
+  - level: L2
+    url: https://github.com/xuxueli/xxl-job
+    description: XXL-JOB source code
 relations:
-  prerequisite: ["03-SpringBoot4深度解析", "03-Spring核心IoC-AOP-事务"]
-  related: ["03-Maven多模块工程实践", "05-分布式一致性与事务方案"]
-tags: ["quartz", "xxl-job", "cron", "job-scheduling", "distributed-scheduling", "cluster", "ai-embedding"]
-created: "2026-07-20"
-updated: "2026-07-20"
+  prerequisite:
+    - 03-SpringBoot4深度解析
+    - 03-Spring核心IoC-AOP-事务
+  related:
+    - 03-Maven多模块工程实践
+    - 05-分布式一致性与事务方案
+tags:
+  - quartz
+  - xxl-job
+  - cron
+  - job-scheduling
+  - distributed-scheduling
+  - cluster
+  - ai-embedding
+created: 2026-07-20
+updated: 2026-07-20
+content_type: production
 ---
 
 # 任务调度：Quartz 与 XXL-JOB

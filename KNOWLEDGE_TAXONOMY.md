@@ -73,7 +73,7 @@
 
 | 子域 | 关键知识点 |
 |------|-----------|
-| 现代Java | JDK 25 LTS 新特性、Record、Sealed Class、Pattern Matching、Virtual Threads、Scoped Values、String Templates |
+| 现代Java | JDK 25 LTS 新特性、Record、Sealed Class、Pattern Matching、Virtual Threads、Scoped Values、Structured Concurrency（Preview）；String Templates 仅作已移除特性的历史参考 |
 | 集合与泛型 | List/Map/Set/Queue 实现与选型、类型擦除、通配符、协变/逆变 |
 | 反射与模块化 | 反射API、MethodHandle、JPMS模块系统、类加载机制 |
 | JVM | 内存模型(G1/ZGC/Shenandoah)、类加载、字节码、JIT(C1/C2/Graal)、AOT |
@@ -461,12 +461,12 @@ Query理解 → Query改写 → Metadata过滤 → 稀疏/稠密检索 → 混�
 
 | 技术 | 当前版本(2026-07) | 备注 |
 |------|-------------------|------|
-| JDK | 25 LTS | 主栈版本；JDK 21 作为兼容参考 |
-| Spring Boot | 4.x | 主线 |
-| Spring AI | 2.x | 稳定主线 |
-| Spring Security | 6.x | 与Spring Boot 4.x配套 |
+| JDK | 25 GA | 主栈版本；JDK 21 仅作为本地兼容回退 |
+| Spring Boot | 4.0.7 | 六周冻结版本 |
+| Spring AI | 2.0.0 | 使用 `spring-ai-bom` |
+| Spring Security | 7.0.x | 由 Spring Boot 4.0.7 BOM 管理 |
 | Spring Cloud | 2025.x | — |
-| Maven | 4.x | 构建工具主栈 |
+| Maven | 3.9.x | Maven 4 未作为默认稳定基线 |
 | Gradle | 8.x | 对比参考 |
 | JUnit | 5.11+ | 测试主栈 |
 | PostgreSQL | 17+ | pgvector 0.8+ |
@@ -476,8 +476,9 @@ Query理解 → Query改写 → Metadata过滤 → 稀疏/稠密检索 → 混�
 | Docker | 28.x | — |
 | Kubernetes | 1.33+ | — |
 | OpenTelemetry | 1.40+ | GenAI语义约定 |
-| MCP Java SDK | 最新 | 查看 Maven Central |
-| A2A Java SDK | 最新 | 查看官方发布 |
+| MCP | 2025-11-25 | 规范锚点 |
+| A2A | 1.0 | 规范锚点 |
+| A2A Java SDK | 1.1.0.Final | `org.a2aproject.sdk` |
 | Ollama | 最新 | 本地开发 |
 | Claude Code | 最新 | AI研发工具 |
 
@@ -495,6 +496,7 @@ domain: "00-knowledge-engineering"
 title: "标题"
 status: "draft"          # draft | verified | outdated
 level: "intermediate"    # beginner | intermediate | advanced | reference
+content_type: "practice" # overview | concept | practice | production | case-study | reference
 sources:
   - level: "L1"
     url: "https://..."
@@ -525,6 +527,49 @@ updated: "2026-07-17"
 - [[other-entry]]
 ```
 
+升级为 `verified` 时必须增加：
+
+```yaml
+verification:
+  reviewed_at: "2026-07-27"
+  version_anchor: "与主题直接相关的规范或依赖版本"
+  code_status: "tested"  # tested | not-applicable；illustrative 仅允许 draft
+  lab: "lab-example"     # 包含 Java 代码时必填
+  evidence:              # tested 时必填；当前粒度为文章核心路径
+    scope: "article-core"
+    source_files:
+      - "labs/lab-example/src/main/java/example/Demo.java"
+    test_files:
+      - "labs/lab-example/src/test/java/example/DemoTest.java"
+    blocks:               # 可选；声明后执行块 ID、文件和 Java 符号联合校验
+      - id: "demo-call"
+        sources:
+          - file: "labs/lab-example/src/main/java/example/Demo.java"
+            symbols: ["Demo#call"]
+        tests:
+          - file: "labs/lab-example/src/test/java/example/DemoTest.java"
+            symbols: ["DemoTest#callsDemo"]
+  performance:           # 包含精确性能数字时必填
+    status: "illustrative"  # 或 reproducible，并补齐环境、脚本和原始结果
+```
+
+快速变化领域按 90 天复核，工程/行业领域按 180 天复核，知识工程和计算机
+基础按 365 天复核。完整约束由 `kb-web/src/schema.mjs` 和
+`kb-web/src/audit-content.mjs` 执行。L0/L1 来源域名还必须在
+`kb-web/source-authorities.yaml` 的版本化白名单中。verified Java 代码块
+不得包含 TODO、孤立省略号、待实现异常或明确声明未实现的占位逻辑。
+需要声明精确测试覆盖的代码围栏必须紧邻唯一标识：
+
+````markdown
+<!-- code-id: demo-call -->
+```java
+new Demo().call();
+```
+````
+
+该 ID 必须出现在 `verification.evidence.blocks` 中；审计同时检查关联文件
+属于声明的 Lab、文件存在，并且所列源码符号和测试方法真实存在。
+
 ---
 
 ## 七、知识条目命名规范
@@ -544,3 +589,6 @@ updated: "2026-07-17"
 | 日期 | 版本 | 变更内容 |
 |------|------|----------|
 | 2026-07-17 | v1.0.0 | 初始版本，定义18个知识域及元数据规范 |
+| 2026-07-27 | v2.0.0 | 增加 content_type、verification、版本锁和自动质量门禁 |
+| 2026-07-28 | v2.1.0 | 增加文章核心代码证据、来源权威白名单和性能证据模型 |
+| 2026-07-28 | v2.2.0 | 增加代码块 ID 到源码符号、测试方法的精确证据门禁 |

@@ -1,33 +1,45 @@
 ---
-domain: "07-AI基础"
-title: "Embeddings and Tokenization"
-status: "draft"
-level: "intermediate"
+domain: 07-AI基础
+title: Embeddings and Tokenization
+status: draft
+level: intermediate
 sources:
-  - level: "L4"
-    url: "https://arxiv.org/abs/1508.07909"
-    description: "Neural Machine Translation of Rare Words with Subword Units (Sennrich et al., BPE for NLP)"
-  - level: "L4"
-    url: "https://arxiv.org/abs/1609.08144"
-    description: "Google's Neural Machine Translation System (WordPiece)"
-  - level: "L4"
-    url: "https://arxiv.org/abs/1804.10959"
-    description: "SentencePiece (Kudo & Richardson)"
-  - level: "L4"
-    url: "https://arxiv.org/abs/2201.12023"
-    description: "Matryoshka Representation Learning (Kusupati et al.)"
-  - level: "L5"
-    url: "https://platform.openai.com/tokenizer"
-    description: "OpenAI Tokenizer — 在线 Token 计数工具"
-  - level: "L4"
-    url: "https://arxiv.org/abs/2103.00020"
+  - level: L4
+    url: https://arxiv.org/abs/1508.07909
+    description: Neural Machine Translation of Rare Words with Subword Units (Sennrich et al., BPE for NLP)
+  - level: L4
+    url: https://arxiv.org/abs/1609.08144
+    description: Google's Neural Machine Translation System (WordPiece)
+  - level: L4
+    url: https://arxiv.org/abs/1804.10959
+    description: SentencePiece (Kudo & Richardson)
+  - level: L4
+    url: https://arxiv.org/abs/2201.12023
+    description: Matryoshka Representation Learning (Kusupati et al.)
+  - level: L5
+    url: https://platform.openai.com/tokenizer
+    description: OpenAI Tokenizer — 在线 Token 计数工具
+  - level: L4
+    url: https://arxiv.org/abs/2103.00020
     description: "CLIP: Learning Transferable Visual Models (Radford et al.)"
 relations:
-  prerequisite: ["07-Transformer架构深度解析"]
-  related: ["07-推理策略与评估方法", "11-向量检索与混合检索"]
-tags: ["tokenization", "bpe", "wordpiece", "sentencepiece", "embedding", "matryoshka", "contrastive-learning", "bge"]
-created: "2026-07-17"
-updated: "2026-07-17"
+  prerequisite:
+    - 07-Transformer架构深度解析
+  related:
+    - 07-推理策略与评估方法
+    - 11-向量检索与混合检索
+tags:
+  - tokenization
+  - bpe
+  - wordpiece
+  - sentencepiece
+  - embedding
+  - matryoshka
+  - contrastive-learning
+  - bge
+created: 2026-07-17
+updated: 2026-07-17
+content_type: concept
 ---
 
 # Embeddings and Tokenization

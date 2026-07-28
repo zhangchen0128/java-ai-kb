@@ -1,30 +1,62 @@
 ---
-domain: "17-系统设计"
-title: "Agent Platform Design"
-status: "draft"
-level: "advanced"
+domain: 17-系统设计
+title: Agent Platform Design
+status: verified
+level: advanced
 sources:
-  - level: "L1"
-    url: "https://modelcontextprotocol.io/specification/2025-11-25/"
-    description: "MCP Specification"
-  - level: "L1"
-    url: "https://docs.spring.io/spring-ai/reference/"
-    description: "Spring AI 官方文档"
-  - level: "L4"
-    url: "https://arxiv.org/abs/2308.08155"
+  - level: L1
+    url: https://modelcontextprotocol.io/specification/2025-11-25/
+    description: MCP Specification
+  - level: L1
+    url: https://docs.spring.io/spring-ai/reference/
+    description: Spring AI 官方文档
+  - level: L4
+    url: https://arxiv.org/abs/2308.08155
     description: "AgentBench: Evaluating LLMs as Agents"
-  - level: "L4"
-    url: "https://docs.temporal.io/"
-    description: "Temporal Workflow Engine 文档"
+  - level: L4
+    url: https://docs.temporal.io/
+    description: Temporal Workflow Engine 文档
 relations:
-  prerequisite: ["12-ToolCalling完整剖析", "14-模型网关与Prompt管理"]
-  related: ["17-企业级RAG系统设计", "12-多Agent协作架构", "12-工具生态管理", "15-AI安全全面防护体系"]
-tags: ["agent-platform", "workflow", "tool-market", "dag", "session", "monitoring"]
-created: "2026-07-20"
-updated: "2026-07-20"
+  prerequisite:
+    - 12-ToolCalling完整剖析
+    - 14-模型网关与Prompt管理
+  related:
+    - 17-企业级RAG系统设计
+    - 12-多Agent协作架构
+    - 12-工具生态管理
+    - 15-AI安全全面防护体系
+tags:
+  - agent-platform
+  - workflow
+  - tool-market
+  - dag
+  - session
+  - monitoring
+created: 2026-07-20
+updated: 2026-07-27
+content_type: production
+verification:
+  reviewed_at: 2026-07-27
+  version_anchor: MCP 2025-11-25 / Spring AI 2.0.0
+  code_status: tested
+  lab: lab-spring-ai-tools
+  evidence:
+    scope: article-core
+    source_files:
+      - labs/lab-spring-ai-tools/src/main/java/com/javaai/kb/labs/tools/SafeToolRegistry.java
+      - labs/lab-spring-ai-tools/src/main/java/com/javaai/kb/labs/tools/ToolCallingDemo.java
+    test_files:
+      - labs/lab-spring-ai-tools/src/test/java/com/javaai/kb/labs/tools/SafeToolRegistryTest.java
+      - labs/lab-spring-ai-tools/src/test/java/com/javaai/kb/labs/tools/ToolCallingDemoTest.java
+  performance:
+    status: illustrative
 ---
 
 # Agent平台设计
+
+> **性能数据声明：** 除非具体表格同时给出硬件、软件版本、数据规模、参数、
+> 测试脚本、运行次数、P50/P95/P99、日期和原始结果链接，否则本文中的精确
+> 性能数字均为“示意值，不代表基准结果”，不能用于容量规划或产品比较。
 
 ## 概述
 

@@ -1,24 +1,33 @@
 ---
-domain: "10-AI数据工程"
-title: "Spring Batch在AI数据工程中的批处理流水线"
-status: "draft"
-level: "advanced"
+domain: 10-AI数据工程
+title: Spring Batch在AI数据工程中的批处理流水线
+status: draft
+level: advanced
 sources:
-  - level: "L1"
-    url: "https://docs.spring.io/spring-batch/reference/"
-    description: "Spring Batch 官方参考文档"
-  - level: "L1"
-    url: "https://docs.spring.io/spring-boot/reference/features/messaging.html"
-    description: "Spring Boot 官方文档 — 批处理和异步"
-  - level: "L4"
-    url: "https://docs.spring.io/spring-ai/reference/api/etl-pipeline.html"
-    description: "Spring AI ETL Pipeline 文档"
+  - level: L1
+    url: https://docs.spring.io/spring-batch/reference/
+    description: Spring Batch 官方参考文档
+  - level: L4
+    url: https://docs.spring.io/spring-ai/reference/api/etl-pipeline.html
+    description: Spring AI ETL Pipeline 文档
 relations:
-  prerequisite: ["03-SpringBoot4深度解析", "10-Java文档解析全景"]
-  related: ["10-切片策略深度剖析", "11-完整RAG流水线实现", "05-分布式一致性与事务方案"]
-tags: ["spring-batch", "batch-processing", "embedding", "rate-limiting", "partitioning", "etl"]
-created: "2026-07-17"
-updated: "2026-07-17"
+  prerequisite:
+    - 03-SpringBoot4深度解析
+    - 10-Java文档解析全景
+  related:
+    - 10-切片策略深度剖析
+    - 11-完整RAG流水线实现
+    - 05-分布式一致性与事务方案
+tags:
+  - spring-batch
+  - batch-processing
+  - embedding
+  - rate-limiting
+  - partitioning
+  - etl
+created: 2026-07-17
+updated: 2026-07-17
+content_type: production
 ---
 
 # Spring Batch在AI数据工程中的批处理流水线

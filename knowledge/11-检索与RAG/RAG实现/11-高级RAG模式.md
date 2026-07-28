@@ -1,30 +1,44 @@
 ---
-domain: "11-检索与RAG"
-title: "高级RAG模式：从Multi-Query到GraphRAG"
-status: "draft"
-level: "advanced"
+domain: 11-检索与RAG
+title: 高级RAG模式：从Multi-Query到GraphRAG
+status: draft
+level: advanced
 sources:
-  - level: "L4"
-    url: "https://arxiv.org/abs/2212.10496"
-    description: "HyDE论文 — Precise Zero-Shot Dense Retrieval without Relevance Labels"
-  - level: "L4"
-    url: "https://arxiv.org/abs/2305.06983"
-    description: "Multi-Query RAG — 多角度查询增强检索"
-  - level: "L4"
-    url: "https://arxiv.org/abs/2401.15884"
-    description: "Corrective RAG (CRAG) — 检索质量自校正"
-  - level: "L4"
-    url: "https://arxiv.org/abs/2404.16130"
-    description: "GraphRAG (Microsoft) — 图增强检索生成"
-  - level: "L4"
-    url: "https://arxiv.org/abs/2310.11511"
-    description: "Self-RAG — 自适应检索增强生成"
+  - level: L4
+    url: https://arxiv.org/abs/2212.10496
+    description: HyDE论文 — Precise Zero-Shot Dense Retrieval without Relevance Labels
+  - level: L4
+    url: https://arxiv.org/abs/2305.06983
+    description: Multi-Query RAG — 多角度查询增强检索
+  - level: L4
+    url: https://arxiv.org/abs/2401.15884
+    description: Corrective RAG (CRAG) — 检索质量自校正
+  - level: L4
+    url: https://arxiv.org/abs/2404.16130
+    description: GraphRAG (Microsoft) — 图增强检索生成
+  - level: L4
+    url: https://arxiv.org/abs/2310.11511
+    description: Self-RAG — 自适应检索增强生成
 relations:
-  prerequisite: ["11-向量检索与混合检索", "11-重排与上下文处理", "12-ToolCalling完整剖析"]
-  related: ["11-完整RAG流水线实现", "09-SpringAI2深度解析"]
-tags: ["advanced-rag", "multi-query", "hyde", "crag", "adaptive-rag", "agentic-rag", "graphrag", "parent-child-retrieval"]
-created: "2026-07-17"
-updated: "2026-07-17"
+  prerequisite:
+    - 11-向量检索与混合检索
+    - 11-重排与上下文处理
+    - 12-ToolCalling完整剖析
+  related:
+    - 11-完整RAG流水线实现
+    - 09-SpringAI2深度解析
+tags:
+  - advanced-rag
+  - multi-query
+  - hyde
+  - crag
+  - adaptive-rag
+  - agentic-rag
+  - graphrag
+  - parent-child-retrieval
+created: 2026-07-17
+updated: 2026-07-17
+content_type: production
 ---
 
 # 高级RAG模式：从Multi-Query到GraphRAG

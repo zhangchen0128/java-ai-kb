@@ -1,24 +1,34 @@
 ---
-domain: "09-Java AI框架"
-title: "LangChain4j Comparison"
-status: "draft"
-level: "intermediate"
+domain: 09-Java AI框架
+title: LangChain4j Comparison
+status: draft
+level: intermediate
 sources:
-  - level: "L1"
-    url: "https://docs.langchain4j.dev/"
-    description: "LangChain4j 官方文档"
-  - level: "L1"
-    url: "https://docs.spring.io/spring-ai/reference/"
-    description: "Spring AI 官方文档"
-  - level: "L2"
-    url: "https://github.com/langchain4j/langchain4j"
-    description: "LangChain4j GitHub 仓库"
+  - level: L1
+    url: https://docs.langchain4j.dev/
+    description: LangChain4j 官方文档
+  - level: L1
+    url: https://docs.spring.io/spring-ai/reference/
+    description: Spring AI 官方文档
+  - level: L2
+    url: https://github.com/langchain4j/langchain4j
+    description: LangChain4j GitHub 仓库
 relations:
-  prerequisite: ["09-SpringAI2深度解析"]
-  related: ["09-架构抽象层设计", "08-云模型API与SDK使用"]
-tags: ["langchain4j", "spring-ai", "comparison", "framework-selection", "ai-services", "migration"]
-created: "2026-07-17"
-updated: "2026-07-17"
+  prerequisite:
+    - 09-SpringAI2深度解析
+  related:
+    - 09-架构抽象层设计
+    - 08-云模型API与SDK使用
+tags:
+  - langchain4j
+  - spring-ai
+  - comparison
+  - framework-selection
+  - ai-services
+  - migration
+created: 2026-07-17
+updated: 2026-07-17
+content_type: concept
 ---
 
 # LangChain4j Comparison

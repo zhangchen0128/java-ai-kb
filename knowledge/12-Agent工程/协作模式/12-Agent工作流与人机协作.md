@@ -1,27 +1,36 @@
 ---
-domain: "12-Agent工程"
-title: "Agent Workflow 范式与 Human-in-the-loop 实战"
-status: "draft"
-level: "intermediate"
+domain: 12-Agent工程
+title: Agent Workflow 范式与 Human-in-the-loop 实战
+status: draft
+level: intermediate
 sources:
-  - level: "L1"
-    url: "https://docs.spring.io/spring-statemachine/docs/current/reference/"
-    description: "Spring State Machine 官方文档"
-  - level: "L1"
-    url: "https://docs.spring.io/spring-batch/docs/current/reference/html/"
-    description: "Spring Batch 官方文档"
-  - level: "L2"
-    url: "https://docs.temporal.io/"
-    description: "Temporal Workflow 引擎文档"
-  - level: "L2"
-    url: "https://www.anthropic.com/engineering/building-effective-agents"
-    description: "Anthropic Building Effective Agents"
+  - level: L1
+    url: https://docs.spring.io/spring-statemachine/docs/current/reference/
+    description: Spring State Machine 官方文档
+  - level: L1
+    url: https://docs.spring.io/spring-batch/docs/current/reference/html/
+    description: Spring Batch 官方文档
+  - level: L2
+    url: https://docs.temporal.io/
+    description: Temporal Workflow 引擎文档
+  - level: L2
+    url: https://www.anthropic.com/engineering/building-effective-agents
+    description: Anthropic Building Effective Agents
 relations:
-  prerequisite: ["12-Agent记忆与规划"]
-  related: ["12-多Agent协作架构", "12-ToolCalling完整剖析"]
-tags: ["workflow", "human-in-the-loop", "state-machine", "spring-state-machine", "insurance"]
-created: "2026-07-17"
-updated: "2026-07-17"
+  prerequisite:
+    - 12-Agent记忆与规划
+  related:
+    - 12-多Agent协作架构
+    - 12-ToolCalling完整剖析
+tags:
+  - workflow
+  - human-in-the-loop
+  - state-machine
+  - spring-state-machine
+  - insurance
+created: 2026-07-17
+updated: 2026-07-17
+content_type: production
 ---
 
 # Agent Workflow 范式与 Human-in-the-loop 实战

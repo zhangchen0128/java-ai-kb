@@ -1,15 +1,14 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.javaai.kb</groupId>
     <artifactId>labs</artifactId>
     <version>1.0.0</version>
     <packaging>pom</packaging>
-    <name>Java AI 知识库 — 实验代码</name>
-    <description>80篇知识笔记对应的可运行 Java 示例</description>
+    <name>Java AI Knowledge Labs</name>
 
     <modules>
         <module>lab-java25-concurrency</module>
@@ -23,13 +22,18 @@
     </modules>
 
     <properties>
-        <java.version>21</java.version>
+        <!-- The public baseline and CI toolchain are JDK 25. The default release
+             remains 21 only as a contributor fallback; the automatically
+             activated jdk25 profile compiles the JDK 25 preview source set. -->
+        <java.baseline>25</java.baseline>
         <maven.compiler.release>21</maven.compiler.release>
-        <spring-boot.version>4.0.0</spring-boot.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+        <spring-boot.version>4.0.7</spring-boot.version>
         <spring-ai.version>2.0.0</spring-ai.version>
-        <opentelemetry.version>1.40.0</opentelemetry.version>
-        <junit.version>5.11.4</junit.version>
-        <testcontainers.version>1.20.4</testcontainers.version>
+        <a2a-java.version>1.1.0.Final</a2a-java.version>
+        <junit.version>5.13.2</junit.version>
+        <java.ai.kb.external>false</java.ai.kb.external>
     </properties>
 
     <dependencyManagement>
@@ -42,9 +46,16 @@
                 <scope>import</scope>
             </dependency>
             <dependency>
+                <groupId>org.springframework.ai</groupId>
+                <artifactId>spring-ai-bom</artifactId>
+                <version>${spring-ai.version}</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+            <dependency>
                 <groupId>org.junit</groupId>
                 <artifactId>junit-bom</artifactId>
-                <version>5.11.4</version>
+                <version>${junit.version}</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -60,21 +71,85 @@
     </dependencies>
 
     <build>
+        <pluginManagement>
+            <plugins>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-compiler-plugin</artifactId>
+                    <version>3.14.1</version>
+                </plugin>
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-surefire-plugin</artifactId>
+                    <version>3.5.3</version>
+                </plugin>
+            </plugins>
+        </pluginManagement>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.13.0</version>
                 <configuration>
-                    <release>21</release>
+                    <release>${maven.compiler.release}</release>
                     <parameters>true</parameters>
                 </configuration>
             </plugin>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
-                <version>3.5.2</version>
+                <configuration>
+                    <useModulePath>false</useModulePath>
+                    <failIfNoTests>true</failIfNoTests>
+                    <systemPropertyVariables>
+                        <java.ai.kb.external>${java.ai.kb.external}</java.ai.kb.external>
+                    </systemPropertyVariables>
+                </configuration>
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <profile>
+            <id>external</id>
+            <properties>
+                <java.ai.kb.external>true</java.ai.kb.external>
+            </properties>
+        </profile>
+        <profile>
+            <id>jdk25</id>
+            <activation>
+                <jdk>[25,26)</jdk>
+            </activation>
+            <properties>
+                <maven.compiler.release>25</maven.compiler.release>
+            </properties>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-compiler-plugin</artifactId>
+                        <configuration>
+                            <release>25</release>
+                            <parameters>true</parameters>
+                            <compilerArgs>
+                                <arg>--enable-preview</arg>
+                            </compilerArgs>
+                        </configuration>
+                    </plugin>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-surefire-plugin</artifactId>
+                        <configuration>
+                            <useModulePath>false</useModulePath>
+                            <failIfNoTests>true</failIfNoTests>
+                            <argLine>--enable-preview</argLine>
+                            <systemPropertyVariables>
+                                <java.ai.kb.external>${java.ai.kb.external}</java.ai.kb.external>
+                            </systemPropertyVariables>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>

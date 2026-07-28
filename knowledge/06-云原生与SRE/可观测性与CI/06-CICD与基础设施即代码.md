@@ -1,27 +1,43 @@
 ---
-domain: "06-云原生与SRE"
-title: "CI/CD 与基础设施即代码（IaC）"
-status: "verified"
-level: "advanced"
+domain: 06-云原生与SRE
+title: CI/CD 与基础设施即代码（IaC）
+status: verified
+level: advanced
 sources:
-  - level: "L1"
-    url: "https://docs.github.com/en/actions"
-    description: "GitHub Actions 官方文档"
-  - level: "L1"
-    url: "https://argo-cd.readthedocs.io/"
-    description: "ArgoCD 官方文档"
-  - level: "L1"
-    url: "https://developer.hashicorp.com/terraform/docs"
-    description: "Terraform 官方文档"
-  - level: "L3"
-    url: "https://www.oreilly.com/library/view/terraform-up-and/"
+  - level: L1
+    url: https://docs.github.com/en/actions
+    description: GitHub Actions 官方文档
+  - level: L1
+    url: https://argo-cd.readthedocs.io/
+    description: ArgoCD 官方文档
+  - level: L1
+    url: https://developer.hashicorp.com/terraform/docs
+    description: Terraform 官方文档
+  - level: L3
+    url: https://www.oreilly.com/library/view/terraform-up-and/
     description: "《Terraform: Up & Running》— Yevgeniy Brikman"
 relations:
-  prerequisite: ["06-Docker与Kubernetes云原生部署", "06-OpenTelemetry可观测性体系"]
-  related: ["05-熔断限流与弹性设计"]
-tags: ["cicd", "github-actions", "argocd", "terraform", "gitops", "container-security", "trivy", "deployment-strategies"]
-created: "2026-07-17"
-updated: "2026-07-17"
+  prerequisite:
+    - 06-Docker与Kubernetes云原生部署
+    - 06-OpenTelemetry可观测性体系
+  related:
+    - 05-熔断限流与弹性设计
+tags:
+  - cicd
+  - github-actions
+  - argocd
+  - terraform
+  - gitops
+  - container-security
+  - trivy
+  - deployment-strategies
+created: 2026-07-17
+updated: 2026-07-27
+content_type: production
+verification:
+  reviewed_at: 2026-07-27
+  version_anchor: GitHub Actions and Terraform references (2026-07-27)
+  code_status: not-applicable
 ---
 
 # CI/CD 与基础设施即代码（IaC）

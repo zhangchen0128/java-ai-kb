@@ -1,27 +1,40 @@
 ---
-domain: "03-Java应用平台"
-title: "Jackson-MapStruct-Validator序列化与校验"
-status: "draft"
-level: "intermediate"
+domain: 03-Java应用平台
+title: Jackson-MapStruct-Validator序列化与校验
+status: draft
+level: intermediate
 sources:
-  - level: "L1"
-    url: "https://github.com/FasterXML/jackson-docs"
-    description: "Jackson Official Documentation — ObjectMapper, annotations, serialization/deserialization"
-  - level: "L1"
-    url: "https://mapstruct.org/documentation/stable/reference/html/"
-    description: "MapStruct Reference Guide — @Mapper, @Mapping, Spring integration"
-  - level: "L1"
-    url: "https://docs.jboss.org/hibernate/stable/validator/reference/en-US/html_single/"
-    description: "Hibernate Validator Reference — Bean Validation 3.0 (Jakarta Validation)"
-  - level: "L2"
-    url: "https://github.com/FasterXML/jackson-core"
-    description: "Jackson source code — ObjectMapper, serializers, deserializers"
+  - level: L1
+    url: https://github.com/FasterXML/jackson-docs
+    description: Jackson Official Documentation — ObjectMapper, annotations, serialization/deserialization
+  - level: L1
+    url: https://mapstruct.org/documentation/stable/reference/html/
+    description: MapStruct Reference Guide — @Mapper, @Mapping, Spring integration
+  - level: L1
+    url: https://docs.jboss.org/hibernate/stable/validator/reference/en-US/html_single/
+    description: Hibernate Validator Reference — Bean Validation 3.0 (Jakarta Validation)
+  - level: L2
+    url: https://github.com/FasterXML/jackson-core
+    description: Jackson source code — ObjectMapper, serializers, deserializers
 relations:
-  prerequisite: ["03-SpringBoot4深度解析", "02-反射与模块化系统"]
-  related: ["03-Maven多模块工程实践", "03-SpringMVC与SSE流式输出"]
-tags: ["jackson", "mapstruct", "bean-validation", "serialization", "deserialization", "json-schema", "dto", "objectmapper"]
-created: "2026-07-20"
-updated: "2026-07-20"
+  prerequisite:
+    - 03-SpringBoot4深度解析
+    - 02-反射与模块化系统
+  related:
+    - 03-Maven多模块工程实践
+    - 03-SpringMVC与SSE流式输出
+tags:
+  - jackson
+  - mapstruct
+  - bean-validation
+  - serialization
+  - deserialization
+  - json-schema
+  - dto
+  - objectmapper
+created: 2026-07-20
+updated: 2026-07-20
+content_type: practice
 ---
 
 # Jackson、MapStruct、Validator 序列化与校验

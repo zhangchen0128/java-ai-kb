@@ -1,8 +1,21 @@
-const CACHE = 'kb-v1';
-const URLS = ['/','/app.css','/app.js','/nav-tree.json','/search-index.json','/manifest.json'];
+const CACHE = 'kb-v5';
+const URLS = [
+  './',
+  'index.html',
+  'app.css?v=5',
+  'app.js?v=5',
+  'nav-tree.json',
+  'search-index.json',
+  'site-meta.json',
+  'manifest.json',
+];
 
 self.addEventListener('install', e => {
-  e.waitUntil(caches.open(CACHE).then(c => c.addAll(URLS)));
+  e.waitUntil(
+    caches.open(CACHE).then(cache =>
+      cache.addAll(URLS.map(url => new Request(url, { cache: 'reload' }))),
+    ),
+  );
   self.skipWaiting();
 });
 
@@ -15,15 +28,24 @@ self.addEventListener('activate', e => {
 
 self.addEventListener('fetch', e => {
   if (e.request.method !== 'GET') return;
-  e.respondWith(
-    caches.match(e.request).then(cached =>
-      cached || fetch(e.request).then(resp => {
-        if (resp.ok) {
-          const clone = resp.clone();
-          caches.open(CACHE).then(c => c.put(e.request, clone));
-        }
-        return resp;
-      })
-    )
-  );
+  const url = new URL(e.request.url);
+  if (url.origin !== self.location.origin) return;
+  e.respondWith(networkFirst(e.request));
 });
+
+async function networkFirst(request) {
+  const cache = await caches.open(CACHE);
+  try {
+    const response = await fetch(request, { cache: 'no-store' });
+    if (response.ok) await cache.put(request, response.clone());
+    return response;
+  } catch (error) {
+    const cached = await caches.match(request);
+    if (cached) return cached;
+    if (request.mode === 'navigate') {
+      const shell = await caches.match('./');
+      if (shell) return shell;
+    }
+    throw error;
+  }
+}

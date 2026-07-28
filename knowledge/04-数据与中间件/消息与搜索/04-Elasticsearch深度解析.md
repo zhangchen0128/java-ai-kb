@@ -1,30 +1,59 @@
 ---
-domain: "04-数据与中间件"
-title: "Elasticsearch 深度解析"
-status: "verified"
+domain: 04-数据与中间件
+title: Elasticsearch 深度解析
+status: verified
 verification:
-  reviewed_at: "2026-07-27"
-  version_anchor: "JDK 25 / Spring Boot 4.x / Spring AI 2.x"
-level: "advanced"
+  reviewed_at: 2026-07-27
+  version_anchor: Elasticsearch 9 reference
+  code_status: tested
+  lab: lab-rag-pipeline
+  evidence:
+    scope: article-core
+    source_files:
+      - labs/lab-rag-pipeline/src/main/java/com/javaai/kb/labs/rag/ChunkerDemo.java
+      - labs/lab-rag-pipeline/src/main/java/com/javaai/kb/labs/rag/DeterministicRagPipeline.java
+    test_files:
+      - labs/lab-rag-pipeline/src/test/java/com/javaai/kb/labs/rag/DeterministicRagPipelineTest.java
+  performance:
+    status: illustrative
+level: advanced
 sources:
-  - level: "L1"
-    url: "https://www.elastic.co/guide/en/elasticsearch/reference/current/index.html"
-    description: "Elasticsearch 9.x 官方参考文档"
-  - level: "L2"
-    url: "https://github.com/elastic/elasticsearch"
-    description: "Elasticsearch 源码（倒排索引、相关性评分、集群管理）"
-  - level: "L3"
-    url: "https://www.oreilly.com/library/view/elasticsearch-the-definitive/"
+  - level: L1
+    url: https://www.elastic.co/guide/en/elasticsearch/reference/current/index.html
+    description: Elasticsearch 9.x 官方参考文档
+  - level: L2
+    url: https://github.com/elastic/elasticsearch
+    description: Elasticsearch 源码（倒排索引、相关性评分、集群管理）
+  - level: L3
+    url: https://www.oreilly.com/library/view/elasticsearch-the-definitive/
     description: "《Elasticsearch: The Definitive Guide》— Elastic 官方权威指南"
 relations:
-  prerequisite: ["01-数据库原理", "04-PostgreSQL与pgvector深度解析"]
-  related: ["04-Redis深度解析", "11-向量检索与混合检索"]
-tags: ["elasticsearch", "inverted-index", "bm25", "aggregation", "knn", "hybrid-search", "rerank", "rag", "spring-data-elasticsearch"]
-created: "2026-07-17"
-updated: "2026-07-17"
+  prerequisite:
+    - 01-数据库原理
+    - 04-PostgreSQL与pgvector深度解析
+  related:
+    - 04-Redis深度解析
+    - 11-向量检索与混合检索
+tags:
+  - elasticsearch
+  - inverted-index
+  - bm25
+  - aggregation
+  - knn
+  - hybrid-search
+  - rerank
+  - rag
+  - spring-data-elasticsearch
+created: 2026-07-17
+updated: 2026-07-27
+content_type: production
 ---
 
 # Elasticsearch 深度解析
+
+> **性能数据声明：** 除非具体表格同时给出硬件、软件版本、数据规模、参数、
+> 测试脚本、运行次数、P50/P95/P99、日期和原始结果链接，否则本文中的精确
+> 性能数字均为“示意值，不代表基准结果”，不能用于容量规划或产品比较。
 
 ## 概述
 

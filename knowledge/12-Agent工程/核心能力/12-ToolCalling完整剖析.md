@@ -1,24 +1,45 @@
 ---
-domain: "12-Agent工程"
-title: "Tool Calling 完整剖析与 Spring AI 实战"
-status: "draft"
-level: "intermediate"
+domain: 12-Agent工程
+title: Tool Calling 完整剖析与 Spring AI 实战
+status: verified
+level: intermediate
 sources:
-  - level: "L1"
-    url: "https://docs.spring.io/spring-ai/reference/api/tools.html"
-    description: "Spring AI Tool Calling 官方文档"
-  - level: "L1"
-    url: "https://platform.openai.com/docs/guides/function-calling"
-    description: "OpenAI Function Calling 官方指南"
-  - level: "L2"
-    url: "https://docs.anthropic.com/en/docs/build-with-claude/tool-use"
-    description: "Anthropic Tool Use 文档"
+  - level: L1
+    url: https://docs.spring.io/spring-ai/reference/api/tools.html
+    description: Spring AI Tool Calling 官方文档
+  - level: L1
+    url: https://platform.openai.com/docs/guides/function-calling
+    description: OpenAI Function Calling 官方指南
+  - level: L2
+    url: https://docs.anthropic.com/en/docs/build-with-claude/tool-use
+    description: Anthropic Tool Use 文档
 relations:
-  prerequisite: ["09-SpringAI2深度解析"]
-  related: ["12-Agent记忆与规划", "12-Agent记忆与规划"]
-tags: ["tool-calling", "function-calling", "spring-ai", "agent", "java"]
-created: "2026-07-17"
-updated: "2026-07-17"
+  prerequisite:
+    - 09-SpringAI2深度解析
+  related:
+    - 12-Agent记忆与规划
+tags:
+  - tool-calling
+  - function-calling
+  - spring-ai
+  - agent
+  - java
+created: 2026-07-17
+updated: 2026-07-27
+content_type: practice
+verification:
+  reviewed_at: 2026-07-27
+  version_anchor: Spring AI 2.0.0 Tool Calling API
+  code_status: tested
+  lab: lab-spring-ai-tools
+  evidence:
+    scope: article-core
+    source_files:
+      - labs/lab-spring-ai-tools/src/main/java/com/javaai/kb/labs/tools/SafeToolRegistry.java
+      - labs/lab-spring-ai-tools/src/main/java/com/javaai/kb/labs/tools/ToolCallingDemo.java
+    test_files:
+      - labs/lab-spring-ai-tools/src/test/java/com/javaai/kb/labs/tools/SafeToolRegistryTest.java
+      - labs/lab-spring-ai-tools/src/test/java/com/javaai/kb/labs/tools/ToolCallingDemoTest.java
 ---
 
 # Tool Calling 完整剖析与 Spring AI 实战

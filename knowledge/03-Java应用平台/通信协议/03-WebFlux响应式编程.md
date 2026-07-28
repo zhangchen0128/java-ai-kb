@@ -1,27 +1,41 @@
 ---
-domain: "03-Java应用平台"
-title: "WebFlux Reactive Programming"
-status: "draft"
-level: "advanced"
+domain: 03-Java应用平台
+title: WebFlux Reactive Programming
+status: draft
+level: advanced
 sources:
-  - level: "L1"
-    url: "https://docs.spring.io/spring-framework/reference/web/webflux.html"
-    description: "Spring WebFlux 官方文档"
-  - level: "L1"
-    url: "https://projectreactor.io/docs/core/release/reference/"
-    description: "Project Reactor 官方参考文档"
-  - level: "L1"
-    url: "https://r2dbc.io/"
-    description: "R2DBC Reactive Relational Database Connectivity 官方文档"
-  - level: "L1"
-    url: "https://docs.spring.io/spring-framework/reference/web/webflux-vs-mvc.html"
-    description: "Spring WebFlux vs Spring MVC 官方对比"
+  - level: L1
+    url: https://docs.spring.io/spring-framework/reference/web/webflux.html
+    description: Spring WebFlux 官方文档
+  - level: L1
+    url: https://projectreactor.io/docs/core/release/reference/
+    description: Project Reactor 官方参考文档
+  - level: L1
+    url: https://r2dbc.io/
+    description: R2DBC Reactive Relational Database Connectivity 官方文档
+  - level: L1
+    url: https://docs.spring.io/spring-framework/reference/web/webflux/new-framework.html
+    description: Spring WebFlux vs Spring MVC 官方对比
 relations:
-  prerequisite: ["03-SpringBoot4深度解析", "02-现代Java25深度解析"]
-  related: ["03-SpringMVC与SSE流式输出", "08-OpenAI兼容协议详解"]
-tags: ["webflux", "reactor", "mono", "flux", "r2dbc", "reactive", "backpressure", "streaming", "ai"]
-created: "2026-07-20"
-updated: "2026-07-20"
+  prerequisite:
+    - 03-SpringBoot4深度解析
+    - 02-现代Java25深度解析
+  related:
+    - 03-SpringMVC与SSE流式输出
+    - 08-OpenAI兼容协议详解
+tags:
+  - webflux
+  - reactor
+  - mono
+  - flux
+  - r2dbc
+  - reactive
+  - backpressure
+  - streaming
+  - ai
+created: 2026-07-20
+updated: 2026-07-20
+content_type: concept
 ---
 
 > 技术雷达：Trial — WebFlux在Virtual Threads时代已降级为特定场景工具。本条目保留响应式编程知识，但默认推荐使用Spring MVC + Virtual Threads。

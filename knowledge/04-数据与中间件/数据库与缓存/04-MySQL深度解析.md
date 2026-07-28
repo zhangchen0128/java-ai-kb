@@ -1,30 +1,45 @@
 ---
-domain: "04-数据与中间件"
-title: "MySQL 深度解析"
-status: "draft"
-verification:
-  reviewed_at: "2026-07-27"
-  version_anchor: "JDK 25 / Spring Boot 4.x / Spring AI 2.x"
-level: "advanced"
+domain: 04-数据与中间件
+title: MySQL 深度解析
+status: draft
+level: advanced
 sources:
-  - level: "L1"
-    url: "https://dev.mysql.com/doc/refman/8.4/en/"
-    description: "MySQL 8.4 官方参考手册 — InnoDB 架构、SQL 优化、复制与高可用"
-  - level: "L2"
-    url: "https://github.com/mysql/mysql-server"
-    description: "MySQL 8.0/8.4 源码 — InnoDB 缓冲池、B+Tree 索引、Redo/Undo Log 实现"
-  - level: "L3"
-    url: "https://www.oreilly.com/library/view/high-performance-mysql/9781492080503/"
-    description: "《高性能MySQL（第4版）》— Baron Schwartz 等，MySQL 性能优化与架构设计权威指南"
-  - level: "L4"
-    url: "https://www.percona.com/blog/"
-    description: "Percona Blog — MySQL 性能调优、死锁分析、复制延迟排查实战文章"
+  - level: L1
+    url: https://dev.mysql.com/doc/refman/8.4/en/
+    description: MySQL 8.4 官方参考手册 — InnoDB 架构、SQL 优化、复制与高可用
+  - level: L2
+    url: https://github.com/mysql/mysql-server
+    description: MySQL 8.0/8.4 源码 — InnoDB 缓冲池、B+Tree 索引、Redo/Undo Log 实现
+  - level: L3
+    url: https://www.oreilly.com/library/view/high-performance-mysql/9781492080503/
+    description: 《高性能MySQL（第4版）》— Baron Schwartz 等，MySQL 性能优化与架构设计权威指南
+  - level: L4
+    url: https://www.percona.com/blog/
+    description: Percona Blog — MySQL 性能调优、死锁分析、复制延迟排查实战文章
 relations:
-  prerequisite: ["01-数据库原理", "04-PostgreSQL与pgvector深度解析"]
-  related: ["05-缓存策略与多级缓存架构", "05-幂等设计与分布式锁", "03-SpringDataJPA与MyBatis深度解析"]
-tags: ["mysql", "innodb", "b+tree", "mvcc", "redo-log", "binlog", "replication", "hikaricp", "mybatis", "shardingsphere", "sql-optimization", "deadlock"]
-created: "2026-07-20"
-updated: "2026-07-20"
+  prerequisite:
+    - 01-数据库原理
+    - 04-PostgreSQL与pgvector深度解析
+  related:
+    - 05-缓存策略与多级缓存架构
+    - 05-幂等设计与分布式锁
+    - 03-SpringDataJPA与MyBatis深度解析
+tags:
+  - mysql
+  - innodb
+  - b+tree
+  - mvcc
+  - redo-log
+  - binlog
+  - replication
+  - hikaricp
+  - mybatis
+  - shardingsphere
+  - sql-optimization
+  - deadlock
+created: 2026-07-20
+updated: 2026-07-20
+content_type: concept
 ---
 
 # MySQL 深度解析

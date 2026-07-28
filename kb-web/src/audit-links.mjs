@@ -1,18 +1,25 @@
 #!/usr/bin/env node
-import { readFileSync, writeFileSync, readdirSync, statSync, existsSync, mkdirSync } from 'fs';
-import { join, dirname } from 'path';
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+} from 'fs';
+import { execFileSync } from 'child_process';
+import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import YAML from 'yaml';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const KNOWLEDGE = join(__dirname, '..', '..', 'knowledge');
+const ROOT = join(__dirname, '..', '..');
+const KNOWLEDGE = join(ROOT, 'knowledge');
 const REPORTS = join(__dirname, '..', 'reports');
-const OUT = join(REPORTS, 'link-audit-report.md');
-const OUT_JSON = join(REPORTS, 'link-audit-report.json');
 
-const CONCURRENCY = 8;
-const TIMEOUT = 10_000;
-const MAX_RETRIES = 1;
+const GLOBAL_CONCURRENCY = 12;
+const HOST_CONCURRENCY = 2;
+const TIMEOUT_MS = 8_000;
 
 function walk(dir, base = '') {
   const results = [];
@@ -26,156 +33,217 @@ function walk(dir, base = '') {
   return results;
 }
 
-async function checkOnce(url, method = 'HEAD') {
-  const ctrl = new AbortController();
-  const t = setTimeout(() => ctrl.abort(), TIMEOUT);
-  try {
-    const opts = { method, signal: ctrl.signal, redirect: 'follow' };
-    if (method === 'GET') opts.headers = { Range: 'bytes=0-1023' };
-    const r = await fetch(url, opts);
-    clearTimeout(t);
-    return { status: r.status, ok: r.ok, redirected: r.redirected };
-  } catch (e) {
-    clearTimeout(t);
-    return { status: 0, ok: false, error: e.cause?.code || e.message };
+function changedKnowledgeFiles() {
+  const commands = [
+    ['diff', '--name-only', 'origin/main...HEAD'],
+    ['diff', '--name-only'],
+    ['diff', '--name-only', '--cached'],
+  ];
+  const files = new Set();
+  for (const args of commands) {
+    try {
+      const output = execFileSync('git', args, { cwd: ROOT, encoding: 'utf-8' });
+      for (const file of output.split('\n')) {
+        if (file.startsWith('knowledge/') && file.endsWith('.md')) files.add(file.slice('knowledge/'.length));
+      }
+    } catch {
+      // A shallow checkout may not have origin/main. Other diff modes still work.
+    }
   }
+  return [...files];
 }
 
-async function checkUrl(url) {
-  // 1. HEAD first
-  let r = await checkOnce(url, 'HEAD');
+export function collectSources({ changedOnly = false } = {}) {
+  let files = changedOnly ? changedKnowledgeFiles() : walk(KNOWLEDGE);
+  if (changedOnly && files.length === 0) return new Map();
 
-  // 2. If HEAD blocked (403/405) or failed, retry with Range GET
-  if (!r.ok || r.status === 403 || r.status === 405 || r.status === 0) {
-    r = await checkOnce(url, 'GET');
-  }
-
-  // 3. If network error or timeout, retry once
-  if (r.status === 0 || r.status === 429 || r.status >= 500) {
-    await new Promise(res => setTimeout(res, 2000));
-    r = await checkOnce(url, 'GET');
-  }
-
-  return r;
-}
-
-async function run() {
-  console.log('🔍 全量链接审计...\n');
-
-  const files = walk(KNOWLEDGE);
-  const urlMap = new Map(); // url -> { files, desc }
-  const now = new Date();
-  const STALE_DAYS = 180;
-  const staleEntries = [];
-
-  // Collect & deduplicate URLs
+  const urls = new Map();
   for (const rel of files) {
-    const raw = readFileSync(join(KNOWLEDGE, rel), 'utf-8');
-    const m = raw.match(/^---\n([\s\S]*?)\n---/);
-    if (!m) continue;
-    let meta; try { meta = YAML.parse(m[1]); } catch { continue; }
-
-    if (meta.updated) {
-      const age = (now - new Date(meta.updated)) / (1000 * 60 * 60 * 24);
-      if (age > STALE_DAYS) staleEntries.push({ file: rel, updated: meta.updated, age: Math.round(age) });
+    const full = join(KNOWLEDGE, rel);
+    if (!existsSync(full)) continue;
+    const raw = readFileSync(full, 'utf-8');
+    const match = raw.match(/^---\n([\s\S]*?)\n---/);
+    if (!match) continue;
+    let meta;
+    try {
+      meta = YAML.parse(match[1]);
+    } catch {
+      continue;
     }
-    for (const s of (meta.sources || [])) {
-      if (!s.url) continue;
-      const u = s.url.trim();
-      if (!urlMap.has(u)) urlMap.set(u, { files: [], desc: s.description || '' });
-      urlMap.get(u).files.push(rel);
+    for (const source of meta.sources || []) {
+      if (!source.url) continue;
+      const url = source.url.trim();
+      if (!urls.has(url)) urls.set(url, { files: [], descriptions: [] });
+      const info = urls.get(url);
+      info.files.push(rel);
+      if (source.description) info.descriptions.push(source.description);
     }
   }
+  return urls;
+}
 
-  const uniqueUrls = [...urlMap.keys()];
-  console.log(`📊 总URL: ${[...urlMap.values()].reduce((a, v) => a + v.files.length, 0)} 个引用`);
-  console.log(`📊 唯一URL: ${uniqueUrls.length} 个`);
-  console.log(`📊 并发: ${CONCURRENCY}  超时: ${TIMEOUT / 1000}s\n`);
+export async function requestUrl(url, method = 'HEAD', timeoutMs = TIMEOUT_MS) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const headers = {
+      'User-Agent': 'java-ai-kb-link-audit/1.0 (+https://github.com/zhangchen0128/java-ai-kb)',
+      Accept: '*/*',
+    };
+    if (method === 'GET') headers.Range = 'bytes=0-1023';
+    const response = await fetch(url, {
+      method,
+      headers,
+      signal: controller.signal,
+      redirect: 'follow',
+    });
+    if (response.body) await response.body.cancel().catch(() => {});
+    return {
+      status: response.status,
+      finalUrl: response.url,
+      redirected: response.redirected,
+    };
+  } catch (error) {
+    return {
+      status: 0,
+      error: error.cause?.code || error.name || error.message,
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
-  // Check with concurrency
-  const broken = [];
-  const warnings = [];
-  const passed = [];
-  let checked = 0;
+export async function checkUrl(
+  url,
+  requester = requestUrl,
+  wait = ms => new Promise(resolve => setTimeout(resolve, ms)),
+) {
+  let result = await requester(url, 'HEAD');
+  if ([0, 403, 404, 405].includes(result.status)) {
+    result = await requester(url, 'GET');
+  }
+  if (result.status === 0 || result.status === 429 || result.status >= 500) {
+    await wait(500);
+    result = await requester(url, 'GET');
+  }
+  return result;
+}
 
-  async function processUrl(url) {
-    const info = urlMap.get(url);
-    const r = await checkUrl(url);
-    const entry = { url, files: info.files, desc: info.desc, status: r.status };
+export function classifyResult(result) {
+  if ([404, 410].includes(result.status)) return 'broken';
+  if ((result.status >= 200 && result.status < 400)) return 'passed';
+  return 'warning';
+}
 
-    if (r.status === 404 || r.status === 410) {
-      broken.push(entry);
+async function runPool(urls, worker) {
+  const pending = [...urls];
+  const hostActive = new Map();
+  let active = 0;
+  let complete = 0;
+
+  return new Promise((resolve, reject) => {
+    function schedule() {
+      while (active < GLOBAL_CONCURRENCY && pending.length > 0) {
+        const index = pending.findIndex(url => {
+          const host = new URL(url).hostname;
+          return (hostActive.get(host) || 0) < HOST_CONCURRENCY;
+        });
+        if (index === -1) break;
+
+        const [url] = pending.splice(index, 1);
+        const host = new URL(url).hostname;
+        active++;
+        hostActive.set(host, (hostActive.get(host) || 0) + 1);
+
+        Promise.resolve(worker(url))
+          .then(() => {
+            complete++;
+            if (complete % 20 === 0 || complete === urls.length) {
+              process.stdout.write(` ${complete}/${urls.length}\n`);
+            }
+          })
+          .catch(reject)
+          .finally(() => {
+            active--;
+            hostActive.set(host, hostActive.get(host) - 1);
+            if (pending.length === 0 && active === 0) resolve();
+            else schedule();
+          });
+      }
+    }
+    if (pending.length === 0) resolve();
+    else schedule();
+  });
+}
+
+export async function auditLinks({ changedOnly = false, writeReports = true } = {}) {
+  const started = Date.now();
+  const sourceMap = collectSources({ changedOnly });
+  const urls = [...sourceMap.keys()];
+  const results = { passed: [], broken: [], warnings: [] };
+
+  await runPool(urls, async url => {
+    const checked = await checkUrl(url);
+    const info = sourceMap.get(url);
+    const entry = {
+      url,
+      files: [...new Set(info.files)],
+      descriptions: [...new Set(info.descriptions)],
+      ...checked,
+    };
+    const classification = classifyResult(checked);
+    if (classification === 'broken') {
+      results.broken.push(entry);
       process.stdout.write('❌');
-    } else if (r.status === 0 || r.status === 401 || r.status === 403 || r.status === 429 || r.status >= 500) {
-      warnings.push({ ...entry, error: r.error || '' });
-      process.stdout.write('⚠️');
-    } else if (r.ok || r.status >= 300 && r.status < 400) {
-      passed.push(entry);
+    } else if (classification === 'passed') {
+      results.passed.push(entry);
       process.stdout.write('.');
     } else {
-      warnings.push({ ...entry, error: `Unexpected status ${r.status}` });
-      process.stdout.write('?');
+      results.warnings.push(entry);
+      process.stdout.write('⚠️');
     }
-    checked++;
-    if (checked % 20 === 0) process.stdout.write(` ${checked}/${uniqueUrls.length}\n`);
+  });
+
+  const report = {
+    generatedAt: new Date().toISOString(),
+    mode: changedOnly ? 'changed' : 'full',
+    durationMs: Date.now() - started,
+    stats: {
+      uniqueUrls: urls.length,
+      passed: results.passed.length,
+      broken: results.broken.length,
+      warnings: results.warnings.length,
+    },
+    ...results,
+  };
+
+  if (writeReports) {
+    if (!existsSync(REPORTS)) mkdirSync(REPORTS, { recursive: true });
+    writeFileSync(join(REPORTS, 'link-audit-report.json'), JSON.stringify(report, null, 2), 'utf-8');
+    let markdown = '# 外部链接审计报告\n\n';
+    markdown += `生成时间：${report.generatedAt}\n\n`;
+    markdown += `模式：${report.mode}；唯一 URL：${urls.length}；通过：${results.passed.length}；失效：${results.broken.length}；警告：${results.warnings.length}；耗时：${Math.round(report.durationMs / 1000)} 秒。\n\n`;
+    markdown += `## 失效链接（${results.broken.length}）\n\n`;
+    for (const item of results.broken) {
+      markdown += `- ${item.status} ${item.url}\n`;
+      for (const file of item.files) markdown += `  - \`${file}\`\n`;
+    }
+    markdown += `\n## 警告（${results.warnings.length}）\n\n`;
+    for (const item of results.warnings) {
+      markdown += `- ${item.status || item.error || 'ERR'} ${item.url}\n`;
+    }
+    writeFileSync(join(REPORTS, 'link-audit-report.md'), markdown, 'utf-8');
   }
-
-  // Process in batches
-  const queue = [...uniqueUrls];
-  while (queue.length > 0) {
-    const batch = queue.splice(0, CONCURRENCY);
-    await Promise.all(batch.map(processUrl));
-    if (queue.length > 0) await new Promise(r => setTimeout(r, 500));
-  }
-
-  console.log(`\n\n✅ 完成: ${passed.length}  ✅  失效: ${broken.length}  ❌  警告: ${warnings.length}  ⚠️\n`);
-
-  // Generate report
-  if (!existsSync(REPORTS)) mkdirSync(REPORTS, { recursive: true });
-
-  let md = `# 外部链接审计报告\n\n`;
-  md += `**生成时间**: ${now.toISOString().slice(0, 19).replace('T', ' ')}\n`;
-  md += `**总引用**: ${[...urlMap.values()].reduce((a, v) => a + v.files.length, 0)}\n`;
-  md += `**唯一URL**: ${uniqueUrls.length}   **已检**: ${checked}\n`;
-  md += `**通过**: ${passed.length}   **失效**: ${broken.length}   **警告**: ${warnings.length}\n\n`;
-
-  // Broken links
-  md += `## ❌ 失效链接 (${broken.length})\n\n`;
-  if (broken.length === 0) md += '✅ 无失效链接。\n\n';
-  else for (const b of broken) {
-    md += `### \`${b.url}\`\n\n- **状态**: ${b.status}\n- **描述**: ${b.desc}\n- **引用文件**:\n`;
-    for (const f of b.files) md += `  - \`${f}\`\n`;
-    md += '\n';
-  }
-
-  // Warnings
-  md += `## ⚠️ 需关注 (${warnings.length})\n\n`;
-  if (warnings.length === 0) md += '无。\n\n';
-  else for (const w of warnings) {
-    md += `- [${w.status || 'ERR'}] \`${w.url}\` — ${w.error || w.desc}\n`;
-    for (const f of w.files) md += `  - \`${f}\`\n`;
-    md += '\n';
-  }
-
-  // Stale
-  md += `## ⏰ 超过${STALE_DAYS}天未更新 (${staleEntries.length})\n\n`;
-  for (const s of staleEntries.slice(0, 30)) md += `- \`${s.file}\` — ${s.age}天前 (${s.updated})\n`;
-  if (staleEntries.length > 30) md += `\n... 还有 ${staleEntries.length - 30} 篇\n`;
-
-  writeFileSync(OUT, md, 'utf-8');
-  writeFileSync(OUT_JSON, JSON.stringify({ broken, warnings, passed, stale: staleEntries, stats: { totalRefs: [...urlMap.values()].reduce((a, v) => a + v.files.length, 0), uniqueUrls: uniqueUrls.length, checked, passed: passed.length, broken: broken.length, warnings: warnings.length } }, null, 2), 'utf-8');
-
-  console.log(`📊 Markdown报告: ${OUT}`);
-  console.log(`📊 JSON报告:    ${OUT_JSON}`);
-
-  // Exit code: 1 if broken links found
-  if (broken.length > 0) {
-    console.log(`\n❌ 发现 ${broken.length} 个失效链接，退出码 1`);
-    process.exit(1);
-  } else {
-    console.log('\n✅ 所有链接正常');
-    process.exit(0);
-  }
+  return report;
 }
 
-run().catch(e => { console.error(e); process.exit(2); });
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  const changedOnly = process.argv.includes('--changed');
+  console.log(`🔍 ${changedOnly ? '变更' : '全量'}链接审计...`);
+  const report = await auditLinks({ changedOnly });
+  console.log(
+    `\n✅ ${report.stats.passed} 通过  ❌ ${report.stats.broken} 失效`
+    + `  ⚠️ ${report.stats.warnings} 警告  ⏱️ ${Math.round(report.durationMs / 1000)}s`,
+  );
+  if (report.stats.broken > 0) process.exit(1);
+}

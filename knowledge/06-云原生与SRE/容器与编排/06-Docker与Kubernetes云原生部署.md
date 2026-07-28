@@ -1,33 +1,53 @@
 ---
-domain: "06-云原生与SRE"
-title: "Docker 与 Kubernetes — Java 应用云原生部署"
-status: "verified"
+domain: 06-云原生与SRE
+title: Docker 与 Kubernetes — Java 应用云原生部署
+status: verified
 verification:
-  reviewed_at: "2026-07-27"
-  version_anchor: "JDK 25 / Spring Boot 4.x / Spring AI 2.x"
-level: "advanced"
+  reviewed_at: 2026-07-27
+  version_anchor: Docker 28 / Kubernetes 1.33
+  code_status: not-applicable
+  performance:
+    status: illustrative
+level: advanced
 sources:
-  - level: "L1"
-    url: "https://docs.docker.com/reference/"
-    description: "Docker 官方文档"
-  - level: "L1"
-    url: "https://kubernetes.io/docs/home/"
-    description: "Kubernetes 官方文档"
-  - level: "L1"
-    url: "https://helm.sh/docs/"
-    description: "Helm 官方文档"
-  - level: "L3"
-    url: "https://www.oreilly.com/library/view/kubernetes-up-and/"
+  - level: L1
+    url: https://docs.docker.com/reference/
+    description: Docker 官方文档
+  - level: L1
+    url: https://kubernetes.io/docs/home/
+    description: Kubernetes 官方文档
+  - level: L1
+    url: https://helm.sh/docs/
+    description: Helm 官方文档
+  - level: L3
+    url: https://www.oreilly.com/library/view/kubernetes-up-and/
     description: "《Kubernetes: Up and Running》— Brendan Burns 等"
 relations:
-  prerequisite: ["05-分布式一致性与事务方案"]
-  related: ["06-OpenTelemetry可观测性体系", "06-CICD与基础设施即代码"]
-tags: ["docker", "kubernetes", "helm", "java-container", "distroless", "health-check", "hpa", "gpu-scheduling", "kserve"]
-created: "2026-07-17"
-updated: "2026-07-17"
+  prerequisite:
+    - 05-分布式一致性与事务方案
+  related:
+    - 06-OpenTelemetry可观测性体系
+    - 06-CICD与基础设施即代码
+tags:
+  - docker
+  - kubernetes
+  - helm
+  - java-container
+  - distroless
+  - health-check
+  - hpa
+  - gpu-scheduling
+  - kserve
+created: 2026-07-17
+updated: 2026-07-27
+content_type: overview
 ---
 
 # Docker 与 Kubernetes — Java 应用云原生部署
+
+> **性能数据声明：** 除非具体表格同时给出硬件、软件版本、数据规模、参数、
+> 测试脚本、运行次数、P50/P95/P99、日期和原始结果链接，否则本文中的精确
+> 性能数字均为“示意值，不代表基准结果”，不能用于容量规划或产品比较。
 
 ## 概述
 

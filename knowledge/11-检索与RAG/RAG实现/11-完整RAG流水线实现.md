@@ -1,33 +1,63 @@
 ---
-domain: "11-检索与RAG"
-title: "完整企业RAG流水线Java实现：从文档到答案的端到端系统"
-status: "draft"
+domain: 11-检索与RAG
+title: 完整企业RAG流水线Java实现：从文档到答案的端到端系统
+status: verified
 verification:
-  reviewed_at: "2026-07-27"
-  version_anchor: "JDK 25 / Spring Boot 4.x / Spring AI 2.x"
-level: "advanced"
+  reviewed_at: 2026-07-27
+  version_anchor: Spring AI 2.0.0 RAG APIs
+  code_status: tested
+  lab: lab-rag-pipeline
+  evidence:
+    scope: article-core
+    source_files:
+      - labs/lab-rag-pipeline/src/main/java/com/javaai/kb/labs/rag/ChunkerDemo.java
+      - labs/lab-rag-pipeline/src/main/java/com/javaai/kb/labs/rag/DeterministicRagPipeline.java
+    test_files:
+      - labs/lab-rag-pipeline/src/test/java/com/javaai/kb/labs/rag/DeterministicRagPipelineTest.java
+  performance:
+    status: illustrative
+level: advanced
 sources:
-  - level: "L1"
-    url: "https://docs.spring.io/spring-ai/reference/api/chatclient.html"
-    description: "Spring AI ChatClient 官方文档"
-  - level: "L1"
-    url: "https://docs.spring.io/spring-ai/reference/api/vectordbs/pgvector.html"
-    description: "Spring AI pgvector 集成文档"
-  - level: "L1"
-    url: "https://docs.spring.io/spring-ai/reference/api/etl-pipeline.html"
-    description: "Spring AI ETL Pipeline 文档"
-  - level: "L4"
-    url: "https://testcontainers.com/guides/"
-    description: "Testcontainers 官方指南 — 集成测试"
+  - level: L1
+    url: https://docs.spring.io/spring-ai/reference/api/chatclient.html
+    description: Spring AI ChatClient 官方文档
+  - level: L1
+    url: https://docs.spring.io/spring-ai/reference/api/vectordbs/pgvector.html
+    description: Spring AI pgvector 集成文档
+  - level: L1
+    url: https://docs.spring.io/spring-ai/reference/api/etl-pipeline.html
+    description: Spring AI ETL Pipeline 文档
+  - level: L4
+    url: https://testcontainers.com/guides/
+    description: Testcontainers 官方指南 — 集成测试
 relations:
-  prerequisite: ["11-向量检索与混合检索", "11-重排与上下文处理", "10-Java文档解析全景", "10-切片策略深度剖析"]
-  related: ["11-高级RAG模式", "10-SpringBatch批处理流水线", "09-SpringAI2深度解析"]
-tags: ["rag", "spring-ai", "pgvector", "elasticsearch", "end-to-end", "testcontainers", "integration-test"]
-created: "2026-07-17"
-updated: "2026-07-17"
+  prerequisite:
+    - 11-向量检索与混合检索
+    - 11-重排与上下文处理
+    - 10-Java文档解析全景
+    - 10-切片策略深度剖析
+  related:
+    - 11-高级RAG模式
+    - 10-SpringBatch批处理流水线
+    - 09-SpringAI2深度解析
+tags:
+  - rag
+  - spring-ai
+  - pgvector
+  - elasticsearch
+  - end-to-end
+  - testcontainers
+  - integration-test
+created: 2026-07-17
+updated: 2026-07-27
+content_type: practice
 ---
 
 # 完整企业RAG流水线Java实现：从文档到答案的端到端系统
+
+> **性能数据声明：** 除非具体表格同时给出硬件、软件版本、数据规模、参数、
+> 测试脚本、运行次数、P50/P95/P99、日期和原始结果链接，否则本文中的精确
+> 性能数字均为“示意值，不代表基准结果”，不能用于容量规划或产品比较。
 
 ## 概述
 
@@ -103,15 +133,15 @@ updated: "2026-07-17"
         <!-- Spring AI -->
         <dependency>
             <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-openai-spring-boot-starter</artifactId>
+            <artifactId>spring-ai-starter-model-openai</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-pgvector-store-spring-boot-starter</artifactId>
+            <artifactId>spring-ai-starter-vector-store-pgvector</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.ai</groupId>
-            <artifactId>spring-ai-elasticsearch-store-spring-boot-starter</artifactId>
+            <artifactId>spring-ai-starter-vector-store-elasticsearch</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.ai</groupId>

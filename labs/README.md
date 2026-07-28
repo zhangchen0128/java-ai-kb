@@ -1,13 +1,14 @@
 # Java AI 知识库 — 可运行实验代码
 
-80篇知识笔记对应的 Maven 多模块实验项目。
+86 篇知识条目的 Maven 多模块实验项目。默认测试使用确定性模型、进程内
+协议端点、STDIO 子进程和内存数据，不要求 API Key、数据库或公网。
 
 ## 模块与知识库映射
 
 | 模块 | 知识域 | 关键文章 |
 |------|--------|----------|
-| `lab-java25-concurrency` | 02-Java平台 | [现代Java25深度解析](../knowledge/02-Java平台/语言特性/02-现代Java25深度解析.md)、[Java并发深度解析](../knowledge/02-Java平台/并发/02-Java并发深度解析.md) |
-| `lab-spring-ai-chat` | 09-Java AI框架 | [SpringAI2深度解析](../knowledge/09-Java%20AI框架/09-SpringAI2深度解析.md) |
+| `lab-java25-concurrency` | 02/05 | [现代Java25深度解析](../knowledge/02-Java平台/语言特性/02-现代Java25深度解析.md)、[Java并发深度解析](../knowledge/02-Java平台/并发/02-Java并发深度解析.md)、[熔断限流与弹性设计](../knowledge/05-分布式架构/弹性设计/05-熔断限流与弹性设计.md)、[缓存策略与多级缓存架构](../knowledge/05-分布式架构/事务与一致性/05-缓存策略与多级缓存架构.md) |
+| `lab-spring-ai-chat` | 08/09 | [云模型API与SDK使用](../knowledge/08-模型接入与推理/模型API/08-云模型API与SDK使用.md)、[SpringAI2深度解析](../knowledge/09-Java%20AI框架/09-SpringAI2深度解析.md) |
 | `lab-spring-ai-tools` | 09/12 | [ToolCalling完整剖析](../knowledge/12-Agent工程/核心能力/12-ToolCalling完整剖析.md) |
 | `lab-mcp-server` | 13-AI协议 | [MCP协议与JavaSDK](../knowledge/13-AI协议/13-MCP协议与JavaSDK.md) |
 | `lab-a2a-agent` | 13-AI协议 | [A2A协议与Agent互操作](../knowledge/13-AI协议/13-A2A协议与Agent互操作.md) |
@@ -18,27 +19,36 @@
 ## 运行
 
 ```bash
-# 全部模块编译+测试
-mvn test
+# 从仓库根目录执行全部模块
+mvn -B -f labs/pom.xml test
 
 # 单个模块
-mvn test -pl lab-java25-concurrency
+mvn -B -f labs/pom.xml test -pl lab-java25-concurrency
 
-# 跳过需要外部服务的测试
-mvn test -DexcludeGroups=external
+# 显式启用需要密钥或外部服务的集成场景（不进入普通 CI）
+mvn -B -f labs/pom.xml -Pexternal verify
 ```
 
 ## 版本锁定
 
-- JDK 25 LTS
-- Spring Boot 4.0.0
+- JDK 25 GA
+- Spring Boot 4.0.7
 - Spring AI 2.0.0
-- JUnit 5.11.4
-- Testcontainers 1.20.4
+- A2A Java SDK 1.1.0.Final
+- MCP 规范 2025-11-25
+
+在 JDK 25 上，`jdk25` profile 自动启用 `--enable-preview`，并编译
+`lab-java25-concurrency/src/{main,test}/java25` 中的 Structured
+Concurrency 测试。JDK 21 只作为贡献者运行其余确定性测试的兼容回退，
+正式 CI 使用 JDK 25。
 
 ## 规则
 
 - ✅ 无外部密钥即可运行的单元测试
-- ✅ 默认不进入 CI 的需要外部服务的测试（`@Disabled`）
-- ✅ 固定版本号，不使用 BOM 范围版本
-- ✅ 文章中的代码与 lab 示例一一对应
+- ✅ 外部集成只由 `external` profile 显式开启，普通 CI 不访问真实模型
+- ✅ Spring AI 依赖由 `spring-ai-bom` 2.0.0 管理
+- ✅ 固定补丁版本，不使用动态版本或 Snapshot
+- ✅ verified 文章通过 `verification.evidence` 关联核心生产源码与测试
+- ✅ 核心代码块可用唯一 `code-id` 精确关联源码符号与测试方法
+- ✅ MCP 模块把 deprecated API 编译警告视为失败
+- ℹ️ 当前证据粒度为 `article-core`，不宣称每个 Markdown 代码块都已逐块执行

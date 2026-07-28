@@ -1,30 +1,39 @@
 ---
-domain: "03-Java应用平台"
-title: "Spring Boot 4 In-Depth"
-status: "draft"
-verification:
-  reviewed_at: "2026-07-27"
-  version_anchor: "JDK 25 / Spring Boot 4.x / Spring AI 2.x"
-level: "intermediate"
+domain: 03-Java应用平台
+title: Spring Boot 4 In-Depth
+status: draft
+level: intermediate
 sources:
-  - level: "L1"
-    url: "https://docs.spring.io/spring-boot/reference/"
-    description: "Spring Boot 4.x Reference Documentation — auto-configuration, starter, actuator, AOT, configuration, lifecycle"
-  - level: "L1"
-    url: "https://docs.spring.io/spring-boot/specification/configuration-metadata/"
-    description: "Spring Boot Configuration Metadata Specification — @ConfigurationProperties metadata format"
-  - level: "L2"
-    url: "https://github.com/spring-projects/spring-boot"
-    description: "Spring Boot source code — AutoConfigurationImportSelector, ConditionEvaluator, SpringApplication implementation"
-  - level: "L4"
-    url: "https://spring.io/blog"
-    description: "Spring Official Blog — AOT compilation updates, configuration encryption, virtual threads configuration guides"
+  - level: L1
+    url: https://docs.spring.io/spring-boot/reference/
+    description: Spring Boot 4.x Reference Documentation — auto-configuration, starter, actuator, AOT, configuration, lifecycle
+  - level: L1
+    url: https://docs.spring.io/spring-boot/specification/configuration-metadata/
+    description: Spring Boot Configuration Metadata Specification — @ConfigurationProperties metadata format
+  - level: L2
+    url: https://github.com/spring-projects/spring-boot
+    description: Spring Boot source code — AutoConfigurationImportSelector, ConditionEvaluator, SpringApplication implementation
+  - level: L4
+    url: https://spring.io/blog
+    description: Spring Official Blog — AOT compilation updates, configuration encryption, virtual threads configuration guides
 relations:
-  prerequisite: ["02-现代Java25深度解析"]
-  related: ["03-Spring核心IoC-AOP-事务", "03-SpringMVC与SSE流式输出"]
-tags: ["spring-boot", "auto-configuration", "starter", "actuator", "aot", "configuration", "virtual-threads", "lifecycle"]
-created: "2026-07-17"
-updated: "2026-07-17"
+  prerequisite:
+    - 02-现代Java25深度解析
+  related:
+    - 03-Spring核心IoC-AOP-事务
+    - 03-SpringMVC与SSE流式输出
+tags:
+  - spring-boot
+  - auto-configuration
+  - starter
+  - actuator
+  - aot
+  - configuration
+  - virtual-threads
+  - lifecycle
+created: 2026-07-17
+updated: 2026-07-17
+content_type: overview
 ---
 
 # Spring Boot 4 In-Depth

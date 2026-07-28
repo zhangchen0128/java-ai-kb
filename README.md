@@ -1,14 +1,19 @@
 # Java AI 工程师知识库
 
-> 一个覆盖 Java 企业开发到 AI 应用工程的完整知识体系。
+> 面向 Java/AI 工程师的公开知识库：来源可追溯、版本可复核、核心代码可运行。
+
+当前质量快照：86 篇知识条目、19 个领域、35 篇 `verified`，8 个
+Maven Lab 默认不需要 API Key。详细结果见
+[`QUALITY_REPORT.md`](./QUALITY_REPORT.md)。
 
 ## 快速导航
 
 | 文件 | 用途 |
 |------|------|
-| [`KNOWLEDGE_TAXONOMY.md`](./KNOWLEDGE_TAXONOMY.md) | 知识分类体系 — 18个知识域的定义和元数据规范 |
+| [`KNOWLEDGE_TAXONOMY.md`](./KNOWLEDGE_TAXONOMY.md) | 知识分类体系 — 19 个领域的定义和元数据规范 |
 | [`TECHNOLOGY_RADAR.md`](./TECHNOLOGY_RADAR.md) | 技术雷达 — Adopt/Trial/Assess/Hold 四象限选型 |
-| [`CLAUDE.md`](./CLAUDE.md) | 操作规则 — Claude 和用户的操作指南 |
+| [`versions.lock.yaml`](./versions.lock.yaml) | 六周冻结版本基线 |
+| [`labs/`](./labs/) | 8 个无密钥确定性实验 |
 
 ## 知识域
 
@@ -53,9 +58,27 @@ JUnit 5 + Testcontainers | Claude Code
 - 某个主题放哪？→ `KNOWLEDGE_TAXONOMY.md`
 - 怎么写笔记？→ `CLAUDE.md`
 
-### 维护
-所有操作通过 Claude 进行，Claude 自动遵守三份总控文件的约束。
+### 验证
+
+```bash
+cd kb-web
+npm ci
+npm run check
+npm run audit:links
+
+cd ..
+mvn -B -f labs/pom.xml test
+```
+
+`npm run check` 固定执行结构验证、Node 测试、深度内容审核和从零网站构建。
+网站支持“只看已验证”筛选；草稿和待复核条目会显示醒目标识。
+`tested` 文章会展示 `article-core` 粒度的源码与测试文件；这不等同于把每个
+Markdown 代码块都声明为已执行。通过 `<!-- code-id: ... -->` 与
+`verification.evidence.blocks` 声明的核心代码块会进一步校验源码符号和测试
+方法，并在网站显示“已映射”标识。
+维护者可运行 `npm run audit:content:fix` 将未通过深审的 verified 条目安全
+降为 draft；CI 只报告并失败，不在检出目录中静默改写内容。
 
 ## 许可
 
-个人知识库，保留所有权利。
+公开浏览。内容与代码的再分发权利以仓库后续明确的许可证文件为准。

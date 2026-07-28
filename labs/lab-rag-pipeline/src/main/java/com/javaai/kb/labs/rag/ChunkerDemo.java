@@ -12,6 +12,12 @@ public class ChunkerDemo {
 
     /** 固定大小切片 */
     public static List<String> fixedSize(String text, int size, int overlap) {
+        if (text == null) throw new IllegalArgumentException("text is required");
+        if (size <= 0) throw new IllegalArgumentException("size must be positive");
+        if (overlap < 0 || overlap >= size) {
+            throw new IllegalArgumentException("overlap must be between 0 and size - 1");
+        }
+        if (text.isEmpty()) return List.of();
         var chunks = new ArrayList<String>();
         int i = 0;
         while (i < text.length()) {
@@ -24,11 +30,19 @@ public class ChunkerDemo {
 
     /** 段落切片 — 按双换行分割 */
     public static List<String> byParagraph(String text) {
+        if (text == null) throw new IllegalArgumentException("text is required");
+        if (text.isBlank()) return List.of();
         return List.of(text.split("\n\n"));
     }
 
     /** 递归字符切片 — 按分隔符优先级分割 */
     public static List<String> recursive(String text, int maxLen, String[] separators, int sepIdx) {
+        if (text == null) throw new IllegalArgumentException("text is required");
+        if (maxLen <= 0) throw new IllegalArgumentException("maxLen must be positive");
+        if (separators == null || separators.length == 0) {
+            return fixedSize(text, maxLen, 0);
+        }
+        if (sepIdx < 0) throw new IllegalArgumentException("sepIdx must not be negative");
         if (text.length() <= maxLen) return List.of(text);
         if (sepIdx >= separators.length) return fixedSize(text, maxLen, 0);
 

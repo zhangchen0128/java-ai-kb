@@ -1,27 +1,58 @@
 ---
-domain: "04-数据与中间件"
-title: "Kafka 深度解析"
-status: "verified"
-level: "advanced"
+domain: 04-数据与中间件
+title: Kafka 深度解析
+status: verified
+level: advanced
 sources:
-  - level: "L1"
-    url: "https://kafka.apache.org/documentation/"
-    description: "Apache Kafka 4.x 官方文档"
-  - level: "L2"
-    url: "https://github.com/apache/kafka"
-    description: "Kafka 源码（日志存储、副本、Controller）"
-  - level: "L3"
-    url: "https://www.oreilly.com/library/view/kafka-the-definitive/"
+  - level: L1
+    url: https://kafka.apache.org/documentation/
+    description: Apache Kafka 4.x 官方文档
+  - level: L2
+    url: https://github.com/apache/kafka
+    description: Kafka 源码（日志存储、副本、Controller）
+  - level: L3
+    url: https://www.oreilly.com/library/view/kafka-the-definitive/
     description: "《Kafka: The Definitive Guide》— Confluent 官方指南"
 relations:
-  prerequisite: ["01-分布式系统理论"]
-  related: ["04-Redis深度解析", "05-幂等设计与分布式锁", "04-对象存储与中间件扩展"]
-tags: ["kafka", "partition", "consumer-group", "isr", "kraft", "spring-kafka", "cdc", "event-driven"]
-created: "2026-07-17"
-updated: "2026-07-17"
+  prerequisite:
+    - 01-分布式系统理论
+  related:
+    - 04-Redis深度解析
+    - 05-幂等设计与分布式锁
+    - 04-对象存储与中间件扩展
+tags:
+  - kafka
+  - partition
+  - consumer-group
+  - isr
+  - kraft
+  - spring-kafka
+  - cdc
+  - event-driven
+created: 2026-07-17
+updated: 2026-07-27
+content_type: production
+verification:
+  reviewed_at: 2026-07-27
+  version_anchor: Apache Kafka 4.1 protocol and APIs
+  code_status: tested
+  lab: lab-rag-pipeline
+  evidence:
+    scope: article-core
+    source_files:
+      - labs/lab-rag-pipeline/src/main/java/com/javaai/kb/labs/rag/ChunkerDemo.java
+      - labs/lab-rag-pipeline/src/main/java/com/javaai/kb/labs/rag/DeterministicRagPipeline.java
+    test_files:
+      - labs/lab-rag-pipeline/src/test/java/com/javaai/kb/labs/rag/DeterministicRagPipelineTest.java
+  performance:
+    status: illustrative
 ---
 
 # Kafka 深度解析
+
+> **性能数据声明：** 除非具体表格同时给出硬件、软件版本、数据规模、参数、
+> 测试脚本、运行次数、P50/P95/P99、日期和原始结果链接，否则本文中的精确
+> 性能数字均为“示意值，不代表基准结果”，不能用于容量规划或产品比较。
 
 ## 概述
 
