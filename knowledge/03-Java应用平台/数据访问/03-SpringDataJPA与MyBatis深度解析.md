@@ -2,6 +2,10 @@
 domain: 03-Java应用平台
 title: Spring Data JPA与MyBatis深度解析
 status: draft
+verification:
+  reviewed_at: "2026-07-28"
+  version_anchor: "Spring Data JPA 3.x / MyBatis 3.x"
+  code_status: illustrative
 level: intermediate
 sources:
   - level: L1

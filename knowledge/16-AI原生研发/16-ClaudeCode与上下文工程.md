@@ -32,7 +32,7 @@ created: 2026-07-17
 updated: 2026-07-27
 content_type: overview
 verification:
-  reviewed_at: 2026-07-27
+  reviewed_at: "2026-07-28"
   version_anchor: Claude Code documentation reviewed 2026-07-27
   code_status: illustrative
 ---

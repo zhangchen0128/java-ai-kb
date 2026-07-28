@@ -2,6 +2,10 @@
 domain: 03-Java应用平台
 title: Maven多模块工程实践
 status: draft
+verification:
+  reviewed_at: "2026-07-28"
+  version_anchor: "Maven 4.x"
+  code_status: illustrative
 level: intermediate
 sources:
   - level: L1

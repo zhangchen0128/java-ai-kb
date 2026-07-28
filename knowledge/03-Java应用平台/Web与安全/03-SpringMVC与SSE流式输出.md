@@ -2,6 +2,10 @@
 domain: 03-Java应用平台
 title: Spring MVC 请求处理与 SSE 流式输出深度解析
 status: draft
+verification:
+  reviewed_at: "2026-07-28"
+  version_anchor: "Spring MVC 4.x / Spring Boot 4.x"
+  code_status: illustrative
 level: advanced
 sources:
   - level: L1

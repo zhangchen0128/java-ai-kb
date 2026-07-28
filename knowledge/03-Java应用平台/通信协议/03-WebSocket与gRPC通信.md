@@ -2,6 +2,10 @@
 domain: 03-Java应用平台
 title: WebSocket与gRPC通信
 status: draft
+verification:
+  reviewed_at: "2026-07-28"
+  version_anchor: "Spring WebSocket 6.x / gRPC 1.x"
+  code_status: illustrative
 level: intermediate
 sources:
   - level: L1

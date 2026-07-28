@@ -2,6 +2,10 @@
 domain: 03-Java应用平台
 title: Jackson-MapStruct-Validator序列化与校验
 status: draft
+verification:
+  reviewed_at: "2026-07-28"
+  version_anchor: "Jackson 2.x / MapStruct 1.x"
+  code_status: illustrative
 level: intermediate
 sources:
   - level: L1

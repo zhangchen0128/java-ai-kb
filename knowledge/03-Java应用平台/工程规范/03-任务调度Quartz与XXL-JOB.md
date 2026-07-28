@@ -2,6 +2,10 @@
 domain: 03-Java应用平台
 title: 任务调度Quartz与XXL-JOB
 status: draft
+verification:
+  reviewed_at: "2026-07-28"
+  version_anchor: "Quartz 2.x / XXL-JOB 2.x"
+  code_status: illustrative
 level: intermediate
 sources:
   - level: L1

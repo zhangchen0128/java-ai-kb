@@ -35,7 +35,7 @@ created: 2026-07-17
 updated: 2026-07-27
 content_type: production
 verification:
-  reviewed_at: 2026-07-27
+  reviewed_at: "2026-07-28"
   version_anchor: A2A 1.0 / a2a-java 1.1.0.Final
   code_status: illustrative
 ---

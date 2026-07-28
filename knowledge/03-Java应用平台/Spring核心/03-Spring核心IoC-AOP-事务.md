@@ -2,6 +2,10 @@
 domain: 03-Java应用平台
 title: Spring核心IoC-AOP-事务
 status: draft
+verification:
+  reviewed_at: "2026-07-28"
+  version_anchor: "Spring Framework 6.x / Spring Boot 4.x"
+  code_status: illustrative
 level: intermediate
 sources:
   - level: L1

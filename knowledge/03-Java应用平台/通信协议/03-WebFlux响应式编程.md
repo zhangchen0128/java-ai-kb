@@ -2,6 +2,10 @@
 domain: 03-Java应用平台
 title: WebFlux Reactive Programming
 status: draft
+verification:
+  reviewed_at: "2026-07-28"
+  version_anchor: "Spring WebFlux 6.x / Reactor 3.x"
+  code_status: illustrative
 level: advanced
 sources:
   - level: L1

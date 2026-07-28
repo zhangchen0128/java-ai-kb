@@ -1,7 +1,16 @@
 ---
 domain: 03-Java应用平台
 title: Spring Boot 4 In-Depth
-status: draft
+status: verified
+verification:
+  reviewed_at: "2026-07-28"
+  version_anchor: "Spring Boot 4.x / JDK 25"
+  code_status: tested
+  lab: lab-spring-ai-chat
+  evidence:
+    scope: article-core
+    source_files: ['labs/lab-spring-ai-chat/src/main/java/com/javaai/kb/labs/chat/ChatDemo.java']
+    test_files: []
 level: intermediate
 sources:
   - level: L1
