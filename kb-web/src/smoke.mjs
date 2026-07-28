@@ -56,8 +56,8 @@ try {
   await page.locator('.domain-card').first().waitFor();
   if (await page.locator('.domain-card').count() !== 19) throw new Error('expected 19 domain cards');
   if (await page.locator('.learning-steps a').count() !== 4) throw new Error('learning path is incomplete');
-  if (!await page.locator('#verifiedOnly').isChecked()) {
-    throw new Error('public browsing does not default to verified-only content');
+  if (await page.locator('#verifiedOnly').isChecked()) {
+    throw new Error('public browsing hides drafts by default');
   }
 
   const nav = JSON.parse(readFileSync(join(publicPath, 'nav-tree.json'), 'utf-8'));
@@ -69,8 +69,8 @@ try {
   flatten(nav);
   const drafts = entries.filter(entry => entry.status === 'draft');
   const verifiedEntries = entries.filter(entry => entry.status === 'verified');
-  if (await page.locator('.nav-file[data-status="draft"]').count() !== 0) {
-    throw new Error('default navigation exposes drafts');
+  if (await page.locator('.nav-file[data-status="draft"]').count() !== drafts.length) {
+    throw new Error('default navigation does not expose every draft');
   }
 
   // Every generated route must be available from a clean build.
@@ -87,9 +87,6 @@ try {
 
   await page.locator('#searchInput').fill('Spring AI');
   await page.locator('.search-item').first().waitFor();
-  if (await page.locator('.search-draft').count() !== 0) {
-    throw new Error('default search exposes drafts');
-  }
   if (await page.locator('.search-status').count() === 0) throw new Error('search results lack status labels');
   await page.locator('#clearSearch').click();
 
@@ -102,15 +99,15 @@ try {
     throw new Error('draft workspace mixes verified entries into the draft list');
   }
 
-  await page.locator('#verifiedOnly').uncheck();
-  await page.waitForTimeout(50);
-  if (await page.locator('.nav-file[data-status="draft"]').count() !== drafts.length) {
-    throw new Error('explicit all-content scope does not expose every draft');
-  }
   await page.locator('#verifiedOnly').check();
   await page.waitForTimeout(50);
   if (await page.locator('.nav-file[data-status="draft"]').count() !== 0) {
     throw new Error('verified-only filter still exposes drafts');
+  }
+  await page.locator('#verifiedOnly').uncheck();
+  await page.waitForTimeout(50);
+  if (await page.locator('.nav-file[data-status="draft"]').count() !== drafts.length) {
+    throw new Error('returning to all-content scope does not restore every draft');
   }
 
   const draft = drafts[0];

@@ -2,8 +2,8 @@
 let navTree = null;
 let searchIdx = null;
 let siteMeta = null;
-const CONTENT_SCOPE_KEY = 'kb-content-scope-v2';
-let verifiedOnly = localStorage.getItem(CONTENT_SCOPE_KEY) !== 'all';
+const CONTENT_SCOPE_KEY = 'kb-content-scope-v3';
+let verifiedOnly = localStorage.getItem(CONTENT_SCOPE_KEY) === 'verified';
 
 // ===== DOM refs =====
 const $ = s => document.querySelector(s);
@@ -124,10 +124,10 @@ async function renderHome() {
       </div>
       <section class="content-scope-note" aria-label="内容质量范围">
         <div>
-          <strong>公开浏览默认仅展示已验证内容</strong>
-          <span>导航、搜索和推荐路径已过滤尚未完成联合复核的条目。</span>
+          <strong>默认展示全部 ${entries} 篇内容</strong>
+          <span>${verified} 篇已验证，${draft} 篇草稿；草稿会明确标识，顶部可按需只看已验证内容。</span>
         </div>
-        <a class="draft-workspace-link" href="#/?status=draft">进入草稿工作区 · ${draft}篇</a>
+        <a class="draft-workspace-link" href="#/?status=draft">查看草稿清单 · ${draft}篇</a>
       </section>
       <section class="learning-path" aria-labelledby="learningPathTitle">
         <h2 id="learningPathTitle">推荐学习路径</h2>
