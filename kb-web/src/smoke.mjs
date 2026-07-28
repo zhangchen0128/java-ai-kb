@@ -136,6 +136,25 @@ try {
   await page.reload({ waitUntil: 'networkidle' });
   const bodyWidth = await page.evaluate(() => document.body.scrollWidth);
   if (bodyWidth > 410) throw new Error(`mobile layout overflows: ${bodyWidth}px`);
+  const mobileArticle = await page.evaluate(() => {
+    const toc = document.querySelector('#toc');
+    const article = document.querySelector('#article');
+    const tocRect = toc.getBoundingClientRect();
+    const articleRect = article.getBoundingClientRect();
+    return {
+      tocDisplay: getComputedStyle(toc).display,
+      tocWidth: tocRect.width,
+      articleLeft: articleRect.left,
+      articleRight: articleRect.right,
+      viewportWidth: innerWidth,
+    };
+  });
+  if (mobileArticle.tocDisplay !== 'none' || mobileArticle.tocWidth !== 0) {
+    throw new Error(`article TOC overlays mobile content: ${JSON.stringify(mobileArticle)}`);
+  }
+  if (mobileArticle.articleLeft < 0 || mobileArticle.articleRight > mobileArticle.viewportWidth) {
+    throw new Error(`mobile article is outside the viewport: ${JSON.stringify(mobileArticle)}`);
+  }
 
   await page.locator('#menuBtn').click();
   await page.locator('#sidebar.open').waitFor();

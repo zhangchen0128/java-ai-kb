@@ -219,12 +219,15 @@ async function renderDomainGrid() {
 }
 
 // ===== TOC =====
-function clearTOC() { if (tocEl) tocEl.style.display = 'none'; if (tocNav) tocNav.innerHTML = ''; }
+function clearTOC() {
+  if (tocEl) tocEl.hidden = true;
+  if (tocNav) tocNav.innerHTML = '';
+}
 function buildTOC() {
   if (!tocEl || !tocNav) return;
   const headings = articleEl.querySelectorAll('.entry-body h2, .entry-body h3');
   if (headings.length < 2) { clearTOC(); return; }
-  tocEl.style.display = 'block';
+  tocEl.hidden = false;
   tocNav.innerHTML = [...headings].map((h, i) => {
     h.id = 'h-' + i;
     const cls = h.tagName === 'H2' ? 'toc-h2' : 'toc-h3';

@@ -1,7 +1,11 @@
 ---
 domain: 14-AI平台与LLMOps
 title: AI 平台与 LLMOps 全景
-status: draft
+status: verified
+verification:
+  reviewed_at: "2026-07-28"
+  version_anchor: "Spring AI 2.x"
+  code_status: not-applicable
 level: intermediate
 content_type: overview
 sources:

@@ -1,9 +1,25 @@
 ---
 domain: 07-AI基础
 title: Embeddings and Tokenization
-status: draft
+status: verified
+verification:
+  reviewed_at: "2026-07-28"
+  version_anchor: "JDK 25 / Spring Boot 4.x / Spring AI 2.x"
+  code_status: tested
+  lab: lab-rag-pipeline
+  evidence:
+    scope: article-core
+    source_files:
+      - labs/lab-rag-pipeline/src/main/java/com/javaai/kb/labs/rag-pipeline/ChunkerDemo.java
+    test_files:
+      - labs/lab-rag-pipeline/src/test/java/com/javaai/kb/labs/rag-pipeline/ChunkerDemoTest.java
 level: intermediate
 sources:
+  - level: L1
+    url: https://platform.openai.com/docs/guides/embeddings
+    description: OpenAI Embeddings API 官方文档
+  - level: L3
+    description: 《Speech and Language Processing》3rd ed. — Jurafsky & Martin (Chapter 6: Vector Semantics)
   - level: L4
     url: https://arxiv.org/abs/1508.07909
     description: Neural Machine Translation of Rare Words with Subword Units (Sennrich et al., BPE for NLP)

@@ -87,7 +87,7 @@ describe('version fact regression', () => {
     assert.doesNotMatch(sources, /new McpSchema\.TextContent\(/);
   });
 
-  it('keeps the mobile drawer visible without stale asset mixtures', () => {
+  it('keeps mobile navigation and article TOC responsive without stale asset mixtures', () => {
     const css = read('kb-web/app.css');
     const app = read('kb-web/app.js');
     const index = read('kb-web/index.html');
@@ -99,11 +99,15 @@ describe('version fact regression', () => {
     );
     assert.match(css, /#sidebar\{width:min\(82vw,320px\)/);
     assert.match(css, /\.sidebar-visible #content\{margin-left:0\}/);
+    assert.match(css, /@media\(max-width:1299px\)\{#toc\{display:none!important\}\}/);
     assert.match(app, /await renderNav\(\);[\s\S]*await navigate\(getRoute\(\)\)/);
-    assert.match(index, /app\.css\?v=5/);
-    assert.match(index, /app\.js\?v=5/);
+    assert.doesNotMatch(app, /tocEl\.style\.display\s*=\s*['"]block['"]/);
+    assert.match(app, /tocEl\.hidden = false/);
+    assert.match(index, /<aside id="toc" hidden>/);
+    assert.match(index, /app\.css\?v=6/);
+    assert.match(index, /app\.js\?v=6/);
     assert.match(index, /updateViaCache:\s*'none'/);
-    assert.match(worker, /const CACHE = 'kb-v5'/);
+    assert.match(worker, /const CACHE = 'kb-v6'/);
     assert.match(worker, /networkFirst\(e\.request\)/);
     assert.match(worker, /fetch\(request,\s*\{\s*cache:\s*'no-store'\s*\}\)/);
   });
