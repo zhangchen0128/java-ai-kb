@@ -91,8 +91,10 @@ try {
 
   const draft = entries.find(entry => entry.status === 'draft');
   const verified = entries.find(entry => entry.status === 'verified');
-  await page.goto(`${base}/#${draft.url}`);
-  await page.locator('.status-notice-draft').waitFor();
+  if (draft) {
+    await page.goto(`${base}/#${draft.url}`);
+    await page.locator('.status-notice-draft').waitFor();
+  }
   await page.goto(`${base}/#${verified.url}`);
   await page.locator('.badge-verified').waitFor();
   await page.locator('.entry-verification').waitFor();
@@ -203,6 +205,34 @@ try {
     || !mobileDrawer.activeFileVisible
   ) {
     throw new Error(`sidebar hierarchy is not visibly expanded: ${JSON.stringify(mobileDrawer)}`);
+  }
+  const hierarchyState = await page.evaluate(() => {
+    const domainTitle = [...document.querySelectorAll('.nav-domain-title')]
+      .find(element => element.nextElementSibling?.querySelector('.nav-subdir-title'));
+    if (!domainTitle) return { error: 'missing domain with subdirectories' };
+    if (domainTitle.getAttribute('aria-expanded') !== 'true') domainTitle.click();
+    const domainContent = domainTitle.nextElementSibling;
+    const subdirTitle = domainContent.querySelector('.nav-subdir-title');
+    if (subdirTitle.getAttribute('aria-expanded') !== 'true') subdirTitle.click();
+    const subdirContent = subdirTitle.nextElementSibling;
+    return {
+      domainExpanded: domainTitle.getAttribute('aria-expanded'),
+      subdirExpanded: subdirTitle.getAttribute('aria-expanded'),
+      subdirHidden: subdirContent.hidden,
+      domainRail: getComputedStyle(domainContent).borderLeftStyle,
+      subdirRail: getComputedStyle(subdirContent).borderLeftStyle,
+      articleCount: subdirContent.querySelectorAll('.nav-file').length,
+    };
+  });
+  if (
+    hierarchyState.domainExpanded !== 'true'
+    || hierarchyState.subdirExpanded !== 'true'
+    || hierarchyState.subdirHidden
+    || hierarchyState.domainRail !== 'solid'
+    || hierarchyState.subdirRail !== 'dashed'
+    || hierarchyState.articleCount === 0
+  ) {
+    throw new Error(`sidebar hierarchy interaction failed: ${JSON.stringify(hierarchyState)}`);
   }
   await page.locator('#overlay').click({ position: { x: 380, y: 100 } });
   if (await page.locator('#menuBtn').getAttribute('aria-expanded') !== 'false') {

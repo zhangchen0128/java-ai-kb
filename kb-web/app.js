@@ -91,7 +91,10 @@ async function loadSiteMeta() {
 }
 
 // ===== Hash routing =====
-function getRoute() { const h = location.hash; return h.startsWith('#/') ? h.slice(1) : '/'; }
+function getRoute() {
+  const hashRoute = location.hash.startsWith('#/') ? location.hash.slice(1) : '/';
+  try { return decodeURIComponent(hashRoute); } catch { return hashRoute; }
+}
 
 // ===== Escape HTML =====
 function esc(s) {

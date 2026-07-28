@@ -122,6 +122,7 @@ describe('version fact regression', () => {
     assert.match(app, /class="subdir-arrow"/);
     assert.match(app, /class="nav-subdir-content" hidden/);
     assert.match(app, /class="nav-file-title"/);
+    assert.match(app, /decodeURIComponent\(hashRoute\)/);
     assert.doesNotMatch(app, /style="display:none"/);
     assert.match(css, /\.nav-domain-title\{display:grid/);
     assert.match(css, /\.nav-sub\.open\{[^}]*border-left-color:var\(--border\)/);
