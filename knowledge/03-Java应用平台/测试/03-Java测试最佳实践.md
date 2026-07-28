@@ -9,8 +9,8 @@ verification:
   lab: lab-java25-concurrency
   evidence:
     scope: article-core
-    source_files: []
-    test_files: ['labs/lab-java25-concurrency/src/test/java/com/javaai/kb/labs/concurrency/VirtualThreadsTest.java']
+    source_files: ["labs/lab-java25-concurrency/src/main/java/com/javaai/kb/labs/concurrency/VirtualThreadsDemo.java"]
+    test_files: ["labs/lab-java25-concurrency/src/test/java/com/javaai/kb/labs/concurrency/VirtualThreadsTest.java"]
 level: intermediate
 sources:
   - level: L1

@@ -9,8 +9,8 @@ verification:
   lab: lab-spring-ai-chat
   evidence:
     scope: article-core
-    source_files: ['labs/lab-spring-ai-chat/src/main/java/com/javaai/kb/labs/chat/ChatDemo.java']
-    test_files: []
+    source_files: ["labs/lab-spring-ai-chat/src/main/java/com/javaai/kb/labs/chat/ChatDemo.java"]
+    test_files: ["labs/lab-spring-ai-chat/src/test/java/com/javaai/kb/labs/chat/ChatDemoTest.java"]
 level: intermediate
 sources:
   - level: L1
