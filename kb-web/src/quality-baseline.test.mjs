@@ -111,4 +111,21 @@ describe('version fact regression', () => {
     assert.match(worker, /networkFirst\(e\.request\)/);
     assert.match(worker, /fetch\(request,\s*\{\s*cache:\s*'no-store'\s*\}\)/);
   });
+
+  it('renders a semantic three-level sidebar hierarchy', () => {
+    const css = read('kb-web/app.css');
+    const app = read('kb-web/app.js');
+
+    assert.match(app, /class="nav-domain-number"/);
+    assert.match(app, /class="nav-domain-name"/);
+    assert.match(app, /class="nav-domain-count"/);
+    assert.match(app, /class="subdir-arrow"/);
+    assert.match(app, /class="nav-subdir-content" hidden/);
+    assert.match(app, /class="nav-file-title"/);
+    assert.doesNotMatch(app, /style="display:none"/);
+    assert.match(css, /\.nav-domain-title\{display:grid/);
+    assert.match(css, /\.nav-sub\.open\{[^}]*border-left-color:var\(--border\)/);
+    assert.match(css, /\.nav-subdir-content\{[^}]*border-left:1px dashed var\(--border\)/);
+    assert.match(css, /\.nav-file\{display:grid/);
+  });
 });

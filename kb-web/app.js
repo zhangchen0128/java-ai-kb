@@ -140,9 +140,12 @@ async function renderNav() {
   for (const domain of Object.keys(tree).sort()) {
     const d = tree[domain];
     const num = domain.match(/^(\d{2})/)?.[1] || '99';
+    const name = domain.replace(/^\d{2}-/, '');
     html += `<div class="nav-domain">
-      <div class="nav-domain-title" data-domain="${esc(domain)}" role="button" aria-expanded="false" tabindex="0">
-        <span class="arrow"></span>${esc(domain)} <span class="nav-file-count">${countEntries(d)}篇</span>
+      <div class="nav-domain-title" data-domain="${esc(domain)}" role="button" aria-label="${esc(domain)}" aria-expanded="false" tabindex="0">
+        <span class="arrow" aria-hidden="true"></span>
+        <span class="nav-domain-label"><span class="nav-domain-number">${esc(num)}</span><span class="nav-domain-name">${esc(name)}</span></span>
+        <span class="nav-domain-count">${countEntries(d)}篇</span>
       </div><div class="nav-sub">${renderNavNode(d)}</div></div>`;
   }
   navTreeEl.innerHTML = html;
@@ -167,15 +170,12 @@ async function renderNav() {
   });
 
   navTreeEl.querySelectorAll('.nav-subdir-title').forEach(el => {
-    el.setAttribute('role', 'button');
-    el.setAttribute('tabindex', '0');
-    el.setAttribute('aria-expanded', 'false');
     const toggleSub = () => {
       const sub = el.nextElementSibling;
-      const show = sub.style.display !== 'none';
-      sub.style.display = show ? 'none' : 'block';
-      el.textContent = (show ? '▸ ' : '▾ ') + el.textContent.slice(2);
-      el.setAttribute('aria-expanded', !show);
+      const open = sub.hidden;
+      sub.hidden = !open;
+      el.classList.toggle('open', open);
+      el.setAttribute('aria-expanded', open);
     };
     el.onclick = e => { e.stopPropagation(); toggleSub(); };
     el.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); e.stopPropagation(); toggleSub(); } };
@@ -190,17 +190,24 @@ function countEntries(node) {
 function isVisibleEntry(entry) {
   return !verifiedOnly || entry.status === 'verified';
 }
-function renderNavNode(node) {
+function renderNavNode(node, depth = 0) {
   let html = '';
   for (const sub of Object.keys(node).filter(k => k !== '_entries').sort()) {
     const subCount = countEntries(node[sub]);
     if (subCount === 0) continue;
-    html += `<div class="nav-subdir-title">▸ ${esc(sub)} <span class="nav-file-count">${subCount}</span></div><div style="display:none">${renderNavNode(node[sub])}</div>`;
+    html += `<div class="nav-subdir" data-depth="${depth}">
+      <div class="nav-subdir-title" role="button" tabindex="0" aria-expanded="false">
+        <span class="subdir-arrow" aria-hidden="true"></span>
+        <span class="nav-subdir-label">${esc(sub)}</span>
+        <span class="nav-file-count">${subCount}</span>
+      </div>
+      <div class="nav-subdir-content" hidden>${renderNavNode(node[sub], depth + 1)}</div>
+    </div>`;
   }
   if (node._entries?.length) {
     for (const e of node._entries.filter(isVisibleEntry)) {
       const status = e.stale ? 'stale' : e.status;
-      html += `<a href="#${esc(e.url)}" class="nav-file" data-url="${esc(e.url)}" data-status="${esc(status)}"><span class="nav-status" aria-label="${esc(status)}"></span>${esc(e.title)}</a>`;
+      html += `<a href="#${esc(e.url)}" class="nav-file" data-url="${esc(e.url)}" data-status="${esc(status)}"><span class="nav-status" aria-label="${esc(status)}"></span><span class="nav-file-title">${esc(e.title)}</span></a>`;
     }
   }
   return html;
@@ -289,9 +296,21 @@ function highlightNav(url) {
   navTreeEl.querySelectorAll('.nav-file').forEach(a => a.classList.remove('active'));
   if (url) {
     const active = navTreeEl.querySelector(`.nav-file[data-url="${esc(url)}"]`);
-    if (active) { active.classList.add('active'); active.scrollIntoView({ block: 'nearest' }); }
-    // Auto-expand parent domain
-    expandParentDomain(url);
+    if (active) {
+      active.classList.add('active');
+      expandParentDomain(url);
+      let parent = active.parentElement;
+      while (parent && parent !== navTreeEl) {
+        if (parent.classList.contains('nav-subdir-content') && parent.hidden) {
+          parent.hidden = false;
+          const title = parent.previousElementSibling;
+          title?.classList.add('open');
+          title?.setAttribute('aria-expanded', 'true');
+        }
+        parent = parent.parentElement;
+      }
+      active.scrollIntoView({ block: 'nearest' });
+    }
   }
 }
 

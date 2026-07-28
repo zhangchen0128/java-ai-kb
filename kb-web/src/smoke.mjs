@@ -164,9 +164,15 @@ try {
   if (await page.locator('#sidebar .nav-domain').count() !== 19) {
     throw new Error('mobile drawer is open but navigation content is missing');
   }
+  if (await page.locator('#sidebar .nav-domain-number').count() !== 19) {
+    throw new Error('sidebar domain hierarchy labels are incomplete');
+  }
   const mobileDrawer = await page.evaluate(() => {
     const sidebarRect = document.querySelector('#sidebar').getBoundingClientRect();
     const contentRect = document.querySelector('#content').getBoundingClientRect();
+    const activeFile = document.querySelector('#sidebar .nav-file.active');
+    const visibleSubdirs = [...document.querySelectorAll('#sidebar .nav-subdir-title')]
+      .filter(element => element.getClientRects().length > 0);
     return {
       sidebarLeft: sidebarRect.left,
       sidebarWidth: sidebarRect.width,
@@ -174,6 +180,9 @@ try {
       overlayDisplay: getComputedStyle(document.querySelector('#overlay')).display,
       navText: document.querySelector('#navTree').textContent.trim().length,
       viewportWidth: innerWidth,
+      domainLayout: getComputedStyle(document.querySelector('.nav-domain-title')).display,
+      visibleSubdirs: visibleSubdirs.length,
+      activeFileVisible: Boolean(activeFile?.getClientRects().length),
     };
   });
   if (Math.abs(mobileDrawer.sidebarLeft) > 1) {
@@ -187,6 +196,13 @@ try {
   }
   if (mobileDrawer.overlayDisplay === 'none' || mobileDrawer.navText === 0) {
     throw new Error(`mobile drawer state is incomplete: ${JSON.stringify(mobileDrawer)}`);
+  }
+  if (
+    mobileDrawer.domainLayout !== 'grid'
+    || mobileDrawer.visibleSubdirs === 0
+    || !mobileDrawer.activeFileVisible
+  ) {
+    throw new Error(`sidebar hierarchy is not visibly expanded: ${JSON.stringify(mobileDrawer)}`);
   }
   await page.locator('#overlay').click({ position: { x: 380, y: 100 } });
   if (await page.locator('#menuBtn').getAttribute('aria-expanded') !== 'false') {
