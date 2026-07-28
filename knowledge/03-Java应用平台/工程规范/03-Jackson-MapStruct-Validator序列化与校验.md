@@ -1,18 +1,7 @@
 ---
 domain: 03-Java应用平台
 title: Jackson-MapStruct-Validator序列化与校验
-status: verified
-verification:
-  reviewed_at: "2026-07-28"
-  version_anchor: "JDK 25 / Spring Boot 4.x / Spring AI 2.x"
-  code_status: tested
-  lab: lab-spring-ai-chat
-  evidence:
-    scope: article-core
-    source_files:
-      - labs/lab-spring-ai-chat/src/main/java/com/javaai/kb/labs/spring-ai-chat/ChatDemo.java
-    test_files:
-      - labs/lab-spring-ai-chat/src/test/java/com/javaai/kb/labs/spring-ai-chat/ChatDemoTest.java
+status: draft
 level: intermediate
 sources:
   - level: L1
@@ -44,7 +33,7 @@ tags:
   - dto
   - objectmapper
 created: 2026-07-20
-updated: 2026-07-20
+updated: 2026-07-28
 content_type: practice
 ---
 

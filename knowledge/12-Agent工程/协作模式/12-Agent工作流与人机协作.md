@@ -1,18 +1,7 @@
 ---
 domain: 12-Agent工程
 title: Agent Workflow 范式与 Human-in-the-loop 实战
-status: verified
-verification:
-  reviewed_at: "2026-07-28"
-  version_anchor: "JDK 25 / Spring Boot 4.x / Spring AI 2.x"
-  code_status: tested
-  lab: lab-ai-security
-  evidence:
-    scope: article-core
-    source_files:
-      - labs/lab-ai-security/src/main/java/com/javaai/kb/labs/ai-security/InputSanitizer.java
-    test_files:
-      - labs/lab-ai-security/src/test/java/com/javaai/kb/labs/ai-security/InputSanitizerTest.java
+status: draft
 level: intermediate
 sources:
   - level: L1
@@ -40,7 +29,7 @@ tags:
   - spring-state-machine
   - insurance
 created: 2026-07-17
-updated: 2026-07-17
+updated: 2026-07-28
 content_type: production
 ---
 

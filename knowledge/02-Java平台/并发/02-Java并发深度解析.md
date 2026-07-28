@@ -1,18 +1,7 @@
 ---
 domain: 02-Java平台
 title: Java 并发深度解析——JMM、锁、AQS、ConcurrentHashMap、原子类与高级同步器
-status: verified
-verification:
-  reviewed_at: "2026-07-28"
-  version_anchor: "JDK 25 / Spring Boot 4.x / Spring AI 2.x"
-  code_status: tested
-  lab: lab-java25-concurrency
-  evidence:
-    scope: article-core
-    source_files:
-      - labs/lab-java25-concurrency/src/main/java/com/javaai/kb/labs/java25-concurrency/VirtualThreadsDemo.java
-    test_files:
-      - labs/lab-java25-concurrency/src/test/java/com/javaai/kb/labs/java25-concurrency/VirtualThreadsTest.java
+status: draft
 level: advanced
 sources:
   - level: L0
@@ -52,7 +41,7 @@ tags:
   - StampedLock
   - VirtualThreads
 created: 2026-07-17
-updated: 2026-07-17
+updated: 2026-07-28
 content_type: practice
 ---
 

@@ -1,18 +1,7 @@
 ---
 domain: 08-模型接入与推理
 title: Local Inference and Ollama
-status: verified
-verification:
-  reviewed_at: "2026-07-28"
-  version_anchor: "JDK 25 / Spring Boot 4.x / Spring AI 2.x"
-  code_status: tested
-  lab: lab-rag-pipeline
-  evidence:
-    scope: article-core
-    source_files:
-      - labs/lab-rag-pipeline/src/main/java/com/javaai/kb/labs/rag-pipeline/ChunkerDemo.java
-    test_files:
-      - labs/lab-rag-pipeline/src/test/java/com/javaai/kb/labs/rag-pipeline/ChunkerDemoTest.java
+status: draft
 level: intermediate
 sources:
   - level: L1
@@ -43,7 +32,7 @@ tags:
   - quantization
   - gguf
 created: 2026-07-17
-updated: 2026-07-17
+updated: 2026-07-28
 content_type: production
 ---
 

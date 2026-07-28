@@ -1,18 +1,7 @@
 ---
 domain: 12-Agent工程
 title: 多 Agent 协作架构模式与实战
-status: verified
-verification:
-  reviewed_at: "2026-07-28"
-  version_anchor: "JDK 25 / Spring Boot 4.x / Spring AI 2.x"
-  code_status: tested
-  lab: lab-ai-security
-  evidence:
-    scope: article-core
-    source_files:
-      - labs/lab-ai-security/src/main/java/com/javaai/kb/labs/ai-security/InputSanitizer.java
-    test_files:
-      - labs/lab-ai-security/src/test/java/com/javaai/kb/labs/ai-security/InputSanitizerTest.java
+status: draft
 level: intermediate
 sources:
   - level: L1
@@ -37,7 +26,7 @@ tags:
   - a2a
   - swarm
 created: 2026-07-17
-updated: 2026-07-17
+updated: 2026-07-28
 content_type: production
 ---
 

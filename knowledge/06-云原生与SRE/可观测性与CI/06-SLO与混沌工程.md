@@ -1,18 +1,7 @@
 ---
 domain: 06-云原生与SRE
 title: SLO与混沌工程
-status: verified
-verification:
-  reviewed_at: "2026-07-28"
-  version_anchor: "JDK 25 / Spring Boot 4.x / Spring AI 2.x"
-  code_status: tested
-  lab: lab-ai-observability
-  evidence:
-    scope: article-core
-    source_files:
-      - labs/lab-ai-observability/src/main/java/com/javaai/kb/labs/ai-observability/TracingDemo.java
-    test_files:
-      - labs/lab-ai-observability/src/test/java/com/javaai/kb/labs/ai-observability/TracingTest.java
+status: draft
 level: advanced
 sources:
   - level: L3
@@ -57,7 +46,7 @@ tags:
   - hpa
   - keda
 created: 2026-07-20
-updated: 2026-07-20
+updated: 2026-07-28
 content_type: concept
 ---
 

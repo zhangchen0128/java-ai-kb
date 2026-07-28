@@ -576,10 +576,10 @@ export function downgradeFailedVerified(report, today = new Date().toISOString()
     const meta = YAML.parse(match[1]);
     meta.status = 'draft';
     meta.updated = today;
-    if (meta.verification) {
-      meta.verification.code_status = 'illustrative';
-      delete meta.verification.lab;
-    }
+    // A failed verification block may contain generic anchors, missing labs or
+    // invalid evidence links. Keeping it on a draft would still present those
+    // claims on the website, so a later review must rebuild it from evidence.
+    delete meta.verification;
     const next = `---\n${YAML.stringify(meta, { lineWidth: 0 }).trimEnd()}\n---\n${match[2]}`;
     writeFileSync(file, next, 'utf-8');
     changed.push(entry.path);

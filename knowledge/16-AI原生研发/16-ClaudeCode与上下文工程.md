@@ -1,7 +1,7 @@
 ---
 domain: 16-AI原生研发
 title: Claude Code与上下文工程：AI原生软件开发实践指南
-status: verified
+status: draft
 level: intermediate
 sources:
   - level: L1
@@ -29,19 +29,8 @@ tags:
   - adr
   - hallucination-detection
 created: 2026-07-17
-updated: 2026-07-27
+updated: 2026-07-28
 content_type: overview
-verification:
-  reviewed_at: "2026-07-28"
-  version_anchor: "JDK 25 / Spring Boot 4.x / Spring AI 2.x"
-  code_status: tested
-  lab: lab-ai-security
-  evidence:
-    scope: article-core
-    source_files:
-      - labs/lab-ai-security/src/main/java/com/javaai/kb/labs/ai-security/InputSanitizer.java
-    test_files:
-      - labs/lab-ai-security/src/test/java/com/javaai/kb/labs/ai-security/InputSanitizerTest.java
 ---
 
 # Claude Code与上下文工程：AI原生软件开发实践指南

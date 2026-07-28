@@ -129,4 +129,10 @@ describe('version fact regression', () => {
     assert.match(css, /\.nav-subdir-content\{[^}]*border-left:1px dashed var\(--border\)/);
     assert.match(css, /\.nav-file\{display:grid/);
   });
+
+  it('removes invalid verification claims when automatically downgrading an entry', () => {
+    const audit = read('kb-web/src/audit-content.mjs');
+    assert.match(audit, /meta\.status = 'draft'/);
+    assert.match(audit, /delete meta\.verification/);
+  });
 });

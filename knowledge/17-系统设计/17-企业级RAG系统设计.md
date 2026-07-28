@@ -1,18 +1,7 @@
 ---
 domain: 17-系统设计
 title: 企业级RAG系统完整设计
-status: verified
-verification:
-  reviewed_at: "2026-07-28"
-  version_anchor: "JDK 25 / Spring Boot 4.x / Spring AI 2.x"
-  code_status: tested
-  lab: lab-ai-observability
-  evidence:
-    scope: article-core
-    source_files:
-      - labs/lab-ai-observability/src/main/java/com/javaai/kb/labs/ai-observability/TracingDemo.java
-    test_files:
-      - labs/lab-ai-observability/src/test/java/com/javaai/kb/labs/ai-observability/TracingTest.java
+status: draft
 level: advanced
 sources:
   - level: L1
@@ -47,7 +36,7 @@ tags:
   - pgvector
   - spring-ai
 created: 2026-07-17
-updated: 2026-07-17
+updated: 2026-07-28
 content_type: concept
 ---
 

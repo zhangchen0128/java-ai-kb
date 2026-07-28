@@ -1,16 +1,7 @@
 ---
 domain: 03-Java应用平台
 title: Java 测试最佳实践
-status: verified
-verification:
-  reviewed_at: "2026-07-28"
-  version_anchor: "JUnit 5.11 / Mockito / Testcontainers 1.20"
-  code_status: tested
-  lab: lab-java25-concurrency
-  evidence:
-    scope: article-core
-    source_files: ["labs/lab-java25-concurrency/src/main/java/com/javaai/kb/labs/concurrency/VirtualThreadsDemo.java"]
-    test_files: ["labs/lab-java25-concurrency/src/test/java/com/javaai/kb/labs/concurrency/VirtualThreadsTest.java"]
+status: draft
 level: intermediate
 sources:
   - level: L1
@@ -55,7 +46,7 @@ tags:
   - test-data
   - quality
 created: 2026-07-17
-updated: 2026-07-17
+updated: 2026-07-28
 content_type: practice
 ---
 

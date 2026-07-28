@@ -1,7 +1,7 @@
 ---
 domain: 13-AI协议
 title: A2A协议背景与Agent互操作实战
-status: verified
+status: draft
 level: intermediate
 sources:
   - level: L0
@@ -32,19 +32,8 @@ tags:
   - json-rpc
   - grpc
 created: 2026-07-17
-updated: 2026-07-27
+updated: 2026-07-28
 content_type: production
-verification:
-  reviewed_at: "2026-07-28"
-  version_anchor: "JDK 25 / Spring Boot 4.x / Spring AI 2.x"
-  code_status: tested
-  lab: lab-a2a-agent
-  evidence:
-    scope: article-core
-    source_files:
-      - labs/lab-a2a-agent/src/main/java/com/javaai/kb/labs/a2a-agent/A2aAgentDemo.java
-    test_files:
-      - labs/lab-a2a-agent/src/test/java/com/javaai/kb/labs/a2a-agent/A2aAgentTest.java
 ---
 
 # A2A协议背景与Agent互操作实战

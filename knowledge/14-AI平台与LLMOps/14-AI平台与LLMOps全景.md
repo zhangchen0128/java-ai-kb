@@ -1,11 +1,7 @@
 ---
 domain: 14-AI平台与LLMOps
 title: AI 平台与 LLMOps 全景
-status: verified
-verification:
-  reviewed_at: "2026-07-28"
-  version_anchor: "Spring AI 2.x"
-  code_status: not-applicable
+status: draft
 level: intermediate
 content_type: overview
 sources:
@@ -32,7 +28,7 @@ tags:
   - finops
   - observability
 created: 2026-07-27
-updated: 2026-07-27
+updated: 2026-07-28
 ---
 
 # AI 平台与 LLMOps 全景
