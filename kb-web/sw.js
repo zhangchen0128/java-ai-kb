@@ -1,9 +1,9 @@
-const CACHE = 'kb-v6';
+const CACHE = 'kb-v7';
 const URLS = [
   './',
   'index.html',
-  'app.css?v=6',
-  'app.js?v=6',
+  'app.css?v=7',
+  'app.js?v=7',
   'nav-tree.json',
   'search-index.json',
   'site-meta.json',

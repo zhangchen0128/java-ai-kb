@@ -56,6 +56,9 @@ try {
   await page.locator('.domain-card').first().waitFor();
   if (await page.locator('.domain-card').count() !== 19) throw new Error('expected 19 domain cards');
   if (await page.locator('.learning-steps a').count() !== 4) throw new Error('learning path is incomplete');
+  if (!await page.locator('#verifiedOnly').isChecked()) {
+    throw new Error('public browsing does not default to verified-only content');
+  }
 
   const nav = JSON.parse(readFileSync(join(publicPath, 'nav-tree.json'), 'utf-8'));
   const entries = [];
@@ -64,6 +67,11 @@ try {
     for (const [key, value] of Object.entries(node)) if (key !== '_entries') flatten(value);
   };
   flatten(nav);
+  const drafts = entries.filter(entry => entry.status === 'draft');
+  const verifiedEntries = entries.filter(entry => entry.status === 'verified');
+  if (await page.locator('.nav-file[data-status="draft"]').count() !== 0) {
+    throw new Error('default navigation exposes drafts');
+  }
 
   // Every generated route must be available from a clean build.
   const responses = await Promise.all(entries.map(entry => fetch(`${base}/content${entry.url}.html`)));
@@ -77,20 +85,36 @@ try {
   }
   await page.evaluate(() => { location.hash = '#/'; });
 
+  await page.locator('#searchInput').fill('Spring AI');
+  await page.locator('.search-item').first().waitFor();
+  if (await page.locator('.search-draft').count() !== 0) {
+    throw new Error('default search exposes drafts');
+  }
+  if (await page.locator('.search-status').count() === 0) throw new Error('search results lack status labels');
+  await page.locator('#clearSearch').click();
+
+  await page.locator('.draft-workspace-link').click();
+  await page.locator('.draft-workspace').waitFor();
+  if (await page.locator('.domain-listing-entry .listing-draft').count() !== drafts.length) {
+    throw new Error('draft workspace does not contain every draft exactly once');
+  }
+  if (await page.locator('.domain-listing-entry .listing-verified').count() !== 0) {
+    throw new Error('draft workspace mixes verified entries into the draft list');
+  }
+
+  await page.locator('#verifiedOnly').uncheck();
+  await page.waitForTimeout(50);
+  if (await page.locator('.nav-file[data-status="draft"]').count() !== drafts.length) {
+    throw new Error('explicit all-content scope does not expose every draft');
+  }
   await page.locator('#verifiedOnly').check();
   await page.waitForTimeout(50);
   if (await page.locator('.nav-file[data-status="draft"]').count() !== 0) {
     throw new Error('verified-only filter still exposes drafts');
   }
-  await page.locator('#verifiedOnly').uncheck();
 
-  await page.locator('#searchInput').fill('Spring AI');
-  await page.locator('.search-item').first().waitFor();
-  if (await page.locator('.search-status').count() === 0) throw new Error('search results lack status labels');
-  await page.locator('#clearSearch').click();
-
-  const draft = entries.find(entry => entry.status === 'draft');
-  const verified = entries.find(entry => entry.status === 'verified');
+  const draft = drafts[0];
+  const verified = verifiedEntries[0];
   if (draft) {
     await page.goto(`${base}/#${draft.url}`);
     await page.locator('.status-notice-draft').waitFor();

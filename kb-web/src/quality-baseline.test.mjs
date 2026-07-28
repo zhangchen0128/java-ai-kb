@@ -104,10 +104,10 @@ describe('version fact regression', () => {
     assert.doesNotMatch(app, /tocEl\.style\.display\s*=\s*['"]block['"]/);
     assert.match(app, /tocEl\.hidden = false/);
     assert.match(index, /<aside id="toc" hidden>/);
-    assert.match(index, /app\.css\?v=6/);
-    assert.match(index, /app\.js\?v=6/);
+    assert.match(index, /app\.css\?v=7/);
+    assert.match(index, /app\.js\?v=7/);
     assert.match(index, /updateViaCache:\s*'none'/);
-    assert.match(worker, /const CACHE = 'kb-v6'/);
+    assert.match(worker, /const CACHE = 'kb-v7'/);
     assert.match(worker, /networkFirst\(e\.request\)/);
     assert.match(worker, /fetch\(request,\s*\{\s*cache:\s*'no-store'\s*\}\)/);
   });
@@ -134,5 +134,16 @@ describe('version fact regression', () => {
     const audit = read('kb-web/src/audit-content.mjs');
     assert.match(audit, /meta\.status = 'draft'/);
     assert.match(audit, /delete meta\.verification/);
+  });
+
+  it('keeps drafts out of the default public content scope', () => {
+    const app = read('kb-web/app.js');
+    const index = read('kb-web/index.html');
+
+    assert.match(app, /kb-content-scope-v2/);
+    assert.match(app, /localStorage\.getItem\(CONTENT_SCOPE_KEY\) !== 'all'/);
+    assert.match(app, /path === '\/\?status=draft'/);
+    assert.match(app, /class="draft-workspace"/);
+    assert.match(index, /<span>仅已验证<\/span>/);
   });
 });

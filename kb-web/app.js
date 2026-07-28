@@ -2,7 +2,8 @@
 let navTree = null;
 let searchIdx = null;
 let siteMeta = null;
-let verifiedOnly = localStorage.getItem('kb-verified-only') === '1';
+const CONTENT_SCOPE_KEY = 'kb-content-scope-v2';
+let verifiedOnly = localStorage.getItem(CONTENT_SCOPE_KEY) !== 'all';
 
 // ===== DOM refs =====
 const $ = s => document.querySelector(s);
@@ -24,7 +25,7 @@ const verifiedOnlyInput = $('#verifiedOnly');
 verifiedOnlyInput.checked = verifiedOnly;
 verifiedOnlyInput.addEventListener('change', async () => {
   verifiedOnly = verifiedOnlyInput.checked;
-  localStorage.setItem('kb-verified-only', verifiedOnly ? '1' : '0');
+  localStorage.setItem(CONTENT_SCOPE_KEY, verifiedOnly ? 'verified' : 'all');
   await renderNav();
   if (getRoute() === '/') await renderHome();
   else if (getRoute().startsWith('/?d=')) await navigate(getRoute());
@@ -108,18 +109,26 @@ async function renderHome() {
   const domains = meta?.domains || 19;
   const lines = meta?.lines || 85000;
   const verified = meta?.verified || 0;
+  const draft = meta?.status?.draft || 0;
   const stale = meta?.stale || 0;
 
   articleEl.innerHTML = `
     <div class="welcome">
       <h1>📚 Java AI 工程师知识库</h1>
-      <p class="subtitle">覆盖 Java 企业开发到 AI 应用工程的完整知识体系 · ${entries}篇深度笔记</p>
+      <p class="subtitle">覆盖 Java 企业开发到 AI 应用工程的公开可验证知识体系</p>
       <div class="stats">
         <div class="stat"><strong>18+1</strong><span>主题域+知识工程元域</span></div>
         <div class="stat"><strong>${entries}</strong><span>篇笔记</span></div>
         <div class="stat"><strong>${verified}</strong><span>已验证</span></div>
         <div class="stat"><strong>${stale}</strong><span>待复核</span></div>
       </div>
+      <section class="content-scope-note" aria-label="内容质量范围">
+        <div>
+          <strong>公开浏览默认仅展示已验证内容</strong>
+          <span>导航、搜索和推荐路径已过滤尚未完成联合复核的条目。</span>
+        </div>
+        <a class="draft-workspace-link" href="#/?status=draft">进入草稿工作区 · ${draft}篇</a>
+      </section>
       <section class="learning-path" aria-labelledby="learningPathTitle">
         <h2 id="learningPathTitle">推荐学习路径</h2>
         <div class="learning-steps">
@@ -133,6 +142,35 @@ async function renderHome() {
     </div>`;
   renderDomainGrid();
   prevNext.innerHTML = '';
+  clearTOC();
+}
+
+async function renderDraftWorkspace() {
+  const tree = await loadNav();
+  const meta = await loadSiteMeta();
+  const isDraft = entry => entry.status === 'draft';
+  const draftCount = meta?.status?.draft || countEntriesMatching(tree, isDraft);
+  const groups = Object.keys(tree).sort().map(domain => {
+    const count = countEntriesMatching(tree[domain], isDraft);
+    if (!count) return '';
+    return `<section class="draft-domain">
+      <h2>${esc(domain)} <span>${count}篇</span></h2>
+      <ul class="domain-listing">${renderDomainEntries(tree[domain], isDraft)}</ul>
+    </section>`;
+  }).join('');
+
+  articleEl.innerHTML = `
+    <div class="draft-workspace">
+      <div class="draft-workspace-header">
+        <span class="draft-workspace-kicker">独立内容区</span>
+        <h1>草稿工作区</h1>
+        <p>这里集中展示 ${draftCount} 篇尚未完成来源、版本和代码联合复核的条目。草稿可用于学习和协作审阅，但不作为生产依据。</p>
+        <a class="verified-home-link" href="#/">← 返回已验证内容</a>
+      </div>
+      <div class="draft-domain-list">${groups}</div>
+    </div>`;
+  prevNext.innerHTML = '';
+  highlightNav(null);
   clearTOC();
 }
 
@@ -185,10 +223,15 @@ async function renderNav() {
   });
 }
 
-function countEntries(node) {
-  let count = node._entries?.filter(isVisibleEntry).length || 0;
-  for (const key of Object.keys(node)) { if (key !== '_entries') count += countEntries(node[key]); }
+function countEntriesMatching(node, predicate) {
+  let count = node._entries?.filter(predicate).length || 0;
+  for (const key of Object.keys(node)) {
+    if (key !== '_entries') count += countEntriesMatching(node[key], predicate);
+  }
   return count;
+}
+function countEntries(node) {
+  return countEntriesMatching(node, isVisibleEntry);
 }
 function isVisibleEntry(entry) {
   return !verifiedOnly || entry.status === 'verified';
@@ -247,7 +290,9 @@ function buildTOC() {
 
 // ===== Navigate =====
 async function navigate(path) {
-  if (path.startsWith('/?d=')) {
+  if (path === '/?status=draft') {
+    await renderDraftWorkspace();
+  } else if (path.startsWith('/?d=')) {
     // Domain listing page
     const domainNum = path.split('d=')[1];
     const tree = await loadNav();
@@ -281,15 +326,16 @@ async function navigate(path) {
   setTimeout(() => { const h = articleEl.querySelector('h1'); if (h) h.setAttribute('tabindex', '-1'); try { h?.focus(); } catch {} }, 150);
 }
 
-function renderDomainEntries(node) {
+function renderDomainEntries(node, predicate = isVisibleEntry) {
   let html = '';
   for (const sub of Object.keys(node).filter(k => k !== '_entries').sort()) {
-    html += `<li style="list-style:none;margin-top:.8em"><strong>${esc(sub)}</strong><ul>${renderDomainEntries(node[sub])}</ul></li>`;
+    if (countEntriesMatching(node[sub], predicate) === 0) continue;
+    html += `<li class="domain-listing-group"><strong>${esc(sub)}</strong><ul>${renderDomainEntries(node[sub], predicate)}</ul></li>`;
   }
   if (node._entries) {
-    for (const e of node._entries.filter(isVisibleEntry)) {
+    for (const e of node._entries.filter(predicate)) {
       const label = e.stale ? '待复核' : (e.status === 'verified' ? '已验证' : '草稿');
-      html += `<li><a href="#${esc(e.url)}">${esc(e.title)}</a> <span class="listing-status listing-${esc(e.stale ? 'stale' : e.status)}">${label}</span></li>`;
+      html += `<li class="domain-listing-entry"><a href="#${esc(e.url)}">${esc(e.title)}</a> <span class="listing-status listing-${esc(e.stale ? 'stale' : e.status)}">${label}</span></li>`;
     }
   }
   return html;
